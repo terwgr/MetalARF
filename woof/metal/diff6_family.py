@@ -1,0 +1,125 @@
+"""Metal submission helpers for ordinary WRF sixth-order diffusion."""
+
+from __future__ import annotations
+
+import numpy as np
+
+from woof.wrf_exact import ENABLED as WRF_EXACT
+
+
+def submit_diff6(state, f, tend, mut, c1, c2, *, coef, mono,
+                 stagger="", phb=None, msfu=None, msfv=None, msft=None,
+                 slopeopt=0, dzthr_x=0.0, dzthr_y=0.0,
+                 boundary_x=False, boundary_y=False):
+    """Submit ordinary diff6 and its nonperiodic staggered seam passes.
+
+    The caller owns zeroing ``tend`` and applying WRF's width-three open
+    strips after this submission. All Metal work stays ordered on the
+    state's serial context queue.
+    """
+    if WRF_EXACT:
+        raise NotImplementedError(
+            "Metal diff6 does not implement WRF exact-D arithmetic")
+    if not getattr(state, "_metal_setup_state", False):
+        raise TypeError("Metal diff6 requires a Metal DomainState")
+    if stagger not in ("", "x", "y", "z"):
+        raise ValueError(f"unsupported diff6 stagger {stagger!r}")
+    if state is None:
+        raise TypeError("Metal diff6 requires its owning DomainState")
+    from .array import MetalArray
+    arrays = {"f": f, "tend": tend, "c1": c1, "c2": c2}
+    if mut is not None:
+        arrays["mut"] = mut
+    for name, array in arrays.items():
+        if (not isinstance(array, MetalArray)
+                or array.dtype != np.dtype(np.float32)
+                or not array.flags.c_contiguous):
+            raise TypeError(f"Metal diff6 {name} must be contiguous FP32")
+    context = f.buffer.context
+    if any(array.buffer.context is not context for array in arrays.values()):
+        raise ValueError("Metal diff6 arrays belong to different contexts")
+    nlev, nys, nxs = f.shape
+    ny = nys - 1 if stagger == "y" else nys
+    nx = nxs - 1 if stagger == "x" else nxs
+    if tend.shape != f.shape:
+        raise ValueError("Metal diff6 field and tendency shapes differ")
+    if c1.shape != (nlev,) or c2.shape != (nlev,):
+        raise ValueError("Metal diff6 hybrid coefficients must match nlev")
+    if stagger == "x" and nxs != nx + 1:
+        raise ValueError("Metal diff6 u field must have nx+1 columns")
+    if stagger != "x" and nxs != nx:
+        raise ValueError("Metal diff6 field x extent does not match its stagger")
+    if stagger == "y" and nys != ny + 1:
+        raise ValueError("Metal diff6 v field must have ny+1 rows")
+    if stagger != "y" and nys != ny:
+        raise ValueError("Metal diff6 field y extent does not match its stagger")
+    variant = {"": 0, "x": 1, "y": 2, "z": 0}[stagger]
+    if mut is None:
+        # Match the production caller's time-t ``mub2d + mup0`` mass without
+        # evaluating unsupported MetalArray Python arithmetic on the host.
+        mut = state.scratch((ny, nx), "diff6_mu_t")
+        state._array_module.context.submit_kernel(
+            "rk_total_mu",
+            {"mub2d": state.mub2d, "mup": state.mup0, "out": mut},
+            {"ny": ny, "nx": nx}, exact_policy=False,
+            grid_size=ny * nx)
+    if mut.shape != (ny, nx):
+        raise ValueError("Metal diff6 total mass must match the mass grid")
+    dummy2d = mut
+    slope = int(slopeopt) >= 1 and phb is not None and phb.ndim == 3
+    if slope and (dzthr_x <= 0.0 or dzthr_y <= 0.0):
+        raise ValueError("diff6 terrain taper requires positive thresholds")
+    phb = phb if slope else dummy2d
+    msfu = state.msfu if msfu is None else msfu
+    msfv = state.msfv if msfv is None else msfv
+    msft = state.msft if msft is None else msft
+    arrays = {"f": f, "tend": tend, "mut": mut, "c1": c1, "c2": c2,
+              "phb": phb, "msfu": msfu, "msfv": msfv, "msft": msft}
+    for name, array in arrays.items():
+        if (not isinstance(array, MetalArray)
+                or array.dtype != np.dtype(np.float32)
+                or not array.flags.c_contiguous):
+            raise TypeError(f"Metal diff6 {name} must be contiguous FP32")
+        if array.buffer.context is not context:
+            raise ValueError("Metal diff6 arrays belong to different contexts")
+    if msfu.shape != (ny, nx + 1) or msfv.shape != (ny + 1, nx):
+        raise ValueError("Metal diff6 map factors do not match staggered grid")
+    if msft.shape != (ny, nx):
+        raise ValueError("Metal diff6 mass map factor does not match grid")
+    if slope and (phb.ndim != 3 or phb.shape[-2:] != (ny, nx)
+                  or phb.shape[0] < nlev):
+        raise ValueError("Metal diff6 terrain geopotential must cover levels/grid")
+    common = {"coef": float(np.float32(coef)), "mono": int(mono),
+              "slopeopt": int(slope), "dzthr_x": float(np.float32(dzthr_x)),
+              "dzthr_y": float(np.float32(dzthr_y)), "nlev": nlev,
+              "ny": ny, "nys": nys, "nx": nx, "nxs": nxs,
+              "variant": variant, "wstag": int(stagger == "z"),
+              "boundary_x": int(bool(boundary_x)),
+              "boundary_y": int(bool(boundary_y))}
+    context.submit_kernel("diff6", arrays, common, exact_policy=False,
+                          grid_size=nlev * nys * nxs)
+
+    # WRF includes u(ide-3)/v(jde-3) in nonperiodic loops. The main kernel
+    # skips these cells when enabled; these direct-read passes fill them.
+    if stagger == "x" and boundary_x and nx >= 6:
+        h0, h1 = ((3, ny - 4) if boundary_y else (0, ny - 1))
+        if h1 >= h0:
+            seam_params = {k: v for k, v in common.items()
+                           if k not in ("nys", "nxs", "variant", "wstag",
+                                        "boundary_x", "boundary_y")}
+            seam_params.update({"h0": h0, "h1": h1,
+                                "boundary_cross": int(bool(boundary_y))})
+            context.submit_kernel(
+                "diff6_seam_u", arrays, seam_params, exact_policy=False,
+                grid_size=nlev * (h1 - h0 + 1))
+    elif stagger == "y" and boundary_y and ny >= 6:
+        h0, h1 = ((3, nx - 4) if boundary_x else (0, nx - 1))
+        if h1 >= h0:
+            seam_params = {k: v for k, v in common.items()
+                           if k not in ("nys", "nxs", "variant", "wstag",
+                                        "boundary_x", "boundary_y")}
+            seam_params.update({"h0": h0, "h1": h1,
+                                "boundary_cross": int(bool(boundary_x))})
+            context.submit_kernel(
+                "diff6_seam_v", arrays, seam_params, exact_policy=False,
+                grid_size=nlev * (h1 - h0 + 1))

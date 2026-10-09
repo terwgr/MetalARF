@@ -1,0 +1,41 @@
+{
+  "kernels": [
+    {
+      "name": "hex_scalar_flux_divergence",
+      "module": "hex_scalar_transport",
+      "source": "woof/metal/shaders/hex_scalar_flux_divergence_fragment.metal",
+      "cuda_source": "woof/hex/transport.py",
+      "cuda_symbol": "standard_tracer_advection_tendency",
+      "resources": [
+        ["tendency", "float", "read_write"],
+        ["horizontal_flux", "float", "read"],
+        ["vertical_flux", "float", "read"],
+        ["edge_indices", "int32", "read"],
+        ["edge_counts", "int32", "read"],
+        ["edge_signs", "float", "read"],
+        ["area_cell", "float", "read"],
+        ["vertical_factor", "float", "read"]
+      ],
+      "shapes": {
+        "tendency": [["ntracers", "nlev", "ncells"]],
+        "horizontal_flux": [["ntracers", "nlev", "nedges"]],
+        "vertical_flux": [["ntracers", "nlev+1", "ncells"]],
+        "edge_indices": [["ncells", "max_edges"]],
+        "edge_counts": [["ncells"]],
+        "edge_signs": [["ncells", "max_edges"]],
+        "area_cell": [["ncells"]],
+        "vertical_factor": [["nlev"]]
+      },
+      "parameters": [
+        ["ntracers", "int32"],
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["nedges", "int32"],
+        ["max_edges", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

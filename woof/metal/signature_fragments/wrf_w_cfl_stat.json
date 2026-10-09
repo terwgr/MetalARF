@@ -1,0 +1,13 @@
+{"kernels": [{
+  "arithmetic_policies": ["default"],
+  "cuda_source": "woof/core/kernels/openbc.cu",
+  "cuda_symbol": "w_cfl_stat",
+  "layout_version": 1,
+  "module": "wrf_w_cfl_stat",
+  "name": "wrf_w_cfl_stat",
+  "parameters": [["dt", "float32"], ["rdx", "float32"], ["rdy", "float32"], ["w_damp_on", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+  "resources": [["ww", "float", "read"], ["mup", "float", "read"], ["mub2d", "float", "read"], ["c1f", "float", "read"], ["c2f", "float", "read"], ["rdnw", "float", "read"], ["u", "float", "read"], ["v", "float", "read"], ["msfu", "float", "read"], ["msfv", "float", "read"], ["out", "uint32", "read_write"]],
+  "shapes": {"ww": [["any_1d"]], "mup": [["ny", "nx"]], "mub2d": [["ny", "nx"]], "c1f": [["any_1d"]], "c2f": [["any_1d"]], "rdnw": [["any_1d"]], "u": [["nz", "ny", "nx+1"]], "v": [["nz", "ny+1", "nx"]], "msfu": [["ny", "nx+1"]], "msfv": [["ny+1", "nx"]], "out": [["any_1d"]]},
+  "source": "woof/metal/shaders/wrf_w_cfl_stat.metal",
+  "threads_per_group": 256
+}]}

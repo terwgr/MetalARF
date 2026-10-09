@@ -1,0 +1,1170 @@
+{
+  "schema": "woof-metal-source-disposition-v1",
+  "status": "blocked-no-production-signatures",
+  "module": "thompson_aerosol_sed_family",
+  "source": "woof/core/kernels/thompson_aerosol_sed.cu",
+  "kernels": [
+  {
+    "name": "thompson_aa_cloud_sediment_64_source",
+    "module": "thompson_aerosol_sed",
+    "source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+    "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+    "cuda_symbol": "thompson_aa_cloud_sediment_64",
+    "resources": [
+      [
+        "qc",
+        "float",
+        "read_write"
+      ],
+      [
+        "cloud_number_entry",
+        "float",
+        "read"
+      ],
+      [
+        "cloud_number_tendency",
+        "float",
+        "read_write"
+      ],
+      [
+        "temperature",
+        "float",
+        "read"
+      ],
+      [
+        "pressure",
+        "float",
+        "read"
+      ],
+      [
+        "qv",
+        "float",
+        "read"
+      ],
+      [
+        "reference_density",
+        "float",
+        "read"
+      ],
+      [
+        "rain_active_columns",
+        "float",
+        "read"
+      ],
+      [
+        "cloud_active_columns",
+        "float",
+        "read"
+      ],
+      [
+        "vertical_velocity",
+        "float",
+        "read"
+      ],
+      [
+        "dz",
+        "float",
+        "read"
+      ],
+      [
+        "ccg2",
+        "float",
+        "read"
+      ],
+      [
+        "ccg4",
+        "float",
+        "read"
+      ],
+      [
+        "ccg5",
+        "float",
+        "read"
+      ],
+      [
+        "ocg1",
+        "float",
+        "read"
+      ],
+      [
+        "ocg2",
+        "float",
+        "read"
+      ],
+      [
+        "out_mass_velocity",
+        "float",
+        "read_write"
+      ],
+      [
+        "out_number_velocity",
+        "float",
+        "read_write"
+      ],
+      [
+        "out_cloud_mass",
+        "float",
+        "read_write"
+      ],
+      [
+        "out_cloud_number",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "qc": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "cloud_number_entry": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "cloud_number_tendency": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "temperature": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "pressure": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "qv": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "reference_density": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "rain_active_columns": [
+        [
+          "ny",
+          "nx"
+        ]
+      ],
+      "cloud_active_columns": [
+        [
+          "ny",
+          "nx"
+        ]
+      ],
+      "vertical_velocity": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "dz": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "ccg2": [
+        [
+          16
+        ]
+      ],
+      "ccg4": [
+        [
+          16
+        ]
+      ],
+      "ccg5": [
+        [
+          16
+        ]
+      ],
+      "ocg1": [
+        [
+          16
+        ]
+      ],
+      "ocg2": [
+        [
+          16
+        ]
+      ],
+      "out_mass_velocity": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "out_number_velocity": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "out_cloud_mass": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "out_cloud_number": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "dt",
+        "float32"
+      ],
+      [
+        "r1",
+        "float32"
+      ],
+      [
+        "r2",
+        "float32"
+      ],
+      [
+        "am_r",
+        "float32"
+      ],
+      [
+        "obmr",
+        "float32"
+      ],
+      [
+        "av_c",
+        "float32"
+      ],
+      [
+        "nc_sed_floor",
+        "float32"
+      ],
+      [
+        "sed_w_limit",
+        "float32"
+      ],
+      [
+        "sed_hgt_agl",
+        "float32"
+      ],
+      [
+        "nz",
+        "int32"
+      ],
+      [
+        "ny",
+        "int32"
+      ],
+      [
+        "nx",
+        "int32"
+      ],
+      [
+        "has_rain_mask",
+        "int32"
+      ],
+      [
+        "has_cloud_mask",
+        "int32"
+      ],
+      [
+        "diagnostic_mask",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 32,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "soft32-rn-nonftz",
+      "soft64-rn-bit-ops",
+      "dependency-marked-unverified"
+    ]
+  },
+  {
+    "name": "thompson_aa_cloud_sediment_levels_64_source",
+    "module": "thompson_aerosol_sed",
+    "source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+    "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+    "cuda_symbol": "thompson_aa_cloud_sediment_levels_64_with_masks",
+    "resources": [
+      [
+        "qc",
+        "float",
+        "read_write"
+      ],
+      [
+        "cloud_number_entry",
+        "float",
+        "read"
+      ],
+      [
+        "cloud_number_tendency",
+        "float",
+        "read_write"
+      ],
+      [
+        "temperature",
+        "float",
+        "read"
+      ],
+      [
+        "pressure",
+        "float",
+        "read"
+      ],
+      [
+        "qv",
+        "float",
+        "read"
+      ],
+      [
+        "reference_density",
+        "float",
+        "read"
+      ],
+      [
+        "rain_active_columns",
+        "float",
+        "read"
+      ],
+      [
+        "cloud_active_columns",
+        "float",
+        "read"
+      ],
+      [
+        "vertical_velocity",
+        "float",
+        "read"
+      ],
+      [
+        "dz",
+        "float",
+        "read"
+      ],
+      [
+        "ccg2",
+        "float",
+        "read"
+      ],
+      [
+        "ccg4",
+        "float",
+        "read"
+      ],
+      [
+        "ccg5",
+        "float",
+        "read"
+      ],
+      [
+        "ocg1",
+        "float",
+        "read"
+      ],
+      [
+        "ocg2",
+        "float",
+        "read"
+      ]
+    ],
+    "shapes": {
+      "qc": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "cloud_number_entry": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "cloud_number_tendency": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "temperature": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "pressure": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "qv": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "reference_density": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "rain_active_columns": [
+        [
+          "ny",
+          "nx"
+        ]
+      ],
+      "cloud_active_columns": [
+        [
+          "ny",
+          "nx"
+        ]
+      ],
+      "vertical_velocity": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "dz": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "ccg2": [
+        [
+          16
+        ]
+      ],
+      "ccg4": [
+        [
+          16
+        ]
+      ],
+      "ccg5": [
+        [
+          16
+        ]
+      ],
+      "ocg1": [
+        [
+          16
+        ]
+      ],
+      "ocg2": [
+        [
+          16
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "dt",
+        "float32"
+      ],
+      [
+        "r1",
+        "float32"
+      ],
+      [
+        "r2",
+        "float32"
+      ],
+      [
+        "am_r",
+        "float32"
+      ],
+      [
+        "obmr",
+        "float32"
+      ],
+      [
+        "av_c",
+        "float32"
+      ],
+      [
+        "nc_sed_floor",
+        "float32"
+      ],
+      [
+        "sed_w_limit",
+        "float32"
+      ],
+      [
+        "sed_hgt_agl",
+        "float32"
+      ],
+      [
+        "nz",
+        "int32"
+      ],
+      [
+        "ny",
+        "int32"
+      ],
+      [
+        "nx",
+        "int32"
+      ],
+      [
+        "has_rain_mask",
+        "int32"
+      ],
+      [
+        "has_cloud_mask",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 512,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "soft32-rn-nonftz",
+      "soft64-rn-bit-ops",
+      "dependency-marked-unverified"
+    ]
+  },
+  {
+    "name": "thompson_aa_cloud_sediment_256_source",
+    "module": "thompson_aerosol_sed",
+    "source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+    "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+    "cuda_symbol": "thompson_aa_cloud_sediment_256",
+    "resources": [
+      [
+        "qc",
+        "float",
+        "read_write"
+      ],
+      [
+        "cloud_number_entry",
+        "float",
+        "read"
+      ],
+      [
+        "cloud_number_tendency",
+        "float",
+        "read_write"
+      ],
+      [
+        "temperature",
+        "float",
+        "read"
+      ],
+      [
+        "pressure",
+        "float",
+        "read"
+      ],
+      [
+        "qv",
+        "float",
+        "read"
+      ],
+      [
+        "reference_density",
+        "float",
+        "read"
+      ],
+      [
+        "rain_active_columns",
+        "float",
+        "read"
+      ],
+      [
+        "cloud_active_columns",
+        "float",
+        "read"
+      ],
+      [
+        "vertical_velocity",
+        "float",
+        "read"
+      ],
+      [
+        "dz",
+        "float",
+        "read"
+      ],
+      [
+        "ccg2",
+        "float",
+        "read"
+      ],
+      [
+        "ccg4",
+        "float",
+        "read"
+      ],
+      [
+        "ccg5",
+        "float",
+        "read"
+      ],
+      [
+        "ocg1",
+        "float",
+        "read"
+      ],
+      [
+        "ocg2",
+        "float",
+        "read"
+      ],
+      [
+        "out_mass_velocity",
+        "float",
+        "read_write"
+      ],
+      [
+        "out_number_velocity",
+        "float",
+        "read_write"
+      ],
+      [
+        "out_cloud_mass",
+        "float",
+        "read_write"
+      ],
+      [
+        "out_cloud_number",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "qc": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "cloud_number_entry": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "cloud_number_tendency": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "temperature": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "pressure": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "qv": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "reference_density": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "rain_active_columns": [
+        [
+          "ny",
+          "nx"
+        ]
+      ],
+      "cloud_active_columns": [
+        [
+          "ny",
+          "nx"
+        ]
+      ],
+      "vertical_velocity": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "dz": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "ccg2": [
+        [
+          16
+        ]
+      ],
+      "ccg4": [
+        [
+          16
+        ]
+      ],
+      "ccg5": [
+        [
+          16
+        ]
+      ],
+      "ocg1": [
+        [
+          16
+        ]
+      ],
+      "ocg2": [
+        [
+          16
+        ]
+      ],
+      "out_mass_velocity": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "out_number_velocity": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "out_cloud_mass": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ],
+      "out_cloud_number": [
+        [
+          "nz",
+          "ny",
+          "nx"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "dt",
+        "float32"
+      ],
+      [
+        "r1",
+        "float32"
+      ],
+      [
+        "r2",
+        "float32"
+      ],
+      [
+        "am_r",
+        "float32"
+      ],
+      [
+        "obmr",
+        "float32"
+      ],
+      [
+        "av_c",
+        "float32"
+      ],
+      [
+        "nc_sed_floor",
+        "float32"
+      ],
+      [
+        "sed_w_limit",
+        "float32"
+      ],
+      [
+        "sed_hgt_agl",
+        "float32"
+      ],
+      [
+        "nz",
+        "int32"
+      ],
+      [
+        "ny",
+        "int32"
+      ],
+      [
+        "nx",
+        "int32"
+      ],
+      [
+        "has_rain_mask",
+        "int32"
+      ],
+      [
+        "has_cloud_mask",
+        "int32"
+      ],
+      [
+        "diagnostic_mask",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 32,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "soft32-rn-nonftz",
+      "soft64-rn-bit-ops",
+      "dependency-marked-unverified"
+    ]
+  },
+  {
+    "name": "thompson_aa_final_phase_cleanup_source",
+    "module": "thompson_aerosol_sed",
+    "source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+    "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+    "cuda_symbol": "thompson_aa_final_phase_cleanup",
+    "resources": [
+      [
+        "qc",
+        "float",
+        "read_write"
+      ],
+      [
+        "qi",
+        "float",
+        "read_write"
+      ],
+      [
+        "ni",
+        "float",
+        "read_write"
+      ],
+      [
+        "temperature",
+        "float",
+        "read_write"
+      ],
+      [
+        "cloud_number_entry",
+        "float",
+        "read"
+      ],
+      [
+        "ice_number_entry",
+        "float",
+        "read"
+      ],
+      [
+        "cloud_number_tendency",
+        "float",
+        "read_write"
+      ],
+      [
+        "pressure",
+        "float",
+        "read"
+      ],
+      [
+        "qv",
+        "float",
+        "read"
+      ]
+    ],
+    "shapes": {
+      "qc": [
+        [
+          "size"
+        ]
+      ],
+      "qi": [
+        [
+          "size"
+        ]
+      ],
+      "ni": [
+        [
+          "size"
+        ]
+      ],
+      "temperature": [
+        [
+          "size"
+        ]
+      ],
+      "cloud_number_entry": [
+        [
+          "size"
+        ]
+      ],
+      "ice_number_entry": [
+        [
+          "size"
+        ]
+      ],
+      "cloud_number_tendency": [
+        [
+          "size"
+        ]
+      ],
+      "pressure": [
+        [
+          "size"
+        ]
+      ],
+      "qv": [
+        [
+          "size"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "dt",
+        "float32"
+      ],
+      [
+        "r1",
+        "float32"
+      ],
+      [
+        "r2",
+        "float32"
+      ],
+      [
+        "am_i",
+        "float32"
+      ],
+      [
+        "size",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 256,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "soft32-rn-nonftz",
+      "soft64-rn-bit-ops",
+      "dependency-marked-unverified"
+    ]
+  }
+],
+  "blocked_exports": [
+    {
+      "name": "thompson_aa_cloud_sediment_64",
+      "family": "cloud_sedimentation",
+      "reason": "Requires unapproved exact pow((double)x,(double)y)-to-float32, float32 sqrt, soft binary64 operation paths, and shared aerosol gamma-moment tables/helpers."
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_256",
+      "family": "cloud_sedimentation",
+      "reason": "Same source operation graph and prerequisites as the 64-layer specialization."
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_64_with_rain",
+      "family": "cloud_sedimentation",
+      "reason": "Same source operation graph and prerequisites, plus rain-active column semantics."
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_256_with_rain",
+      "family": "cloud_sedimentation",
+      "reason": "Same source operation graph and prerequisites, plus rain-active column semantics."
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_64_with_masks",
+      "family": "cloud_sedimentation",
+      "reason": "Same source operation graph and prerequisites, plus rain/cloud column-mask semantics."
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_256_with_masks",
+      "family": "cloud_sedimentation",
+      "reason": "Same source operation graph and prerequisites, plus rain/cloud column-mask semantics."
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_64_diagnostic",
+      "family": "cloud_sedimentation_diagnostic",
+      "reason": "Same blocked cloud operation graph; optional output planes do not remove the exact-math dependencies."
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_256_diagnostic",
+      "family": "cloud_sedimentation_diagnostic",
+      "reason": "Same blocked cloud operation graph; optional output planes do not remove the exact-math dependencies."
+    },
+    {
+      "name": "thompson_aa_final_phase_cleanup",
+      "family": "final_phase_cleanup",
+      "reason": "Requires the shared ice-number bound (including its CUDA powf, RN division, fminf/fmaxf, and binary64 diameter/cube semantics), exact source powf_cr, binary64 divide/multiply/pow/fmin edge behavior, float32 add/sub/mul/div/fmax, and RN width conversions."
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_levels_64_with_masks",
+      "family": "level_parallel_cloud_sedimentation",
+      "reason": "Same blocked cloud operation graph; also requires fixed threadgroup storage and block barriers."
+    }
+  ],
+  "proposed_binding_plan": {
+    "production_signature": false,
+    "cloud_column": {
+      "proposed_metal_entrypoints": ["thompson_aa_cloud_sediment_64_source", "thompson_aa_cloud_sediment_256_source"],
+      "dispatch": "one thread per (j,i) column; grid ceil(ny*nx/threads_per_group); nz in [2,256]",
+      "specialization": "Select the 64-frame entrypoint for 2 <= nz <= 64 and the 256-frame entrypoint for 65 <= nz <= 256.",
+      "optional_binding_policy": "The proposed unified serial resource structs have fixed slots for both masks and all four diagnostic outputs. When a source CUDA pointer is null, bind a safe dummy Metal buffer and clear the corresponding has_rain_mask, has_cloud_mask, or diagnostic_mask bit; the shader only dereferences or writes those slots when enabled.",
+      "diagnostic_mask_bits": {"1": "out_mass_velocity", "2": "out_number_velocity", "4": "out_cloud_mass", "8": "out_cloud_number"},
+      "source_constants_f32": {"r1": "THOMPSON_AA_R1 = 1.0e-12f", "r2": "THOMPSON_AA_R2 = 1.0e-6f", "am_r": "THOMPSON_AA_AM_R = 5.235988159e+02f", "obmr": "THOMPSON_AA_OBMR = 3.333333433e-01f", "av_c": "THOMPSON_AA_AV_C = 0.316946e8f", "nc_sed_floor": "THOMPSON_AA_NC_SED_FLOOR = 10.0f", "sed_w_limit": "THOMPSON_AA_SED_W_LIMIT = 1.0e-1f", "sed_hgt_agl": "THOMPSON_AA_SED_HGT_AGL = 500.0f", "rho_not": "evaluated in-kernel as 101325.0f/(287.05f*298.0f)"},
+      "source_resources": [
+        ["qc", "float32", "read_write", ["nz", "ny", "nx"]],
+        ["cloud_number_entry", "float32", "read", ["nz", "ny", "nx"]],
+        ["cloud_number_tendency", "float32", "read_write", ["nz", "ny", "nx"]],
+        ["temperature", "float32", "read", ["nz", "ny", "nx"]],
+        ["pressure", "float32", "read", ["nz", "ny", "nx"]],
+        ["qv", "float32", "read", ["nz", "ny", "nx"]],
+        ["reference_density", "float32", "read", ["nz", "ny", "nx"]],
+        ["rain_active_columns", "float32", "read", ["ny", "nx"], "optional"],
+        ["cloud_active_columns", "float32", "read", ["ny", "nx"], "optional"],
+        ["vertical_velocity", "float32", "read", ["nz", "ny", "nx"]],
+        ["dz", "float32", "read", ["nz", "ny", "nx"]],
+        ["ccg2", "float32", "read", [16], "shared aerosol moment resource"],
+        ["ccg4", "float32", "read", [16], "shared aerosol moment resource"],
+        ["ccg5", "float32", "read", [16], "shared aerosol moment resource"],
+        ["ocg1", "float32", "read", [16], "shared aerosol moment resource"],
+        ["ocg2", "float32", "read", [16], "shared aerosol moment resource"],
+        ["out_mass_velocity", "float32", "read_write", ["nz", "ny", "nx"], "optional diagnostic"],
+        ["out_number_velocity", "float32", "read_write", ["nz", "ny", "nx"], "optional diagnostic"],
+        ["out_cloud_mass", "float32", "read_write", ["nz", "ny", "nx"], "optional diagnostic"],
+        ["out_cloud_number", "float32", "read_write", ["nz", "ny", "nx"], "optional diagnostic"]
+      ],
+      "parameters": ["dt:float32", "nz:int32", "ny:int32", "nx:int32", "mask-presence flags:int32", "diagnostic mask:int32", "shared source constants:float32"]
+    },
+    "final_phase_cleanup": {
+      "proposed_metal_entrypoint": "thompson_aa_final_phase_cleanup_source",
+      "dispatch": "one thread per flat state element; grid ceil(size/threads_per_group)",
+      "source_constants_f32": {"r1": "THOMPSON_AA_R1 = 1.0e-12f", "r2": "THOMPSON_AA_R2 = 1.0e-6f", "am_i": "THOMPSON_AA_AM_I = 4.660029297e+02f"},
+      "resources": [
+        ["qc", "float32", "read_write", ["size"]],
+        ["qi", "float32", "read_write", ["size"]],
+        ["ni", "float32", "read_write", ["size"]],
+        ["temperature", "float32", "read_write", ["size"]],
+        ["cloud_number_entry", "float32", "read", ["size"]],
+        ["ice_number_entry", "float32", "read", ["size"]],
+        ["cloud_number_tendency", "float32", "read_write", ["size"]],
+        ["pressure", "float32", "read", ["size"]],
+        ["qv", "float32", "read", ["size"]]
+      ],
+      "parameters": ["dt:float32", "size:int32", "shared source constants:float32"]
+    },
+    "configuration_gap": "The column core is specialized to 64/256 private frames and the CUDA level-parallel configuration has a proposed 8-by-64 threadgroup kernel. Generated bindings and reviewed shared helpers are still absent."
+  },
+  "proposed_kernels": [
+    {
+      "name": "thompson_aa_cloud_sediment_64_source",
+      "module": "thompson_aerosol_sed",
+      "source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_cloud_sediment_64",
+      "source_symbol_variants": ["thompson_aa_cloud_sediment_64_with_rain", "thompson_aa_cloud_sediment_64_with_masks", "thompson_aa_cloud_sediment_64_diagnostic"],
+      "resources": [["qc","float","read_write"],["cloud_number_entry","float","read"],["cloud_number_tendency","float","read_write"],["temperature","float","read"],["pressure","float","read"],["qv","float","read"],["reference_density","float","read"],["rain_active_columns","float","read"],["cloud_active_columns","float","read"],["vertical_velocity","float","read"],["dz","float","read"],["ccg2","float","read"],["ccg4","float","read"],["ccg5","float","read"],["ocg1","float","read"],["ocg2","float","read"],["out_mass_velocity","float","read_write"],["out_number_velocity","float","read_write"],["out_cloud_mass","float","read_write"],["out_cloud_number","float","read_write"]],
+      "shapes": {"qc":[["nz","ny","nx"]],"cloud_number_entry":[["nz","ny","nx"]],"cloud_number_tendency":[["nz","ny","nx"]],"temperature":[["nz","ny","nx"]],"pressure":[["nz","ny","nx"]],"qv":[["nz","ny","nx"]],"reference_density":[["nz","ny","nx"]],"rain_active_columns":[["ny","nx"]],"cloud_active_columns":[["ny","nx"]],"vertical_velocity":[["nz","ny","nx"]],"dz":[["nz","ny","nx"]],"ccg2":[[16]],"ccg4":[[16]],"ccg5":[[16]],"ocg1":[[16]],"ocg2":[[16]],"out_mass_velocity":[["nz","ny","nx"]],"out_number_velocity":[["nz","ny","nx"]],"out_cloud_mass":[["nz","ny","nx"]],"out_cloud_number":[["nz","ny","nx"]]},
+      "parameters": [["dt","float32"],["r1","float32"],["r2","float32"],["am_r","float32"],["obmr","float32"],["av_c","float32"],["nc_sed_floor","float32"],["sed_w_limit","float32"],["sed_hgt_agl","float32"],["nz","int32"],["ny","int32"],["nx","int32"],["has_rain_mask","int32"],["has_cloud_mask","int32"],["diagnostic_mask","int32"]],
+      "threads_per_group": 32, "layout_version": 1, "arithmetic_policies": ["soft32-rn-nonftz", "soft64-rn-bit-ops", "dependency-marked-unverified"],
+      "not_for_registry": true
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_levels_64_source",
+      "module": "thompson_aerosol_sed",
+      "source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_cloud_sediment_levels_64_with_masks",
+      "dispatch_policy": "Grid ceil(ny*nx/8); one 8-column group with 512 threads. Eligible only for nz <= 64 when level-parallel fallout is enabled, a cloud mask is supplied, and diagnostics are absent.",
+      "optional_binding_policy": "The level-parallel resource struct has fixed rain/cloud mask slots. Bind safe dummy Metal buffers for null CUDA masks and clear the corresponding presence flags.",
+      "resources": [["qc","float","read_write"],["cloud_number_entry","float","read"],["cloud_number_tendency","float","read_write"],["temperature","float","read"],["pressure","float","read"],["qv","float","read"],["reference_density","float","read"],["rain_active_columns","float","read"],["cloud_active_columns","float","read"],["vertical_velocity","float","read"],["dz","float","read"],["ccg2","float","read"],["ccg4","float","read"],["ccg5","float","read"],["ocg1","float","read"],["ocg2","float","read"]],
+      "shapes": {"qc":[["nz","ny","nx"]],"cloud_number_entry":[["nz","ny","nx"]],"cloud_number_tendency":[["nz","ny","nx"]],"temperature":[["nz","ny","nx"]],"pressure":[["nz","ny","nx"]],"qv":[["nz","ny","nx"]],"reference_density":[["nz","ny","nx"]],"rain_active_columns":[["ny","nx"]],"cloud_active_columns":[["ny","nx"]],"vertical_velocity":[["nz","ny","nx"]],"dz":[["nz","ny","nx"]],"ccg2":[[16]],"ccg4":[[16]],"ccg5":[[16]],"ocg1":[[16]],"ocg2":[[16]]},
+      "parameters": [["dt","float32"],["r1","float32"],["r2","float32"],["am_r","float32"],["obmr","float32"],["av_c","float32"],["nc_sed_floor","float32"],["sed_w_limit","float32"],["sed_hgt_agl","float32"],["nz","int32"],["ny","int32"],["nx","int32"],["has_rain_mask","int32"],["has_cloud_mask","int32"]],
+      "threads_per_group": 512, "layout_version": 1, "arithmetic_policies": ["soft32-rn-nonftz", "soft64-rn-bit-ops", "dependency-marked-unverified"],
+      "not_for_registry": true
+    },
+    {
+      "name": "thompson_aa_cloud_sediment_256_source",
+      "module": "thompson_aerosol_sed",
+      "source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_cloud_sediment_256",
+      "source_symbol_variants": ["thompson_aa_cloud_sediment_256_with_rain", "thompson_aa_cloud_sediment_256_with_masks", "thompson_aa_cloud_sediment_256_diagnostic"],
+      "resources": [["qc","float","read_write"],["cloud_number_entry","float","read"],["cloud_number_tendency","float","read_write"],["temperature","float","read"],["pressure","float","read"],["qv","float","read"],["reference_density","float","read"],["rain_active_columns","float","read"],["cloud_active_columns","float","read"],["vertical_velocity","float","read"],["dz","float","read"],["ccg2","float","read"],["ccg4","float","read"],["ccg5","float","read"],["ocg1","float","read"],["ocg2","float","read"],["out_mass_velocity","float","read_write"],["out_number_velocity","float","read_write"],["out_cloud_mass","float","read_write"],["out_cloud_number","float","read_write"]],
+      "shapes": {"qc":[["nz","ny","nx"]],"cloud_number_entry":[["nz","ny","nx"]],"cloud_number_tendency":[["nz","ny","nx"]],"temperature":[["nz","ny","nx"]],"pressure":[["nz","ny","nx"]],"qv":[["nz","ny","nx"]],"reference_density":[["nz","ny","nx"]],"rain_active_columns":[["ny","nx"]],"cloud_active_columns":[["ny","nx"]],"vertical_velocity":[["nz","ny","nx"]],"dz":[["nz","ny","nx"]],"ccg2":[[16]],"ccg4":[[16]],"ccg5":[[16]],"ocg1":[[16]],"ocg2":[[16]],"out_mass_velocity":[["nz","ny","nx"]],"out_number_velocity":[["nz","ny","nx"]],"out_cloud_mass":[["nz","ny","nx"]],"out_cloud_number":[["nz","ny","nx"]]},
+      "parameters": [["dt","float32"],["r1","float32"],["r2","float32"],["am_r","float32"],["obmr","float32"],["av_c","float32"],["nc_sed_floor","float32"],["sed_w_limit","float32"],["sed_hgt_agl","float32"],["nz","int32"],["ny","int32"],["nx","int32"],["has_rain_mask","int32"],["has_cloud_mask","int32"],["diagnostic_mask","int32"]],
+      "threads_per_group": 32, "layout_version": 1, "arithmetic_policies": ["soft32-rn-nonftz", "soft64-rn-bit-ops", "dependency-marked-unverified"],
+      "not_for_registry": true
+    },
+    {
+      "name": "thompson_aa_final_phase_cleanup_source",
+      "module": "thompson_aerosol_sed",
+      "source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_symbol": "thompson_aa_final_phase_cleanup",
+      "resources": [["qc","float","read_write"],["qi","float","read_write"],["ni","float","read_write"],["temperature","float","read_write"],["cloud_number_entry","float","read"],["ice_number_entry","float","read"],["cloud_number_tendency","float","read_write"],["pressure","float","read"],["qv","float","read"]],
+      "shapes": {"qc":[["size"]],"qi":[["size"]],"ni":[["size"]],"temperature":[["size"]],"cloud_number_entry":[["size"]],"ice_number_entry":[["size"]],"cloud_number_tendency":[["size"]],"pressure":[["size"]],"qv":[["size"]]},
+      "parameters": [["dt","float32"],["r1","float32"],["r2","float32"],["am_i","float32"],["size","int32"]],
+      "threads_per_group": 256, "layout_version": 1, "arithmetic_policies": ["soft32-rn-nonftz", "soft64-rn-bit-ops", "dependency-marked-unverified"],
+      "not_for_registry": true
+    }
+  ],
+  "production_consumable": false,
+  "verification": "No build, test, compiler, or runtime probe was run."
+}

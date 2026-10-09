@@ -1,0 +1,43 @@
+[package]
+name = "rw-zarr"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+license = "Apache-2.0"
+publish = false
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "rw_zarr"
+path = "src/main.rs"
+
+[dependencies]
+zarrs = { version = "=0.23.14", default-features = false, features = ["filesystem", "blosc", "gzip", "zstd", "transpose"] }
+zarrs_http = "=0.3.1"
+# The HTTP client the reader's own store (src/http_store.rs) builds, with a timeout sized for a chunk.
+reqwest = { version = "=0.12.28", default-features = false, features = ["blocking"] }
+bytes = "=1.12.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "alloc"] }
+netcdf-writer = { path = "../rustwx/crates/netcdf-writer" }
+mapped-engine = { path = "../rw_wps/crates/mapped-engine" }
+netcrust = { path = "../rustwx/vendor/netcrust" }
+
+# zarrs_http enables reqwest's native TLS backend. Bundle that backend's
+# OpenSSL on Unix so a Linux release does not depend on a host libssl ABI.
+[target.'cfg(unix)'.dependencies]
+openssl = { version = "=0.10.81", features = ["vendored"] }
+
+# netcrust carries a self-contained path dependency chain for NetCDF/HDF5.
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+# WOOF: symbol tables go too (strip = "symbols"). Its platform wheel carries
+# six more decoders than the engine's and measured 103,610,312 bytes with
+# debuginfo stripping only; dropping symbols gives back 5.26 MB and keeps the
+# source-revision stamp, contract markers and exported ABI symbols.
+strip = "symbols"

@@ -1,0 +1,156 @@
+#ifndef WOOF_THOMPSON_AEROSOL_COMMON_METALH
+#define WOOF_THOMPSON_AEROSOL_COMMON_METALH
+
+// Shared Metal counterparts for the MP28 Thompson aerosol CUDA helpers in
+// woof/core/kernels/thompson_aerosol_common.cuh. Requires soft_binary32,
+// soft_binary64, soft_libm64 and soft_gfk_pow to be included first.
+
+// The source tables are generated from WRF v4.6.1 REAL(4) WGAMMA/GAMMLN;
+// keep the upstream Numerical Recipes notice with the derived values.
+// See licenses/NOTICE-Numerical-Recipes.txt.
+
+#pragma clang fp contract(off)
+
+#define THOMPSON_AA_NT_C_MAX 1999.0e6f
+#define THOMPSON_AA_NC_FLOOR 2.0f
+#define THOMPSON_AA_R1 1.0e-12f
+#define THOMPSON_AA_R2 1.0e-6f
+#define THOMPSON_AA_AM_I 4.660029297e+2f
+
+constant float THOMPSON_AA_CCG2[16] = {
+    0.000000000e+00f, 2.400000000e+01f, 1.200000076e+02f, 7.200000610e+02f,
+    5.040001953e+03f, 4.031999609e+04f, 3.628799688e+05f, 3.628801750e+06f,
+    3.991680000e+07f, 4.790018560e+08f, 6.227022336e+09f, 8.717829734e+10f,
+    1.307673887e+12f, 2.092278219e+13f, 3.556874482e+14f, 6.402383731e+15f};
+
+constant float THOMPSON_AA_CCG4[16] = {
+    0.000000000e+00f, 6.000000000e+00f, 2.400000000e+01f, 1.200000076e+02f,
+    7.200000610e+02f, 5.040001953e+03f, 4.031999609e+04f, 3.628799688e+05f,
+    3.628801750e+06f, 3.991680000e+07f, 4.790018560e+08f, 6.227022336e+09f,
+    8.717829734e+10f, 1.307673887e+12f, 2.092278219e+13f, 3.556874482e+14f};
+
+constant float THOMPSON_AA_CCG5[16] = {
+    0.000000000e+00f, 7.200000610e+02f, 5.040001953e+03f, 4.031999609e+04f,
+    3.628799688e+05f, 3.628801750e+06f, 3.991680000e+07f, 4.790018560e+08f,
+    6.227022336e+09f, 8.717829734e+10f, 1.307673887e+12f, 2.092278219e+13f,
+    3.556874482e+14f, 6.402383731e+15f, 1.216452850e+17f, 2.432903398e+18f};
+
+constant float THOMPSON_AA_OCG1[16] = {
+    0.000000000e+00f, 1.000000000e+00f, 5.000000000e-01f, 1.666666716e-01f,
+    4.166666791e-02f, 8.333332837e-03f, 1.388888806e-03f, 1.984126284e-04f,
+    2.480158946e-05f, 2.755732112e-06f, 2.755730577e-07f, 2.505210794e-08f,
+    2.087674478e-09f, 1.605904021e-10f, 1.147074449e-11f, 7.647166320e-13f};
+
+constant float THOMPSON_AA_OCG2[16] = {
+    0.000000000e+00f, 4.166666791e-02f, 8.333332837e-03f, 1.388888806e-03f,
+    1.984126284e-04f, 2.480158946e-05f, 2.755732112e-06f, 2.755730577e-07f,
+    2.505210794e-08f, 2.087674478e-09f, 1.605904021e-10f, 1.147074449e-11f,
+    7.647166320e-13f, 4.779478950e-14f, 2.811457147e-15f, 1.561918299e-16f};
+
+// CUDA's __f*_rn / binary64 helpers, carried on the soft32/soft64 IEEE
+// words the cold family uses (thompson_aerosol_cold_family.metal:19-57,
+// :1694-1730), so no native Metal double or fast-math rounding is involved.
+static inline uint thompson_aa_bits(float x) { return as_type<uint>(x); }
+static inline float thompson_aa_value(uint x) { return as_type<float>(x); }
+static inline float thompson_aa_add(float a, float b)
+{
+    return thompson_aa_value(soft32_add(thompson_aa_bits(a), thompson_aa_bits(b)));
+}
+static inline float thompson_aa_sub(float a, float b)
+{
+    return thompson_aa_value(soft32_sub(thompson_aa_bits(a), thompson_aa_bits(b)));
+}
+static inline float thompson_aa_mul(float a, float b)
+{
+    return thompson_aa_value(soft32_mul(thompson_aa_bits(a), thompson_aa_bits(b)));
+}
+static inline float thompson_aa_div(float a, float b)
+{
+    return thompson_aa_value(soft32_div(thompson_aa_bits(a), thompson_aa_bits(b)));
+}
+static inline float thompson_aa_sqrtf_rn(float x)
+{
+    return thompson_aa_value(soft32_sqrt(thompson_aa_bits(x)));
+}
+
+// (float)pow((double)x, (double)y): binary64 pow on soft64 words.
+static inline float thompson_aa_powf_cr(float x, float y)
+{
+    return thompson_aa_value(soft64_to_f32_bits(soft64_plm_pow(
+        soft64_from_f32_bits(thompson_aa_bits(x)),
+        soft64_from_f32_bits(thompson_aa_bits(y)))));
+}
+
+// CUDA powf, as the cold family ports it.
+static inline float thompson_aa_powf(float x, float y)
+{
+    return thompson_aa_value(
+        soft_gfk_pow_bits(thompson_aa_bits(x), thompson_aa_bits(y)));
+}
+
+static inline float thompson_aa_fmaxf(float a, float b)
+{
+    const uint ab = thompson_aa_bits(a), bb = thompson_aa_bits(b);
+    if (soft32_is_nan(ab)) return b;
+    if (soft32_is_nan(bb)) return a;
+    if (soft32_is_zero(ab) && soft32_is_zero(bb))
+        return (ab & 0x80000000u) != 0u ? b : a;
+    return soft32_greater(ab, bb) ? a : b;
+}
+static inline float thompson_aa_fminf(float a, float b)
+{
+    const uint ab = thompson_aa_bits(a), bb = thompson_aa_bits(b);
+    if (soft32_is_nan(ab)) return b;
+    if (soft32_is_nan(bb)) return a;
+    if (soft32_is_zero(ab) && soft32_is_zero(bb))
+        return (ab & 0x80000000u) != 0u ? a : b;
+    return soft32_less(ab, bb) ? a : b;
+}
+
+static inline float thompson_aa_clamp_nc(float nc_m3)
+{
+    return thompson_aa_fmaxf(THOMPSON_AA_NC_FLOOR,
+                             thompson_aa_fminf(nc_m3, THOMPSON_AA_NT_C_MAX));
+}
+
+// MIN(15, NINT(1000.E6/nc) + 2); nc >= 2 at every caller.
+static inline int thompson_aa_nu_c(float nc_m3)
+{
+    return metal::min(15, int(metal::floor(thompson_aa_add(
+        thompson_aa_div(1000.0e6f, nc_m3), 0.5f))) + 2);
+}
+
+// thompson_aa_bound_ice_number (thompson_aerosol_common.cuh:1524-1547).
+static inline void thompson_aa_bound_ice_number(
+    float ice_mass, float density, device float *ice_number_per_kg)
+{
+    if (ice_mass <= THOMPSON_AA_R1) {
+        *ice_number_per_kg = 0.0f;
+        return;
+    }
+    const float am_i = THOMPSON_AA_AM_I;
+    float ice_number = thompson_aa_fmaxf(
+        THOMPSON_AA_R2, thompson_aa_mul(*ice_number_per_kg, density));
+    const float base = thompson_aa_div(
+        thompson_aa_mul(thompson_aa_mul(am_i, 6.0f), ice_number), ice_mass);
+    const float root = thompson_aa_powf(base, as_type<float>(0x3eaaaaabu));
+    ulong lambda = soft64_from_f32_bits(thompson_aa_bits(root));
+    const ulong four = 0x4010000000000000ul;
+    const float diameter = thompson_aa_value(
+        soft64_to_f32_bits(soft64_div(four, lambda)));
+    if (diameter < 5.0e-6f || diameter > 300.0e-6f) {
+        lambda = soft64_div(four, diameter < 5.0e-6f
+            ? 0x3ed4f8b588e368f1ul : 0x3f33a92a30553261ul);
+        const ulong cube = soft64_mul(soft64_mul(lambda, lambda), lambda);
+        const float cube32 = thompson_aa_value(soft64_to_f32_bits(cube));
+        const float mass_factor = thompson_aa_div(
+            thompson_aa_mul(thompson_aa_div(1.0f, 6.0f), ice_mass), am_i);
+        ice_number = thompson_aa_mul(mass_factor, cube32);
+        if (diameter < 5.0e-6f)
+            ice_number = thompson_aa_fminf(999.0e3f, ice_number);
+    }
+    *ice_number_per_kg = thompson_aa_div(
+        thompson_aa_fminf(ice_number, 999.0e3f), density);
+}
+
+#endif // WOOF_THOMPSON_AEROSOL_COMMON_METALH

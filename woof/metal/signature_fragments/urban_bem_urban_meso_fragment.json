@@ -1,0 +1,53 @@
+{
+  "kernels": [{
+    "name": "urban_bem_urban_meso_fragment",
+    "module": "urban_bem_urban_meso_fragment",
+    "source": "woof/metal/shaders/urban_bem_urban_meso_fragment.metal",
+    "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+    "cuda_symbol": "bb_urban_meso, module_sf_bep_bem.F:2978-3114",
+    "resources": [
+      ["active_cols", "int32", "read"], ["z", "float", "read"],
+      ["dz", "float", "read"], ["z_u", "float", "read"],
+      ["pb", "float", "read"], ["ss", "float", "read"],
+      ["bs", "float", "read"], ["ws", "float", "read"],
+      ["uva", "float", "read"], ["vva", "float", "read"],
+      ["uvb", "float", "read"], ["vvb", "float", "read"],
+      ["tvb", "float", "read"], ["tvb_ac", "float", "read"],
+      ["evb", "float", "read"], ["uhb", "float", "read"],
+      ["vhb", "float", "read"], ["thb", "float", "read"],
+      ["ehb", "float", "read"], ["qhb", "float", "read"],
+      ["qvb", "float", "read"],
+      ["a_u", "float", "read_write"], ["a_v", "float", "read_write"],
+      ["a_t", "float", "read_write"], ["a_e", "float", "read_write"],
+      ["b_u", "float", "read_write"], ["b_v", "float", "read_write"],
+      ["b_t", "float", "read_write"], ["b_e", "float", "read_write"],
+      ["b_q", "float", "read_write"], ["b_ac", "float", "read_write"],
+      ["sf", "float", "read_write"], ["vl", "float", "read_write"],
+      ["error", "int32", "read_write"]
+    ],
+    "shapes": {
+      "active_cols": [["ncol"]], "z": [["ncol", "nedge"]],
+      "dz": [["nz", "ncol"]], "z_u": [[19]],
+      "pb": [["ncol", 19]], "ss": [["ncol", 19]],
+      "bs": [["ncol", 2]], "ws": [["ncol", 2]],
+      "uva": [["ncol", 4, 18]], "vva": [["ncol", 4, 18]],
+      "uvb": [["ncol", 4, 18]], "vvb": [["ncol", 4, 18]],
+      "tvb": [["ncol", 4, 18]], "tvb_ac": [["ncol", 4, 18]],
+      "evb": [["ncol", 4, 18]], "uhb": [["ncol", 2, 18]],
+      "vhb": [["ncol", 2, 18]], "thb": [["ncol", 2, 18]],
+      "ehb": [["ncol", 2, 18]], "qhb": [["ncol", 2, 18]],
+      "qvb": [["ncol", 4, 18]],
+      "a_u": [["ncol", "nz"]], "a_v": [["ncol", "nz"]],
+      "a_t": [["ncol", "nz"]], "a_e": [["ncol", "nz"]],
+      "b_u": [["ncol", "nz"]], "b_v": [["ncol", "nz"]],
+      "b_t": [["ncol", "nz"]], "b_e": [["ncol", "nz"]],
+      "b_q": [["ncol", "nz"]], "b_ac": [["ncol", "nz"]],
+      "sf": [["ncol", "nedge"]], "vl": [["ncol", "nz"]],
+      "error": [["ncol"]]
+    },
+    "parameters": [["ncol", "int32"], ["nz", "int32"], ["nedge", "int32"]],
+    "threads_per_group": 64,
+    "layout_version": 1,
+    "arithmetic_policies": ["soft32"]
+  }]
+}

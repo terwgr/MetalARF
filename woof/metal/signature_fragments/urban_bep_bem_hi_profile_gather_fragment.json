@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_bem_hi_profile_gather_fragment",
+      "module": "urban_bep_bem_hi_profile_gather_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_hi_profile_gather_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_column: copy hi_urb2d into zero-initialized hi_urb1d",
+      "resources": [
+        ["hi_domain", "float", "read"],
+        ["hi_column", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "hi_domain": [["num_urban_hi", "ncol"]],
+        "hi_column": [["ncol", 18]],
+        "error": [["ncol"]]
+      },
+      "parameters": [["ncol", "int32"], ["num_urban_hi", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

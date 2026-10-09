@@ -1,0 +1,30 @@
+// Generated from kernel_signatures.json; layout e1149ca121679d091ea8d88ffc030e867150567053fca57338bffd3b6f65f923.
+struct SaseVerticalChannelResources {
+    device const float *e [[id(0)]];
+    device const float *n2 [[id(1)]];
+    device const float *n2d [[id(2)]];
+    device const float *theta [[id(3)]];
+    device const float *t [[id(4)]];
+    device float *kv [[id(5)]];
+    device float *leps [[id(6)]];
+};
+struct SaseVerticalChannelParams {
+    float z0;
+    float karman;
+    float blk_lambda;
+    float c_kv;
+    float ls_coef;
+    float e_min;
+    float f_blend;
+    float g_accel;
+    float c_ks;
+    float cks_exp;
+    float dz;
+    int t_mode;
+    int has_n2;
+    int has_moist;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseVerticalChannelParams) == 68, "sase_vertical_channel parameter ABI size changed");

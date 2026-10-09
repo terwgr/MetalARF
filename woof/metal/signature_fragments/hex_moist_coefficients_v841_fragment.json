@@ -1,0 +1,32 @@
+{
+  "kernels": [
+    {
+      "name": "hex_moist_coefficients_v841_fragment",
+      "module": "hex_moist_coefficients_v841_fragment",
+      "source": "woof/metal/shaders/hex_moist_coefficients_v841_fragment.metal",
+      "cuda_source": "woof/hex/regional_v841.py",
+      "cuda_symbol": "compute_moist_coefficients",
+      "resources": [
+        ["scalars", "float", "read"],
+        ["moist_indices", "int32", "read"],
+        ["cells_on_edge", "int32", "read"],
+        ["qtot", "float", "read_write"],
+        ["cqw", "float", "read_write"],
+        ["cqu", "float", "read_write"]
+      ],
+      "shapes": {
+        "scalars": [["any_1d"]], "moist_indices": [["any_1d"]],
+        "cells_on_edge": [["any_1d"]], "qtot": [["any_1d"]],
+        "cqw": [["any_1d"]], "cqu": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlev", "int32"], ["ncells", "int32"],
+        ["nedges", "int32"], ["nscalars", "int32"],
+        ["nmoist", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

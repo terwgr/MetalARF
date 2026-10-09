@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout c0f5a4483540740d4ea659671c2da37bcda59fb4da3fadc326c6f0e7c9c1d35b.
+struct NoahmpGlacierColumnResources {
+    device const float *in [[id(0)]];
+    device const int *ii [[id(1)]];
+    device const float *zsoil_row [[id(2)]];
+    device float *out [[id(3)]];
+    device int *io [[id(4)]];
+};
+struct NoahmpGlacierColumnParams {
+    float dt;
+    int ncase;
+};
+static_assert(sizeof(NoahmpGlacierColumnParams) == 8, "noahmp_glacier_column parameter ABI size changed");

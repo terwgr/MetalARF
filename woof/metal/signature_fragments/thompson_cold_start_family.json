@@ -1,0 +1,158 @@
+{
+  "kernels": [
+    {
+      "name": "cold_start_alt",
+      "module": "thompson_cold_start_family",
+      "source": "woof/metal/shaders/thompson_cold_start_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_cold_start.cu",
+      "cuda_symbol": "cold_start_alt",
+      "resources": [
+        ["input_words", "float", "read"],
+        ["output", "float", "read_write"]
+      ],
+      "shapes": {
+        "input_words": [["word_count"]],
+        "output": [["n"]]
+      },
+      "parameters": [
+        ["n", "int32"],
+        ["word_count", "int32"]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "cold_start_surface",
+      "module": "thompson_cold_start_family",
+      "source": "woof/metal/shaders/thompson_cold_start_surface.metal",
+      "cuda_source": "woof/core/kernels/thompson_cold_start.cu",
+      "cuda_symbol": "cold_start_surface",
+      "resources": [
+        ["alt", "float", "read"],
+        ["aerosol", "float", "read"],
+        ["surface", "int32", "read_write"]
+      ],
+      "shapes": {
+        "alt": [["n"]],
+        "aerosol": [["n"]],
+        "surface": [["n"]]
+      },
+      "parameters": [["n", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft64-rn-bit-ops"]
+    },
+    {
+      "name": "cold_start_temperature",
+      "module": "thompson_cold_start_family",
+      "source": "woof/metal/shaders/thompson_cold_start_numbers.metal",
+      "cuda_source": "woof/core/kernels/thompson_cold_start.cu",
+      "cuda_symbol": "cold_start_temperature",
+      "resources": [
+        ["theta", "float64_bits", "read"],
+        ["pressure", "float64_bits", "read"],
+        ["indices", "int64", "read"],
+        ["thermo_constants", "float64_bits", "read"],
+        ["temperature", "float", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["n_total"]],
+        "pressure": [["n_total"]],
+        "indices": [["n"]],
+        "thermo_constants": [[2]],
+        "temperature": [["n"]]
+      },
+      "parameters": [["n", "int32"], ["n_total", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft64-rn-bit-ops", "soft-libm64-plm-pow"]
+    },
+    {
+      "name": "cold_start_numbers",
+      "module": "thompson_cold_start_family",
+      "source": "woof/metal/shaders/thompson_cold_start_numbers.metal",
+      "cuda_source": "woof/core/kernels/thompson_cold_start.cu",
+      "cuda_symbol": "cold_start_numbers",
+      "resources": [
+        ["mass", "float", "read"],
+        ["number", "float", "read"],
+        ["alt", "float", "read"],
+        ["temperature", "float", "read"],
+        ["aerosol", "float", "read"],
+        ["xland", "float", "read"],
+        ["retab", "float", "read"],
+        ["gratio", "float", "read"],
+        ["constants", "float64_bits", "read"],
+        ["final_number", "float", "read_write"],
+        ["seed_volume", "float", "read_write"],
+        ["seeded", "int32", "read_write"],
+        ["offender", "int32", "read_write"]
+      ],
+      "shapes": {
+        "mass": [["n"]],
+        "number": [["n"]],
+        "alt": [["n"]],
+        "temperature": [["n"]],
+        "aerosol": [["n"]],
+        "xland": [["n"]],
+        "retab": [["retab_n"]],
+        "gratio": [["gratio_n"]],
+        "constants": [[21]],
+        "final_number": [["n"]],
+        "seed_volume": [["n"]],
+        "seeded": [["n"]],
+        "offender": [["n"]]
+      },
+      "parameters": [["n", "int32"], ["species", "int32"],
+                     ["retab_n", "int32"], ["gratio_n", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft64-rn-bit-ops", "soft-gfk-pow"]
+    },
+    {
+      "name": "cold_start_seed_compact",
+      "module": "thompson_cold_start_family",
+      "source": "woof/metal/shaders/thompson_cold_start_numbers.metal",
+      "cuda_source": "woof/core/kernels/thompson_cold_start.cu",
+      "cuda_symbol": "cold_start_numbers",
+      "resources": [
+        ["mass", "float", "read"],
+        ["number", "float", "read"],
+        ["indices", "int64", "read_write"],
+        ["count", "int32", "read_write"]
+      ],
+      "shapes": {
+        "mass": [["n"]],
+        "number": [["n"]],
+        "indices": [["n"]],
+        "count": [[1]]
+      },
+      "parameters": [["n", "int32"], ["base", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["bitwise-fp32-predicates"]
+    },
+    {
+      "name": "cold_start_temperature_scatter",
+      "module": "thompson_cold_start_family",
+      "source": "woof/metal/shaders/thompson_cold_start_numbers.metal",
+      "cuda_source": "woof/core/kernels/thompson_cold_start.cu",
+      "cuda_symbol": "cold_start_temperature",
+      "resources": [
+        ["indices", "int64", "read"],
+        ["temperature", "float", "read"],
+        ["full_temperature", "float", "read_write"]
+      ],
+      "shapes": {
+        "indices": [["n"]],
+        "temperature": [["n"]],
+        "full_temperature": [["n_total"]]
+      },
+      "parameters": [["n", "int32"], ["n_total", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["device-scatter"]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+// Generated from kernel_signatures.json; layout 97bf2aa8b648f661dd9e676081fd6f14ccd59a86045fdcf9e645132023fc0bbf.
+struct GlobalGrayRadiationOpticsFragmentResources {
+    device const ulong *theta [[id(0)]];
+    device const ulong *exner [[id(1)]];
+    device const ulong *dp [[id(2)]];
+    device const ulong *qc [[id(3)]];
+    device const ulong *qi [[id(4)]];
+    device const ulong *qs [[id(5)]];
+    device const ulong *sw_atmosphere [[id(6)]];
+    device const ulong *tau_column [[id(7)]];
+    device const ulong *cloud_optical_depth [[id(8)]];
+    device const ulong *stefan_boltzmann [[id(9)]];
+    device ulong *epsilon [[id(10)]];
+    device ulong *emission [[id(11)]];
+    device ulong *shortwave_heating [[id(12)]];
+};
+struct GlobalGrayRadiationOpticsFragmentParams {
+    int count;
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalGrayRadiationOpticsFragmentParams) == 12, "global_gray_radiation_optics_fragment parameter ABI size changed");

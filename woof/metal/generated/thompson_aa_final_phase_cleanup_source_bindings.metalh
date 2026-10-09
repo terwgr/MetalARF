@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout 588e495ee992369a43196b60c64f5dc7e43c872373520bfd0488bb5e31a7a375.
+struct ThompsonAaFinalPhaseCleanupSourceResources {
+    device float *qc [[id(0)]];
+    device float *qi [[id(1)]];
+    device float *ni [[id(2)]];
+    device float *temperature [[id(3)]];
+    device const float *cloud_number_entry [[id(4)]];
+    device const float *ice_number_entry [[id(5)]];
+    device float *cloud_number_tendency [[id(6)]];
+    device const float *pressure [[id(7)]];
+    device const float *qv [[id(8)]];
+};
+struct ThompsonAaFinalPhaseCleanupSourceParams {
+    float dt;
+    float r1;
+    float r2;
+    float am_i;
+    int size;
+};
+static_assert(sizeof(ThompsonAaFinalPhaseCleanupSourceParams) == 20, "thompson_aa_final_phase_cleanup_source parameter ABI size changed");

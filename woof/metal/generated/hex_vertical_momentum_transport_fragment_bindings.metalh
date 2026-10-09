@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout dad054db5672bf895e8a952fa77a76356d861ef9d82a2d2f5311ceabc1ba0ad2.
+struct HexVerticalMomentumTransportFragmentResources {
+    device const float *normal_velocity [[id(0)]];
+    device const float *rho_w [[id(1)]];
+    device const int *cells_on_edge [[id(2)]];
+    device const float *fzm [[id(3)]];
+    device const float *fzp [[id(4)]];
+    device const float *rdzw [[id(5)]];
+    device float *tendency [[id(6)]];
+};
+struct HexVerticalMomentumTransportFragmentParams {
+    int nlev;
+    int nedges;
+    int ncells;
+    float coefficient;
+};
+static_assert(sizeof(HexVerticalMomentumTransportFragmentParams) == 16, "hex_vertical_momentum_transport_fragment parameter ABI size changed");

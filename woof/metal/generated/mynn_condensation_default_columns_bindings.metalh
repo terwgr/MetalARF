@@ -1,0 +1,27 @@
+// Generated from kernel_signatures.json; layout e45787e9678206fea352af94986cc29263c662505e2f38f308b2b1226e1b4f69.
+struct MynnCondensationDefaultColumnsResources {
+    device const float *dz [[id(0)]];
+    device const float *th [[id(1)]];
+    device const float *qw [[id(2)]];
+    device const float *qc [[id(3)]];
+    device const float *qi [[id(4)]];
+    device const float *qs [[id(5)]];
+    device const float *p [[id(6)]];
+    device const float *exner [[id(7)]];
+    device const float *qsq [[id(8)]];
+    device const float *rstoch [[id(9)]];
+    device const float *xland [[id(10)]];
+    device const float *pblh [[id(11)]];
+    device const float *sgm_in [[id(12)]];
+    device float *qc_bl [[id(13)]];
+    device float *qi_bl [[id(14)]];
+    device float *cldfra [[id(15)]];
+    device float *vt [[id(16)]];
+    device float *vq [[id(17)]];
+    device float *sgm [[id(18)]];
+};
+struct MynnCondensationDefaultColumnsParams {
+    int nz;
+    int ncol;
+};
+static_assert(sizeof(MynnCondensationDefaultColumnsParams) == 8, "mynn_condensation_default_columns parameter ABI size changed");

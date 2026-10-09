@@ -1,0 +1,186 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/model.py",
+      "cuda_symbol": "MoistHybridModel._rhs_from_sources",
+      "layout_version": 1,
+      "module": "global_momentum_fragment",
+      "name": "global_momentum_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "vorticity",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "coriolis",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "zonal_wind",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "meridional_wind",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vertical_zonal",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vertical_meridional",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "virtual_temperature",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "pressure_gradient",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "grad_logps_zonal",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "grad_logps_meridional",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "geopotential",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tendency_zonal",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "tendency_meridional",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "bernoulli",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "gas_constant",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "half_bits",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "bernoulli": [
+          [
+            "count"
+          ]
+        ],
+        "coriolis": [
+          [
+            "count"
+          ]
+        ],
+        "gas_constant": [
+          [
+            1
+          ]
+        ],
+        "geopotential": [
+          [
+            "count"
+          ]
+        ],
+        "grad_logps_meridional": [
+          [
+            "count"
+          ]
+        ],
+        "grad_logps_zonal": [
+          [
+            "count"
+          ]
+        ],
+        "half_bits": [
+          [
+            1
+          ]
+        ],
+        "meridional_wind": [
+          [
+            "count"
+          ]
+        ],
+        "pressure_gradient": [
+          [
+            "count"
+          ]
+        ],
+        "tendency_meridional": [
+          [
+            "count"
+          ]
+        ],
+        "tendency_zonal": [
+          [
+            "count"
+          ]
+        ],
+        "vertical_meridional": [
+          [
+            "count"
+          ]
+        ],
+        "vertical_zonal": [
+          [
+            "count"
+          ]
+        ],
+        "virtual_temperature": [
+          [
+            "count"
+          ]
+        ],
+        "vorticity": [
+          [
+            "count"
+          ]
+        ],
+        "zonal_wind": [
+          [
+            "count"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_momentum_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+// Generated from kernel_signatures.json; layout a1a88308ba9f28616fc2366857d5433de7e39939d5e7d8ba40fe255da086cd8d.
+struct GlobalAnyU32FragmentResources {
+    device const uint *flags [[id(0)]];
+    device uint *any [[id(1)]];
+};
+struct GlobalAnyU32FragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalAnyU32FragmentParams) == 4, "global_any_u32_fragment parameter ABI size changed");

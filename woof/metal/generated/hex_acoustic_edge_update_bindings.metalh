@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout c43062a0d52dd7fa5f82b37c3415333b11fc1a8e1466b892c9a6ee80333a9244.
+struct HexAcousticEdgeUpdateResources {
+    device float *ru_p [[id(0)]];
+    device float *ru_avg [[id(1)]];
+    device const float *tend_ru [[id(2)]];
+    device const float *rtheta_pp [[id(3)]];
+    device const float *rho_pp [[id(4)]];
+    device const float *zz [[id(5)]];
+    device const float *exner [[id(6)]];
+    device const float *zxu [[id(7)]];
+    device const float *cqu [[id(8)]];
+    device const int *cells_on_edge [[id(9)]];
+    device const float *dc_edge [[id(10)]];
+    device const float *specified_zone_edge [[id(11)]];
+};
+struct HexAcousticEdgeUpdateParams {
+    int nlev;
+    int ncells;
+    int nedges;
+    int small_step;
+    float dts;
+    float c2;
+    float gravity;
+};
+static_assert(sizeof(HexAcousticEdgeUpdateParams) == 28, "hex_acoustic_edge_update parameter ABI size changed");

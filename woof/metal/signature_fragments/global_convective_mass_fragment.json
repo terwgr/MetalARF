@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._convective_adjust",
+      "layout_version": 1,
+      "module": "global_convective_mass_fragment",
+      "name": "global_convective_mass_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["dp", "float64_bits", "read"],
+        ["gravity", "float64_bits", "read"],
+        ["mass", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "dp": [["any_1d"]],
+        "gravity": [[1]],
+        "mass": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_convective_mass_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

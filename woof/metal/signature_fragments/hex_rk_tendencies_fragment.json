@@ -1,0 +1,60 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_metal_rk_tendency_add",
+      "layout_version": 1,
+      "module": "hex_rk_tendencies_fragment",
+      "name": "hex_rk_tendencies_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "resources": [
+        [
+          "base",
+          "float",
+          "read"
+        ],
+        [
+          "tendency",
+          "float",
+          "read"
+        ],
+        [
+          "updated",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ],
+        "updated": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/hex_rk_tendencies_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

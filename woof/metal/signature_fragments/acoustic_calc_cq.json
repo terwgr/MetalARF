@@ -1,0 +1,44 @@
+{
+  "kernels": [
+    {
+      "name": "calc_cq",
+      "module": "acoustic",
+      "source": "woof/metal/shaders/acoustic_calc_cq.metal",
+      "cuda_source": "woof/core/kernels/acoustic.cu",
+      "cuda_symbol": "calc_cq",
+      "resources": [
+        ["qv", "float", "read"],
+        ["qc", "float", "read"],
+        ["qr", "float", "read"],
+        ["qi", "float", "read"],
+        ["qs", "float", "read"],
+        ["qg", "float", "read"],
+        ["qh", "float", "read"],
+        ["cqu", "float", "read_write"],
+        ["cqv", "float", "read_write"],
+        ["cqw", "float", "read_write"]
+      ],
+      "shapes": {
+        "qv": [["nz", "ny", "nx"]],
+        "qc": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]],
+        "qi": [["nz", "ny", "nx"]],
+        "qs": [["nz", "ny", "nx"]],
+        "qg": [["nz", "ny", "nx"]],
+        "qh": [["nz", "ny", "nx"]],
+        "cqu": [["nz", "ny", "nx+1"]],
+        "cqv": [["nz", "ny+1", "nx"]],
+        "cqw": [["nz+1", "ny", "nx"]]
+      },
+      "parameters": [
+        ["n_mass", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    }
+  ]
+}

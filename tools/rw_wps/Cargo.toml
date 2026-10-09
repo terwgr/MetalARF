@@ -1,0 +1,58 @@
+# gpuwm mapped-engine workspace (skeleton).
+#
+# The donor snapshot under crates/ and vendor/ is UNMODIFIED (see
+# VENDOR.md); this manifest is gpuwm's, added so the snapshot resolves
+# its `*.workspace = true` inheritances and builds in-tree.  The pins
+# mirror the donor workspace at edf044c (edition 2024, rust 1.92).
+#
+# Offline posture: `--locked --offline`, via the checked-in crates.io
+# mirror under vendor/crates-io and the .cargo/config.toml source
+# replacement beside it (the tools/grib1_bridge posture).  The
+# clean-clone rule is `pip install gpuwm` + one offline cargo build.
+#
+# grib-core: BOTH members point at ../../../grib1_bridge/vendor/grib-core,
+# the ONE superset crate that carries this snapshot's hardening and
+# gpuwm's together.  The donor's convergence-input copy that used to sit
+# at vendor/grib-core is deleted; cargo refuses two different packages
+# named grib-core v0.1.0 in one lockfile, and a second copy would let the
+# mapped engine decode through different bytes than the shipped
+# grib2_dump.  tests/test_grib_core_convergence.py holds the line that
+# exactly one grib-core manifest is tracked.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/rw-wps",
+    "crates/mapped-engine",
+]
+# The vendored library crates are path dependencies of the members,
+# not workspace members: their donor manifests stay byte-identical.
+exclude = [
+    "vendor/netcrust",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+publish = false
+rust-version = "1.92"
+
+[workspace.dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+
+# netcrust pins both its NetCDF and HDF5 readers by path, including builds
+# outside this workspace. No consumer-side checksum workaround is needed.
+
+[profile.release]
+# Same reasoning as tools/grib1_bridge: bridge binaries are package
+# data measured against wheel caps; debug symbols are the cheapest
+# weight to give back.  The ABI marker literal survives stripping.
+# WOOF: symbol tables go too (strip = "symbols"). Its platform wheel carries
+# six more decoders than the engine's and measured 103,610,312 bytes with
+# debuginfo stripping only; dropping symbols gives back 5.26 MB and keeps the
+# source-revision stamp, contract markers and exported ABI symbols.
+strip = "symbols"

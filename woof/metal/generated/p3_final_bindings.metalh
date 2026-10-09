@@ -1,0 +1,32 @@
+// Generated from kernel_signatures.json; layout 60615ac0a1c7a870607906dbc74722fc95400ad830016dc17f9f9a42d6ca77f9.
+struct P3FinalResources {
+    device float *qc [[id(0)]];
+    device float *nc [[id(1)]];
+    device float *qr [[id(2)]];
+    device float *nr [[id(3)]];
+    device float *qi [[id(4)]];
+    device float *qir [[id(5)]];
+    device float *ni [[id(6)]];
+    device float *qib [[id(7)]];
+    device float *theta [[id(8)]];
+    device float *qv [[id(9)]];
+    device const float *temperature [[id(10)]];
+    device const float *tmparr1 [[id(11)]];
+    device const float *rho [[id(12)]];
+    device const float *inv_rho [[id(13)]];
+    device const float *rhofaci [[id(14)]];
+    device float *zdbz [[id(15)]];
+    device float *effc [[id(16)]];
+    device float *effi [[id(17)]];
+    device float *vmi [[id(18)]];
+    device float *di [[id(19)]];
+    device float *rhopo [[id(20)]];
+    device const float *itab [[id(21)]];
+    device const float *flags [[id(22)]];
+};
+struct P3FinalParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(P3FinalParams) == 12, "p3_final parameter ABI size changed");

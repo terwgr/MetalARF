@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout 531acc27a4a126c68b574c958817e50686eed4a562ff7c8e527ea25f73ae94c5.
+struct Smag2DKmResources {
+    device const float *u [[id(0)]];
+    device const float *v [[id(1)]];
+    device float *xkmh [[id(2)]];
+    device float *xkhh [[id(3)]];
+};
+struct Smag2DKmParams {
+    float rdx;
+    float rdy;
+    float mlen;
+    float c_s;
+    float prandtl;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Smag2DKmParams) == 32, "smag2d_km parameter ABI size changed");

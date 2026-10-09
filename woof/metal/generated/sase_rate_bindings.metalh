@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 2a1ca63521db462933a2a8cf11cb95ce442a246f616f0a31ea77581e51a05fc6.
+struct SaseRateResources {
+    device const float *a [[id(0)]];
+    device const float *b [[id(1)]];
+    device float *out [[id(2)]];
+};
+struct SaseRateParams {
+    int mode;
+    float inv_dt;
+    float heat_scale;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseRateParams) == 24, "sase_rate parameter ABI size changed");

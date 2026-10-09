@@ -1,0 +1,68 @@
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-t21-baroclinic-ten-day"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "numpy"
+precision = "float64"
+
+[grid]
+truncation = 21
+dealias_factor = 1.5
+
+[time]
+dt_s = 360.0
+duration_s = 864000.0
+output_interval_s = 21600.0
+maximum_cfl = 0.75
+integrator = "ssprk3"
+
+[vertical]
+coordinate = "pressure_blend"
+nlev = 10
+p_top_pa = 100.0
+
+[initial]
+surface_pressure_pa = 100000.0
+surface_temperature_k = 292.0
+top_temperature_k = 210.0
+qv_surface = 0.012
+zonal_wind_m_s = 25.0
+perturbation_amplitude = 0.004
+zonal_wavenumber = 5
+terrain_amplitude_m = 800.0
+surface_water_kg_m2 = 500.0
+
+[physics]
+mode = "reference"
+
+[reference_physics]
+radiation = true
+surface_fluxes = true
+turbulence = true
+convection = true
+saturation_adjustment = true
+microphysics = true
+
+[diffusion]
+enabled = true
+order = 4
+e_folding_time_s_at_truncation = 14400.0
+preserve_degree = 1
+divergence_strength = 1.5
+pressure_strength = 0.25
+water_strength = 0.5
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 5.0e-11
+transform_parseval_relative_error = 5.0e-12
+mass_relative_drift = 1.0e-9
+total_water_relative_drift = 1.0e-8

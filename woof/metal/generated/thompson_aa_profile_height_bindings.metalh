@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout bd16e2caffca24179d9ac73cfc024adb5f09362db269b07b629fa139a39829e2.
+struct ThompsonAaProfileHeightResources {
+    device const float *phb [[id(0)]];
+    device const float *php [[id(1)]];
+    device float *z8w [[id(2)]];
+};
+struct ThompsonAaProfileHeightParams {
+    float gravity;
+    int nz;
+    int ny;
+    int nx;
+    int phb_full;
+};
+static_assert(sizeof(ThompsonAaProfileHeightParams) == 20, "thompson_aa_profile_height parameter ABI size changed");

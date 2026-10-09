@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout 13dbaf6ae8a00a0ecd7eea83513ae648f825d2ff78682f55aca1af84d0b5b04f.
+struct AdvanceStageUResources {
+    device float *u [[id(0)]];
+    device const float *u0 [[id(1)]];
+    device const float *ru_t [[id(2)]];
+    device const float *mub2d [[id(3)]];
+    device const float *mup0 [[id(4)]];
+    device const float *mup [[id(5)]];
+    device const float *c1h [[id(6)]];
+    device const float *c2h [[id(7)]];
+    device const float *msfu [[id(8)]];
+};
+struct AdvanceStageUParams {
+    float dt_eff;
+    int has_msf;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(AdvanceStageUParams) == 20, "advance_stage_u parameter ABI size changed");

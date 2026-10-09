@@ -1,0 +1,79 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_bem_class_init_fragment",
+      "module": "urban_bep_bem_class_init_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_class_init_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_init_para",
+      "resources": [
+        ["table_float", "float", "read"],
+        ["table_int", "int32", "read"],
+        ["class_float", "float", "read_write"],
+        ["class_int", "int32", "read_write"]
+      ],
+      "shapes": {
+        "table_float": [["any_1d"]],
+        "table_int": [["any_1d"]],
+        "class_float": [["any_1d"]],
+        "class_int": [["any_1d"]]
+      },
+      "parameters": [["nurbm", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "urban_bep_bem_class_profile_pack_fragment",
+      "module": "urban_bep_bem_class_profile_pack_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_class_profile_pack_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_icbep",
+      "resources": [
+        ["ss_profile", "float", "read"],
+        ["pb_profile", "float", "read"],
+        ["z_u", "float", "read"],
+        ["nz_profile", "int32", "read"],
+        ["profile_error", "int32", "read"],
+        ["class_float", "float", "read_write"],
+        ["class_int", "int32", "read_write"]
+      ],
+      "shapes": {
+        "ss_profile": [["nurbm", 19]],
+        "pb_profile": [["nurbm", 19]],
+        "z_u": [[19]],
+        "nz_profile": [["nurbm"]],
+        "profile_error": [["nurbm"]],
+        "class_float": [["any_1d"]],
+        "class_int": [["any_1d"]]
+      },
+      "parameters": [["nurbm", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "urban_bep_bem_albedo_fragment",
+      "module": "urban_bep_bem_albedo_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_albedo_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_albwindow",
+      "resources": [
+        ["p_num", "int32", "read"],
+        ["q_num", "int32", "read"],
+        ["albwin", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "p_num": [["ncase"]],
+        "q_num": [["ncase"]],
+        "albwin": [["ncase"]],
+        "error": [["ncase"]]
+      },
+      "parameters": [["ncase", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

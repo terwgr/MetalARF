@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 0251011799f48963ec1581f74176bf0d384e8bd179fe1dfc5d140111ab0b1e5d.
+struct UhSmoothMaxResources {
+    device const float *uh [[id(0)]];
+    device const float *usecol [[id(1)]];
+    device float *up_heli_max [[id(2)]];
+};
+struct UhSmoothMaxParams {
+    int ny;
+    int nx;
+};
+static_assert(sizeof(UhSmoothMaxParams) == 8, "uh_smooth_max parameter ABI size changed");

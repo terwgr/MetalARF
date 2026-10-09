@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout e21758b0ef35eba227dc08b030daf166324cbc92b12e8ae35344abc9b2ede8d1.
+struct HexInterfaceVelocityRecoveryFragmentResources {
+    device const float *rho [[id(0)]];
+    device const float *rho_w [[id(1)]];
+    device const float *zz [[id(2)]];
+    device const float *fzm [[id(3)]];
+    device const float *fzp [[id(4)]];
+    device float *velocity [[id(5)]];
+    device int *error [[id(6)]];
+};
+struct HexInterfaceVelocityRecoveryFragmentParams {
+    int nlev;
+    int ncells;
+    int nlev_plus_one;
+};
+static_assert(sizeof(HexInterfaceVelocityRecoveryFragmentParams) == 12, "hex_interface_velocity_recovery_fragment parameter ABI size changed");

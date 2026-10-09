@@ -1,0 +1,31 @@
+// Generated from kernel_signatures.json; layout 49a01e54cc062aeed9c5aa9c76c1aed5ec18b6bb6fdc32545d732974702864a8.
+struct GlobalSurfaceFluxPrepResidentFragmentResources {
+    device const ulong *theta [[id(0)]];
+    device const ulong *exner_bottom [[id(1)]];
+    device const ulong *qv [[id(2)]];
+    device const ulong *p_full_bottom [[id(3)]];
+    device const ulong *p_surface [[id(4)]];
+    device const ulong *u [[id(5)]];
+    device const ulong *v [[id(6)]];
+    device const ulong *surface_temperature [[id(7)]];
+    device const ulong *roughness [[id(8)]];
+    device const ulong *soil_water_fraction [[id(9)]];
+    device const ulong *land_fraction [[id(10)]];
+    device const ulong *dry_air_gas_constant [[id(11)]];
+    device const ulong *epsilon [[id(12)]];
+    device const ulong *bulk_exchange_coefficient [[id(13)]];
+    device const ulong *soil_wetness_capacity [[id(14)]];
+    device ulong *air_temperature [[id(15)]];
+    device ulong *rho_bottom [[id(16)]];
+    device ulong *wind [[id(17)]];
+    device ulong *cd [[id(18)]];
+    device ulong *saturation_mixing_ratio [[id(19)]];
+    device ulong *beta [[id(20)]];
+    device const ulong *surface_water [[id(21)]];
+    device const ulong *dt [[id(22)]];
+    device ulong *available_water_rate [[id(23)]];
+};
+struct GlobalSurfaceFluxPrepResidentFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalSurfaceFluxPrepResidentFragmentParams) == 4, "global_surface_flux_prep_resident_fragment parameter ABI size changed");

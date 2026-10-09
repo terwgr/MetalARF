@@ -1,0 +1,36 @@
+// Generated from kernel_signatures.json; layout f23a5cdcde2d5703f15df4572f88ac5b19d4431950658dd71c609c04dc0b5871.
+struct RrtmLwSetcoefResources {
+    device const float *pavel [[id(0)]];
+    device const float *tavel [[id(1)]];
+    device const float *coldry [[id(2)]];
+    device const float *wkl [[id(3)]];
+    device const float *preflog [[id(4)]];
+    device const float *tref [[id(5)]];
+    device float *colh2o [[id(6)]];
+    device float *colco2 [[id(7)]];
+    device float *colo3 [[id(8)]];
+    device float *coln2o [[id(9)]];
+    device float *colch4 [[id(10)]];
+    device float *colo2 [[id(11)]];
+    device float *co2mult [[id(12)]];
+    device float *fac00 [[id(13)]];
+    device float *fac01 [[id(14)]];
+    device float *fac10 [[id(15)]];
+    device float *fac11 [[id(16)]];
+    device float *forfac [[id(17)]];
+    device float *selffac [[id(18)]];
+    device float *selffrac [[id(19)]];
+    device int *jp [[id(20)]];
+    device int *jt [[id(21)]];
+    device int *jt1 [[id(22)]];
+    device int *indself [[id(23)]];
+    device int *laytrop [[id(24)]];
+    device int *layswtch [[id(25)]];
+    device int *laylow [[id(26)]];
+};
+struct RrtmLwSetcoefParams {
+    int ncol;
+    int nlay;
+    int ncell;
+};
+static_assert(sizeof(RrtmLwSetcoefParams) == 12, "rrtm_lw_setcoef parameter ABI size changed");

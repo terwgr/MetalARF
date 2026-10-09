@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout 5eaf2af60afd393b392a5a17d1fcf55f580e76813771705e9b5e695362eb0006.
+struct KfValidateOutputsResources {
+    device const float *rthcuten [[id(0)]];
+    device const float *rqvcuten [[id(1)]];
+    device const float *rqccuten [[id(2)]];
+    device const float *rqicuten [[id(3)]];
+    device const float *rqrcuten [[id(4)]];
+    device const float *rqscuten [[id(5)]];
+    device const float *nca_seconds [[id(6)]];
+    device const float *pratec [[id(7)]];
+    device uint *status [[id(8)]];
+};
+struct KfValidateOutputsParams {
+    int active;
+    int count3;
+    int count2;
+};
+static_assert(sizeof(KfValidateOutputsParams) == 12, "kf_validate_outputs parameter ABI size changed");

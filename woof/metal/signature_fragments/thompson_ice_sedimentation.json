@@ -1,0 +1,140 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_ice_sedimentation_seed",
+      "module": "thompson_ice_sedimentation",
+      "source": "woof/metal/shaders/thompson_ice_sedimentation.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_ice_sediment_64_with_density",
+      "source_symbol_variants": ["thompson_ice_sediment_256_with_density"],
+      "resources": [
+        ["qi", "float", "read"], ["ni", "float", "read"],
+        ["temperature", "float", "read"], ["pressure", "float", "read"],
+        ["qv", "float", "read"], ["reference_density", "float", "read"],
+        ["density", "float", "read_write"],
+        ["ice_mass", "float", "read_write"], ["ice_number", "float", "read_write"],
+        ["mass_velocity", "float", "read_write"], ["number_velocity", "float", "read_write"],
+        ["qi_tendency", "float", "read_write"], ["ni_tendency", "float", "read_write"],
+        ["active_marker", "float", "read_write"]
+      ],
+      "shapes": {
+        "qi": [["nz", "ny", "nx"]], "ni": [["nz", "ny", "nx"]],
+        "temperature": [["nz", "ny", "nx"]], "pressure": [["nz", "ny", "nx"]],
+        "qv": [["nz", "ny", "nx"]], "reference_density": [["nz", "ny", "nx"]],
+        "density": [["nz", "ny", "nx"]],
+        "ice_mass": [["nz", "ny", "nx"]], "ice_number": [["nz", "ny", "nx"]],
+        "mass_velocity": [["nz", "ny", "nx"]], "number_velocity": [["nz", "ny", "nx"]],
+        "qi_tendency": [["nz", "ny", "nx"]], "ni_tendency": [["nz", "ny", "nx"]],
+        "active_marker": [["nz", "ny", "nx"]]
+      },
+      "parameters": [["dt", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-precise-libm", "portable-soft-binary64", "cuda-libm-identity-unverified"]
+    },
+    {
+      "name": "thompson_ice_sedimentation_active_ice",
+      "module": "thompson_ice_sedimentation",
+      "source": "woof/metal/shaders/thompson_ice_sedimentation.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_ice_sediment_64_with_density",
+      "source_symbol_variants": ["thompson_ice_sediment_256_with_density"],
+      "resources": [
+        ["qi", "float", "read"], ["ni", "float", "read"],
+        ["reference_density", "float", "read"], ["density", "float", "read"],
+        ["ice_mass", "float", "read_write"], ["ice_number", "float", "read_write"],
+        ["mass_velocity", "float", "read_write"], ["number_velocity", "float", "read_write"],
+        ["active_marker", "float", "read_write"]
+      ],
+      "shapes": {
+        "qi": [["nz", "ny", "nx"]], "ni": [["nz", "ny", "nx"]],
+        "reference_density": [["nz", "ny", "nx"]], "density": [["nz", "ny", "nx"]],
+        "ice_mass": [["nz", "ny", "nx"]], "ice_number": [["nz", "ny", "nx"]],
+        "mass_velocity": [["nz", "ny", "nx"]], "number_velocity": [["nz", "ny", "nx"]],
+        "active_marker": [["nz", "ny", "nx"]]
+      },
+      "parameters": [["dt", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-precise-libm", "portable-soft-binary64", "cuda-libm-identity-unverified"]
+    },
+    {
+      "name": "thompson_ice_sedimentation_select_timestep",
+      "module": "thompson_ice_sedimentation",
+      "source": "woof/metal/shaders/thompson_ice_sedimentation.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_ice_sediment_64_with_density",
+      "source_symbol_variants": ["thompson_ice_sediment_256_with_density"],
+      "resources": [
+        ["dz", "float", "read"], ["mass_velocity", "float", "read_write"],
+        ["number_velocity", "float", "read_write"], ["active_marker", "float", "read"],
+        ["sediment_top", "int32", "read_write"], ["nstep", "int32", "read_write"]
+      ],
+      "shapes": {
+        "dz": [["nz", "ny", "nx"]], "mass_velocity": [["nz", "ny", "nx"]],
+        "number_velocity": [["nz", "ny", "nx"]], "active_marker": [["nz", "ny", "nx"]],
+        "sediment_top": [["ny", "nx"]], "nstep": [["ny", "nx"]]
+      },
+      "parameters": [["dt", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-precise-libm", "portable-soft-binary64", "cuda-libm-identity-unverified"]
+    },
+    {
+      "name": "thompson_ice_sedimentation_subcycling",
+      "module": "thompson_ice_sedimentation",
+      "source": "woof/metal/shaders/thompson_ice_sedimentation.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_ice_sediment_64_with_density",
+      "source_symbol_variants": ["thompson_ice_sediment_256_with_density"],
+      "resources": [
+        ["dz", "float", "read"], ["density", "float", "read"],
+        ["ice_mass", "float", "read_write"], ["ice_number", "float", "read_write"],
+        ["mass_velocity", "float", "read"], ["number_velocity", "float", "read"],
+        ["mass_flux", "float", "read_write"], ["number_flux", "float", "read_write"],
+        ["qi_tendency", "float", "read_write"], ["ni_tendency", "float", "read_write"],
+        ["sediment_top", "int32", "read"], ["nstep", "int32", "read"],
+        ["exported", "float", "read_write"]
+      ],
+      "shapes": {
+        "dz": [["nz", "ny", "nx"]], "density": [["nz", "ny", "nx"]],
+        "ice_mass": [["nz", "ny", "nx"]], "ice_number": [["nz", "ny", "nx"]],
+        "mass_velocity": [["nz", "ny", "nx"]], "number_velocity": [["nz", "ny", "nx"]],
+        "mass_flux": [["nz", "ny", "nx"]], "number_flux": [["nz", "ny", "nx"]],
+        "qi_tendency": [["nz", "ny", "nx"]], "ni_tendency": [["nz", "ny", "nx"]],
+        "sediment_top": [["ny", "nx"]], "nstep": [["ny", "nx"]],
+        "exported": [["ny", "nx"]]
+      },
+      "parameters": [["dt", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-precise-libm", "portable-soft-binary64", "cuda-libm-identity-unverified"]
+    },
+    {
+      "name": "thompson_ice_sedimentation_finalize",
+      "module": "thompson_ice_sedimentation",
+      "source": "woof/metal/shaders/thompson_ice_sedimentation.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_ice_sediment_64_with_density",
+      "source_symbol_variants": ["thompson_ice_sediment_256_with_density"],
+      "resources": [
+        ["qi", "float", "read_write"], ["ni", "float", "read_write"],
+        ["density", "float", "read"], ["qi_tendency", "float", "read"],
+        ["ni_tendency", "float", "read"], ["exported", "float", "read"],
+        ["rainnc", "float", "read_write"], ["rainncv", "float", "read_write"],
+        ["snownc", "float", "read_write"], ["snowncv", "float", "read_write"]
+      ],
+      "shapes": {
+        "qi": [["nz", "ny", "nx"]], "ni": [["nz", "ny", "nx"]],
+        "density": [["nz", "ny", "nx"]], "qi_tendency": [["nz", "ny", "nx"]],
+        "ni_tendency": [["nz", "ny", "nx"]], "exported": [["ny", "nx"]],
+        "rainnc": [["ny", "nx"]], "rainncv": [["ny", "nx"]],
+        "snownc": [["ny", "nx"]], "snowncv": [["ny", "nx"]]
+      },
+      "parameters": [["dt", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-precise-libm", "portable-soft-binary64", "cuda-libm-identity-unverified"]
+    }
+  ]
+}

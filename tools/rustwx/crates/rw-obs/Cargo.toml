@@ -1,0 +1,127 @@
+# ArWen's observation front doors: one crate, one binary per instrument.
+#
+# The observation-verification battery scores forecasts against three
+# archives, and each gets a fail-closed CLI in the shape `rw_nexrad`
+# established -- `list`/`fetch`/`decode`/`verify` subcommands, a
+# schema-tagged JSON record on stdout, an `--abi` marker the Python bridge
+# pins, and SHA-256 receipts on every byte kept.
+#
+# They share a crate rather than one each because they share substance: the
+# same pack container, the same seam time spelling, the same HTTP agent, and
+# the same fetch-receipt shape.  Three crates would have meant three copies
+# of that or a fourth crate holding it.
+#
+# Nothing here decodes a GRIB message itself.  MRMS goes through
+# `rustwx-io`'s MRMS selector and Stage-IV through `grib-core` directly --
+# the decoders this workspace already vendors and already tests.
+
+[package]
+name = "rw-obs"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rw_mrms"
+path = "src/bin/mrms.rs"
+
+[[bin]]
+name = "rw_stage4"
+path = "src/bin/stage4.rs"
+
+[[bin]]
+name = "rw_precip"
+path = "src/bin/precip.rs"
+
+[[bin]]
+name = "rw_ensemble_match"
+path = "src/bin/ensemble_match.rs"
+
+[[bin]]
+name = "rw_asos"
+path = "src/bin/asos.rs"
+
+[[bin]]
+name = "rw_opera"
+path = "src/bin/opera.rs"
+
+# The global data-assimilation streams (design item 2 of the Arwen Global
+# DA program): each writes the neutral observation table
+# `gpuwm-obs.table.v1` (src/table.rs) that gpuwm.arwen_global.obs_table
+# reads without conversion.
+[[bin]]
+name = "rw_igra2"
+path = "src/bin/igra2.rs"
+
+[[bin]]
+name = "rw_amv"
+path = "src/bin/amv.rs"
+
+[[bin]]
+name = "rw_ndbc"
+path = "src/bin/ndbc.rs"
+
+[[bin]]
+name = "rw_gnssro"
+path = "src/bin/gnssro.rs"
+
+# The WIS2 subscriber: MQTT over TLS to the WMO global broker, framed by
+# hand on rustls (six packet types; no MQTT crate is in the vendor closure).
+[[bin]]
+name = "rw_wis2"
+path = "src/bin/wis2.rs"
+
+# NCEP's prepbufr: the file's own dictionary decoded in Rust
+# (`rw_obs::ncep_bufr`), GSI's use rule on NCEP's quality marks applied in
+# the door (`rw_obs::prepbufr`), rows in `gpuwm-obs.table.v2`.
+[[bin]]
+name = "rw_prepbufr"
+path = "src/bin/prepbufr.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# `rust_backend` rather than the zlib C shim, matching rustwx-io and
+# rw-nexrad: these bins build --offline from the vendor closure and must not
+# need a system zlib.  MRMS archive objects are all gzip-wrapped.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+sha2 = "0.10"
+ureq.workspace = true
+grib-core = { path = "../../../grib1_bridge/vendor/grib-core" }
+# The pure-Rust HDF5 reader `rustwx-io` already uses for the same archive.
+# `rw_opera` needs it directly because the European composite states its two
+# sentinels, its four corner coordinates and its production notes as ODIM
+# attributes, and every one of those is a fact the seam has to carry --
+# `rustwx-io`'s ODIM entry point returns a field, not the file.  Same version
+# requirement as `rustwx-io`, so one copy resolves for both.
+hdf5-reader = "0.3"
+# The anonymous-S3 client (hardened ListObjectsV2 XML reader, content-
+# addressed cache, SHA-256 receipts).  MRMS needs it; writing a second one
+# would re-earn the bugs that client's audit already fixed.
+rw-nexrad = { path = "../rw-nexrad" }
+# The GOES open-data S3 client and the ABI NetCDF reader, for the derived
+# motion winds (`rw_amv`); the DMW decode itself lives in rw-sat's `dmw`
+# module beside the cloud products.  netcrust by path for the radio
+# occultation profiles (`rw_gnssro`), the same pure-Rust NetCDF-4 facade.
+rw-sat = { path = "../rw-sat" }
+netcrust = { path = "../../vendor/netcrust" }
+# Typed reads preserve the diagnostic archive's uint64 identities and f32 words.
+netcdf-reader = "0.3"
+# `rw_wis2`: the TLS stack every HTTPS door here already uses (rustls with
+# the RustCrypto provider and the webpki roots), reached directly for a raw
+# MQTT stream, and base64 for the notifications' integrity digests.
+rustls.workspace = true
+rustls-rustcrypto.workspace = true
+webpki-roots = "1"
+base64 = "0.22"
+rustwx-core = { path = "../rustwx-core" }
+rustwx-io = { path = "../rustwx-io" }
+obs-regrid = { path = "../obs-regrid" }
+static-fields = { path = "../static-fields" }
+wrf-core = { git = "https://github.com/FahrenheitResearch/wrf-rust.git", rev = "93bd2ca670c13fec35bcfc27a58108e6fd71c627", package = "wrf-core", default-features = false, features = ["pure-rust-reader"] }
+
+[dev-dependencies]
+netcdf-writer = { path = "../netcdf-writer" }

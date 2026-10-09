@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout aebc8304fa77be8d27b9c0f6c7500c0d33b1cdb5c389d89a214aa048f5dbac2b.
+struct UrbanBemHeightInitFragmentResources {
+    device const float *z_u [[id(0)]];
+    device float *hi_urb1d [[id(1)]];
+    device float *hb_u [[id(2)]];
+    device float *ss_u [[id(3)]];
+    device float *pb_u [[id(4)]];
+    device int *nzu_out [[id(5)]];
+    device int *error [[id(6)]];
+};
+struct UrbanBemHeightInitFragmentParams {
+    int nitem;
+    float dz_u;
+};
+static_assert(sizeof(UrbanBemHeightInitFragmentParams) == 8, "urban_bem_height_init_fragment parameter ABI size changed");

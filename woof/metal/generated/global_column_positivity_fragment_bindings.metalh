@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 43bbb9aa78b95975039f33fe169ab24edeff940330403bb0f0db492b2e90cfc7.
+struct GlobalColumnPositivityFragmentResources {
+    device const ulong *qv [[id(0)]];
+    device const ulong *dp [[id(1)]];
+    device ulong *repaired_qv [[id(2)]];
+    device ulong *negative_mass [[id(3)]];
+    device ulong *unfillable_mass [[id(4)]];
+    device ulong *rescale [[id(5)]];
+};
+struct GlobalColumnPositivityFragmentParams {
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalColumnPositivityFragmentParams) == 8, "global_column_positivity_fragment parameter ABI size changed");

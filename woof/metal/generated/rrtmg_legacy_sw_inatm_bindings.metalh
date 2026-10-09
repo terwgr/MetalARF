@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout 10b20d446a45e4bda35902ae7a69a48a707d8f232bc5319a148279486493da33.
+struct RrtmgLegacySwInatmResources {
+    device const float *plev [[id(0)]];
+    device const float *h2ovmr [[id(1)]];
+    device const float *co2vmr [[id(2)]];
+    device const float *o3vmr [[id(3)]];
+    device const float *n2ovmr [[id(4)]];
+    device const float *ch4vmr [[id(5)]];
+    device const float *o2vmr [[id(6)]];
+    device float *pdp [[id(7)]];
+    device float *coldry [[id(8)]];
+    device float *wkl [[id(9)]];
+};
+struct RrtmgLegacySwInatmParams {
+    int ncol;
+    int nl;
+    float grav;
+    float avogad;
+};
+static_assert(sizeof(RrtmgLegacySwInatmParams) == 16, "rrtmg_legacy_sw_inatm parameter ABI size changed");

@@ -1,0 +1,314 @@
+"""Shin-Hong scale-aware PBL column kernel (bl_pbl_physics=11).
+
+This module is the device launcher for the WRF v4.6.1 Shin-Hong
+transcription in ``kernels/shinhong.cu`` -- arm A only (``ctopo = ctopo2 =
+1``, the Registry ``topo_wind=0`` default, the only arm this engine can
+reach).  The scheme consumes mass-point wind, potential temperature,
+moisture, pressure/Exner, layer depths, the scheme's own prognostic SGS TKE,
+and the surface-layer coupling fields (UST, HFX/QFX, PSIM/PSIH, plus the
+Coriolis parameter for the QNSE mixing length).  It returns tendencies
+rather than updating the state; the physics driver owns their application
+(Phase D wires it).
+
+Array layout is woof's standard ``(nz, ny, nx)`` with x fastest.  Every
+CUDA thread owns one complete column and performs the implicit vertical
+solves in-thread, matching the acoustic Thomas-solve pattern.  The float32
+authority is :func:`tests.physics_reference.shinhong_ref.np_shinhong_column`, itself
+bitwise against the WRF v4.6.1 oracle; the kernel's measured distance from
+WRF is pinned in ``tests/test_shinhong_wrf461_parity.py``.
+
+``dx``/``dy``/``dt``/``tke_diag`` are launch-wide scalars: the whole point
+of Shin-Hong is that the answer moves with ``sqrt(dx*dy)``, so each nest
+launches with its own spacing.
+"""
+
+from __future__ import annotations
+
+from typing import Mapping
+
+import numpy as np
+try:
+    import cupy as cp
+except ImportError:
+    cp = None
+
+from woof.core.kernels import get_kernel
+from woof.core.state import DTYPE
+from woof.physics_vertical_contract import (
+    outside_vertical_bounds, refuse_vertical_levels)
+
+from woof.core.physics_inventory import (
+    SHWS_SLOTS, SHINHONG_BLOCK, SHINHONG_TILE_BLOCKS_PER_SM,
+    shinhong_workspace_floats,
+)
+
+_TPB = SHINHONG_BLOCK
+_VALIDATE_TPB = 256
+_KMAX = 128
+
+#: The launcher's first-call vertical bound, restated for front doors by
+#: ``woof.physics_vertical_contract.SHINHONG_VERTICAL_LEVEL_BOUNDS`` and
+#: bound to it by ``tests/test_pbl_vertical_bounds.py``.
+VERTICAL_LEVEL_BOUNDS = (4, _KMAX)
+
+_SHINHONG_3D_FLOAT_OUTPUTS = (
+    "du", "dv", "dtheta", "dqv", "dqc", "dqi", "exch_h", "tke", "el",
+)
+_SHINHONG_2D_OUTPUTS = ("hpbl", "kpbl", "wstar", "delta")
+_SHINHONG_OUTPUTS = _SHINHONG_3D_FLOAT_OUTPUTS + _SHINHONG_2D_OUTPUTS
+_SHINHONG_2D_FLOAT_OUTPUTS = tuple(
+    name for name in _SHINHONG_2D_OUTPUTS if name != "kpbl")
+
+#: The scheme's PASSENGER diagnostics: outputs no tendency ever reads.
+#: The SGS TKE chain (``mixlen``/``prodq2``/``vdifq``, tke_diag = 1) and
+#: its mixing length exist so ``state.e_sgs`` carries a gray-zone
+#: instrument field; WRF's own default never computes them, and WRF's
+#: arithmetic inside them divides by quantities that legitimately reach
+#: zero (prodq2's ``q2**1.5/disel`` at q2 == 0, ``mf/xkzh``, prfac2's
+#: cubes).  A non-finite CONFINED to this pair is therefore a documented
+#: hazard of the transcribed chain, not corrupted physics -- the
+#: tendencies above it are computed independently and stay finite
+#: (proven through the float32 authority in
+#: tests/test_shinhong_composed_tke_guard.py, task #206).
+SHINHONG_PASSENGER_OUTPUTS = ("tke", "el")
+
+#: WRF's shinhonginit cold-start TKE, epsq2l/2 -- the chain's own floor
+#: (the authority's EPSQ2L lives in the verification tree this module
+#: must not depend on; the pair is gated equal in the task #206 suite).
+SHINHONG_TKE_FLOOR = 0.005
+
+
+def shinhong_tile_columns(fn, ncol: int) -> int:
+    """Bound workspace storage to columns that can be resident."""
+    sms = cp.cuda.Device().attributes["MultiProcessorCount"]
+    per_sm = SHINHONG_TILE_BLOCKS_PER_SM
+    try:
+        from cupy_backends.cuda.api import driver
+
+        resident = driver.occupancyMaxActiveBlocksPerMultiprocessor(
+            fn.kernel.ptr, SHINHONG_BLOCK, 0)
+        per_sm = min(per_sm, int(resident))
+    except Exception:  # noqa: BLE001
+        pass
+    per_sm = max(1, int(per_sm))
+    return int(max(SHINHONG_BLOCK,
+                   min(int(ncol), sms * per_sm * SHINHONG_BLOCK)))
+
+
+def launch_shinhong(u, v, theta, qv, qc, qi, p, p_interface, exner, dz,
+                    tke, *,
+                    psfc, znt, ust, hfx, qfx, wspd, br, psim, psih, xland,
+                    u10, v10, corf,
+                    dt: float, dx: float, dy: float, tke_diag: int = 1):
+    """Launch Shin-Hong for a batch of device columns; return device outputs.
+
+    Metal inputs dispatch to the typed Metal caller with the same WRF-facing
+    arguments. The CUDA path remains the default when inputs are CuPy arrays.
+
+    Three-dimensional inputs have shape ``(nz, ny, nx)`` except
+    ``p_interface`` which is ``(nz+1, ny, nx)``; ``tke`` is the scheme's own
+    prognostic-diagnostic SGS TKE.  Surface inputs have shape ``(ny, nx)``.
+    All are C-contiguous float32 CuPy arrays.  The returned dict contains
+    3-D ``du/dv/dtheta/dqv/dqc/dqi/exch_h/tke/el`` float32 arrays (``dtheta``
+    is the wrapper's ``rthblten``, already divided by the Exner function),
+    2-D ``hpbl/wstar/delta`` float32 arrays, and 2-D one-based ``kpbl``
+    int32.
+    """
+    try:
+        from woof.metal.array import MetalArray
+    except ImportError:  # pragma: no cover - Metal is an optional backend
+        MetalArray = ()
+    if isinstance(theta, MetalArray):
+        from woof.metal.shinhong_family import submit_shinhong_column
+        return submit_shinhong_column(
+            theta.buffer.context, u, v, theta, qv, qc, qi, p, p_interface,
+            exner, dz, tke, psfc=psfc, znt=znt, ust=ust, hfx=hfx,
+            qfx=qfx, wspd=wspd, br=br, psim=psim, psih=psih,
+            xland=xland, u10=u10, v10=v10, corf=corf, dt=dt, dx=dx,
+            dy=dy, tke_diag=tke_diag)
+
+    columns = {"u": u, "v": v, "theta": theta, "qv": qv, "qc": qc,
+               "qi": qi, "p": p, "exner": exner, "dz": dz, "tke": tke}
+    shape = theta.shape
+    if len(shape) != 3:
+        raise ValueError(f"theta must have shape (nz, ny, nx), got {shape}")
+    nz, ny, nx = shape
+    if outside_vertical_bounds(nz, VERTICAL_LEVEL_BOUNDS):
+        raise refuse_vertical_levels(
+            "Shin-Hong PBL", VERTICAL_LEVEL_BOUNDS, nz,
+            breakage=(
+                "one CUDA thread owns a whole column and holds it in "
+                f"a global column workspace bounded by SHINHONG_KMAX={_KMAX} "
+                "(kernels/shinhong.cu), and the scheme's YSU-inherited "
+                "counter-gradient and entrainment indexing needs four levels "
+                "to exist."))
+    for name, arr in columns.items():
+        if not isinstance(arr, cp.ndarray) or arr.shape != shape:
+            raise ValueError(f"{name} must be a CuPy array with shape {shape}")
+        if arr.dtype != DTYPE or not arr.flags.c_contiguous:
+            raise ValueError(f"{name} must be C-contiguous float32")
+    if (not isinstance(p_interface, cp.ndarray)
+            or p_interface.shape != (nz + 1, ny, nx)
+            or p_interface.dtype != DTYPE
+            or not p_interface.flags.c_contiguous):
+        raise ValueError("p_interface must be C-contiguous float32 with shape "
+                         f"{(nz + 1, ny, nx)}")
+    surfaces = {"psfc": psfc, "znt": znt, "ust": ust, "hfx": hfx,
+                "qfx": qfx, "wspd": wspd, "br": br, "psim": psim,
+                "psih": psih, "xland": xland, "u10": u10, "v10": v10,
+                "corf": corf}
+    for name, arr in surfaces.items():
+        if (not isinstance(arr, cp.ndarray) or arr.shape != (ny, nx)
+                or arr.dtype != DTYPE or not arr.flags.c_contiguous):
+            raise ValueError(f"{name} must be a C-contiguous float32 CuPy "
+                             f"array with shape {(ny, nx)}")
+    if not np.isfinite(dt) or dt <= 0.0:
+        raise ValueError(f"Shin-Hong requires a positive finite dt, got {dt}")
+    for label, value in (("dx", dx), ("dy", dy)):
+        if not np.isfinite(value) or value <= 0.0:
+            raise ValueError(
+                f"Shin-Hong requires a positive finite {label}, got {value}")
+    if tke_diag not in (0, 1, False, True):
+        raise ValueError("tke_diag must be 0 or 1")
+
+    out = {name: cp.empty_like(theta) for name in _SHINHONG_3D_FLOAT_OUTPUTS}
+    out.update(hpbl=cp.empty((ny, nx), dtype=DTYPE),
+               kpbl=cp.empty((ny, nx), dtype=cp.int32),
+               wstar=cp.empty((ny, nx), dtype=DTYPE),
+               delta=cp.empty((ny, nx), dtype=DTYPE))
+    ncol = ny * nx
+    kernel = get_kernel("shinhong", "shinhong_column")
+    tile = shinhong_tile_columns(kernel, ncol)
+    ws = cp.empty(shinhong_workspace_floats(nz, tile), dtype=DTYPE)
+    for lo in range(0, ncol, tile):
+        blocks = (min(tile, ncol - lo) + _TPB - 1) // _TPB
+        kernel((blocks,), (_TPB,),
+               (u, v, theta, qv, qc, qi, p, p_interface, exner, dz, tke,
+                psfc, znt, ust, hfx, qfx, wspd, br, psim, psih, xland, u10, v10,
+                corf,
+                out["du"], out["dv"], out["dtheta"], out["dqv"], out["dqc"],
+                out["dqi"], out["exch_h"], out["tke"], out["el"],
+                out["hpbl"], out["kpbl"], out["wstar"], out["delta"],
+                DTYPE(dt), DTYPE(dx), DTYPE(dy), np.int32(int(tke_diag)),
+                np.int32(nz), np.int32(ny), np.int32(nx),
+                ws, np.int32(nz + 2), np.int32(lo)))
+    return out
+
+
+def validate_shinhong_outputs(
+        out: Mapping[str, cp.ndarray], status: cp.ndarray) -> str | None:
+    """Return the first non-finite native Shin-Hong output name, or ``None``.
+
+    The first-invalid readback in launcher order, kept for the callers
+    that want the historical scalar answer; the driver's disposition
+    policy reads :func:`invalid_shinhong_outputs` instead, because
+    "which output" decides fatality (task #206).
+    """
+    names = invalid_shinhong_outputs(out, status)
+    return names[0] if names else None
+
+
+def invalid_shinhong_outputs(
+        out: Mapping[str, cp.ndarray], status: cp.ndarray) -> tuple[str, ...]:
+    """Return EVERY non-finite native Shin-Hong output name, launcher order.
+
+    ``launch_shinhong`` owns this exact output layout.  One validation kernel
+    records a bit per floating-point output and one scalar readback preserves
+    the driver's historical first-invalid error ordering.  The integer
+    ``kpbl`` is necessarily finite and needs no device work.  Note that a
+    NaN here is not always a port defect: WRF's own ``prfac2`` 0/0
+    (module_bl_shinhong.F:1010) writes NaN heat columns on purpose-built
+    inputs, and the kernel reproduces it; this validator exists so the
+    driver can say so instead of silently advancing corrupted state.
+    """
+    if tuple(out) != _SHINHONG_OUTPUTS:
+        raise ValueError(
+            "native Shin-Hong validation requires outputs in launcher order "
+            f"{_SHINHONG_OUTPUTS}, got {tuple(out)}")
+    try:
+        from woof.metal.array import MetalArray
+    except ImportError:  # pragma: no cover - Metal is optional
+        MetalArray = ()
+    metal_status = isinstance(status, MetalArray)
+    valid_status_type = (metal_status or isinstance(status, cp.ndarray))
+    if (not valid_status_type or status.shape != (1,)
+            or status.dtype != np.dtype(np.uint32)
+            or not status.flags.c_contiguous):
+        raise ValueError(
+            "Shin-Hong validation status must be a C-contiguous uint32 "
+            "device array with shape (1,)")
+
+    if metal_status:
+        shape_3d = out["du"].shape
+        shape_2d = out["hpbl"].shape
+        if len(shape_3d) != 3 or len(shape_2d) != 2:
+            raise ValueError(
+                "native Shin-Hong outputs must retain 3-D/2-D shapes")
+        from woof.metal.shinhong_family import submit_shinhong_validate_outputs
+        invalid = submit_shinhong_validate_outputs(out, status)
+        return tuple(name for bit, name in enumerate(_SHINHONG_OUTPUTS)
+                     if invalid & (1 << bit))
+
+    shape_3d = out["du"].shape
+    shape_2d = out["hpbl"].shape
+    if len(shape_3d) != 3 or len(shape_2d) != 2:
+        raise ValueError("native Shin-Hong outputs must retain 3-D/2-D shapes")
+    for name in _SHINHONG_3D_FLOAT_OUTPUTS:
+        value = out[name]
+        if (not isinstance(value, cp.ndarray) or value.shape != shape_3d
+                or value.dtype != DTYPE or not value.flags.c_contiguous):
+            raise ValueError(
+                f"native Shin-Hong output {name} must be C-contiguous "
+                f"float32 with shape {shape_3d}")
+    for name in _SHINHONG_2D_FLOAT_OUTPUTS:
+        value = out[name]
+        if (not isinstance(value, cp.ndarray) or value.shape != shape_2d
+                or value.dtype != DTYPE or not value.flags.c_contiguous):
+            raise ValueError(
+                f"native Shin-Hong output {name} must be C-contiguous "
+                f"float32 with shape {shape_2d}")
+
+    status.fill(cp.uint32(0))
+    count_3d = out["du"].size
+    count_2d = out["hpbl"].size
+    blocks = (max(count_3d, count_2d) + _VALIDATE_TPB - 1) // _VALIDATE_TPB
+    kernel = get_kernel("shinhong_validation", "shinhong_validate_outputs")
+    kernel(
+        (blocks,), (_VALIDATE_TPB,),
+        tuple(out[name] for name in _SHINHONG_3D_FLOAT_OUTPUTS)
+        + tuple(out[name] for name in _SHINHONG_2D_FLOAT_OUTPUTS)
+        + (status, np.int64(count_3d), np.int64(count_2d)))
+    invalid = (int(status.to_numpy()[0]) if metal_status
+               else int(status[0].item()))
+    return tuple(name for bit, name in enumerate(_SHINHONG_OUTPUTS)
+                 if invalid & (1 << bit))
+
+
+def repair_shinhong_passenger_outputs(
+        out: dict[str, cp.ndarray]) -> dict[str, int]:
+    """Repair non-finite passenger diagnostics, rebinding ``out``'s entries.
+
+    The caller has already established (via
+    :func:`invalid_shinhong_outputs`) that every CONSUMED output is
+    finite; this replaces each non-finite ``tke`` value with the chain's
+    own cold-start floor (:data:`SHINHONG_TKE_FLOOR`, WRF's
+    ``shinhonginit`` epsq2l/2) and each non-finite ``el`` value with the
+    scheme's :673 zero, so ``state.e_sgs`` never inherits a NaN that
+    would poison every later ``mixlen`` call.  DOCUMENTED DIVERGENCE
+    from WRF: with tke_diag on, stock WRF leaves the NaN in ``TKE_PBL``
+    forever (and by default never computes the chain at all); carrying a
+    poisoned instrument field silently is the WRF-undefined behaviour
+    this repair replaces with a defined one.  Returns ``{name: repaired
+    count}`` for the driver's advisory; array-module dispatch keeps the
+    function testable on NumPy arrays without a device.
+    """
+    counts: dict[str, int] = {}
+    for name, floor in (("tke", SHINHONG_TKE_FLOOR), ("el", 0.0)):
+        value = out[name]
+        xp = cp.get_array_module(value)
+        bad = ~xp.isfinite(value)
+        repaired = int(bad.sum())
+        if repaired:
+            out[name] = xp.where(bad, value.dtype.type(floor), value)
+            counts[name] = repaired
+    return counts

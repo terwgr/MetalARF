@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 9e9573c7cc8ff027d38a74dc6a5d14625a70ea1baeb0b4642f32ad6590d9c122.
+struct SaseVentDepositResources {
+    device float *phi [[id(0)]];
+    device const float *f [[id(1)]];
+    device const ulong *scale [[id(2)]];
+    device const float *rho1 [[id(3)]];
+    device const float *t [[id(4)]];
+    device const ulong *constants [[id(5)]];
+};
+struct SaseVentDepositParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseVentDepositParams) == 12, "sase_vent_deposit parameter ABI size changed");

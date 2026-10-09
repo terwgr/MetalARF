@@ -1,0 +1,46 @@
+// Generated from kernel_signatures.json; layout 0b23a35893c8d85504bb9e8741c80ed909b1c9849049434315bca58706cb2b4c.
+struct NtiedtkeCuflxnResources {
+    device const int *kcbot [[id(0)]];
+    device const int *kctop [[id(1)]];
+    device const int *kdtop [[id(2)]];
+    device const int *lndj [[id(3)]];
+    device const float *pten [[id(4)]];
+    device const float *ptenh [[id(5)]];
+    device const float *pqenh [[id(6)]];
+    device const float *paph [[id(7)]];
+    device const float *pap [[id(8)]];
+    device const float *pqen [[id(9)]];
+    device const float *pgeoh [[id(10)]];
+    device int *ldcum [[id(11)]];
+    device int *lddraf [[id(12)]];
+    device int *ktype [[id(13)]];
+    device float *pmfu [[id(14)]];
+    device float *pmfd [[id(15)]];
+    device float *pmfus [[id(16)]];
+    device float *pmfds [[id(17)]];
+    device float *pmfuq [[id(18)]];
+    device float *pmfdq [[id(19)]];
+    device float *pmful [[id(20)]];
+    device float *plude [[id(21)]];
+    device float *plglac [[id(22)]];
+    device float *pdmfup [[id(23)]];
+    device float *pdmfdp [[id(24)]];
+    device float *pmfdde_rate [[id(25)]];
+    device float *pqsen [[id(26)]];
+    device float *pdpmel [[id(27)]];
+    device float *pmflxr [[id(28)]];
+    device float *pmflxs [[id(29)]];
+    device float *prain [[id(30)]];
+};
+struct NtiedtkeCuflxnParams {
+    int ncol;
+    int klev;
+    float ztmst;
+    float cp;
+    float rd;
+    float rv;
+    float xlv;
+    float xlf;
+    float grav;
+};
+static_assert(sizeof(NtiedtkeCuflxnParams) == 36, "ntiedtke_cuflxn parameter ABI size changed");

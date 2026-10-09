@@ -1,0 +1,34 @@
+// Generated from kernel_signatures.json; layout c5dfafef4de74cecb0edbd0049333d839b2515eb1db6ad19a53e84761fa2c33a.
+struct AcousticBoundaryFrameResources {
+    device float *ph_pp [[id(0)]];
+    device float *w_pp [[id(1)]];
+    device float *p_pp [[id(2)]];
+    device float *al_pp [[id(3)]];
+    device const float *rph_t [[id(4)]];
+    device const float *rw_t [[id(5)]];
+    device const float *th_pp [[id(6)]];
+    device const float *mup [[id(7)]];
+    device const float *mu_pp [[id(8)]];
+    device const float *mub2d [[id(9)]];
+    device const float *rmu_t [[id(10)]];
+    device const float *php [[id(11)]];
+    device const float *thp [[id(12)]];
+    device const float *thb [[id(13)]];
+    device const float *alt [[id(14)]];
+    device const float *c2a [[id(15)]];
+    device const float *rdnw [[id(16)]];
+    device const float *c1h [[id(17)]];
+    device const float *c2h [[id(18)]];
+    device const float *c1f [[id(19)]];
+    device const float *c2f [[id(20)]];
+};
+struct AcousticBoundaryFrameParams {
+    float dtau;
+    int spec_zone;
+    int base3d;
+    int table_w;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(AcousticBoundaryFrameParams) == 28, "acoustic_boundary_frame parameter ABI size changed");

@@ -1,0 +1,27 @@
+{
+  "kernels": [
+    {
+      "name": "hex_vertical_pressure_euler_fragment",
+      "module": "hex_vertical_pressure_euler_fragment",
+      "source": "woof/metal/shaders/hex_vertical_pressure_euler_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "euler_rw pressure-gradient loop",
+      "resources": [
+        ["pressure_perturbation", "float", "read"], ["dpdz", "float", "read"],
+        ["cqw", "float", "read"], ["rdzu", "float", "read"],
+        ["fzm", "float", "read"], ["fzp", "float", "read"],
+        ["tendency", "float", "read_write"]
+      ],
+      "shapes": {
+        "pressure_perturbation": [["any_1d"]], "dpdz": [["any_1d"]],
+        "cqw": [["any_1d"]], "rdzu": [["any_1d"]],
+        "fzm": [["any_1d"]], "fzp": [["any_1d"]],
+        "tendency": [["any_1d"]]
+      },
+      "parameters": [["nlev", "int32"], ["ncells", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

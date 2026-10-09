@@ -1,0 +1,80 @@
+{
+  "kernels": [
+    {
+      "name": "add_diff2",
+      "module": "diffusion",
+      "source": "woof/metal/shaders/diffusion.metal",
+      "cuda_source": "woof/core/diffusion.py",
+      "cuda_symbol": "add_diffusion_tendencies",
+      "resources": [
+        ["f", "float", "read"],
+        ["tend", "float", "read_write"],
+        ["rdzf", "float", "read"],
+        ["rdzc", "float", "read"],
+        ["mub2d", "float", "read"],
+        ["mup", "float", "read"],
+        ["c1", "float", "read"],
+        ["c2", "float", "read"]
+      ],
+      "shapes": {
+        "f": [["nlev", "nys", "nxs"]],
+        "tend": [["nlev", "nys", "nxs"]],
+        "rdzf": [["nlev-1"]],
+        "rdzc": [["nlev"]],
+        "mub2d": [["ny", "nx"]],
+        "mup": [["ny", "nx"]],
+        "c1": [["nlev"]],
+        "c2": [["nlev"]]
+      },
+      "parameters": [
+        ["kh", "float32"],
+        ["kv", "float32"],
+        ["dx_inv2", "float32"],
+        ["dy_inv2", "float32"],
+        ["nlev", "int32"],
+        ["ny", "int32"],
+        ["nys", "int32"],
+        ["nx", "int32"],
+        ["nxs", "int32"],
+        ["stagger", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "add_diff2_raw",
+      "module": "diffusion",
+      "source": "woof/metal/shaders/diffusion.metal",
+      "cuda_source": "woof/core/diffusion.py",
+      "cuda_symbol": "launch_add_diff2",
+      "resources": [
+        ["f", "float", "read"],
+        ["tend", "float", "read_write"],
+        ["rdzf", "float", "read"],
+        ["rdzc", "float", "read"]
+      ],
+      "shapes": {
+        "f": [["nlev", "nys", "nxs"]],
+        "tend": [["nlev", "nys", "nxs"]],
+        "rdzf": [["nlev-1"]],
+        "rdzc": [["nlev"]]
+      },
+      "parameters": [
+        ["kh", "float32"],
+        ["kv", "float32"],
+        ["dx_inv2", "float32"],
+        ["dy_inv2", "float32"],
+        ["nlev", "int32"],
+        ["ny", "int32"],
+        ["nys", "int32"],
+        ["nx", "int32"],
+        ["nxs", "int32"],
+        ["stagger", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    }
+  ]
+}

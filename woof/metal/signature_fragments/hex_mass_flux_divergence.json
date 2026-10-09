@@ -1,0 +1,126 @@
+{
+  "kernels": [
+    {
+      "name": "hex_mass_flux_divergence",
+      "module": "hex_mass_flux_divergence",
+      "source": "woof/metal/shaders/hex_mass_flux_divergence.metal",
+      "cuda_source": "woof/hex/dynamics.py",
+      "cuda_symbol": "mass_flux_divergence",
+      "resources": [
+        [
+          "rho_u",
+          "float",
+          "read"
+        ],
+        [
+          "edge_indices",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_signs",
+          "float",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "divergence",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_u": [
+          [
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "edge_indices": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "edge_counts": [
+          [
+            "ncells"
+          ]
+        ],
+        "edge_signs": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "nedges"
+          ]
+        ],
+        "area_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "divergence": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "use_inverse",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

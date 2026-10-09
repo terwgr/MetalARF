@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout bf82881e543e5c66843b67fea3c08b49fb2e2ed65672e685ab2fb41dbc360c45.
+struct Complex64AddResources {
+    device const float *a [[id(0)]];
+    device const float *b [[id(1)]];
+    device float *dst [[id(2)]];
+};
+struct Complex64AddParams {
+    int n;
+    int n2;
+};
+static_assert(sizeof(Complex64AddParams) == 8, "complex64_add parameter ABI size changed");

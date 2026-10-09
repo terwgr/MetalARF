@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout ac4b45235c04c25ab8f407222cf9e80c643028323448cbeeefba2f4442b974ee.
+struct RrtmgLegacyLwTaugb11Resources {
+    device const int *laytrop [[id(0)]];
+    device const float *fs [[id(1)]];
+    device const int *isv [[id(2)]];
+    device const float *absa [[id(3)]];
+    device const float *absb [[id(4)]];
+    device const float *selfref [[id(5)]];
+    device const float *forref [[id(6)]];
+    device const float *ka_mo2 [[id(7)]];
+    device const float *kb_mo2 [[id(8)]];
+    device const float *fracrefa [[id(9)]];
+    device const float *fracrefb [[id(10)]];
+    device float *taug [[id(11)]];
+    device float *fracs [[id(12)]];
+};
+struct RrtmgLegacyLwTaugb11Params {
+    int ncol;
+    int nl;
+};
+static_assert(sizeof(RrtmgLegacyLwTaugb11Params) == 8, "rrtmg_legacy_lw_taugb11 parameter ABI size changed");

@@ -1,0 +1,41 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semi_implicit.py",
+      "cuda_symbol": "VerticalModeSemiImplicit.linear_tendencies",
+      "layout_version": 1,
+      "module": "global_semilag_linear_tendencies_fragment",
+      "name": "global_semilag_linear_tendencies_fragment",
+      "parameters": [
+        ["nlevel", "int32"],
+        ["ndegree", "int32"],
+        ["mcount", "int32"]
+      ],
+      "resources": [
+        ["divergence", "float64_bits", "read"],
+        ["theta", "float64_bits", "read"],
+        ["logps", "float64_bits", "read"],
+        ["b_matrix", "float64_bits", "read"],
+        ["c_matrix", "float64_bits", "read"],
+        ["k2", "float64_bits", "read"],
+        ["weight", "float64_bits", "read"],
+        ["divergence_tendency", "float64_bits", "read_write"],
+        ["state_tendency", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "b_matrix": [["any_1d"]],
+        "c_matrix": [["any_1d"]],
+        "divergence": [["any_1d"]],
+        "divergence_tendency": [["any_1d"]],
+        "k2": [["any_1d"]],
+        "logps": [["any_1d"]],
+        "state_tendency": [["any_1d"]],
+        "theta": [["any_1d"]],
+        "weight": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_linear_tendencies_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

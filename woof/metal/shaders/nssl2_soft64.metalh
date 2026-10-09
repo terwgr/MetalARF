@@ -1,0 +1,107 @@
+// Software binary64 values for NSSL source expressions on Metal devices.
+#include "soft_binary64.metalh"
+#include "soft_libm64.metalh"
+
+struct Nssl2Soft64 {
+    ulong bits;
+    Nssl2Soft64() : bits(0ul) {}
+    Nssl2Soft64(float value)
+        : bits(soft64_from_f32_bits(as_type<uint>(value))) {}
+    Nssl2Soft64(int value) : bits(soft64_from_i32(value)) {}
+    static Nssl2Soft64 from_bits(ulong value) {
+        Nssl2Soft64 result;
+        result.bits = value;
+        return result;
+    }
+    operator float() const {
+        return as_type<float>(soft64_to_f32_bits(bits));
+    }
+    operator int() const { return soft64_to_i32_rz(bits).value; }
+};
+
+static inline Nssl2Soft64 operator+(Nssl2Soft64 a, Nssl2Soft64 b) {
+    Nssl2Soft64 result; result.bits = soft64_add(a.bits, b.bits); return result;
+}
+static inline Nssl2Soft64 operator+(Nssl2Soft64 a, float b) { return a + Nssl2Soft64(b); }
+static inline Nssl2Soft64 operator+(float a, Nssl2Soft64 b) { return Nssl2Soft64(a) + b; }
+static inline Nssl2Soft64 operator-(Nssl2Soft64 a, Nssl2Soft64 b) {
+    Nssl2Soft64 result; result.bits = soft64_sub(a.bits, b.bits); return result;
+}
+static inline Nssl2Soft64 operator-(Nssl2Soft64 a, float b) { return a - Nssl2Soft64(b); }
+static inline Nssl2Soft64 operator-(float a, Nssl2Soft64 b) { return Nssl2Soft64(a) - b; }
+static inline Nssl2Soft64 operator*(Nssl2Soft64 a, Nssl2Soft64 b) {
+    Nssl2Soft64 result; result.bits = soft64_mul(a.bits, b.bits); return result;
+}
+static inline Nssl2Soft64 operator*(Nssl2Soft64 a, float b) { return a * Nssl2Soft64(b); }
+static inline Nssl2Soft64 operator*(float a, Nssl2Soft64 b) { return Nssl2Soft64(a) * b; }
+static inline Nssl2Soft64 operator/(Nssl2Soft64 a, Nssl2Soft64 b) {
+    Nssl2Soft64 result; result.bits = soft64_div(a.bits, b.bits); return result;
+}
+static inline Nssl2Soft64 operator/(Nssl2Soft64 a, float b) { return a / Nssl2Soft64(b); }
+static inline Nssl2Soft64 operator/(float a, Nssl2Soft64 b) { return Nssl2Soft64(a) / b; }
+static inline thread Nssl2Soft64 &operator+=(thread Nssl2Soft64 &a, Nssl2Soft64 b) {
+    a.bits = soft64_add(a.bits, b.bits); return a;
+}
+static inline bool operator<(Nssl2Soft64 a, Nssl2Soft64 b) { return soft64_less(a.bits, b.bits); }
+static inline bool operator>(Nssl2Soft64 a, Nssl2Soft64 b) { return soft64_greater(a.bits, b.bits); }
+static inline bool operator<=(Nssl2Soft64 a, Nssl2Soft64 b) { return soft64_less_equal(a.bits, b.bits); }
+static inline bool operator>=(Nssl2Soft64 a, Nssl2Soft64 b) { return soft64_greater_equal(a.bits, b.bits); }
+static inline bool operator<(Nssl2Soft64 a, float b) { return a < Nssl2Soft64(b); }
+static inline bool operator>(Nssl2Soft64 a, float b) { return a > Nssl2Soft64(b); }
+static inline bool operator<=(Nssl2Soft64 a, float b) { return a <= Nssl2Soft64(b); }
+static inline bool operator>=(Nssl2Soft64 a, float b) { return a >= Nssl2Soft64(b); }
+static inline Nssl2Soft64 fmin(Nssl2Soft64 a, Nssl2Soft64 b) { return a > b ? b : a; }
+static inline Nssl2Soft64 fmax(Nssl2Soft64 a, Nssl2Soft64 b) { return a < b ? b : a; }
+static inline Nssl2Soft64 log(Nssl2Soft64 a) {
+    Nssl2Soft64 result; result.bits = soft64_plm_log(a.bits); return result;
+}
+static inline Nssl2Soft64 exp(Nssl2Soft64 a) {
+    Nssl2Soft64 result; result.bits = soft64_plm_exp(a.bits); return result;
+}
+static inline Nssl2Soft64 pow(Nssl2Soft64 a, Nssl2Soft64 b) {
+    Nssl2Soft64 result; result.bits = soft64_plm_pow(a.bits, b.bits); return result;
+}
+static inline Nssl2Soft64 pow(Nssl2Soft64 a, float b) { return pow(a, Nssl2Soft64(b)); }
+static inline Nssl2Soft64 nssl2_soft64_const(ulong bits) {
+    return Nssl2Soft64::from_bits(bits);
+}
+
+// tgamma call sites in the NSSL sedimentation path are restricted to the
+// binary64 lookup interval [1.0, 8.69]. Shift that bounded input to x >= 16
+// with Gamma(x+1)=x*Gamma(x), then evaluate log-Gamma with the Stirling
+// expansion through x^-19. The first omitted term is below 3e-25 at x=16.
+// This is deliberately not a general-purpose gamma implementation.
+static inline Nssl2Soft64 nssl2_tgamma64(Nssl2Soft64 value) {
+    Nssl2Soft64 x = value;
+    Nssl2Soft64 recurrence_product(1.0f);
+    for (int i = 0; i < 16 && x < 16.0f; ++i) {
+        recurrence_product = recurrence_product * x;
+        x = x + 1.0f;
+    }
+
+    const Nssl2Soft64 x2 = x * x;
+    const Nssl2Soft64 x3 = x2 * x;
+    const Nssl2Soft64 x5 = x3 * x2;
+    const Nssl2Soft64 x7 = x5 * x2;
+    const Nssl2Soft64 x9 = x7 * x2;
+    const Nssl2Soft64 x11 = x9 * x2;
+    const Nssl2Soft64 x13 = x11 * x2;
+    const Nssl2Soft64 x15 = x13 * x2;
+    const Nssl2Soft64 x17 = x15 * x2;
+    const Nssl2Soft64 x19 = x17 * x2;
+
+    Nssl2Soft64 log_gamma = (x - 0.5f) * log(x) - x
+        + nssl2_soft64_const(0x3fed67f1c864beb4ul);
+    log_gamma = log_gamma
+        + nssl2_soft64_const(0x3fb5555555555555ul) / x
+        + nssl2_soft64_const(0xbf66c16c16c16c17ul) / x3
+        + nssl2_soft64_const(0x3f4a01a01a01a01aul) / x5
+        + nssl2_soft64_const(0xbf43813813813814ul) / x7
+        + nssl2_soft64_const(0x3f4b951e2b18ff23ul) / x9
+        + nssl2_soft64_const(0xbf5f6ab0d9993c7dul) / x11
+        + nssl2_soft64_const(0x3f7a41a41a41a41aul) / x13
+        + nssl2_soft64_const(0xbf9e4286cb0f5398ul) / x15
+        + nssl2_soft64_const(0x3fc6fe96381e0680ul) / x17
+        + nssl2_soft64_const(0xbff6476701181f3aul) / x19;
+    return exp(log_gamma) / recurrence_product;
+}

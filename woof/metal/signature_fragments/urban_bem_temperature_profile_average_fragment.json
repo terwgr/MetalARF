@@ -1,0 +1,37 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_temperature_profile_average_fragment",
+      "module": "urban_bem_temperature_profile_average_fragment",
+      "source": "woof/metal/shaders/urban_bem_temperature_profile_average_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_bep1d",
+      "resources": [
+        ["active_cols", "int32", "read"],
+        ["utype", "int32", "read"],
+        ["class_float", "float", "read"],
+        ["tg", "float", "read"],
+        ["tr", "float", "read"],
+        ["trv", "float", "read"],
+        ["tg_av", "float", "read_write"],
+        ["tr_av", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]],
+        "utype": [["ncol"]],
+        "class_float": [[1320]],
+        "tg": [["ncol", 10, 2]],
+        "tr": [["ncol", 5, 18, 2]],
+        "trv": [["ncol", 10, 18, 2]],
+        "tg_av": [["ncol", 2]],
+        "tr_av": [["ncol", 18, 2]],
+        "error": [["ncol"]]
+      },
+      "parameters": [["ncol", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "kernels": [
+    {
+      "name": "global_reductions_fragment",
+      "module": "global_dynamics",
+      "source": "woof/metal/shaders/global_reductions_fragment.metal",
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._mass_flux_band",
+      "resources": [
+        ["values", "float64_bits", "read"],
+        ["partial_sums", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "values": [["any_1d"]],
+        "partial_sums": [["any_1d"]]
+      },
+      "parameters": [["count", "int32"], ["chunk_size", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

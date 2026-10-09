@@ -1,0 +1,54 @@
+{
+  "schema": "woof-metal-soft-gfk-log-proposal-v1",
+  "status": "dependency-blocked-source-proposal",
+  "proposal": "soft_gfk_log",
+  "source": "woof/core/kernels/glibc_flt32.cuh::gfk_log",
+  "source_identity": "glibc 2.39 sysdeps/ieee754/flt-32/e_logf.c; source function at lines 149-174",
+  "representation": "FP32 arguments and result are uint bit patterns; FP64 values are ulong bit patterns defined by soft_binary64.metalh",
+  "operation_graph": [
+    "z = exact-f32-to-soft64(iz)",
+    "r = RN64_sub(RN64_mul(z, GFK_LOGF_INVC[i]), 1.0)",
+    "y0 = RN64_add(GFK_LOGF_LOGC[i], RN64_mul(exact-i32-to-soft64(k), GFK_LOGF_LN2))",
+    "r2 = RN64_mul(r, r)",
+    "y = RN64_add(RN64_mul(GFK_LOGF_A1, r), GFK_LOGF_A2)",
+    "y = RN64_add(RN64_mul(GFK_LOGF_A0, r2), y)",
+    "y = RN64_add(RN64_mul(y, r2), RN64_add(y0, r))",
+    "result = RN64-to-FP32-bits(y)"
+  ],
+  "special_cases": {
+    "x_bits_equal_one": "return positive-zero bits 0x00000000",
+    "either_signed_zero": "return negative-infinity bits 0xff800000",
+    "positive_infinity": "return input bits unchanged",
+    "negative_input_or_any_nan": "return canonical positive quiet-NaN bits 0x7fc00000",
+    "positive_subnormal": "exactly scale its positive mantissa by 2^23 as FP32 bits, then apply the source unsigned exponent adjustment (23 << 23)",
+    "ordinary_finite_positive": "preserve source unsigned tmp/index extraction and arithmetic signed shift for k"
+  },
+  "source_constants": {
+    "tables": [
+      "GFK_LOGF_INVC[16]",
+      "GFK_LOGF_LOGC[16]"
+    ],
+    "scalars": [
+      "GFK_LOGF_LN2",
+      "GFK_LOGF_A0",
+      "GFK_LOGF_A1",
+      "GFK_LOGF_A2"
+    ],
+    "encoding": "Exact source hexadecimal binary64 constants are stored as ulong bit patterns in soft_gfk_log.metalh"
+  },
+  "soft64_dependencies": {
+    "header": "woof/metal/shaders/soft_binary64.metalh",
+    "declared_interfaces_used": [
+      "soft64_from_f32_bits(uint) -> ulong",
+      "soft64_mul(ulong, ulong) -> ulong",
+      "soft64_sub(ulong, ulong) -> ulong",
+      "soft64_add(ulong, ulong) -> ulong",
+      "soft64_to_f32_bits(ulong) -> uint"
+    ],
+    "approval": "This proposal remains dependency-blocked until the shared base and this translation pass central numerical verification.",
+    "integer_widening_interface": "The exact bounded-k local conversion is retained in soft_gfk_log.metalh; the shared soft64_from_i32(int) interface also exists in soft_binary64.metalh. Both remain unverified with the shared header.",
+    "acceptance_state": "The combined GFK and shared-helper MSL kernel compiled and matched the in-tree glibc 2.39 CPU transcription on a bounded probe; complete shared primitive and consumer-level acceptance is still pending."
+  },
+  "production_consumption": "none",
+  "verification": "MetalToolchain 27.1 compiled all four helpers together with the shared binary32/binary64 headers and executed the temporary kernel on Apple M2. Each of logf, expf, powf, and atanf matched the in-tree glibc 2.39 CPU transcription in woof/core/noahmp_libm.py exactly on 4,826 rows (zero bit mismatches each). Inputs covered special values, subnormals, thresholds and adjacent encodings, plus seeded random bit patterns/pairs. This is bounded evidence, not exhaustive certification; production consumption remains blocked by the shared primitive and consumer-level contracts."
+}

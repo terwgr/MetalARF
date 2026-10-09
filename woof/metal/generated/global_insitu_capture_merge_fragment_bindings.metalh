@@ -1,0 +1,9 @@
+// Generated from kernel_signatures.json; layout 15b8a7016207229b2fac28c2e8a225b006f3e21d123e014afb11d7b76cec9e61.
+struct GlobalInsituCaptureMergeFragmentResources {
+    device ulong *accumulator [[id(0)]];
+    device const ulong *band_statistics [[id(1)]];
+};
+struct GlobalInsituCaptureMergeFragmentParams {
+    int nfield;
+};
+static_assert(sizeof(GlobalInsituCaptureMergeFragmentParams) == 4, "global_insitu_capture_merge_fragment parameter ABI size changed");

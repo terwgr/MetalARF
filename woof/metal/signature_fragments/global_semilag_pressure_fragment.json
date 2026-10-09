@@ -1,0 +1,35 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "resident Global semi-Lagrangian hybrid pressure setup",
+      "layout_version": 1,
+      "module": "global_semilag_pressure_fragment",
+      "name": "global_semilag_pressure_fragment",
+      "parameters": [["nlevel", "int32"], ["ncolumn", "int32"]],
+      "resources": [
+        ["log_surface_pressure", "float64_bits", "read"],
+        ["a_half", "float64_bits", "read"],
+        ["b_half", "float64_bits", "read"],
+        ["surface_pressure", "float64_bits", "read_write"],
+        ["pressure_half", "float64_bits", "read_write"],
+        ["pressure_full", "float64_bits", "read_write"],
+        ["layer_thickness", "float64_bits", "read_write"],
+        ["ln_ratio", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "a_half": [["any_1d"]],
+        "b_half": [["any_1d"]],
+        "layer_thickness": [["any_1d"]],
+        "log_surface_pressure": [["any_1d"]],
+        "ln_ratio": [["any_1d"]],
+        "pressure_full": [["any_1d"]],
+        "pressure_half": [["any_1d"]],
+        "surface_pressure": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_pressure_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

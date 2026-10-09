@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 5a843c9cc5a54bbc0734ce2f46f35290afc1c71c22e9d6efbd0a061deb37f66e.
+struct GlobalSemilagMassFluxFragmentResources {
+    device const ulong *dp [[id(0)]];
+    device const ulong *u [[id(1)]];
+    device const ulong *v [[id(2)]];
+    device ulong *flux_u [[id(3)]];
+    device ulong *flux_v [[id(4)]];
+};
+struct GlobalSemilagMassFluxFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalSemilagMassFluxFragmentParams) == 4, "global_semilag_mass_flux_fragment parameter ABI size changed");

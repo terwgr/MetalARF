@@ -1,0 +1,44 @@
+// Generated from kernel_signatures.json; layout c6010b5fe49bb6214de4960d6404af0499d7ca867af08f3fe76ee306372dd58e.
+struct RucSurfaceParametersResources {
+    device const int *isltyp [[id(0)]];
+    device const int *ivgtyp [[id(1)]];
+    device const float *shdmin [[id(2)]];
+    device const float *shdmax [[id(3)]];
+    device const float *vegfrac [[id(4)]];
+    device const float *znt_in [[id(5)]];
+    device const float *lai_in [[id(6)]];
+    device const int *ifortbl [[id(7)]];
+    device const float *z0tbl [[id(8)]];
+    device const float *lemitbl [[id(9)]];
+    device const float *pctbl [[id(10)]];
+    device const float *laitbl [[id(11)]];
+    device const float *bb [[id(12)]];
+    device const float *drysmc [[id(13)]];
+    device const float *hc [[id(14)]];
+    device const float *maxsmc [[id(15)]];
+    device const float *refsmc [[id(16)]];
+    device const float *satpsi [[id(17)]];
+    device const float *satdk [[id(18)]];
+    device const float *wltsmc [[id(19)]];
+    device const float *qtz [[id(20)]];
+    device int *iforest_out [[id(21)]];
+    device float *emiss_out [[id(22)]];
+    device float *pc_out [[id(23)]];
+    device float *znt_out [[id(24)]];
+    device float *lai_out [[id(25)]];
+    device float *qwrtz_out [[id(26)]];
+    device float *rhocs_out [[id(27)]];
+    device float *bclh_out [[id(28)]];
+    device float *dqm_out [[id(29)]];
+    device float *ksat_out [[id(30)]];
+    device float *psis_out [[id(31)]];
+    device float *qmin_out [[id(32)]];
+    device float *ref_out [[id(33)]];
+    device float *wilt_out [[id(34)]];
+};
+struct RucSurfaceParametersParams {
+    int iswater;
+    int rdlai2d;
+    int n;
+};
+static_assert(sizeof(RucSurfaceParametersParams) == 12, "ruc_surface_parameters parameter ABI size changed");

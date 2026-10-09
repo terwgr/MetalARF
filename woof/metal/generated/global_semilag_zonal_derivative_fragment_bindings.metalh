@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout 13c2d4ecdb677bd295c06f416ad1f696fb08d31b41db0cf6259c9e8c44c9ef82.
+struct GlobalSemilagZonalDerivativeFragmentResources {
+    device const ulong *coefficients [[id(0)]];
+    device ulong *derivative [[id(1)]];
+};
+struct GlobalSemilagZonalDerivativeFragmentParams {
+    int truncation;
+    int coefficient_count;
+};
+static_assert(sizeof(GlobalSemilagZonalDerivativeFragmentParams) == 8, "global_semilag_zonal_derivative_fragment parameter ABI size changed");

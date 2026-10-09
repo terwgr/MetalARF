@@ -1,0 +1,340 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_nucond.cu",
+      "cuda_symbol": "nssl2_nucond_supersaturation",
+      "layout_version": 1,
+      "module": "nssl2_nucond",
+      "name": "nssl2_nucond_supersaturation",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "full_theta",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_pa",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "supersaturation_percent",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "exner": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "full_theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure_pa": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "supersaturation_percent": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_nucond.metal",
+      "threads_per_group": 256
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_nucond.cu",
+      "cuda_symbol": "nssl2_nucond_default",
+      "layout_version": 1,
+      "module": "nssl2_nucond",
+      "name": "nssl2_nucond_default",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "concentration_space",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "horizontal_size",
+          "int32"
+        ],
+        [
+          "predicted_ccn",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "full_theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_pa",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "w_interface",
+          "float",
+          "read"
+        ],
+        [
+          "initial_supersaturation_percent",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qndrop",
+          "float",
+          "read_write"
+        ],
+        [
+          "qnr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qni",
+          "float",
+          "read"
+        ],
+        [
+          "qns",
+          "float",
+          "read"
+        ],
+        [
+          "qnn",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "exner": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "full_theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "initial_supersaturation_percent": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure_pa": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qndrop": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnn": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qns": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w_interface": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_nucond.metal",
+      "threads_per_group": 256
+    }
+  ]
+}

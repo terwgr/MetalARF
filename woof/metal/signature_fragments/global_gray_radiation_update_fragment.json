@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "gray radiation potential-temperature update",
+      "layout_version": 1,
+      "module": "global_gray_radiation_update_fragment",
+      "name": "global_gray_radiation_update_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["theta", "float64_bits", "read"],
+        ["exner", "float64_bits", "read"],
+        ["dp", "float64_bits", "read"],
+        ["shortwave_heating", "float64_bits", "read"],
+        ["longwave_heating", "float64_bits", "read"],
+        ["dt", "float64_bits", "read"],
+        ["gravity", "float64_bits", "read"],
+        ["dry_air_cp", "float64_bits", "read"],
+        ["theta_out", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["any_1d"]], "exner": [["any_1d"]],
+        "dp": [["any_1d"]], "shortwave_heating": [["any_1d"]],
+        "longwave_heating": [["any_1d"]], "dt": [[1]],
+        "gravity": [[1]], "dry_air_cp": [[1]],
+        "theta_out": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_gray_radiation_update_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

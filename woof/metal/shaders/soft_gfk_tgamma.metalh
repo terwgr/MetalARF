@@ -1,0 +1,80 @@
+#ifndef WOOF_SOFT_GFK_TGAMMA_METALH
+#define WOOF_SOFT_GFK_TGAMMA_METALH
+#include "soft_binary64.metalh"
+
+// Shared positive-domain implementation of WOOF's source-derived
+// correctly-rounded binary32 gamma. Coefficients and recurrence come from
+// woof/core/kernels/glibc_flt32.cuh (Apache-2.0 original work).
+// Live production callers constrain inputs to 0 < x < 36.
+// Adapted from WOOF's Apache-2.0 original-work Gamma implementation by ArWen
+// contributors, `woof/core/kernels/glibc_flt32.cuh` (gfk_tgamma_poly and
+// gfk_tgamma_pos). The 160 coefficient words are the upstream GFK_TG_C table,
+// converted without numeric change from hexadecimal binary64 literals to
+// IEEE-754 bit patterns for the software-binary64 evaluator below. See the
+// repository LICENSE and the provenance/derivation comments beside GFK_TG_C.
+// This positive-domain positive-domain shared wrapper retains one final FP32 rounding;
+// mathematical-Gamma parity with CUDA tgammaf remains unverified.
+constant ulong SOFT_GFK_TG_C[16][10] = {
+    {0x3fef73ed01940522ul, 0xbfe092fd20dd784cul, 0x3fed1a2ea66d2aeful, 0xbfe966a1d7f2b9d9ul, 0x3feaf057a1fa6b33ul, 0xbfea114e80ce35b1ul, 0x3fe99b28f9ddcee8ul, 0xbfe8e73dca5f8820ul, 0x3fe843285f62ee7dul, 0xbfe78e83c533d8b1ul},
+    {0x3fee865a5b755fb9ul, 0xbfda6b50f60b5c6eul, 0x3fe8e9a9675e8147ul, 0xbfe39251063e4e66ul, 0x3fe41a834d107f5eul, 0xbfe237aaf45da8d8ul, 0x3fe0f0e4f41772eaul, 0xbfdf11209307f1c0ul, 0x3fdc8cbfdb620ef9ul, 0xbfda24012d73ac3cul},
+    {0x3fedcac35f2a7419ul, 0xbfd49cf184c91f8eul, 0x3fe5ac61acea578eul, 0xbfde5d43093961e1ul, 0x3fde91903e412f2aul, 0xbfd9eedaece7d029ul, 0x3fd6f07e745bdddeul, 0xbfd3e2e7165ba686ul, 0x3fd14c7245554af4ul, 0xbfcdf8a55df66ee0ul},
+    {0x3fed3aa3cecb6cd0ul, 0xbfcf0b8c2384c507ul, 0x3fe327dd5130ef72ul, 0xbfd7a2070b357f21ul, 0x3fd7a7cfacdf879dul, 0xbfd2c07bb9dae965ul, 0x3fcfb753b1f31c65ul, 0xbfca0d97e4269587ul, 0x3fc58589453b97bbul, 0xbfc1b0d3d42d932bul},
+    {0x3fecd0ebb0c4e488ul, 0xbfc5fa4609a59d2cul, 0x3fe13236e09cf181ul, 0xbfd2616a66cb748aul, 0x3fd29fb9224d7007ul, 0xbfcb7c019bda7132ul, 0x3fc658f76dab2a86ul, 0xbfc16bef3649d39bul, 0x3fbb6aee3baf8284ul, 0xbfb570897c5886ebul},
+    {0x3fec89aaab6c10fdul, 0xbfbb8d4972a0d9c0ul, 0x3fdf59ee44fdc796ul, 0xbfcc6c163713c6cbul, 0x3fcdd53c7e7fbca8ul, 0xbfc45d61e648b785ul, 0x3fc00706690f6116ul, 0xbfb7bbc7df8eac4cul, 0x3fb1d809aa6ec9f0ul, 0xbfaa9b3bfeb56d76ul},
+    {0x3fec61d286fe74edul, 0xbfa8f960eacc3e79ul, 0x3fdd035f977bf7fful, 0xbfc5afe653a01c68ul, 0x3fc850c11888a092ul, 0xbfbe6f81933b909dul, 0x3fb7607930824288ul, 0xbfb06f53c3fa90a8ul, 0x3fa7afbb95743636ul, 0xbfa0de3bdb94b909ul},
+    {0x3fec5709f063f61eul, 0x3f78e787a2ac1f9eul, 0x3fdb3f656a414190ul, 0xbfc026537ebbdf28ul, 0x3fc42e2dcb386c76ul, 0xbfb6dedd3608424aul, 0x3fb1533b414d61e0ul, 0xbfa718dbd05eec3dul, 0x3fa001e8923ca168ul, 0xbf95cf9f00355d61ul},
+    {0x3fec678adaa16db2ul, 0x3fadade0522ce28dul, 0x3fd9f502b04aa917ul, 0xbfb7061698453ed0ul, 0x3fc111adaec147d2ul, 0xbfb138a886268f36ul, 0x3faa17ae1c392bd6ul, 0xbfa0707922c8c43eul, 0x3f960077de104a49ul, 0xbf8cb5c7571211ddul},
+    {0x3fec920953aa5d66ul, 0x3fbb9496a6874861ul, 0x3fd9116c2e5de8d1ul, 0xbfae346a34c78d6eul, 0x3fbd74c383999e27ul, 0xbfa9de756ede0cd1ul, 0x3fa3f8131690fd1aul, 0xbf97a888b14ec653ul, 0x3f8eb8b5d6cd0026ul, 0xbf8334a276679165ul},
+    {0x3fecd5a098928442ul, 0x3fc3fb8f1d0abf2cul, 0x3fd8867f0f1d270aul, 0xbfa0654798b0415ful, 0x3fb9f3d067f9d585ul, 0xbfa3412ca3fa8323ul, 0x3f9f164f1fbed563ul, 0xbf912caa9ef9524eul, 0x3f85c618b73bc8a7ul, 0xbf7a14084fcb5d75ul},
+    {0x3fed31c4db6ff586ul, 0x3fca140aba605e6aul, 0x3fd849a7d111fe3eul, 0xbf80665ee5c25becul, 0x3fb75d82f748db66ul, 0xbf9c1f8dbdb02d95ul, 0x3f98a422b1844434ul, 0xbf8917ecef6748cdul, 0x3f7f5201988eff97ul, 0xbf71f187b1036facul},
+    {0x3feda6389f09f623ul, 0x3fd0131e5b57cf1aul, 0x3fd853176b1f3b73ul, 0x3f8c5c9000d6e1ceul, 0x3fb581177702069bul, 0xbf93d027a323721ful, 0x3f93ec6f9466489ful, 0xbf8263da5167e690ul, 0x3f76dbe71bbe090cul, 0xbf68fd143df66799ul},
+    {0x3fee3304db941633ul, 0x3fd3217c4a579d7cul, 0x3fd89d2fbae9b259ul, 0x3fa1807b533d9092ul, 0x3fb43ae1d6087604ul, 0xbf8a0c1119bc32a0ul, 0x3f9077745c6a4217ul, 0xbf7aecbc52480399ul, 0x3f70f00dd6253d47ul, 0xbf6194b848e9be9eul},
+    {0x3feed87357995087ul, 0x3fd63cf26c2a3f66ul, 0x3fd924179f06fc8cul, 0x3fab66aa0070a6b4ul, 0x3fb370c0b9271813ul, 0xbf7d632bc804cea1ul, 0x3f8be2e3854ef50bul, 0xbf7391015cd2774dul, 0x3f69823259db4371ul, 0xbf58f35002269e0ful},
+    {0x3fef970ac84d0a49ul, 0x3fd96cf0f1b4e4d0ul, 0x3fd9e56bf5311f1aul, 0x3fb2815a841a3351ul, 0x3fb30fa25285e4feul, 0xbf63d45167c1dcbaul, 0x3f883e8c0f79bf95ul, 0xbf6bf53a20fad880ul, 0x3f638d7f76fe48b2ul, 0xbf51d0e83e2ca312ul},
+};
+
+inline ulong soft_gfk_tgamma_poly(ulong r) {
+    const ulong t=soft64_mul(soft64_sub(r,0x3ff0000000000000ul),
+                             0x4030000000000000ul); // * 16
+    const Soft64I32Result index=soft64_to_i32_rz(t);
+    if (!index.valid) return 0x7ff8000000000000ul;
+    const int j=metal::max(0,metal::min(index.value,15));
+    const ulong centre=soft64_mul(soft64_from_i32(33+2*j),
+                                  0x3fa0000000000000ul); // * 1/32
+    const ulong u=soft64_sub(r,centre);
+    ulong p=SOFT_GFK_TG_C[j][9];
+    for (int k=8;k>=0;--k)
+        p=soft64_add(soft64_mul(p,u),SOFT_GFK_TG_C[j][k]);
+    return p;
+}
+
+// Adapted positive arm of gfk_tgamma_pos. The source production domains are positive and below 36; the recurrence
+// and overflow guard match the original positive arm for 0 < x < 36. Negative and non-finite exceptional
+// behavior is explicit because the selected Morrison domain is positive.
+inline float soft_gfk_tgammaf(float x) {
+    const uint bits=as_type<uint>(x);
+    const uint magnitude=bits&0x7fffffffu;
+    if (magnitude>0x7f800000u) return as_type<float>(0x7fc00000u);
+    if ((bits&0x80000000u)!=0u) return as_type<float>(0x7fc00000u);
+    if (magnitude==0u) return as_type<float>(0x7f800000u);
+    if (magnitude==0x7f800000u) return x;
+    if (x>=36.0f) return as_type<float>(0x7f800000u);
+
+    const ulong v=soft64_from_f32_bits(bits);
+    const ulong one=0x3ff0000000000000ul;
+    if (x>=1.0f) {
+        const Soft64I32Result n_result=soft64_to_i32_rz(v);
+        if (!n_result.valid) return as_type<float>(0x7fc00000u);
+        const int n=n_result.value;
+        const ulong r=soft64_sub(v,soft64_from_i32(n-1));
+        ulong p=soft_gfk_tgamma_poly(r);
+        for (int i=1;i<n;++i)
+            p=soft64_mul(p,soft64_sub(v,soft64_from_i32(i)));
+        return as_type<float>(soft64_to_f32_bits(p));
+    }
+    return as_type<float>(soft64_to_f32_bits(
+        soft64_div(soft_gfk_tgamma_poly(soft64_add(v,one)),v)));
+}
+
+
+#endif

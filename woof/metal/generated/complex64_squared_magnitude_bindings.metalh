@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout bc4de59cc77ba86b5c090462fa0da837fd2a7f5c43639177538d1259b13c6b08.
+struct Complex64SquaredMagnitudeResources {
+    device const float *src [[id(0)]];
+    device float *dst [[id(1)]];
+};
+struct Complex64SquaredMagnitudeParams {
+    int n;
+    int n2;
+};
+static_assert(sizeof(Complex64SquaredMagnitudeParams) == 8, "complex64_squared_magnitude parameter ABI size changed");

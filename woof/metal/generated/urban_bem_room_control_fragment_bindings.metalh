@@ -1,0 +1,39 @@
+// Generated from kernel_signatures.json; layout 3ec712a4f7d391d65e231134be977a464fd25d15773b624c073ca491c5476c19.
+struct UrbanBemRoomControlFragmentResources {
+    device const float *cpint [[id(0)]];
+    device const float *rhoint [[id(1)]];
+    device const float *vollev [[id(2)]];
+    device const float *tlev [[id(3)]];
+    device const float *tout [[id(4)]];
+    device const float *latent [[id(5)]];
+    device const float *humout [[id(6)]];
+    device const float *rhoout [[id(7)]];
+    device const float *humlev [[id(8)]];
+    device const float *beta [[id(9)]];
+    device const float *qb [[id(10)]];
+    device const float *hsroo [[id(11)]];
+    device const float *volroo [[id(12)]];
+    device const float *hlroo [[id(13)]];
+    device const float *shumroo [[id(14)]];
+    device const float *cop [[id(15)]];
+    device const float *timeon [[id(16)]];
+    device const float *timeoff [[id(17)]];
+    device const float *targtemp [[id(18)]];
+    device const float *gaptemp [[id(19)]];
+    device const float *targhum [[id(20)]];
+    device const float *gaphum [[id(21)]];
+    device const int *swcond [[id(22)]];
+    device float *hsvent [[id(23)]];
+    device float *hlvent [[id(24)]];
+    device float *hsneed_out [[id(25)]];
+    device float *hlneed_out [[id(26)]];
+    device float *hsout [[id(27)]];
+    device float *hlout [[id(28)]];
+    device float *consump [[id(29)]];
+};
+struct UrbanBemRoomControlFragmentParams {
+    int nitem;
+    float nhourday;
+    float dt;
+};
+static_assert(sizeof(UrbanBemRoomControlFragmentParams) == 12, "urban_bem_room_control_fragment parameter ABI size changed");

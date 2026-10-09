@@ -1,0 +1,62 @@
+{
+  "kernels": [
+    {
+      "name": "nest_sint_fragment",
+      "module": "nest_family",
+      "source": "woof/metal/shaders/nest_interp_fragment.metal",
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_sint",
+      "resources": [
+        ["parent_a", "float", "read"], ["child_a", "float", "read_write"],
+        ["ci_map_a", "int32", "read"], ["ip_map_a", "int32", "read"],
+        ["cj_map_a", "int32", "read"], ["jp_map_a", "int32", "read"],
+        ["xig_a", "float", "read"], ["xjg_a", "float", "read"]
+      ],
+      "shapes": {
+        "parent_a": [["nz", "nyp", "nxp"]],
+        "child_a": [["nz", "nyc", "nxc"]],
+        "ci_map_a": [["nxc"]], "ip_map_a": [["nxc"]],
+        "cj_map_a": [["nyc"]], "jp_map_a": [["nyc"]],
+        "xig_a": [["nri"]], "xjg_a": [["nrj"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["nyc", "int32"], ["nxc", "int32"],
+        ["nyp", "int32"], ["nxp", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    },
+    {
+      "name": "nest_bdy_interp1_fragment",
+      "module": "nest_family",
+      "source": "woof/metal/shaders/nest_interp_fragment.metal",
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_bdy_interp1",
+      "resources": [
+        ["parent_a", "float", "read"], ["child_a", "float", "read"],
+        ["value_a", "float", "read_write"], ["tendency_a", "float", "read_write"],
+        ["ci_map_a", "int32", "read"], ["ip_map_a", "int32", "read"],
+        ["cj_map_a", "int32", "read"], ["jp_map_a", "int32", "read"],
+        ["xig_a", "float", "read"], ["xjg_a", "float", "read"]
+      ],
+      "shapes": {
+        "parent_a": [["nz", "nyp", "nxp"]],
+        "child_a": [["nz", "nyc", "nxc"]],
+        "value_a": [["nz", "sz", "nlong"]],
+        "tendency_a": [["nz", "sz", "nlong"]],
+        "ci_map_a": [["nxc"]], "ip_map_a": [["nxc"]],
+        "cj_map_a": [["nyc"]], "jp_map_a": [["nyc"]],
+        "xig_a": [["nri"]], "xjg_a": [["nrj"]]
+      },
+      "parameters": [
+        ["cdt", "float32"], ["side", "int32"], ["sz", "int32"],
+        ["nz", "int32"], ["nyc", "int32"], ["nxc", "int32"],
+        ["nyp", "int32"], ["nxp", "int32"], ["nlong", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    }
+  ]
+}

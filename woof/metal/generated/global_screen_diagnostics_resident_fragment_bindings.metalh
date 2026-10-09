@@ -1,0 +1,24 @@
+// Generated from kernel_signatures.json; layout e7b46f6a72d3b27d4e61388bc330843e037c495a192aa6a869ae9dd9331e4a50.
+struct GlobalScreenDiagnosticsResidentFragmentResources {
+    device const ulong *u [[id(0)]];
+    device const ulong *v [[id(1)]];
+    device const ulong *theta [[id(2)]];
+    device const ulong *exner [[id(3)]];
+    device const ulong *qv [[id(4)]];
+    device const ulong *p_full [[id(5)]];
+    device const ulong *p_surface [[id(6)]];
+    device const ulong *skin_temperature [[id(7)]];
+    device const ulong *land_fraction [[id(8)]];
+    device const ulong *soil_wetness [[id(9)]];
+    device const ulong *roughness [[id(10)]];
+    device const ulong *thermodynamic_constants [[id(11)]];
+    device ulong *t2 [[id(12)]];
+    device ulong *th2 [[id(13)]];
+    device ulong *q2 [[id(14)]];
+    device ulong *u10 [[id(15)]];
+    device ulong *v10 [[id(16)]];
+};
+struct GlobalScreenDiagnosticsResidentFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalScreenDiagnosticsResidentFragmentParams) == 4, "global_screen_diagnostics_resident_fragment parameter ABI size changed");

@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout f77144922f443297e5d04337548680355601736b70e849290f95159026bb0751.
+struct NoahSfcdiagsResources {
+    device const float *psfc_a [[id(0)]];
+    device const float *tsk_a [[id(1)]];
+    device const float *cqs2_a [[id(2)]];
+    device const float *chs2_a [[id(3)]];
+    device const float *qsfc_a [[id(4)]];
+    device const float *qfx_a [[id(5)]];
+    device const float *hfx_a [[id(6)]];
+    device const float *qv1_a [[id(7)]];
+    device float *q2_a [[id(8)]];
+    device float *t2_a [[id(9)]];
+    device float *th2_a [[id(10)]];
+};
+struct NoahSfcdiagsParams {
+    float rd;
+    float cp_air;
+    float p0;
+    float rcp;
+    float active_floor;
+    int ny;
+    int nx;
+    int ncol;
+};
+static_assert(sizeof(NoahSfcdiagsParams) == 32, "noah_sfcdiags parameter ABI size changed");

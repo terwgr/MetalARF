@@ -1,0 +1,215 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_hydrometeor_paths",
+      "module": "rrtmgp_cloud_prep_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "cuda_source": "woof/core/rrtmgp.py",
+      "cuda_symbol": "hydrometeor_paths",
+      "resources": [
+        ["plev", "float", "read"],
+        ["qc", "float", "read"],
+        ["qi", "float", "read"],
+        ["qs", "float", "read"],
+        ["play", "float", "read"],
+        ["tlay", "float", "read"],
+        ["nc", "float", "read"],
+        ["nr", "float", "read"],
+        ["ni", "float", "read"],
+        ["ns", "float", "read"],
+        ["effc", "float", "read"],
+        ["effr", "float", "read"],
+        ["effi", "float", "read"],
+        ["effs", "float", "read"],
+        ["cldfra", "float", "read"],
+        ["clwp", "float", "read_write"],
+        ["ciwp", "float", "read_write"],
+        ["reliq", "float", "read_write"],
+        ["dgice", "float", "read_write"]
+      ],
+      "shapes": {
+        "plev": [["ncol", "nlay+1"]],
+        "qc": [["ncol", "nlay"]],
+        "qi": [["ncol", "nlay"]],
+        "qs": [["ncol", "nlay"]],
+        "play": [["ncol", "nlay"]],
+        "tlay": [["ncol", "nlay"]],
+        "nc": [["ncol", "nlay"]],
+        "nr": [["ncol", "nlay"]],
+        "ni": [["ncol", "nlay"]],
+        "ns": [["ncol", "nlay"]],
+        "effc": [["ncol", "nlay"]],
+        "effr": [["ncol", "nlay"]],
+        "effi": [["ncol", "nlay"]],
+        "effs": [["ncol", "nlay"]],
+        "cldfra": [["ncol", "nlay"]],
+        "clwp": [["ncol", "nlay"]],
+        "ciwp": [["ncol", "nlay"]],
+        "reliq": [["ncol", "nlay"]],
+        "dgice": [["ncol", "nlay"]]
+      },
+      "parameters": [
+        ["ncell", "int32"],
+        ["ncol", "int32"],
+        ["nlay", "int32"],
+        ["scheme", "int32"],
+        ["snow_discount", "int32"],
+        ["has_qi", "int32"],
+        ["has_qs", "int32"],
+        ["has_cldfra", "int32"],
+        ["morrison_use_effective", "int32"],
+        ["my2_icexc9", "float32"],
+        ["my2_icexi9", "float32"],
+        ["my2_igs20", "float32"],
+        ["my2_idms", "float32"],
+        ["my2_ilam_min", "float32"],
+        ["my2_eps_q", "float32"],
+        ["my2_eps_n", "float32"],
+        ["my2_cloud_radius", "float32"],
+        ["my2_ice_radius", "float32"],
+        ["my2_snow_radius", "float32"],
+        ["morrison_cloud_lambda_const", "float32"],
+        ["morrison_ice_lambda_const", "float32"],
+        ["morrison_snow_lambda_const", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["float32_ordered", "soft_glibc_2_39_pow"]
+    },
+    {
+      "name": "rrtmgp_mynn_cloud_supplied",
+      "module": "rrtmgp_cloud_prep_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "cuda_source": "woof/core/mynn_radiation.py",
+      "cuda_symbol": "mynn_bl_cloud_supplied",
+      "resources": [
+        ["qc", "float", "read"],
+        ["qi", "float", "read"],
+        ["qc_bl", "float", "read"],
+        ["qi_bl", "float", "read"],
+        ["cldfra_bl", "float", "read"],
+        ["liquid_supplied", "uint32", "read_write"],
+        ["ice_supplied", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "qc": [["ncol", "nlay"]],
+        "qi": [["ncol", "nlay"]],
+        "qc_bl": [["ncol", "nlay"]],
+        "qi_bl": [["ncol", "nlay"]],
+        "cldfra_bl": [["ncol", "nlay"]],
+        "liquid_supplied": [["ncol", "nlay"]],
+        "ice_supplied": [["ncol", "nlay"]]
+      },
+      "parameters": [
+        ["ncell", "int32"],
+        ["ncol", "int32"],
+        ["nlay", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["float32_ordered", "uint32_logical_masks"]
+    },
+    {
+      "name": "rrtmgp_mynn_cloud_merge",
+      "module": "rrtmgp_cloud_prep_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "cuda_source": "woof/core/mynn_radiation.py",
+      "cuda_symbol": "merge_mynn_bl_clouds",
+      "resources": [
+        ["qc", "float", "read_write"],
+        ["qi", "float", "read_write"],
+        ["cldfra", "float", "read_write"],
+        ["qc_bl", "float", "read"],
+        ["qi_bl", "float", "read"],
+        ["cldfra_bl", "float", "read"]
+      ],
+      "shapes": {
+        "qc": [["ncol", "nlay"]],
+        "qi": [["ncol", "nlay"]],
+        "cldfra": [["ncol", "nlay"]],
+        "qc_bl": [["ncol", "nlay"]],
+        "qi_bl": [["ncol", "nlay"]],
+        "cldfra_bl": [["ncol", "nlay"]]
+      },
+      "parameters": [
+        ["ncell", "int32"],
+        ["ncol", "int32"],
+        ["nlay", "int32"],
+        ["has_cldfra", "int32"],
+        ["replace_cldfra", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["float32_ordered", "wrf_mynn_thresholds"]
+    },
+    {
+      "name": "rrtmgp_cloudy_background_radii",
+      "module": "rrtmgp_cloud_prep_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "cuda_source": "woof/core/rrtmgp.py",
+      "cuda_symbol": "cloudy_background_radii",
+      "resources": [
+        ["effc", "float", "read"],
+        ["effi", "float", "read"],
+        ["cldfra", "float", "read"],
+        ["tlay", "float", "read"],
+        ["xland", "float", "read"],
+        ["retab", "float", "read"],
+        ["supplied_liquid", "uint32", "read"],
+        ["supplied_ice", "uint32", "read"],
+        ["effc_out", "float", "read_write"],
+        ["effi_out", "float", "read_write"]
+      ],
+      "shapes": {
+        "effc": [["ncol", "nlay"]],
+        "effi": [["ncol", "nlay"]],
+        "cldfra": [["ncol", "nlay"]],
+        "tlay": [["ncol", "nlay"]],
+        "xland": [["ncol"]],
+        "retab": [["ntable"]],
+        "supplied_liquid": [["ncol", "nlay"]],
+        "supplied_ice": [["ncol", "nlay"]],
+        "effc_out": [["ncol", "nlay"]],
+        "effi_out": [["ncol", "nlay"]]
+      },
+      "parameters": [
+        ["ncell", "int32"],
+        ["ncol", "int32"],
+        ["nlay", "int32"],
+        ["ntable", "int32"],
+        ["has_supplied_liquid", "int32"],
+        ["has_supplied_ice", "int32"],
+        ["is_p3", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["float32_ordered", "wrf_ice_radius_table"]
+    },
+    {
+      "name": "rrtmgp_surface_emissivity",
+      "module": "rrtmgp_cloud_prep_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "cuda_source": "woof/core/rrtmgp.py",
+      "cuda_symbol": "_surface_emissivity_bands",
+      "resources": [
+        ["emissivity", "float", "read"],
+        ["emissivity_out", "float", "read_write"]
+      ],
+      "shapes": {
+        "emissivity": [[], ["ny", "nx"], ["nband"], ["nband", "ny", "nx"]],
+        "emissivity_out": [["ncol", "nband"]]
+      },
+      "parameters": [
+        ["layout", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["ncol", "int32"],
+        ["nband", "int32"],
+        ["ncell", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["float32_broadcast_order"]
+    }
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "kernels": [
+    {
+      "name": "global_surface_emission_fragment",
+      "module": "global_surface_emission_fragment",
+      "source": "woof/metal/shaders/global_surface_emission_fragment.metal",
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_surface_emission",
+      "resources": [
+        ["surface_temperature", "float64_bits", "read"],
+        ["emissivity", "float64_bits", "read"],
+        ["stefan_boltzmann", "float64_bits", "read"],
+        ["surface_emission", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "surface_temperature": [["any_1d"]],
+        "emissivity": [["any_1d"]],
+        "stefan_boltzmann": [[1]],
+        "surface_emission": [["any_1d"]]
+      },
+      "parameters": [["count", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "global_soil_temperature_relax_fragment",
+      "module": "global_soil_temperature_relax_fragment",
+      "source": "woof/metal/shaders/global_soil_temperature_relax_fragment.metal",
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_soil_temperature_relax",
+      "resources": [
+        ["surface_temperature", "float64_bits", "read"],
+        ["soil_temperature", "float64_bits", "read"],
+        ["relax", "float64_bits", "read"],
+        ["updated_soil_temperature", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "surface_temperature": [["any_1d"]],
+        "soil_temperature": [["any_1d"]],
+        "relax": [[1]],
+        "updated_soil_temperature": [["any_1d"]]
+      },
+      "parameters": [["count", "int32"], ["nlayer", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "global_surface_fallout_cooling_fragment",
+      "module": "global_surface_fallout_cooling_fragment",
+      "source": "woof/metal/shaders/global_surface_fallout_cooling_fragment.metal",
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_surface_fallout_cooling",
+      "resources": [
+        ["surface_temperature", "float64_bits", "read"],
+        ["snow", "float64_bits", "read"],
+        ["graupel", "float64_bits", "read"],
+        ["heat_capacity", "float64_bits", "read"],
+        ["latent_heat_fusion", "float64_bits", "read"],
+        ["updated_surface_temperature", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "surface_temperature": [["any_1d"]],
+        "snow": [["any_1d"]],
+        "graupel": [["any_1d"]],
+        "heat_capacity": [["any_1d"]],
+        "latent_heat_fusion": [[1]],
+        "updated_surface_temperature": [["any_1d"]]
+      },
+      "parameters": [["count", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "global_surface_energy_update_fragment",
+      "module": "global_surface_energy_update_fragment",
+      "source": "woof/metal/shaders/global_surface_energy_update_fragment.metal",
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_surface_energy_update",
+      "resources": [
+        ["surface_temperature", "float64_bits", "read"],
+        ["net_surface_radiation", "float64_bits", "read"],
+        ["sensible", "float64_bits", "read"],
+        ["evaporation", "float64_bits", "read"],
+        ["heat_capacity", "float64_bits", "read"],
+        ["dt", "float64_bits", "read"],
+        ["latent_heat_vaporization", "float64_bits", "read"],
+        ["updated_surface_temperature", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "surface_temperature": [["any_1d"]],
+        "net_surface_radiation": [["any_1d"]],
+        "sensible": [["any_1d"]],
+        "evaporation": [["any_1d"]],
+        "heat_capacity": [["any_1d"]],
+        "dt": [[1]],
+        "latent_heat_vaporization": [[1]],
+        "updated_surface_temperature": [["any_1d"]]
+      },
+      "parameters": [["count", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

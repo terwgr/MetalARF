@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 9ee438ceae498face432923933ab445eeb147cb2f144895c40df6717479177df.
+struct KSflxErrorResources {
+    device const float *sc [[id(0)]];
+    device const float *smc [[id(1)]];
+    device const float *dzsnso [[id(2)]];
+    device const int *ist [[id(3)]];
+    device const int *calc [[id(4)]];
+    device float *out [[id(5)]];
+    device int *status [[id(6)]];
+};
+struct KSflxErrorParams {
+    int ncase;
+};
+static_assert(sizeof(KSflxErrorParams) == 4, "k_sflx_error parameter ABI size changed");

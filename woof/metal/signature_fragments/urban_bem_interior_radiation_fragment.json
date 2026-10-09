@@ -1,0 +1,44 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_interior_radiation_fragment",
+      "module": "urban_bem_interior_radiation_fragment",
+      "source": "woof/metal/shaders/urban_bem_interior_radiation_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bem_bem: bem_int_rsrad/bem_int_rlrad/bem_algebra_short/bem_algebra_long/bem_fprl_ints/bem_fnrm_ints/bem_gaussjbem",
+      "resources": [
+        ["rswal", "float", "read"],
+        ["surwal", "float", "read"],
+        ["twal_int", "float", "read"],
+        ["twin", "float", "read"],
+        ["rsint", "float", "read_write"],
+        ["rlint", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "rswal": [["nitem", 4]],
+        "surwal": [["nitem", 6]],
+        "twal_int": [["nitem", 6]],
+        "twin": [["nitem", 4]],
+        "rsint": [["nitem", 6]],
+        "rlint": [["nitem", 6]],
+        "error": [["nitem"]]
+      },
+      "parameters": [
+        ["nitem", "int32"],
+        ["albwal", "float32"],
+        ["albwin", "float32"],
+        ["emwal", "float32"],
+        ["emwin", "float32"],
+        ["sigma", "float32"],
+        ["pwin", "float32"],
+        ["bw", "float32"],
+        ["bl", "float32"],
+        ["zw", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32", "soft64-rn-bit-ops", "soft-gfk-log-glibc-2.39", "soft-gfk-atan-glibc-2.39"]
+    }
+  ]
+}

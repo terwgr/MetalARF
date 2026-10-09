@@ -1,0 +1,8 @@
+// Generated from kernel_signatures.json; layout 016098127ae1596d8a181ab9a5d75d9e2e265d20c1b28c599b744ff1896195d3.
+struct ThompsonAaProbeFrozenConstantsResources {
+    device float *output_words [[id(0)]];
+};
+struct ThompsonAaProbeFrozenConstantsParams {
+    int word_count;
+};
+static_assert(sizeof(ThompsonAaProbeFrozenConstantsParams) == 4, "thompson_aa_probe_frozen_constants parameter ABI size changed");

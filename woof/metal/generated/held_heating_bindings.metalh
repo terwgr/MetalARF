@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 4aa8becf3f1a85a12a3483e89d3526337044a0987ab608bfe01092dbf05b6d23.
+struct HeldHeatingResources {
+    device float *rth [[id(0)]];
+    device const float *hd [[id(1)]];
+    device const float *mub [[id(2)]];
+    device const float *mup [[id(3)]];
+    device const float *c1 [[id(4)]];
+    device const float *c2 [[id(5)]];
+    device const float *msft [[id(6)]];
+};
+struct HeldHeatingParams {
+    int has_msf;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(HeldHeatingParams) == 16, "held_heating parameter ABI size changed");

@@ -1,0 +1,61 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_atmosphere_gather_fragment",
+      "module": "urban_bem_atmosphere_gather_fragment",
+      "source": "woof/metal/shaders/urban_bem_atmosphere_gather_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_column atmospheric gather and tendency initialization (module_sf_bep_bem.F:759-778)",
+      "resources": [
+        ["active_cols", "int32", "read"],
+        ["column_x", "float", "read"],
+        ["qv", "float", "read"],
+        ["ua1d", "float", "read_write"],
+        ["va1d", "float", "read_write"],
+        ["pt1d", "float", "read_write"],
+        ["da1d", "float", "read_write"],
+        ["pr1d", "float", "read_write"],
+        ["pt01d", "float", "read_write"],
+        ["z1d", "float", "read_write"],
+        ["qv1d", "float", "read_write"],
+        ["a_u1d", "float", "read_write"],
+        ["a_v1d", "float", "read_write"],
+        ["a_t1d", "float", "read_write"],
+        ["a_e1d", "float", "read_write"],
+        ["b_u1d", "float", "read_write"],
+        ["b_v1d", "float", "read_write"],
+        ["b_t1d", "float", "read_write"],
+        ["b_ac1d", "float", "read_write"],
+        ["b_e1d", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]],
+        "column_x": [["ncol", 15, "nz+1"]],
+        "qv": [["nz", "ncol"]],
+        "ua1d": [["ncol", "nz"]],
+        "va1d": [["ncol", "nz"]],
+        "pt1d": [["ncol", "nz"]],
+        "da1d": [["ncol", "nz"]],
+        "pr1d": [["ncol", "nz"]],
+        "pt01d": [["ncol", "nz"]],
+        "z1d": [["ncol", "nz+1"]],
+        "qv1d": [["ncol", "nz"]],
+        "a_u1d": [["ncol", "nz"]],
+        "a_v1d": [["ncol", "nz"]],
+        "a_t1d": [["ncol", "nz"]],
+        "a_e1d": [["ncol", "nz"]],
+        "b_u1d": [["ncol", "nz"]],
+        "b_v1d": [["ncol", "nz"]],
+        "b_t1d": [["ncol", "nz"]],
+        "b_ac1d": [["ncol", "nz"]],
+        "b_e1d": [["ncol", "nz"]],
+        "error": [["ncol"]]
+      },
+      "parameters": [["ncol", "int32"], ["nz", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

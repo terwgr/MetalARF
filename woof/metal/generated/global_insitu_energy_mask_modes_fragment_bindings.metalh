@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout e0117bbb7b28dde3e533748e200f2bab8e15d7b671553b0ceedc2e67eee28240.
+struct GlobalInsituEnergyMaskModesFragmentResources {
+    device const ulong *vorticity [[id(0)]];
+    device const ulong *divergence [[id(1)]];
+    device const ulong *mask [[id(2)]];
+    device ulong *filtered_vorticity [[id(3)]];
+    device ulong *filtered_divergence [[id(4)]];
+};
+struct GlobalInsituEnergyMaskModesFragmentParams {
+    int nlevel;
+    int nterm;
+    int norder;
+};
+static_assert(sizeof(GlobalInsituEnergyMaskModesFragmentParams) == 12, "global_insitu_energy_mask_modes_fragment parameter ABI size changed");

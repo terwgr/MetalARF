@@ -1,0 +1,28 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_final_phase_cleanup_with_columns",
+      "module": "thompson_final_phase_cleanup",
+      "source": "woof/metal/shaders/thompson_final_phase_cleanup.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_final_phase_cleanup_with_columns",
+      "resources": [
+        ["qc", "float", "read_write"], ["qi", "float", "read_write"],
+        ["ni", "float", "read_write"], ["temperature", "float", "read_write"],
+        ["pressure", "float", "read"], ["qv", "float", "read_write"],
+        ["micro_columns", "float", "read"]
+      ],
+      "shapes": {
+        "qc": [["nz", "ny", "nx"]], "qi": [["nz", "ny", "nx"]],
+        "ni": [["nz", "ny", "nx"]], "temperature": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]], "qv": [["nz", "ny", "nx"]],
+        "micro_columns": [["ny", "nx"]]
+      },
+      "parameters": [["ncol", "int32"], ["size", "int32"],
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-precise-libm", "soft64-rn-bit-ops", "cuda-libm-identity-unverified"]
+    }
+  ]
+}

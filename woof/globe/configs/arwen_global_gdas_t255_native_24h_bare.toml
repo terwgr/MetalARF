@@ -1,0 +1,89 @@
+# The door with no flag: T255 L40, the whole native physics suite, one
+# forecast day from the GDAS 2026-09-01 00Z analysis, and NOTHING said
+# about the core.  No [time] integrator, no dt_s, no [semilag] table, no
+# [diffusion] order or e-folding, no [semi_implicit] off-centring: every
+# one of those reads the door's default, which is the semi-Lagrangian core
+# at 300 s with its own drain and gather (config.DEFAULT_TIME_INTEGRATOR,
+# DEFAULT_SEMILAG_STEP_S, SEMILAG_DIFFUSION_ORDER, SEMILAG_DIFFUSION_EFOLD_S,
+# SEMILAG_OFF_CENTRING_WEIGHT, semilag.options.SemiLagrangianOptions).
+#
+# This file exists so the bare default run is a file in the tree and not a
+# sentence: tests/test_arwen_global_default_core.py checks it resolves to
+# the same run as arwen_global_gdas_t255_native_sl_si_24h.toml, the arm of
+# record with every one of those keys written out, and the coupling lane's
+# one bare run (2026-09-07) was made from it.  The case, the physics table
+# and the gates are the arm of record's, verbatim.
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-gdas-t255-native-24h-bare"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 255
+dealias_factor = 1.5
+
+[time]
+duration_s = 86400.0
+output_interval_s = 10800.0
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+[initial]
+mode = "analysis"
+analysis_grib = "cases/baseline-2026090100/gdas.t00z.pgrb2.0p25.f000"
+analysis_mapping = "gdas-global"
+surface_water_kg_m2 = 500.0
+
+[physics]
+mode = "arwen-native"
+native_adapter_name = "arwen-cuda-column-suite-v1"
+native_adapter_options = { acknowledgement = "device-pending-arwen-native-physics-v1", start_time_utc = "2026-09-01T00:00:00Z", radiation = "rrtmgp", radiation_interval_s = 3000.0, radiation_column_chunk = 12500, radiation_validation_mode = "fused", surface_layer = "sfclay", sfclay_option = 1, land_surface = "noah", land_surface_interval_s = 300.0, pbl = "ysu", ysu_topdown_pblmix = 1, microphysics = "morrison", morr_rimed_ice = 1, dx_m = 52100.0 }
+
+[diffusion]
+enabled = true
+preserve_degree = 1
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 1.0e-6
+transform_parseval_relative_error = 5.0e-7
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-3
+# physics_water_repair gate, NATIVE-suite sizing (2026-09-01).  The
+# precision-wide 5e-4 envelope (runner._FIXER_ABSORPTION_LIMITS) was
+# measured on the reference suite, which has no kernel-internal closure
+# channel; the native suite has two -- Morrison's rainncv credited 1:1 to
+# the reservoir vs the actual column debit its fp32 process arithmetic
+# applies, and the post-kernel negative-species clamp (tolerance 1e-7 per
+# level-species; the creation ceiling is order 3e-3 kg/m2 at 20 levels and
+# the same order at 40, the column mass being the same) --
+# both genuine fp32 accumulation, NOT booking routes: the CPU repro
+# (water-repair-262, 2026-09-01, real model.step with verbatim-noah water
+# arithmetic, 217,800 column-calls of drip/melt/partition/evap/dew/qfx
+# forcing) put every booking route at <= 2 x 2^-14 = 1.22e-4 kg/m2, the
+# same ledger-summation floor the reference suite reads (~1e-4).
+# Measurement: day 1 of this config on the RTX 5090 (GDAS 2026-08-30 18Z,
+# 1440 steps) read max repair 0.00262451171875 kg/m2 = exactly 43 x 2^-14,
+# the fp32 quantum of the worst column's [512,1024) kg/m2 ledger total.
+# Sizing: 4 x that measured max = 0.010498046875 = 43 x 2^-12, which
+# admits the same 43-quantum excursion class on column totals up to the
+# 4096 kg/m2 binade (the convicted-era worst columns totalled ~1150,
+# where the class reads 5.25e-3) while staying 100x below the smallest
+# booking-route conviction at run scale (1.0943603515625, precip
+# double-entry, fixed 7d7b528d0) and 1e5 below the runoff-store
+# conviction (1072, fixed 89571245d) -- the unbooked-route breakage this
+# gate exists to catch.  Reference configs keep the 5e-4 envelope.
+physics_water_repair_max_step_kg_m2 = 0.010498046875

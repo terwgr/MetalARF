@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout b696fec9f64a2f72c75473060ec4cfc4a307d6b5ae6b7bcc87368f77dfb6c7f0.
+struct Nssl2RadiusMicronsResources {
+    device float *cloud [[id(0)]];
+    device float *ice [[id(1)]];
+    device float *snow [[id(2)]];
+};
+struct Nssl2RadiusMicronsParams {
+    int n;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Nssl2RadiusMicronsParams) == 16, "nssl2_radius_microns parameter ABI size changed");

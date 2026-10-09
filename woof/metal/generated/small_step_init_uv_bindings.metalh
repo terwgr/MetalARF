@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout dd238d9fbc28a8034ff1293a98b9f9d772d6097cfea8cdf9815bba2bc29b90c0.
+struct SmallStepInitUvResources {
+    device float *u_pp [[id(0)]];
+    device float *v_pp [[id(1)]];
+    device const float *u0 [[id(2)]];
+    device const float *v0 [[id(3)]];
+    device const float *u [[id(4)]];
+    device const float *v [[id(5)]];
+    device const float *mup0 [[id(6)]];
+    device const float *mup [[id(7)]];
+    device const float *mub2d [[id(8)]];
+    device const float *c1h [[id(9)]];
+    device const float *c2h [[id(10)]];
+    device const float *msfu [[id(11)]];
+    device const float *msfv [[id(12)]];
+};
+struct SmallStepInitUvParams {
+    int has_msf;
+    int boundary_x;
+    int boundary_y;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SmallStepInitUvParams) == 24, "small_step_init_uv parameter ABI size changed");

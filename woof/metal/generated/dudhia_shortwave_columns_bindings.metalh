@@ -1,0 +1,28 @@
+// Generated from kernel_signatures.json; layout 056757b81245ab077f913cc12a6820c2fb2166e3c6c7b9ff67606d536004e845.
+struct DudhiaShortwaveColumnsResources {
+    device const float *temperature [[id(0)]];
+    device const float *pressure [[id(1)]];
+    device const float *qv [[id(2)]];
+    device const float *qc [[id(3)]];
+    device const float *qr [[id(4)]];
+    device const float *qi [[id(5)]];
+    device const float *qs [[id(6)]];
+    device const float *qg [[id(7)]];
+    device const float *dz [[id(8)]];
+    device const float *exner [[id(9)]];
+    device const float *cosine_zenith [[id(10)]];
+    device const float *albedo [[id(11)]];
+    device float *heating [[id(12)]];
+    device float *swdown [[id(13)]];
+    device float *gsw [[id(14)]];
+    device float *coszen [[id(15)]];
+};
+struct DudhiaShortwaveColumnsParams {
+    int nz;
+    int ny;
+    int nx;
+    float solcon;
+    float swrad_scat;
+    int icloud;
+};
+static_assert(sizeof(DudhiaShortwaveColumnsParams) == 24, "dudhia_shortwave_columns parameter ABI size changed");

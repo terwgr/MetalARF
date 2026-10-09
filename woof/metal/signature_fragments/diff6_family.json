@@ -1,0 +1,529 @@
+{
+  "kernels": [
+    {
+      "name": "diff6",
+      "module": "diff6_family",
+      "source": "woof/metal/shaders/diff6_family.metal",
+      "cuda_source": "woof/core/kernels/diff6.cu",
+      "cuda_symbol": "diff6",
+      "resources": [
+        [
+          "f",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "mut",
+          "float",
+          "read"
+        ],
+        [
+          "c1",
+          "float",
+          "read"
+        ],
+        [
+          "c2",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "f": [
+          [
+            "nlev",
+            "nys",
+            "nxs"
+          ]
+        ],
+        "tend": [
+          [
+            "nlev",
+            "nys",
+            "nxs"
+          ]
+        ],
+        "mut": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1": [
+          [
+            "nlev"
+          ]
+        ],
+        "c2": [
+          [
+            "nlev"
+          ]
+        ],
+        "phb": [
+          [
+            "nlev+1",
+            "ny",
+            "nx"
+          ],
+          [
+            "nlev",
+            "ny",
+            "nx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "coef",
+          "float32"
+        ],
+        [
+          "mono",
+          "int32"
+        ],
+        [
+          "slopeopt",
+          "int32"
+        ],
+        [
+          "dzthr_x",
+          "float32"
+        ],
+        [
+          "dzthr_y",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nys",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nxs",
+          "int32"
+        ],
+        [
+          "variant",
+          "int32"
+        ],
+        [
+          "wstag",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "diff6_seam_u",
+      "module": "diff6_family",
+      "source": "woof/metal/shaders/diff6_family.metal",
+      "cuda_source": "woof/core/kernels/diff6_seam.cu",
+      "cuda_symbol": "diff6_seam_u",
+      "resources": [
+        [
+          "f",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "mut",
+          "float",
+          "read"
+        ],
+        [
+          "c1",
+          "float",
+          "read"
+        ],
+        [
+          "c2",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "f": [
+          [
+            "nlev",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "tend": [
+          [
+            "nlev",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "mut": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1": [
+          [
+            "nlev"
+          ]
+        ],
+        "c2": [
+          [
+            "nlev"
+          ]
+        ],
+        "phb": [
+          [
+            "nlev+1",
+            "ny",
+            "nx"
+          ],
+          [
+            "nlev",
+            "ny",
+            "nx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "coef",
+          "float32"
+        ],
+        [
+          "mono",
+          "int32"
+        ],
+        [
+          "slopeopt",
+          "int32"
+        ],
+        [
+          "dzthr_x",
+          "float32"
+        ],
+        [
+          "dzthr_y",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "h0",
+          "int32"
+        ],
+        [
+          "h1",
+          "int32"
+        ],
+        [
+          "boundary_cross",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "diff6_seam_v",
+      "module": "diff6_family",
+      "source": "woof/metal/shaders/diff6_family.metal",
+      "cuda_source": "woof/core/kernels/diff6_seam.cu",
+      "cuda_symbol": "diff6_seam_v",
+      "resources": [
+        [
+          "f",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "mut",
+          "float",
+          "read"
+        ],
+        [
+          "c1",
+          "float",
+          "read"
+        ],
+        [
+          "c2",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "f": [
+          [
+            "nlev",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "tend": [
+          [
+            "nlev",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mut": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1": [
+          [
+            "nlev"
+          ]
+        ],
+        "c2": [
+          [
+            "nlev"
+          ]
+        ],
+        "phb": [
+          [
+            "nlev+1",
+            "ny",
+            "nx"
+          ],
+          [
+            "nlev",
+            "ny",
+            "nx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "coef",
+          "float32"
+        ],
+        [
+          "mono",
+          "int32"
+        ],
+        [
+          "slopeopt",
+          "int32"
+        ],
+        [
+          "dzthr_x",
+          "float32"
+        ],
+        [
+          "dzthr_y",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "h0",
+          "int32"
+        ],
+        [
+          "h1",
+          "int32"
+        ],
+        [
+          "boundary_cross",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

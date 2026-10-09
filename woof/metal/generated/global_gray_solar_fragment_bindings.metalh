@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 93afc8289939cbaaa8aa9612dfdd00cd906b75e59fa7b9d94af5ab9497a3f63c.
+struct GlobalGraySolarFragmentResources {
+    device const ulong *cos_lat [[id(0)]];
+    device const ulong *sin_lon [[id(1)]];
+    device const ulong *cos_lon [[id(2)]];
+    device const ulong *albedo [[id(3)]];
+    device const ulong *solar_angle [[id(4)]];
+    device const ulong *solar_constant [[id(5)]];
+    device const ulong *atmospheric_absorptivity [[id(6)]];
+    device ulong *cosine_zenith [[id(7)]];
+    device ulong *sw_atmosphere [[id(8)]];
+    device ulong *absorbed_shortwave [[id(9)]];
+};
+struct GlobalGraySolarFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalGraySolarFragmentParams) == 4, "global_gray_solar_fragment parameter ABI size changed");

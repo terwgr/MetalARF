@@ -1,0 +1,478 @@
+{
+  "kernels": [
+    {
+      "name": "kessler_column",
+      "module": "kessler_family",
+      "source": "woof/metal/shaders/kessler_family.metal",
+      "cuda_source": "woof/core/kernels/kessler.cu",
+      "cuda_symbol": "kessler_column",
+      "resources": [
+        [
+          "t",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "z",
+          "float",
+          "read"
+        ],
+        [
+          "dz8w",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "z": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz8w": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "svp1",
+          "float32"
+        ],
+        [
+          "svp2",
+          "float32"
+        ],
+        [
+          "svp3",
+          "float32"
+        ],
+        [
+          "svpt0",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rhowater",
+          "float32"
+        ],
+        [
+          "ep2",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "kessler_prepare",
+      "module": "kessler_family",
+      "source": "woof/metal/shaders/kessler_family.metal",
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "_apply_kessler prep",
+      "resources": [
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho",
+          "float",
+          "read_write"
+        ],
+        [
+          "pii",
+          "float",
+          "read_write"
+        ],
+        [
+          "z",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz8w",
+          "float",
+          "read_write"
+        ],
+        [
+          "z_interface",
+          "float",
+          "read_write"
+        ],
+        [
+          "h_diabatic",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "z": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz8w": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "z_interface": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_diabatic": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "thb_3d",
+          "int32"
+        ],
+        [
+          "phb_3d",
+          "int32"
+        ],
+        [
+          "p0",
+          "float32"
+        ],
+        [
+          "rcp",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "kessler_finish",
+      "module": "kessler_family",
+      "source": "woof/metal/shaders/kessler_family.metal",
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "moist_physics_finish",
+      "resources": [
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "h_diabatic",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_diabatic": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "limit",
+          "float32"
+        ],
+        [
+          "no_mp_heating",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

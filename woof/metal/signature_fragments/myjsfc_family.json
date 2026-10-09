@@ -1,0 +1,711 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/myjsfc.cu",
+      "cuda_symbol": "myjsfc_column",
+      "layout_version": 1,
+      "module": "myjsfc_family",
+      "name": "myjsfc_column",
+      "parameters": [
+        [
+          "dzeta1",
+          "float32"
+        ],
+        [
+          "dzeta2",
+          "float32"
+        ],
+        [
+          "ztmin1",
+          "float32"
+        ],
+        [
+          "ztmax1",
+          "float32"
+        ],
+        [
+          "ztmin2",
+          "float32"
+        ],
+        [
+          "ztmax2",
+          "float32"
+        ],
+        [
+          "fh01",
+          "float32"
+        ],
+        [
+          "fh02",
+          "float32"
+        ],
+        [
+          "itimestep",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "npsi",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "tke",
+          "float",
+          "read"
+        ],
+        [
+          "u1",
+          "float",
+          "read"
+        ],
+        [
+          "v1",
+          "float",
+          "read"
+        ],
+        [
+          "t1",
+          "float",
+          "read"
+        ],
+        [
+          "th1",
+          "float",
+          "read"
+        ],
+        [
+          "qv1",
+          "float",
+          "read"
+        ],
+        [
+          "qc1",
+          "float",
+          "read"
+        ],
+        [
+          "p1",
+          "float",
+          "read"
+        ],
+        [
+          "psfc",
+          "float",
+          "read"
+        ],
+        [
+          "tsk",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "mavail",
+          "float",
+          "read"
+        ],
+        [
+          "z0base",
+          "float",
+          "read"
+        ],
+        [
+          "ust",
+          "float",
+          "read_write"
+        ],
+        [
+          "znt",
+          "float",
+          "read_write"
+        ],
+        [
+          "thz0",
+          "float",
+          "read_write"
+        ],
+        [
+          "qz0",
+          "float",
+          "read_write"
+        ],
+        [
+          "uz0",
+          "float",
+          "read_write"
+        ],
+        [
+          "vz0",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "akhs",
+          "float",
+          "read_write"
+        ],
+        [
+          "akms",
+          "float",
+          "read_write"
+        ],
+        [
+          "rmol",
+          "float",
+          "read_write"
+        ],
+        [
+          "ct",
+          "float",
+          "read_write"
+        ],
+        [
+          "pblh",
+          "float",
+          "read_write"
+        ],
+        [
+          "rib",
+          "float",
+          "read_write"
+        ],
+        [
+          "chs",
+          "float",
+          "read_write"
+        ],
+        [
+          "chs2",
+          "float",
+          "read_write"
+        ],
+        [
+          "cqs2",
+          "float",
+          "read_write"
+        ],
+        [
+          "hfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "lh",
+          "float",
+          "read_write"
+        ],
+        [
+          "flhc",
+          "float",
+          "read_write"
+        ],
+        [
+          "flqc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qgh",
+          "float",
+          "read_write"
+        ],
+        [
+          "cpm",
+          "float",
+          "read_write"
+        ],
+        [
+          "u10",
+          "float",
+          "read_write"
+        ],
+        [
+          "v10",
+          "float",
+          "read_write"
+        ],
+        [
+          "t2",
+          "float",
+          "read_write"
+        ],
+        [
+          "th2",
+          "float",
+          "read_write"
+        ],
+        [
+          "tshltr",
+          "float",
+          "read_write"
+        ],
+        [
+          "th10",
+          "float",
+          "read_write"
+        ],
+        [
+          "q2",
+          "float",
+          "read_write"
+        ],
+        [
+          "qshltr",
+          "float",
+          "read_write"
+        ],
+        [
+          "q10",
+          "float",
+          "read_write"
+        ],
+        [
+          "pshltr",
+          "float",
+          "read_write"
+        ],
+        [
+          "u10e",
+          "float",
+          "read_write"
+        ],
+        [
+          "v10e",
+          "float",
+          "read_write"
+        ],
+        [
+          "psim1",
+          "float",
+          "read"
+        ],
+        [
+          "psih1",
+          "float",
+          "read"
+        ],
+        [
+          "psim2",
+          "float",
+          "read"
+        ],
+        [
+          "psih2",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "akhs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "akms": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chs2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "cpm": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "cqs2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ct": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "flhc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "flqc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mavail": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "p1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "pblh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "psfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "pshltr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "psih1": [
+          [
+            "npsi"
+          ]
+        ],
+        "psih2": [
+          [
+            "npsi"
+          ]
+        ],
+        "psim1": [
+          [
+            "npsi"
+          ]
+        ],
+        "psim2": [
+          [
+            "npsi"
+          ]
+        ],
+        "q10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "q2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qgh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qsfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qshltr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qz0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rib": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rmol": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "t1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "t2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "th1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "th10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "th2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "thz0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tke": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tshltr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tsk": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "u1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "u10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "u10e": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ust": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "uz0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "v1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "v10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "v10e": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "vz0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xland": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "z0base": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "znt": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/myjsfc_family.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/myj_driver_wspd.cu",
+      "cuda_symbol": "myj_driver_wspd",
+      "layout_version": 1,
+      "module": "myjsfc_family",
+      "name": "myj_driver_wspd",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "wspd",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "n"
+          ]
+        ],
+        "v": [
+          [
+            "n"
+          ]
+        ],
+        "wspd": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/myjsfc_family.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

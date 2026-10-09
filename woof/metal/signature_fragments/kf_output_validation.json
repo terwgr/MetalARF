@@ -1,0 +1,35 @@
+{
+  "kernels": [
+    {
+      "name": "kf_validate_outputs",
+      "module": "kf_output_validation",
+      "source": "woof/metal/shaders/kf_output_validation.metal",
+      "cuda_source": "woof/core/kernels/kf_validation.cu",
+      "cuda_symbol": "kf_validate_outputs",
+      "resources": [
+        ["rthcuten", "float", "read"], ["rqvcuten", "float", "read"],
+        ["rqccuten", "float", "read"], ["rqicuten", "float", "read"],
+        ["rqrcuten", "float", "read"], ["rqscuten", "float", "read"],
+        ["nca_seconds", "float", "read"], ["pratec", "float", "read"],
+        ["status", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "rthcuten": [["count3"]],
+        "rqvcuten": [["count3"]],
+        "rqccuten": [["count3"]],
+        "rqicuten": [["count3"]],
+        "rqrcuten": [["count3"]],
+        "rqscuten": [["count3"]],
+        "nca_seconds": [["count2"]],
+        "pratec": [["count2"]],
+        "status": [[1]]
+      },
+      "parameters": [
+        ["active", "int32"], ["count3", "int32"], ["count2", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout caf397e9b41ee8479007bf49491250f65eb62a0b288257a6ab32db3b3578a995.
+struct HexDpdzTendencyFragmentResources {
+    device const float *density_perturbation [[id(0)]];
+    device const float *rho_base [[id(1)]];
+    device const float *qtot [[id(2)]];
+    device float *dpdz [[id(3)]];
+};
+struct HexDpdzTendencyFragmentParams {
+    int nlev;
+    int ncells;
+    float gravity;
+    int use_moist;
+};
+static_assert(sizeof(HexDpdzTendencyFragmentParams) == 16, "hex_dpdz_tendency_fragment parameter ABI size changed");

@@ -1,0 +1,49 @@
+{
+  "kernels": [{
+    "name": "urban_bep_bem_finalize_fragment",
+    "module": "urban_bep_bem_finalize_fragment",
+    "source": "woof/metal/shaders/urban_bep_bem_finalize_fragment.metal",
+    "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+    "cuda_symbol": "module_sf_bep_bem.F:1081-1108, final PV energy and green-roof diagnostics",
+    "resources": [
+      ["active_cols", "int32", "read"],
+      ["fraction", "float", "read"],
+      ["utype", "int32", "read"],
+      ["class_float", "float", "read"],
+      ["bs", "float", "read"],
+      ["ws", "float", "read"],
+      ["building_nlev", "int32", "read"],
+      ["d_urb", "float", "read"],
+      ["trv", "float", "read"],
+      ["qr", "float", "read"],
+      ["drain", "float", "read"],
+      ["pv_energy", "float", "read"],
+      ["ep_pv", "float", "read_write"],
+      ["drain_green", "float", "read_write"],
+      ["qgr", "float", "read_write"],
+      ["tgr", "float", "read_write"]
+    ],
+    "shapes": {
+      "active_cols": [["ncol"]],
+      "fraction": [["ncol"]],
+      "utype": [["ncol"]],
+      "class_float": [["any_1d"]],
+      "bs": [["ncol", 2]],
+      "ws": [["ncol", 2]],
+      "building_nlev": [["ncol", 15]],
+      "d_urb": [["ncol", 18]],
+      "trv": [["ncol", 10, 18, 2]],
+      "qr": [["ncol", 10, 18, 2]],
+      "drain": [["ncol", 18, 2]],
+      "pv_energy": [["ncol", 15]],
+      "ep_pv": [["ncol"]],
+      "drain_green": [["ncol"]],
+      "qgr": [["ncol"]],
+      "tgr": [["ncol"]]
+    },
+    "parameters": [["ncol", "int32"], ["green_roof", "int32"]],
+    "threads_per_group": 64,
+    "layout_version": 1,
+    "arithmetic_policies": ["soft32"]
+  }]
+}

@@ -1,0 +1,162 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._convective_adjust resident packing",
+      "layout_version": 1,
+      "module": "global_convective_pack_fragment",
+      "name": "global_convective_pack_fragment",
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "ncolumn",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "theta",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qv",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qc",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qr",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qs",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qg",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "theta_packed",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "q_packed",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_packed": [
+          [
+            "any_1d"
+          ]
+        ],
+        "q_packed": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_convective_pack_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._convective_adjust diagnostic count reduction",
+      "layout_version": 1,
+      "module": "global_convective_count_finalize_fragment",
+      "name": "global_convective_count_finalize_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "mixed_pairs",
+          "uint32",
+          "read"
+        ],
+        [
+          "mixed_total",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mixed_pairs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mixed_total": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_convective_count_finalize_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

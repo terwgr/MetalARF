@@ -1,0 +1,116 @@
+# woof native GRIB bridges
+
+One Rust crate (`grib1_bridge`, library name `gpuwm_preprocess_cpu`) holding
+every CPU-side GRIB decode boundary woof uses.  `woof.ingest.grib`,
+`woof.ingest.hrrr`, and `woof.gfs_direct` consume the raw little-endian
+arrays and JSON/TSV metadata these binaries write; no ecCodes, cfgrib, or C
+runtime is required anywhere.
+
+## Prerequisites
+
+- A Rust toolchain (stable; `cargo` on PATH).  <https://rustup.rs> installs
+  it on every platform woof targets; no nightly features are used.
+- Nothing else -- no network access included.  The hardened `grib-core`
+  decoder and every crates.io transitive dependency are checked in under
+  `vendor/` (provenance in `vendor/VENDOR.md`), so a clean clone builds
+  without a user-specific path and without touching the network.
+
+## Build
+
+From the repository root:
+
+```powershell
+Push-Location tools/grib1_bridge
+cargo build --release --locked --offline
+Pop-Location
+```
+
+The command is intentionally run *in* `tools/grib1_bridge`, where Cargo finds
+the checked-in source-replacement configuration in `.cargo/config.toml`
+(crates.io is replaced by the `vendor/crates-io` directory).
+
+## Where the binaries land
+
+Everything is written to `tools/grib1_bridge/target/release/` (with an
+`.exe` suffix on Windows).  Binaries are **not** committed -- `target/` is
+gitignored -- so `cargo build --release` is a required step of any clean
+clone that ingests GRIB sources.  The clean-clone rule is:
+`pip install recast-woof` + this one cargo build + the documented data fetch.
+
+| Binary | Purpose |
+|---|---|
+| `grib1_bridge` | ERA5 GRIB1 decode boundary.  Validates every concatenated GRIB1 envelope (declared length, edition, `7777` terminator, exact EOF coverage) before decode, writes every decoded message to one little-endian float64 stream, and records message/grid metadata in JSON.  `woof.ingest.grib` applies `Vtable.ERA5_CDO` and assembles snapshots.  Usage: `grib1_bridge INPUT.grb OUTPUT_DIR`. |
+| `gfs_grib2_bridge` | Fail-closed companion for GFS-container `pgrb2.0p25` series.  Accepts a `HOUR<TAB>GRIB2<TAB>FORECAST_PROCESS_ID` manifest (legacy two-column rows declare analysis process 81 only), inventories the whole series before publication, selects 124 records per time by raw GRIB2 identifiers, validates the NCEP/table/declared-process identity, exact 0.25-degree grid endpoints, cycle/cadence/packing/missing-value policies, WPS-compatible RH2 and LANDN-with-LAND-fallback semantics, and both fixed surfaces for the four exact Noah soil layers.  Terrain and the selected land mask must remain bit-identical across the series.  Writes little-endian FP32 regular-grid arrays consumed directly by `woof.gfs_direct`; no `.rws`, WPS, or `real.exe` step is involved. |
+| `hrrr_grib2_bridge` | Fail-closed native HRRR GRIB2 subset bridge for woof initialization.  Accepts one contiguous public source-lead window from a single HRRR cycle, proves the exact atmosphere/surface/soil inventory the initialization lane needs (no field selected by display name or message position), and writes a south-to-north row-major FP32 source window read by `woof.ingest.hrrr`. |
+| `grib2_inventory` | Strict GRIB2 inventory/decode probe.  Emits one TSV row per message (raw identifiers, grid definition, packing, decode statistics) -- the manifest/receipt tool for auditing what a downloaded GRIB2 file actually contains before anything ingests it. |
+| `grib2_dump` | Dumps selected GRIB2 fields as little-endian float64 with a TSV header, for decoder cross-checks against independent readers. |
+
+The ERA5 bridge also accepts `grib1_bridge --inventory INPUT.grb`. It
+writes versioned JSON message headers to stdout using the same native
+section parser as normal decode, retaining one packed message at a time.
+It does not unpack field values or coordinate arrays. The wizard uses this
+mode to measure supplied forcing times before fitting a grid. A failed
+command's partial stdout is not a usable inventory; complete field and
+spatial validation still belongs to normal input preflight.
+
+## The CPU preprocessing library
+
+The same crate builds `gpuwm_preprocess_cpu` (`libgpuwm_preprocess_cpu.so`,
+`gpuwm_preprocess_cpu.dll`), which `woof.ingest.cpu_backend` loads through
+ctypes.  Besides the horizontal, vertical and WRF-real transforms of the CPU
+preprocessing backend, it carries `gpuwm_wps_masked_chain_f64` and
+`gpuwm_wps_land_unit_scan_f64` (`src/wps_masked.rs`): WPS metgrid's masked
+chain for soil moisture and temperature, snow, skin temperature and sea ice,
+in float64, parallel across target cells with a result that does not depend
+on the worker count.  BOTH preprocessing backends map those fields through
+it, so a library without the entry is refused by name.  Its values and
+repair counts are byte-identical to the NumPy transcription kept as the test
+oracle (`woof/verify/wps_masked_oracle.py`); the search takes its walk
+once per start cell and squares a distance as `dx * dx`, as the oracle's
+shared-walk search does.
+
+`gpuwm_masked_bilinear_stencil_f64` and `gpuwm_masked_stencil_apply_f32`
+(`src/masked_stencil.rs`) build and apply the land-only bilinear stencil of
+the native HRRR route: surface-matched corner weights, the nearest land
+donor for a land cell with none, and the report's counts, byte-identical to
+the NumPy builder kept as its test oracle
+(`woof/verify/hrrr_stencil_oracle.py`).
+
+`src/water_blend.rs` carries the water surfaces: `gpuwm_lake_water_nearest_f64`
+(the search for the nearest source water cell of each model lake, whose
+stopping bound is squared with the C library's `pow` as Python's `** 2`
+does), `gpuwm_masked_bilinear_blend_f64` (the bilinear blend renormalised
+over the water donors that exist), `gpuwm_component_fill_f64` (the
+four-neighbour sweep that closes a water body's holes from its own cells),
+`gpuwm_overlay_bilinear_sample_f64` (the corner blend of a
+water-temperature overlay) and `gpuwm_label_components_8` (the 8-connected
+labelling of water bodies, one thread, labels in the row-major order of each
+body's first cell).  Each is byte-identical to the NumPy code kept
+as its test oracle (`woof/verify/water_blend_oracle.py`) at any worker
+count, and a library without them is refused by name.
+
+`src/water_repair.rs` carries the rest of the water-temperature assembly:
+`gpuwm_water_repair_f64` (the box repairs of water cells whose provider left
+no admissible temperature: ring by ring from the body's own water, else the
+nearest admissible water, else the surrounding skin) and
+`gpuwm_water_bodies_f64` (the per-body loop: each body's cells, donors,
+renormalised blend, coverage, hole fill and provider in one pass instead of
+whole-domain masks once per body).  Both are byte-identical to the NumPy
+code kept in the same oracle, the old assembly loop included, at any worker
+count.
+
+`src/water_owner.rs` carries `gpuwm_component_owner_f64`: which water body
+owns each source cell (the body holding most of the targets nearest to it,
+and among equal claims the highest label), the donor sets of the per-body
+assembly.  `src/surface_nearest.rs` carries `gpuwm_masked_nearest_f32`, the
+CPU backend's bounded surface-nearest search in float32 (the first of
+equally near cells in its scan wins), and is the library's newest entry: the
+ABI marker `woof.bridges` checks.  Both are byte-identical to the NumPy code
+kept in the same oracle at any worker count.
+
+## Validation posture
+
+Every bridge is fail-closed: unexpected editions, grids, packing, missing
+records, or inventory drift abort with a receipt instead of publishing a
+partial product.  Upstream provenance of the vendored decoder is recorded in
+`vendor/VENDOR.md`.

@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 6a7d40d47eb98d23758989a9d52738cbab30ed5a0f342a8bd603a37a6f2aa3af.
+struct SaseDiffFluxDiagResources {
+    device const float *phi [[id(0)]];
+    device const float *kv [[id(1)]];
+    device const float *rho1 [[id(2)]];
+    device float *out [[id(3)]];
+    device const float *t [[id(4)]];
+    device const ulong *constants [[id(5)]];
+};
+struct SaseDiffFluxDiagParams {
+    float dz;
+    int t_mode;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseDiffFluxDiagParams) == 20, "sase_diff_flux_diag parameter ABI size changed");

@@ -1,0 +1,110 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_legacy_lw_rtrn_prol",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_rtrn_prol",
+      "resources": [
+        [
+          "cldfmc",
+          "float",
+          "read"
+        ],
+        [
+          "taucmc",
+          "float",
+          "read"
+        ],
+        [
+          "secdiff",
+          "float",
+          "read"
+        ],
+        [
+          "ngb",
+          "int32",
+          "read"
+        ],
+        [
+          "odcld",
+          "float",
+          "read_write"
+        ],
+        [
+          "efclfrac",
+          "float",
+          "read_write"
+        ],
+        [
+          "icldlyr",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cldfmc": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "taucmc": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "secdiff": [
+          [
+            "ncol",
+            "16"
+          ]
+        ],
+        "ngb": [
+          [
+            "140"
+          ]
+        ],
+        "odcld": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "efclfrac": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "icldlyr": [
+          [
+            "ncol",
+            "nl"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

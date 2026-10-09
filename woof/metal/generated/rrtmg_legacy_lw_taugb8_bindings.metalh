@@ -1,0 +1,28 @@
+// Generated from kernel_signatures.json; layout df8333ad457d99dbc314ab83a0282079fa47670565d46268837ab3408d942e02.
+struct RrtmgLegacyLwTaugb8Resources {
+    device const int *laytrop [[id(0)]];
+    device const float *fs [[id(1)]];
+    device const int *isv [[id(2)]];
+    device const float *wx [[id(3)]];
+    device const float *chi_mls [[id(4)]];
+    device const float *absa [[id(5)]];
+    device const float *absb [[id(6)]];
+    device const float *selfref [[id(7)]];
+    device const float *forref [[id(8)]];
+    device const float *ka_mco2 [[id(9)]];
+    device const float *kb_mco2 [[id(10)]];
+    device const float *ka_mn2o [[id(11)]];
+    device const float *kb_mn2o [[id(12)]];
+    device const float *ka_mo3 [[id(13)]];
+    device const float *cfc12 [[id(14)]];
+    device const float *cfc22adj [[id(15)]];
+    device const float *fracrefa [[id(16)]];
+    device const float *fracrefb [[id(17)]];
+    device float *taug [[id(18)]];
+    device float *fracs [[id(19)]];
+};
+struct RrtmgLegacyLwTaugb8Params {
+    int ncol;
+    int nl;
+};
+static_assert(sizeof(RrtmgLegacyLwTaugb8Params) == 8, "rrtmg_legacy_lw_taugb8 parameter ABI size changed");

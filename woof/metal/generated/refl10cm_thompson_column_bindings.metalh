@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout 8d43208d6739eeb9b116d30851e50f2fbf8f8cee2d2598e3ca7e1b710341125d.
+struct Refl10CmThompsonColumnResources {
+    device const float *qv [[id(0)]];
+    device const float *qr [[id(1)]];
+    device const float *nr [[id(2)]];
+    device const float *qs [[id(3)]];
+    device const float *qg [[id(4)]];
+    device const float *graupel_number_shadow [[id(5)]];
+    device const float *t [[id(6)]];
+    device const float *p [[id(7)]];
+    device float *refl [[id(8)]];
+    device const ulong *tables [[id(9)]];
+};
+struct Refl10CmThompsonColumnParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Refl10CmThompsonColumnParams) == 12, "refl10cm_thompson_column parameter ABI size changed");

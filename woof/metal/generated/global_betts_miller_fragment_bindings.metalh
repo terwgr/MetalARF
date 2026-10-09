@@ -1,0 +1,27 @@
+// Generated from kernel_signatures.json; layout 9ce62d8046552f4862fe1e8453227d563a0892472d7d539ec5e64475fff1195b.
+struct GlobalBettsMillerFragmentResources {
+    device const ulong *temperature [[id(0)]];
+    device const ulong *qv [[id(1)]];
+    device const ulong *pressure [[id(2)]];
+    device const ulong *dp [[id(3)]];
+    device const ulong *virtual_temperature [[id(4)]];
+    device const ulong *relax [[id(5)]];
+    device const ulong *rh [[id(6)]];
+    device const ulong *minimum_depth [[id(7)]];
+    device const ulong *epsilon [[id(8)]];
+    device const ulong *gravity [[id(9)]];
+    device const ulong *rd [[id(10)]];
+    device const ulong *lv [[id(11)]];
+    device const ulong *cp [[id(12)]];
+    device const ulong *lv2 [[id(13)]];
+    device const ulong *rd_cp [[id(14)]];
+    device ulong *temperature_out [[id(15)]];
+    device ulong *qv_out [[id(16)]];
+    device ulong *precip [[id(17)]];
+    device uint *deep [[id(18)]];
+};
+struct GlobalBettsMillerFragmentParams {
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalBettsMillerFragmentParams) == 8, "global_betts_miller_fragment parameter ABI size changed");

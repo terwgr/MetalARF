@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_saturation_maximum",
+      "layout_version": 1,
+      "module": "global_saturation_pair_max_fragment",
+      "name": "global_saturation_pair_max_fragment",
+      "parameters": [["count", "int32"], ["chunk_size", "int32"], ["partial_count", "int32"]],
+      "resources": [
+        ["first", "float64_bits", "read"],
+        ["second", "float64_bits", "read"],
+        ["partial_max", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "first": [["any_1d"]],
+        "second": [["any_1d"]],
+        "partial_max": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_saturation_pair_max_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

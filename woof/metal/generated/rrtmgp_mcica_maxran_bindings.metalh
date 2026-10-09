@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 68c315d336f0436c78b07ed7c4d9da4f8e03557efbaa5a353263bbce423b1f5c.
+struct RrtmgpMcicaMaxranResources {
+    device const float *cldfra [[id(0)]];
+    device const uint *seed [[id(1)]];
+    device const uint *jump_s1 [[id(2)]];
+    device const uint *jump_s2 [[id(3)]];
+    device const uint *jump_s3 [[id(4)]];
+    device const uint *jump_s4 [[id(5)]];
+    device uint *mask_words [[id(6)]];
+};
+struct RrtmgpMcicaMaxranParams {
+    int ncol;
+    int nlay;
+    int ngpt;
+    int nmask_words;
+};
+static_assert(sizeof(RrtmgpMcicaMaxranParams) == 16, "rrtmgp_mcica_maxran parameter ABI size changed");

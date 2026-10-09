@@ -1,0 +1,40 @@
+[package]
+name = "grib1_bridge"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "gpuwm_preprocess_cpu"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+chrono = { version = "0.4", default-features = false }
+# jpeg2000 (GRIB2 DRT 5.40) is ON: several agencies pack operational
+# GRIB2 with it -- every RAP/NAM AWIPS-grid Lambert product and MSC
+# Datamart's GDPS files among them -- and a bridge without the codec
+# turns "decode this record" into a refusal about packing rather than
+# about meteorology.  The implementation is grib-core's own
+# (BowEcho-ratified) optional openjp2 backend, through the same vendored
+# openjp2 the renderer workspace already builds; png_codec stays off
+# because no consumed product uses Template 5.41.
+grib-core = { path = "vendor/grib-core", default-features = false, features = ["jpeg2000"] }
+# A pure Rust port of musl's libm, for the portable transcendentals in
+# src/portable_math.rs: the same bits on every CPU and C library.
+libm = "0.2.16"
+rayon = "1"
+sha2 = "0.10"
+
+# See tools/rustwx/Cargo.toml for the reasoning: these artifacts are
+# package data in a platform wheel measured against PyPI's 100 MB cap,
+# and debug symbols are the cheapest weight to give back.  The
+# source-revision stamp and the `gpuwm_preprocess_cpu_abi_version`
+# export both survive stripping -- one is .rodata, the other is an
+# export table entry.
+[profile.release]
+# WOOF: symbol tables go too (strip = "symbols"). Its platform wheel carries
+# six more decoders than the engine's and measured 103,610,312 bytes with
+# debuginfo stripping only; dropping symbols gives back 5.26 MB and keeps the
+# source-revision stamp, contract markers and exported ABI symbols.
+strip = "symbols"

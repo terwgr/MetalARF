@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 86d8423f1775f9622d10fe1171fbf2a2b6d0a9c963a6ed5b721f0f4c25b38a8e.
+struct RrtmgpPreparePackColumnsResources {
+    device const float *input [[id(0)]];
+    device float *output [[id(1)]];
+};
+struct RrtmgpPreparePackColumnsParams {
+    int ncol;
+    int nlay;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(RrtmgpPreparePackColumnsParams) == 16, "rrtmgp_prepare_pack_columns parameter ABI size changed");

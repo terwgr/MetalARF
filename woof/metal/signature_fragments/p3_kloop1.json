@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "name": "p3_kloop1",
+      "module": "p3_kloop1",
+      "source": "woof/metal/shaders/p3_kloop1.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_kloop1",
+      "resources": [
+        ["qc", "float", "read_write"], ["nc", "float", "read_write"],
+        ["qr", "float", "read_write"], ["nr", "float", "read_write"],
+        ["qi", "float", "read_write"], ["qir", "float", "read_write"],
+        ["ni", "float", "read_write"], ["qib", "float", "read_write"],
+        ["theta", "float", "read_write"], ["qv", "float", "read_write"],
+        ["th_old", "float", "read"], ["qv_old", "float", "read"],
+        ["ssat", "float", "read_write"], ["pressure", "float", "read"],
+        ["temperature", "float", "read"], ["tmparr1", "float", "read"],
+        ["rho", "float", "read_write"], ["inv_rho", "float", "read_write"],
+        ["qvs", "float", "read_write"], ["qvi", "float", "read_write"],
+        ["sup", "float", "read_write"], ["supi", "float", "read_write"],
+        ["rhofacr", "float", "read_write"], ["rhofaci", "float", "read_write"],
+        ["acn", "float", "read_write"], ["qv_cld", "float", "read_write"],
+        ["flags", "float", "read_write"]
+      ],
+      "shapes": {
+        "qc": [["nz", "ny", "nx"]], "nc": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]], "nr": [["nz", "ny", "nx"]],
+        "qi": [["nz", "ny", "nx"]], "qir": [["nz", "ny", "nx"]],
+        "ni": [["nz", "ny", "nx"]], "qib": [["nz", "ny", "nx"]],
+        "theta": [["nz", "ny", "nx"]], "qv": [["nz", "ny", "nx"]],
+        "th_old": [["nz", "ny", "nx"]], "qv_old": [["nz", "ny", "nx"]],
+        "ssat": [["nz", "ny", "nx"]], "pressure": [["nz", "ny", "nx"]],
+        "temperature": [["nz", "ny", "nx"]], "tmparr1": [["nz", "ny", "nx"]],
+        "rho": [["nz", "ny", "nx"]], "inv_rho": [["nz", "ny", "nx"]],
+        "qvs": [["nz", "ny", "nx"]], "qvi": [["nz", "ny", "nx"]],
+        "sup": [["nz", "ny", "nx"]], "supi": [["nz", "ny", "nx"]],
+        "rhofacr": [["nz", "ny", "nx"]], "rhofaci": [["nz", "ny", "nx"]],
+        "acn": [["nz", "ny", "nx"]], "qv_cld": [["nz", "ny", "nx"]],
+        "flags": [[2, "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["log_predict_nc", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

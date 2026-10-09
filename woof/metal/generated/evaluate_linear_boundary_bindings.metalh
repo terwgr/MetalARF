@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 36f9e4c07644536ce27e68c4af5e2a25adf2a6b1e9998e9c9bd7478e96009495.
+struct EvaluateLinearBoundaryResources {
+    device const float *value [[id(0)]];
+    device const float *tendency [[id(1)]];
+    device float *out_value [[id(2)]];
+    device float *out_tendency [[id(3)]];
+};
+struct EvaluateLinearBoundaryParams {
+    float seconds;
+    int count;
+};
+static_assert(sizeof(EvaluateLinearBoundaryParams) == 8, "evaluate_linear_boundary parameter ABI size changed");

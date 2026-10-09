@@ -1,0 +1,39 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_cal_cldfra1",
+      "module": "rrtmgp_cloud_prep_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "cuda_source": "woof/core/rrtmgp.py",
+      "cuda_symbol": "cal_cldfra1",
+      "resources": [
+        ["qv", "float", "read"],
+        ["qc", "float", "read"],
+        ["qi", "float", "read"],
+        ["qs", "float", "read"],
+        ["tlay", "float", "read"],
+        ["play", "float", "read"],
+        ["cldfra", "float", "read_write"]
+      ],
+      "shapes": {
+        "qv": [["ncol", "nlay"]],
+        "qc": [["ncol", "nlay"]],
+        "qi": [["ncol", "nlay"]],
+        "qs": [["ncol", "nlay"]],
+        "tlay": [["ncol", "nlay"]],
+        "play": [["ncol", "nlay"]],
+        "cldfra": [["ncol", "nlay"]]
+      },
+      "parameters": [
+        ["ncell", "int32"],
+        ["ncol", "int32"],
+        ["nlay", "int32"],
+        ["f_qi", "int32"],
+        ["f_qs", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["float32_ordered", "soft_glibc_2_39_exp_pow"]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "kernels": [
+    {
+      "name": "coupled_boundary_field",
+      "module": "lateral_boundary_fields",
+      "source": "woof/metal/shaders/coupled_boundary_field.metal",
+      "cuda_source": "woof/ingest/lateral_bc.py",
+      "cuda_symbol": "_coupled_device_fields",
+      "resources": [
+        ["target", "float", "read"],
+        ["mub2d", "float", "read"],
+        ["mup", "float", "read"],
+        ["thb", "float", "read"],
+        ["c1h", "float", "read"],
+        ["c2h", "float", "read"],
+        ["c1f", "float", "read"],
+        ["c2f", "float", "read"],
+        ["msft", "float", "read"],
+        ["msfu", "float", "read"],
+        ["msfv", "float", "read"],
+        ["out", "float", "read_write"]
+      ],
+      "shapes": {
+        "target": [["nz", "ny", "nx"]],
+        "mub2d": [["mny", "mnx"]],
+        "mup": [["mny", "mnx"]],
+        "thb": [["nz"], ["nz-1"], ["nz", "mny", "mnx"], ["nz-1", "mny", "mnx"]],
+        "c1h": [["nz"], ["nz-1"]],
+        "c2h": [["nz"], ["nz-1"]],
+        "c1f": [["nz"], ["nz+1"]],
+        "c2f": [["nz"], ["nz+1"]],
+        "msft": [["mny", "mnx"], ["ny", "nx"]],
+        "msfu": [["mny", "mnx+1"], ["ny", "nx"]],
+        "msfv": [["mny+1", "mnx"], ["ny", "nx"]],
+        "out": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["kind", "int32"],
+        ["has_msf", "int32"],
+        ["thb_3d", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["mny", "int32"],
+        ["mnx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

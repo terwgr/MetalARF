@@ -1,0 +1,5168 @@
+# ======================================================================
+# THIRD-PARTY NOTICE.  Parts of this file are hand transcriptions of
+# third-party work.  ArWen distributes the file under the Apache License
+# 2.0; the notices below belong to the transcribed parts and are kept here
+# because their own licences require it.  Full texts are in the repository
+# NOTICE and in the licenses/ directory.
+#
+#   RTE+RRTMGP, transcribed from earth-system-radiation/rte-rrtmgp at the
+#   commit this file's own docstring cites.  BSD 3-Clause:
+#
+#       Copyright (c) 2015-2025, Atmospheric and Environmental Research,
+#         Regents of the University of Colorado,
+#         Trustees of Columbia University in the City of New York.
+#
+#   Clause 1 requires source redistributions to retain that notice, the
+#   conditions and the disclaimer; the full text is in
+#   licenses/LICENSE-RTE-RRTMGP-BSD-3-Clause.txt.
+#
+#   WRF RRTMG's McICA subcolumn cloud generator, transcribed from WRF
+#   v4.6.1 phys/module_ra_rrtmg_sw.F (module mcica_subcol_gen_sw).  The
+#   RRTMGP path is driven with WRF's generator, not rte-rrtmgp's; the
+#   device copy is woof/globe/core/kernels/rrtmgp_mcica.cu.  That routine is
+#   AER's work, not UCAR's, and WRF preserves AER's own notice over it:
+#
+#       Copyright 2002-2008, Atmospheric & Environmental Research, Inc. (AER).
+#       This software may be used, copied, or redistributed as long as it is
+#       not sold and this copyright notice is reproduced on each copy made.
+#       This model is provided as is without any express or implied warranties.
+#                             (http://www.rtweb.aer.com/)
+#
+#   ArWen takes this material under AER's own current grant instead: BSD
+#   3-Clause, "Copyright (c) 2020, Atmospheric and Environmental
+#   Research", published by AER at github.com/AER-RC/RRTMG_SW.  Text in
+#   licenses/LICENSE-AER-RRTMG-BSD-3-Clause.txt.
+# ======================================================================
+"""GPU RTE+RRTMGP longwave/shortwave radiation.
+
+The coefficient loader in this first section mirrors the transformations in
+RTE+RRTMGP ``mo_optics_utils_rrtmgp.F90`` and
+``mo_gas_optics_rrtmgp.F90:init_abs_coeffs``.  NetCDF values remain float64 on
+the host; :meth:`GasTables.to_device` and :meth:`CloudTables.to_device` create
+and cache packed FP32 device copies.
+
+Reference: earth-system-radiation/rte-rrtmgp commit
+fa107a16120051c4124305c6b3d4c87059119f58; coefficient data are rrtmgp-data
+v1.9.  See ``woof_data/data/rrtmgp/PROVENANCE.md`` in the ``recast-woof-data``
+companion distribution, which carries these tables since 2.5.0.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
+from functools import lru_cache
+import os
+from pathlib import Path
+from typing import Mapping, NamedTuple
+
+import numpy as np
+from netCDF4 import Dataset, chartostring
+
+from woof import data_assets
+from woof.config import DEFAULT_COLUMN_CHUNK
+from woof.physics_compat import (
+    WRF_RRTMG_TO_RTE_RRTMGP,
+    WRF_RRTMG_TO_RTE_RRTMGP_V1,
+)
+from woof.core.mynn_radiation import (
+    merge_mynn_bl_clouds,
+    mynn_bl_cloud_active,
+    wrf_itimestep,
+)
+
+#: The k-distribution, cloud-optics and RFMIP NetCDFs.  Same files, same
+#: relative layout, same bytes as when they sat at ``woof/data/rrtmgp``;
+#: they ship in the ``recast-woof-data`` companion distribution since 2.5.0
+#: because the wheel carrying them measured 103.62 MiB against PyPI's
+#: 100 MiB cap.  ``woof.data_assets`` is the only thing that knows that,
+#: and it refuses BY NAME (with the pip line) if the companion is absent
+#: or a different version.
+DATA_DIR = data_assets.rrtmgp_data_dir()
+DTYPE = np.float32
+
+
+def _table(filename: str):
+    """One member, resolved through the refusal that can name it.
+
+    ``Dataset(DATA_DIR / filename)`` on an absent member is a bare
+    ``FileNotFoundError`` fifteen frames deep in whatever asked for
+    radiation -- measured at the front door when the first public-tree
+    companion wheel shipped without its ``rrtmgp/*.nc``.  The resolver
+    turns the same absence into ``data_assets.CompanionDataMissing``,
+    which ``woof.cli.main`` prints as the sentence it is.
+    """
+
+    return data_assets.require_companion_member(f"rrtmgp/{filename}")
+
+# ---------------------------------------------------------------------------
+# Radiation-facing effective radii are contracted in MICRONS across every
+# microphysics writer (state.py background fills, thompson_contract.py,
+# the WSM6/Thompson/Morrison kernels).  These physical-plausibility bands
+# gate that contract at the radiation boundary: clouds with re_liq of
+# 0.0000025 um or 2,500,000 um do not exist, so any writer that emits a
+# radius in the wrong metric unit must fail here instead of silently
+# radiating at a clip floor.  Every writer background-fills clear cells
+# with 2.49-25 um values, and every background times or divided by any
+# metric-prefix factor (>= 1000) leaves its band, so a metre, millimetre,
+# or nanometre emission trips the gate on the very first radiation call
+# regardless of scheme or cloud state.  Bounds admit each scheme's clamp
+# extremes: WSM6/Thompson clamps 2.49-50/4.99-125/9.99-999 um; Morrison
+# lambda bounds give cloud (pgam+3)/(2(pgam+1)) = 0.59-0.83 um through
+# 50 um, ice 1.5 through 525 um (1.5e6*(2*MDCS+100e-6)), snow 15 through
+# 3000 um (1.5e6*2000e-6); backgrounds 2.49-25 um.
+EFFECTIVE_RADIUS_PLAUSIBLE_UM = {
+    "effc": (0.5, 100.0),
+    "effi": (1.0, 600.0),
+    "effs": (1.0, 5000.0),
+}
+
+#: ``itab`` column (1-based, as WRF spells it) that IS P3's ice effective
+#: radius: ``f1pr06 = access_lookup_table(itab, ..., 6, ...)`` and
+#: ``diag_effi = f1pr06`` (module_mp_p3.F:1595/:1610, woof/core/p3.py and
+#: woof/core/kernels/p3.cu:1813/:1830), in METRES.
+P3_ICE_RADIUS_TABLE_COLUMN = 6
+
+
+@lru_cache(maxsize=None)
+def p3_ice_radius_band_um(root: str | None = None) -> tuple[float, float]:
+    """P3's ice-radius band, READ OFF the shipped lookup table.
+
+    THE BREAKAGE THIS CLOSES, measured on a real forecast.  A 6 h GFS run
+    on the shipped ``p3-mp50-...`` suite died at its FIRST radiation call
+    (12 steps in, radt = 12 min) with "effi is outside the
+    physical-plausibility band [1.0, 600.0] microns; the state contract is
+    microns -- a radii writer probably emitted another unit".  The writer
+    had emitted microns and the values were physical: over 5.59 M cells the
+    field ran ``min 1.3832, max 21495`` microns, and those two numbers are
+    EXACTLY the minimum and maximum of the shipped table's own column 6.
+    P3 is a lookup-table scheme; ``diag_effi`` is that column and nothing
+    else, so the attainable set is the column's range.
+
+    Why P3 needs its own band while nothing else does: every other shipped
+    scheme clamps its ice radius inside its own microphysics (Thompson's
+    ``MIN(re, 125.E-6)``, WSM6's equivalent), so a value outside a generic
+    band really is a unit mistake there.  WRF applies NO clamp to P3 --
+    ``module_microphysics_driver.F:1597-1598`` passes ``re_ice`` straight
+    out of the scheme -- and caps it in RADIATION instead, at
+    ``resnow1d = 130`` with the mass discount ``MIN(0.99, (130/res)^2)``
+    (module_ra_rrtmg_lw.F:12515-12532, _sw.F:11055-11067), which
+    :func:`hydrometeor_paths`' p3 branch already transcribes.  A generic
+    600 um band therefore refused the scheme for being itself, three cells
+    in a thousand, and named a unit error that had not happened -- a
+    refusal that misnames its breakage.
+
+    NOT A WIDENED TOLERANCE.  The band is DERIVED from the table this
+    install ships (sha256-pinned by
+    :data:`woof.core.p3_tables.TABLE_1_2MOM_ASSET`), so it cannot drift
+    from the scheme, and it keeps the whole point of the check: P3 returns
+    metres and woof converts to microns, so an unconverted metres emission
+    reads about 1.4e-6 and is still refused by the lower bound.
+    """
+
+    from woof.core.p3_tables import load_lookup_table_1, p3_table_root
+
+    itab, _ = load_lookup_table_1(p3_table_root() if root is None else root)
+    column = itab[:, :, :, P3_ICE_RADIUS_TABLE_COLUMN - 1]
+    # The metres -> microns conversion is done HERE the way the writer does
+    # it (woof/core/p3.py: ``diag["effi"] * cp.float32(1.0e6)``), in
+    # float32.  A float64 multiply of the same table entry can land one ULP
+    # away, and at the endpoint that difference is the whole answer: the
+    # cell holding the table maximum would test one ULP ABOVE its own band
+    # and the run would die on the value the band was derived from.
+    scale = np.float32(1.0e6)
+    return (float(np.float32(column.min()) * scale),
+            float(np.float32(column.max()) * scale))
+
+
+def effective_radius_bands(scheme: str) -> dict[str, tuple[float, float]]:
+    """The micron bands to gate THIS scheme's radiation-facing radii with.
+
+    Every scheme but P3 answers with :data:`EFFECTIVE_RADIUS_PLAUSIBLE_UM`
+    unchanged.  P3's ice band is the shipped lookup table's own range, and
+    its SNOW band is the same one for the reason the coupling exists: WRF
+    radiates P3's single ice category as the snow species at P3's own ice
+    radius (``resnow1D = MAX(10., re_ice*1.E6)``,
+    module_ra_rrtmg_lw.F:12256, _sw.F:10857), so the value in the snow slot
+    IS the ice radius and must be judged by the ice radius's range.
+    """
+
+    if scheme != "p3":
+        return dict(EFFECTIVE_RADIUS_PLAUSIBLE_UM)
+    lower, upper = p3_ice_radius_band_um()
+    bands = dict(EFFECTIVE_RADIUS_PLAUSIBLE_UM)
+    generic_i = EFFECTIVE_RADIUS_PLAUSIBLE_UM["effi"]
+    generic_s = EFFECTIVE_RADIUS_PLAUSIBLE_UM["effs"]
+    bands["effi"] = (min(lower, generic_i[0]), max(upper, generic_i[1]))
+    bands["effs"] = (min(lower, generic_s[0]), max(upper, generic_s[1]))
+    return bands
+
+# Snow treatment in the radiative ice path for schemes that provide an
+# explicit snow effective radius (the WSM6/Thompson coupling surface).
+#   full-snow-mass-into-ice: the adapter's original coupling -- snow joins
+#     the ice optical path at full mass with its native radius.
+#   wrf-rrtmg-130um-snow-discount: WRF v4.6.1's option-4 explicit-radius
+#     coupling (inflg/iceflg=5) -- the ice path is cloud ice only, snow
+#     mass is discounted by MIN(0.99, (130/re_s)^2) and re_s is capped at
+#     130 um (module_ra_rrtmg_lw.F:12500-12532, module_ra_rrtmg_sw.F:
+#     11040-11067; fixture: tests/data/wrf_rrtmg_snow_discount_fixture.csv).
+# Selection is bound to the wrf_rrtmg_compatibility receipt token so no
+# already-issued run is relabeled; unknown tokens fail closed.
+SNOW_TREATMENT_FULL_MASS = "full-snow-mass-into-ice"
+SNOW_TREATMENT_WRF_DISCOUNT = "wrf-rrtmg-130um-snow-discount"
+SNOW_TREATMENTS = (SNOW_TREATMENT_FULL_MASS, SNOW_TREATMENT_WRF_DISCOUNT)
+
+_SNOW_TREATMENT_BY_COMPATIBILITY = {
+    # Native RTE+RRTMGP selection: not a WRF-mapped run, keeps the
+    # adapter's original coupling unchanged.
+    "none": SNOW_TREATMENT_FULL_MASS,
+    # -v1 receipts predate the WRF-matching snow coupling; they keep the
+    # behavior they were issued under.
+    WRF_RRTMG_TO_RTE_RRTMGP_V1: SNOW_TREATMENT_FULL_MASS,
+    # -v2 (current importer default): WRF-matching snow discount.
+    WRF_RRTMG_TO_RTE_RRTMGP: SNOW_TREATMENT_WRF_DISCOUNT,
+}
+
+
+def snow_treatment_for_compatibility(token: str) -> str:
+    """Map a ``wrf_rrtmg_compatibility`` receipt token to a snow treatment.
+
+    Fails closed: a token this build does not recognize must never be
+    silently coerced onto either behavior.
+    """
+    try:
+        return _SNOW_TREATMENT_BY_COMPATIBILITY[token]
+    except KeyError:
+        raise ValueError(
+            "unknown wrf_rrtmg_compatibility token for the radiation "
+            f"snow treatment: {token!r}; known tokens: "
+            f"{sorted(_SNOW_TREATMENT_BY_COMPATIBILITY)}") from None
+
+
+# ---------------------------------------------------------------------------
+# Which cloud-optics coupling each microphysics selector gets.
+#
+# This table decides THREE things at once inside
+# :meth:`RRTMGPRadiation.__call__`, which is why it is stated here as data
+# with its WRF citations rather than inlined as a ``.get(mp, "kessler")``
+# default: the branch :func:`hydrometeor_paths` takes (scheme-native radii
+# vs. Kessler's constant 10 um / 50 um pair), whether the scheme's
+# effc/effi/effs columns are read out of state at all, and -- through
+# :data:`_ICE_ACTIVE_SCHEMES` -- the ``f_qi``/``f_qs`` flags
+# :func:`cal_cldfra1` is called with.  A scheme that falls through to
+# "kessler" therefore does not merely lose its radii: its ice and snow stop
+# producing cloud fraction, and an overcast ice cloud radiates as clear sky.
+#
+# THE ENTRY THAT WAS MISSING.  ``28`` (THOMPSONAERO) is the aerosol-aware
+# Thompson package and takes the SAME radiative coupling as classic
+# Thompson.  WRF's authority for that, all in the stock v4.6.1 tree:
+#
+#   * ``Registry/Registry.EM_COMMON:3036`` declares
+#     ``package thompsonaero mp_physics==28 - moist:qv,qc,qr,qi,qs,qg;
+#     scalar:...;state:re_cloud,re_ice,re_snow`` -- character for character
+#     the same ``moist:`` inventory and the same three ``re_*`` state
+#     fields as line 3024's ``thompson`` (mp==8).  ``F_QI``/``F_QS`` are
+#     therefore both true for mp=28, which is exactly what
+#     ``cal_cldfra1`` keys on.
+#   * ``phys/module_physics_init.F:1005-1006`` lists ``THOMPSON`` and
+#     ``THOMPSONAERO`` as two members of ONE disjunction that sets
+#     ``has_reqc = has_reqi = has_reqs = 1`` (:1021-1023); the P3 /
+#     Jensen-Ishmael ``has_reqs = 0`` override at :1027-1033 does not
+#     name THOMPSONAERO.  So mp=28 hands radiation all three radii.
+#     Those same three flags are the ONLY gate on the block that computes
+#     them -- ``module_mp_thompson.F:1466`` opens
+#     ``IF (has_reqc.ne.0 .and. has_reqi.ne.0 .and. has_reqs.ne.0)`` around
+#     calc_effectRad and the :1475-1477 clamps -- so in WRF a scheme
+#     computes re_cloud/re_ice/re_snow if and only if radiation consumes
+#     them.  Computing them for mp=28 and then discarding them at the
+#     radiation boundary is not a WRF configuration at all.
+#   * Neither RRTMG wrapper branches on the selector for any of this:
+#     ``phys/module_ra_rrtmg_lw.F`` tests ``mp_physics`` only at
+#     :12131-12136 and ``_sw.F`` only at :10732-10737, both for
+#     FER_MP_HIRES / FER_MP_HIRES_ADVECT / ETAMP_HWRF.  ``cal_cldfra1``'s
+#     only ``mp_physics`` branch is the same Ferrier one
+#     (``phys/module_radiation_driver.F:3926-3937``); mp=8 and mp=28 both
+#     take the ``F_QI .and. F_QC .and. F_QS`` arm at :3870-3877.
+#
+# woof's own side of the contract is already in place: ``mp_physics == 28``
+# allocates effc/effi/effs and background-fills them with the same
+# RE_QC_BG/RE_QI_BG/RE_QS_BG values mp=8 uses
+# (``woof/core/state.py``), and the mp=28 adapter writes them every step
+# through ``launch_aerosol_effective_radius``
+# (``woof/core/microphysics_aerosol.py``) under mp_gt_driver's OWN clamps
+# (module_mp_thompson.F:1466-1479), which is the identical clamp pair mp=8
+# takes because mp_gt_driver is one driver serving both packages.
+# ``woof/core/rrtmg_legacy.py`` already carried this same judgement
+# (``_MP_DECLARES_RADII[28] = True``, ``_LEGACY_ICE_ACTIVE_MICROPHYSICS``);
+# this table is the RTE+RRTMGP half of it, and the two are pinned equal by
+# ``tests/test_rrtmgp.py``.
+#
+# FAILS CLOSED.  Every selector ``woof/config.py`` accepts has a row.  A
+# selector without one raises instead of silently resolving to Kessler --
+# a silent default is precisely how mp=28 spent four waves radiating its
+# ice clouds as clear sky.
+_MP_CLOUD_OPTICS_SCHEME = {
+    # Registry.EM_COMMON:3014, package passiveqv mp_physics==0 - moist:qv.
+    # No condensate species exist at all, so the constant-radius branch is
+    # inert: it multiplies zero paths.
+    0: "kessler",
+    # Registry.EM_COMMON:3015, package kesslerscheme mp_physics==1 -
+    # moist:qv,qc,qr.  No qi, no qs, no re_* state.
+    1: "kessler",
+    6: "wsm6",       # Registry.EM_COMMON:3021, wsm6scheme
+    8: "thompson",   # Registry.EM_COMMON:3024, thompson
+    10: "morrison",  # Registry.EM_COMMON:3026, morr_two_moment
+    # WDM6.  The VALUE names a COUPLING, not a scheme -- 28 resolves to
+    # "thompson" on the same principle -- and WDM6's coupling is WSM6's,
+    # for the two reasons that decide this table:
+    #  * F_QI/F_QS.  Registry.EM_COMMON:3031 declares wdm6scheme as
+    #    ``moist:qv,qc,qr,qi,qs,qg``, WSM6's inventory (:3021) character for
+    #    character, so cal_cldfra1 takes the same QCLD = QI + QC + QS arm
+    #    (module_radiation_driver.F:3870-3877).
+    #  * Explicit radii.  module_physics_init.F:1013 lists WDM6SCHEME in the
+    #    same has_reqc/has_reqi/has_reqs disjunction as WSM6SCHEME (:1010),
+    #    and the P3 ``has_reqs = 0`` override (:1027-1033) does not name it,
+    #    so all three are 1 and the scheme's own re_cloud/re_ice/re_snow
+    #    (effectRad_wdm6, module_mp_wdm6.F:3135-3234) reach cloud optics.
+    # What is DIFFERENT about WDM6 -- a droplet radius built from prognostic
+    # nc rather than a fixed number -- is inside the radii the scheme
+    # supplies, not in how radiation consumes them, so it changes the
+    # values on this path and not the path.
+    16: "wsm6",      # Registry.EM_COMMON:3031, wdm6scheme
+    18: "nssl",      # Registry.EM_COMMON:3033, nssl_2mom
+    28: "thompson",  # Registry.EM_COMMON:3036, thompsonaero
+    # P3 one-category.  The VALUE is its own coupling name and not a
+    # borrowed one, because P3 is the only scheme in this table whose
+    # has_req* triple is not all-ones -- and WRF's RRTMG wrappers carry a
+    # named branch for exactly that case.  Read on a stock WRF v4.7.1 tree
+    # (phys/module_mp_p3.F there hashes to the same
+    # 716950a3081ec4e338c9a918d26ec80f7ee0e40b3e284283f070423237f6a3c6 the
+    # Fortran oracle pins); v4.6.1 line numbers, the tree the rows above
+    # cite, are given second where the text moved.
+    #
+    #  * ``Registry/Registry.EM_COMMON:3043`` (v4.6.1 :3038) declares
+    #    ``package p3_1category mp_physics==50 -
+    #    moist:qv,qc,qr,qi;scalar:qni,qnr,qir,qib;
+    #    state:re_cloud,re_ice,vmi3d,rhopo3d,di3d,refl_10cm,th_old,qv_old``.
+    #    ``moist`` carries qi and NO qs, so cal_cldfra1's ``F_QI`` is true
+    #    and its ``F_QS`` is FALSE; ``state`` carries re_cloud and re_ice
+    #    and NO re_snow.  Both absences are the same physical fact: P3 has
+    #    ONE ice category spanning the snow-to-graupel continuum through
+    #    rime mass and rime volume, so there is no snow species to have a
+    #    mixing ratio or an effective radius.
+    #  * ``phys/module_physics_init.F:1018`` (v4.6.1 :1017) names
+    #    P3_1CATEGORY in the ``use_mp_re`` disjunction that sets
+    #    ``has_reqc = has_reqi = has_reqs = 1`` at :1022-1024 (v4.6.1
+    #    :1021-1023) -- and then :1027-1034 (v4.6.1 :1026-1033), under the
+    #    comment "for P3, to ensure correct coupling with predicted
+    #    effective radii", sets ``has_reqs = 0`` for P3_1CATEGORY,
+    #    P3_1CATEGORY_NC, P3_1CAT_3MOM, P3_2CATEGORY and JENSEN_ISHMAEL.
+    #    THE ROW IS has_reqc=1, has_reqi=1, has_reqs=0.  Cloud and ice
+    #    effective radii come from the scheme -- WRF's diag_effc_3d and
+    #    diag_effi_3d (module_mp_p3.F:757-758, written at :1557 and :1610)
+    #    are woof's ``state.effc``/``state.effi`` (woof/core/p3.py) --
+    #    and no snow radius exists to be supplied.
+    #  * ``phys/module_radiation_driver.F:3879-3887`` (same lines in
+    #    v4.6.1) is cal_cldfra1's OWN P3 arm, comment "for P3, mp option
+    #    50 or 51": ``IF (F_QI .and. F_QC .and. .not. F_QS)`` gives
+    #    QCLD = QI + QC and weight = QI/QCLD, distinct from the
+    #    :3870-3877 arm every other row here takes.
+    #  * ``phys/module_ra_rrtmg_lw.F:12250-12261`` and
+    #    ``phys/module_ra_rrtmg_sw.F:10851-10863`` (same lines in v4.6.1)
+    #    are the radiative half, and they are why this row is not merely
+    #    "ice, without snow": under
+    #    ``has_reqs == 0 .and. has_reqi /= 0 .and. has_reqc /= 0`` WRF
+    #    sets inflg = iceflg = 5 and REMAPS the species --
+    #    ``resnow1D = MAX(10., re_ice*1.E6)``, ``QS1D = QI3D``,
+    #    ``QI1D = 0.``, ``reice1D = 10.`` -- so P3's ice mass is radiated
+    #    through the SNOW (Fu) parameterisation at P3's own ice radius and
+    #    the cloud-ice path is left empty.  :func:`hydrometeor_paths`
+    #    transcribes that remap; no snow radius is invented, and none is
+    #    accepted.
+    50: "p3",
+}
+
+# WHY A SELECTOR THIS BUILD ACCEPTS HAS NO ROW ABOVE.  One entry per such
+# selector, stating the reason a row would be WRONG -- not a note that one
+# is missing.  A set that merely omits a scheme is an omission, and the
+# next reader cannot tell an omission from an oversight; the tree's other
+# deliberate exclusions (microphysics_transition's
+# UNVALIDATED_MIXED_EDGE_SELECTORS) are recorded the same way.
+#
+# THE RECORD LIVES IN THE MODULE THAT RAISES.  Both pairings are already
+# refused at admission by ``woof/config.py``
+# (validate_milbrandt2_options, validate_p3_radiation), and
+# ``tools/build_registry.py`` writes the same refusal into the shipped
+# registry.  Neither is where a reader lands when
+# :func:`cloud_optics_scheme` throws, and until this record existed that
+# exception told them to "add a row" -- the one instruction that is wrong
+# for a selector deliberately left out, and, for mp=50, an instruction
+# that does not even work: the row alone is not the missing piece (see
+# the last paragraph of its entry).
+#
+# A selector with NEITHER a row NOR an entry here still gets the
+# fail-closed "add a row" message, which is the right message for a
+# scheme nobody has judged yet.
+_NO_CLOUD_OPTICS_COUPLING = {
+    9: (
+        "MILBRANDT2MOM is absent from WRF's use_mp_re disjunction "
+        "(phys/module_physics_init.F:1004-1023) and its own "
+        "effective-radius block is commented out "
+        "(phys/module_mp_milbrandt2mom.F:3351-3378), so the scheme hands "
+        "radiation no radii at all; Kessler's row would radiate an "
+        "overcast ice cloud as clear sky and Morrison's would derive the "
+        "radii from a gamma distribution that is not this scheme's."),
+    50: (
+        "P3 has ONE ice category and no snow species: "
+        "Registry.EM_COMMON:3038 declares p3_1category as "
+        "moist:qv,qc,qr,qi -- no qs and no qg -- and WRF, having put the "
+        "P3 family in the use_mp_re disjunction at "
+        "phys/module_physics_init.F:1017-1020, overrides has_reqs back "
+        "to 0 at :1026-1033 while leaving has_reqc=has_reqi=1.  So P3 "
+        "supplies a cloud and an ice radius (woof/core/state.py seeds "
+        "effc/effi from module_mp_p3.F:2280-2282) and never a snow "
+        "radius, and it allocates no qs at all.  EVERY row above "
+        "resolves to a hydrometeor_paths branch that requires one: "
+        "'wsm6'/'thompson'/'nssl' raise without effc+effi+effs, and "
+        "'morrison' reconstructs from the four number moments "
+        "nc/nr/ni/ns, of which P3 transports ni alone.  Picking any of "
+        "them hands RRTMGP a snow radius P3 never computed. "
+        "AND THE ROW IS NOT THE ONLY MISSING PIECE: P3's moisture set is "
+        "F_QI true with F_QS false, and while cal_cldfra1 already "
+        "carries WRF's arm for exactly that "
+        "(module_radiation_driver.F:3879-3887, QCLD = QI + QC, "
+        "weight = QI/QCLD), THIS ADAPTER CANNOT ASK FOR IT: "
+        "_ICE_ACTIVE_SCHEMES is one bit and "
+        "RRTMGPRadiation.__call__ hands that one bit to BOTH f_qi and "
+        "f_qs, so no scheme name it can resolve produces the unequal "
+        "pair the arm is selected by.  A P3 coupling is therefore a "
+        "radii branch consuming effc/effi alone PLUS a call site that "
+        "resolves f_qi and f_qs separately, each with its own WRF "
+        "authority and its own evidence, not a value added to a table."),
+}
+
+#: The two adapters that DO serve these selectors, named by every refusal
+#: so none of them is a dead end.  One copy: a user told different things
+#: about the same door stops trusting either.
+_CLOUD_OPTICS_REMEDY = (
+    "Set ra_rrtmg_variant='rrtmg_legacy' (which computes its own radii "
+    "the way WRF does), or select ra_lw_physics=0/ra_sw_physics=1 "
+    "(Dudhia).")
+
+#: Schemes whose Registry package carries ``qi`` and ``qs`` in ``moist``,
+#: i.e. the ones for which the radiation driver's ``F_QI``/``F_QS`` are
+#: true and :func:`cal_cldfra1` takes its QCLD = QI + QC + QS arm
+#: (module_radiation_driver.F:3870-3877).  Derived from the table above so
+#: the two can never disagree; Kessler's package has neither species.
+_ICE_ACTIVE_SCHEMES = ("wsm6", "thompson", "morrison", "nssl", "p3")
+
+#: The subset of the above whose Registry package ALSO carries ``qs`` in
+#: ``moist``, i.e. the ones for which the driver's ``F_QS`` is true.  P3 is
+#: the one member of this table that is ice-active WITHOUT a snow species:
+#: ``Registry.EM_COMMON:3043`` gives mp=50 ``moist:qv,qc,qr,qi`` and no qs,
+#: which is what selects cal_cldfra1's own P3 arm
+#: (module_radiation_driver.F:3879-3887) instead of the :3870-3877 arm.
+#: Kessler's package has neither species and is in neither tuple.
+_SNOW_SPECIES_SCHEMES = ("wsm6", "thompson", "morrison", "nssl")
+
+
+def cloud_optics_scheme(mp_physics) -> str:
+    """Resolve an ``mp_physics`` selector to its cloud-optics coupling.
+
+    See :data:`_MP_CLOUD_OPTICS_SCHEME`.  Raises rather than defaulting:
+    an unmapped selector must not silently inherit Kessler's constant
+    radii and ice-free cloud fraction.
+    """
+    selector = int(mp_physics)
+    try:
+        return _MP_CLOUD_OPTICS_SCHEME[selector]
+    except KeyError:
+        pass
+    recorded = _NO_CLOUD_OPTICS_COUPLING.get(selector)
+    if recorded is not None:
+        # A JUDGED exclusion, not a gap.  Say what was decided and why,
+        # and name the two adapters that do serve the scheme -- never
+        # "add a row", which sends the reader to undo the decision.
+        raise NotImplementedError(
+            f"mp_physics={selector} has no RTE+RRTMGP cloud-optics "
+            f"coupling, deliberately: {recorded} {_CLOUD_OPTICS_REMEDY}"
+        ) from None
+    raise NotImplementedError(
+        f"mp_physics={selector} has no RTE+RRTMGP cloud-optics coupling; "
+        "add a row to woof.globe.core.rrtmgp._MP_CLOUD_OPTICS_SCHEME with its "
+        "Registry package (which fixes F_QI/F_QS for cal_cldfra1) and "
+        "its module_physics_init.F use_mp_re membership (which fixes "
+        "whether its effective radii reach cloud optics) rather than "
+        "letting it fall through to Kessler's constant 10 um / 50 um "
+        "radii -- or, if the omission is deliberate, record the reason in "
+        "woof.globe.core.rrtmgp._NO_CLOUD_OPTICS_COUPLING so the next reader "
+        "finds a decision instead of a gap") from None
+
+
+def scheme_is_ice_active(scheme: str) -> bool:
+    """``F_QI`` for a resolved cloud-optics scheme name.
+
+    This used to answer ``F_QI`` and ``F_QS`` together, which was true of
+    every scheme in the table until P3: mp=50 is ice-active and has no
+    snow species at all, so the two flags separate.  Ask
+    :func:`scheme_has_snow_species` for ``F_QS``.
+    """
+
+    return scheme in _ICE_ACTIVE_SCHEMES
+
+
+def scheme_has_snow_species(scheme: str) -> bool:
+    """``F_QS`` for a resolved cloud-optics scheme name."""
+
+    return scheme in _SNOW_SPECIES_SCHEMES
+
+
+# RRTMGP v1.9's lowest reference pressure.  WRF's wrappers use 0/1e-5 mb
+# at TOA, but the pinned RRTMGP example raises that interface to the gas-table
+# floor before computing dry-column amounts (the same adaptation formerly
+# applied directly to woof's model top).
+RRTMGP_TOA_PRESSURE_PA = 1.005183574463
+WRF_LW_UPPER_DELTA_P_PA = 400.0
+MAX_RADIATION_LAYERS = 128
+
+# module_ra_rrtmg_lw.F:11904-11932.  Pressures are hPa.  The table is the
+# weighted standard-atmosphere mean used by WRF to temperature its 4-hPa
+# model-top buffer layers.
+_WRF_LW_PPROF_HPA = np.array([
+    1000.00, 855.47, 731.82, 626.05, 535.57, 458.16,
+    391.94, 335.29, 286.83, 245.38, 209.91, 179.57,
+    153.62, 131.41, 112.42, 96.17, 82.27, 70.38,
+    60.21, 51.51, 44.06, 37.69, 32.25, 27.59,
+    23.60, 20.19, 17.27, 14.77, 12.64, 10.81,
+    9.25, 7.91, 6.77, 5.79, 4.95, 4.24,
+    3.63, 3.10, 2.65, 2.27, 1.94, 1.66,
+    1.42, 1.22, 1.04, 0.89, 0.76, 0.65,
+    0.56, 0.48, 0.41, 0.35, 0.30, 0.26,
+    0.22, 0.19, 0.16, 0.14, 0.12, 0.10,
+], np.float64)
+_WRF_LW_TPROF_K = np.array([
+    286.96, 281.07, 275.16, 268.11, 260.56, 253.02,
+    245.62, 238.41, 231.57, 225.91, 221.72, 217.79,
+    215.06, 212.74, 210.25, 210.16, 210.69, 212.14,
+    213.74, 215.37, 216.82, 217.94, 219.03, 220.18,
+    221.37, 222.64, 224.16, 225.88, 227.63, 229.51,
+    231.50, 233.73, 236.18, 238.78, 241.60, 244.44,
+    247.35, 250.33, 253.32, 256.30, 259.22, 262.12,
+    264.80, 266.50, 267.59, 268.44, 268.69, 267.76,
+    266.13, 263.96, 261.54, 258.93, 256.15, 253.23,
+    249.89, 246.67, 243.48, 240.25, 236.66, 233.86,
+], np.float64)
+
+#: ``(pressure, temperature)`` for WRF's LW upper-atmosphere climatology, in
+#: ascending pressure order, one array pair per array module.  Uploaded once
+#: instead of once per radiation call: the profile is a literal in this file
+#: and the sort is over 30-odd elements, but every call used to pay two
+#: pageable host-to-device copies for it -- and an H2D of any kind is illegal
+#: inside a CUDA graph capture, so on a radiation-due step this was the line
+#: that made the step uncapturable.  Same bytes, same interpolation, same
+#: answer.
+_LW_CLIMATOLOGY: dict = {}
+
+#: The shortwave g-point solar source, uploaded once per gas-table set.
+#: Same reasoning as :data:`_LW_CLIMATOLOGY`: a shipped table that was
+#: re-copied from host memory on every radiation call.
+#:
+#: Held HERE and not on the radiation callable, which was the first attempt:
+#: ``woof/io/restart.py`` audits every array attribute a callable owns and
+#: refused it as unclassified, and it was right to -- an array on the driver
+#: is state that a restart has to account for, and a cached constant is not
+#: state.  The key holds a reference to the tables object so its ``id`` can
+#: never be recycled under the cache.
+_SOLAR_SOURCE: dict = {}
+
+
+def _cache_device_key(xp=None):
+    """Cache key that includes the CARD, because the value is a DEVICE array.
+
+    A memoized device array keyed on anything but the device is handed to
+    whichever card asks for it next.  With peer access that merely reads
+    across the bus; WITHOUT it -- which is every GeForce box, including the
+    4x RTX 5080 this was found on -- CuPy raises outright:
+
+        ValueError: The device where the array resides (0) is different from
+        the current device (1).  Peer access is unavailable...
+
+    ``tilestream/mgstream.py`` documents five sites with exactly this defect
+    (rrtmgp.GasTables/CloudTables.to_device, kf._device_table,
+    mynn_pbl_runtime._VALIDITY_FLAGS, noahmp_vegeflux_gpu._module,
+    noahmp_slab_libm._KERNEL_CACHE) and keys each on the current device.
+    These two were NOT among them, and they are on the longwave and
+    shortwave radiation paths, so any multi-GPU run with radiation on hits
+    them at the first due step on the second card.
+    """
+    name = "cupy" if xp is None else getattr(xp, "__name__", str(xp))
+    if name == "cupy":
+        import cupy as cp
+        return (name, int(cp.cuda.Device().id))
+    return (name,)
+
+
+def _solar_source_device(sw_tables):
+    import cupy as cp
+
+    key = (id(sw_tables), _cache_device_key())
+    held = _SOLAR_SOURCE.get(key)
+    if held is None:
+        held = (sw_tables, cp.asarray(sw_tables.solar_source, dtype=DTYPE))
+        _SOLAR_SOURCE[key] = held
+    return held[1]
+
+
+#: Per-device trace-gas ``(slots, values)`` pairs, keyed the same way as
+#: :data:`_LW_CLIMATOLOGY`.  Two arrays of one or two elements, otherwise
+#: rebuilt per chunk -- two allocations and two host-to-device copies each,
+#: 2364 times an hour, for a value that changes once per forecast.
+_TRACE_VMR_DEVICE: dict = {}
+
+
+def _trace_vmr_device(trace, *, xp):
+    """Device ``(slot_indices, values)`` for the well-mixed trace gases."""
+    key = (_cache_device_key(xp), trace)
+    cached = _TRACE_VMR_DEVICE.get(key)
+    if cached is None:
+        cached = (
+            xp.asarray(np.asarray([slot for slot, _ in trace],
+                                  dtype=np.int32)),
+            xp.asarray(np.asarray([value for _, value in trace],
+                                  dtype=np.float32)),
+        )
+        _TRACE_VMR_DEVICE[key] = cached
+    return cached
+
+
+def _lw_climatology(xp):
+    key = _cache_device_key(xp)
+    cached = _LW_CLIMATOLOGY.get(key)
+    if cached is None:
+        order = np.argsort(_WRF_LW_PPROF_HPA)
+        cached = (xp.asarray(_WRF_LW_PPROF_HPA[order], dtype=DTYPE),
+                  xp.asarray(_WRF_LW_TPROF_K[order], dtype=DTYPE))
+        _LW_CLIMATOLOGY[key] = cached
+    return cached
+
+
+@dataclass(frozen=True)
+class _RadiationColumnProfile:
+    play: object
+    plev: object
+    tlay: object
+    tlev: object
+    qv: object
+    model_nlay: int
+    upper_nlay: int
+
+
+def rrtmgp_above_model_layer_counts(
+        p_top: float, *, pressure_floor: float = RRTMGP_TOA_PRESSURE_PA,
+) -> tuple[int, int]:
+    """Return WRF v4.6.1's ``(LW, SW)`` above-model layer counts.
+
+    LW uses ``nint(p_top*.01/4)`` 4-hPa layers
+    (module_ra_rrtmg_lw.F:11565,12998-13001).  SW uses one model-top-to-TOA
+    layer (:10756-10760).  A column whose possible layer midpoint is already
+    below the pinned coefficient floor needs no representable extra layer.
+    """
+    p_top = float(p_top)
+    pressure_floor = float(pressure_floor)
+    if (not np.isfinite(p_top) or not np.isfinite(pressure_floor)
+            or p_top < 0.0 or pressure_floor <= 0.0):
+        raise ValueError("radiation top pressures must be finite and nonnegative")
+    if p_top <= pressure_floor:
+        return 0, 0
+    # Fortran NINT is nearest integer, with a positive half rounded upward.
+    lw = int(np.floor(p_top / WRF_LW_UPPER_DELTA_P_PA + 0.5))
+    sw = int(0.5 * p_top >= pressure_floor)
+    return max(0, lw), sw
+
+
+def _validate_model_top_interface(plev, p_top: float, *, xp=None) -> None:
+    """Check the model-top interface against the declared ``p_top``.
+
+    This reduces on device and reads the result back, so it SYNCHRONIZES.
+    That is why the chunk loop hoists it: ``plev`` is the same array for
+    every chunk of a firing, so checking each chunk over again bought
+    nothing and cost a synchronization per chunk per domain per band.
+    """
+    _validate_model_top_plane(plev[:, -1], p_top, xp=xp)
+
+
+def _validate_model_top_plane(top, p_top: float, *, xp=None) -> None:
+    """:func:`_validate_model_top_interface` on the top interface alone,
+    for a driver that never holds the whole ``plev`` at once."""
+    if xp is None:
+        import cupy as xp
+    if not bool(xp.allclose(
+            top, DTYPE(p_top), rtol=DTYPE(0.0),
+            atol=DTYPE(max(1.0e-3, abs(float(p_top)) * 2.0e-7)))):
+        raise ValueError(
+            "radiation workspace top pressure does not match the model-top "
+            f"interface ({p_top:g} Pa)")
+
+
+#: Per-device above-model rows that depend on the model TOP alone, keyed
+#: like :data:`_LW_CLIMATOLOGY`.  The synthetic cap above the model is built
+#: from `plev[:, -1]`, and WRF's mass coordinate makes that one number for
+#: the whole grid -- `physics.py` fills the top interface with a scalar
+#: (`p_interface[nz] = state.p_top`).  So the pressure ladder and the
+#: climatology lookups on it are the SAME for every column and every chunk,
+#: and rebuilding them per chunk cost two `interp` calls and a dozen small
+#: kernels 1182 times an hour.
+_ABOVE_MODEL_ROWS: dict = {}
+
+
+def _above_model_rows(kind, upper_nlay, p_top, pressure_floor, *, xp):
+    """``(plev_row, play_row, climo_top, climo_row)`` for a uniform cap.
+
+    Shaped (1, upper_nlay) so the caller broadcasts against its own
+    (ncol, 1) top temperature.  Every value is what the per-column
+    construction produced when every column carried the same top pressure,
+    element for element -- these are the same expressions on a single row.
+    """
+    key = (_cache_device_key(xp), kind, int(upper_nlay),
+           float(p_top), float(pressure_floor))
+    cached = _ABOVE_MODEL_ROWS.get(key)
+    if cached is not None:
+        return cached
+    top_pressure = xp.full((1, 1), DTYPE(p_top), dtype=DTYPE)
+    if kind == "sw":
+        plev_row = xp.full((1, 1), DTYPE(pressure_floor), dtype=DTYPE)
+        play_row = DTYPE(0.5) * top_pressure
+        climo_top = climo_row = None
+    else:
+        offsets = (WRF_LW_UPPER_DELTA_P_PA
+                   * xp.arange(1, upper_nlay + 1, dtype=DTYPE))[None, :]
+        plev_row = top_pressure - offsets
+        plev_row[:, -1] = DTYPE(pressure_floor)
+        interfaces = xp.concatenate((top_pressure, plev_row), axis=1)
+        play_row = DTYPE(0.5) * (interfaces[:, :-1] + interfaces[:, 1:])
+        pprof, tprof = _lw_climatology(xp)
+        climo_top = xp.interp(
+            top_pressure.ravel() * DTYPE(0.01), pprof, tprof).reshape(1, 1)
+        climo_row = xp.interp(
+            plev_row.ravel() * DTYPE(0.01), pprof, tprof).reshape(
+                1, upper_nlay)
+    cached = (plev_row, play_row, climo_top, climo_row)
+    _ABOVE_MODEL_ROWS[key] = cached
+    return cached
+
+
+def _extend_above_model_profile(
+        play, plev, tlay, tlev, qv, *, p_top: float, kind: str,
+        pressure_floor: float = RRTMGP_TOA_PRESSURE_PA, xp=None,
+        validate_top: bool = True,
+        uniform_top: bool = False) -> _RadiationColumnProfile:
+    """Append WRF's clear upper atmosphere in bottom-to-top layout.
+
+    ``uniform_top`` asserts that every column's ``plev[:, -1]`` holds the
+    same value, which lets the pressure ladder above the model and the two
+    climatology lookups on it come from :func:`_above_model_rows` as single
+    cached rows instead of being rebuilt per column per chunk.  It is
+    OFF by default and the caller owns the claim: `RRTMGPRadiation.__call__`
+    checks it on device once per firing.  The values are identical either
+    way -- the fast path runs the same expressions on one row and lets
+    broadcasting do what the wide arrays were doing by hand.
+
+    The LW pressure/temperature construction transcribes
+    ``module_ra_rrtmg_lw.F:12322-12393``: 400-Pa interfaces, a final TOA
+    interface adapted to the RRTMGP coefficient floor, the 60-level WRF
+    standard-atmosphere temperature interpolant shifted to meet the live
+    model-top temperature, and layer temperatures averaged from interfaces.
+    SW transcribes ``module_ra_rrtmg_sw.F:10910-10925``: one layer with
+    ``play=.5*ptop`` and an isothermal top.  Both hold top-layer water vapor
+    constant; well-mixed gases and pressure-interpolated ozone are filled by
+    :meth:`RRTMGPRadiation._gas_vmr` after extension.
+    """
+    if kind not in ("lw", "sw"):
+        raise ValueError("above-model profile kind must be 'lw' or 'sw'")
+    if xp is None:
+        import cupy as xp
+
+    play = xp.ascontiguousarray(xp.asarray(play, dtype=DTYPE))
+    plev = xp.ascontiguousarray(xp.asarray(plev, dtype=DTYPE))
+    tlay = xp.ascontiguousarray(xp.asarray(tlay, dtype=DTYPE))
+    tlev = xp.ascontiguousarray(xp.asarray(tlev, dtype=DTYPE))
+    qv = xp.ascontiguousarray(xp.asarray(qv, dtype=DTYPE))
+    if play.ndim != 2:
+        raise ValueError("play must have shape (ncol,nlay)")
+    ncol, model_nlay = play.shape
+    expected = {
+        "plev": (plev, (ncol, model_nlay + 1)),
+        "tlay": (tlay, play.shape), "tlev": (tlev, plev.shape),
+        "qv": (qv, play.shape),
+    }
+    for name, (value, shape) in expected.items():
+        if value.shape != shape:
+            raise ValueError(f"{name} must have shape {shape}, got {value.shape}")
+
+    lw_upper, sw_upper = rrtmgp_above_model_layer_counts(
+        p_top, pressure_floor=pressure_floor)
+    upper_nlay = lw_upper if kind == "lw" else sw_upper
+    if model_nlay + upper_nlay > MAX_RADIATION_LAYERS:
+        raise ValueError(
+            "RRTMGP CUDA RTE supports at most "
+            f"{MAX_RADIATION_LAYERS} layers including the above-model "
+            f"column; got {model_nlay + upper_nlay}")
+    if validate_top:
+        _validate_model_top_interface(plev, p_top, xp=xp)
+    if upper_nlay == 0:
+        return _RadiationColumnProfile(
+            play, plev, tlay, tlev, qv, model_nlay, 0)
+
+    top_pressure = plev[:, -1:]
+    top_temperature = tlev[:, -1:]
+    top_qv = qv[:, -1:]
+    rows = (_above_model_rows(kind, upper_nlay, p_top, pressure_floor, xp=xp)
+            if uniform_top else None)
+    if kind == "sw":
+        if rows is not None:
+            plev_row, play_row, _, _ = rows
+            upper_plev = xp.broadcast_to(plev_row, (ncol, 1))
+            upper_play = xp.broadcast_to(play_row, (ncol, 1))
+        else:
+            upper_plev = xp.full(
+                (ncol, 1), DTYPE(pressure_floor), dtype=DTYPE)
+            upper_play = DTYPE(0.5) * top_pressure
+        upper_tlev = top_temperature.copy()
+        upper_tlay = top_temperature.copy()
+    else:
+        if rows is not None:
+            plev_row, play_row, climo_top, climo_upper = rows
+            upper_plev = xp.broadcast_to(plev_row, (ncol, upper_nlay))
+            upper_play = xp.broadcast_to(play_row, (ncol, upper_nlay))
+        else:
+            offsets = (WRF_LW_UPPER_DELTA_P_PA
+                       * xp.arange(1, upper_nlay + 1, dtype=DTYPE))[None, :]
+            upper_plev = top_pressure - offsets
+            upper_plev[:, -1] = DTYPE(pressure_floor)
+            all_upper_interfaces = xp.concatenate(
+                (top_pressure, upper_plev), axis=1)
+            upper_play = DTYPE(0.5) * (
+                all_upper_interfaces[:, :-1] + all_upper_interfaces[:, 1:])
+
+            pprof, tprof = _lw_climatology(xp)
+            climo_top = xp.interp(
+                top_pressure.ravel() * DTYPE(0.01), pprof, tprof).reshape(
+                    ncol, 1)
+            climo_upper = xp.interp(
+                upper_plev.ravel() * DTYPE(0.01), pprof, tprof).reshape(
+                    ncol, upper_nlay)
+        # Broadcast, not tile: (1, upper) against the chunk's own (ncol, 1)
+        # top temperature is the same subtraction and the same addition the
+        # wide arrays performed, element for element.
+        upper_tlev = climo_upper + (top_temperature - climo_top)
+        all_upper_tlev = xp.concatenate(
+            (top_temperature, upper_tlev), axis=1)
+        upper_tlay = DTYPE(0.5) * (
+            all_upper_tlev[:, :-1] + all_upper_tlev[:, 1:])
+    upper_qv = xp.broadcast_to(top_qv, (ncol, upper_nlay))
+    return _RadiationColumnProfile(
+        xp.ascontiguousarray(xp.concatenate((play, upper_play), axis=1)),
+        xp.ascontiguousarray(xp.concatenate((plev, upper_plev), axis=1)),
+        xp.ascontiguousarray(xp.concatenate((tlay, upper_tlay), axis=1)),
+        xp.ascontiguousarray(xp.concatenate((tlev, upper_tlev), axis=1)),
+        xp.ascontiguousarray(xp.concatenate((qv, upper_qv), axis=1)),
+        model_nlay, upper_nlay)
+
+
+def _model_flux_interfaces(flux, model_nlay: int, *, xp=None):
+    """Discard upper-atmosphere heating levels while retaining model-top flux."""
+    if xp is None:
+        import cupy as xp
+    flux = xp.asarray(flux, dtype=DTYPE)
+    if flux.ndim != 2 or flux.shape[1] < int(model_nlay) + 1:
+        raise ValueError("radiation flux column does not reach model top")
+    return flux[:, :int(model_nlay) + 1]
+
+
+#: Named per-chunk scratch buffers.  `_prepare_above_model_chunk` runs 2364
+#: times an hour and allocated ~15 fresh arrays each time; the profile puts
+#: it at 2.78 s of HOST against 0.98 s of device, the worst ratio in
+#: radiation.  Each entry is keyed by a call-site NAME as well as shape and
+#: dtype, which is what makes reuse safe: two temporaries that are live at
+#: the same moment ask under different names and can never be handed the
+#: same bytes.  Bounded by construction -- fifteen names times the handful
+#: of chunk widths a domain tree produces (full width plus one ragged tail
+#: per domain), a few MiB in total, and it REPLACES pool allocations rather
+#: than adding to them.
+_CHUNK_SCRATCH: dict = {}
+
+
+def _chunk_scratch(name: str, shape, *, xp, dtype=DTYPE):
+    """``(buffer, first_use)`` for one named per-chunk temporary.
+
+    ``first_use`` lets a caller skip re-establishing bytes that its own
+    previous call already wrote and nothing else can have touched -- see
+    the clear-layer tail in :func:`_append_clear_upper_layers`.
+    """
+    shape = tuple(int(extent) for extent in shape)
+    key = (_cache_device_key(xp), name, shape, np.dtype(dtype).str)
+    buffer = _CHUNK_SCRATCH.get(key)
+    if buffer is None:
+        buffer = xp.empty(shape, dtype=dtype)
+        _CHUNK_SCRATCH[key] = buffer
+        return buffer, True
+    return buffer, False
+
+
+def _append_clear_upper_layers(value, upper_nlay: int, *, xp=None,
+                               scratch: str | None = None):
+    """Append zero-valued cloud/path layers to a model-layer field.
+
+    ``scratch`` names a reused buffer (:func:`_chunk_scratch`).  The clear
+    tail is then written ONCE: this call site is the only writer of that
+    name, so on every later call the zeros it wrote the first time are
+    still there.  Same bytes, one fewer fill kernel and one fewer
+    allocation per call, five times per chunk per band.
+    """
+    if xp is None:
+        import cupy as xp
+    value = xp.ascontiguousarray(xp.asarray(value, dtype=DTYPE))
+    if value.ndim != 2:
+        raise ValueError("clear-layer input must have shape (ncol,nlay)")
+    upper_nlay = int(upper_nlay)
+    if upper_nlay < 0:
+        raise ValueError("upper_nlay must be nonnegative")
+    if upper_nlay == 0:
+        return value
+    # One allocation and one copy: `zeros` + `concatenate` allocated the
+    # clear block only to copy it straight into a second array, and this
+    # runs five times per chunk per band.
+    model_nlay = value.shape[1]
+    shape = (value.shape[0], model_nlay + upper_nlay)
+    if scratch is None:
+        out, clear_tail = xp.empty(shape, dtype=DTYPE), True
+    else:
+        out, clear_tail = _chunk_scratch(scratch, shape, xp=xp)
+    out[:, :model_nlay] = value
+    if clear_tail:
+        out[:, model_nlay:] = DTYPE(0.0)
+    return out
+
+
+def _array(value, dtype):
+    """Materialize a masked/NetCDF value as a C-contiguous plain array."""
+    return np.ascontiguousarray(np.asarray(value, dtype=dtype))
+
+
+def _packed_variable(variable, dimensions, dtype):
+    """Pack a NetCDF variable in a kernel layout selected by dimension name."""
+    source = tuple(variable.dimensions)
+    target = tuple(dimensions)
+    if len(source) != len(target) or set(source) != set(target):
+        raise ValueError(
+            f"{getattr(variable, 'name', 'variable')} dimensions {source} "
+            f"do not match required dimensions {target}")
+    permutation = tuple(source.index(name) for name in target)
+    return _array(np.transpose(variable[:], permutation), dtype)
+
+
+def _strings(variable) -> tuple[str, ...]:
+    values = chartostring(variable[:])
+    return tuple(str(value).strip().lower() for value in values.tolist())
+
+
+def _make_flavors(key_species: np.ndarray,
+                  band_lims: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Transcribe ``create_flavor``/``create_gpoint_flavor`` (0-based).
+
+    Gas slot zero is dry air.  Upstream rewrites the special ``(0,0)`` pair
+    to ``(2,2)`` because those coefficients are identically zero.
+    """
+    pairs: list[tuple[int, int]] = []
+    for iband in range(key_species.shape[0]):
+        for iatm in range(2):
+            pair = tuple(int(x) for x in key_species[iband, iatm])
+            if pair == (0, 0):
+                pair = (2, 2)
+            if pair not in pairs:
+                pairs.append(pair)
+    flavors = _array(pairs, np.int32)
+    gpoint_flavor = np.empty((2, int(band_lims[-1, 1]) + 1), np.int32)
+    lookup = {pair: i for i, pair in enumerate(pairs)}
+    for iband, (start, end) in enumerate(band_lims):
+        for iatm in range(2):
+            pair = tuple(int(x) for x in key_species[iband, iatm])
+            if pair == (0, 0):
+                pair = (2, 2)
+            gpoint_flavor[iatm, start:end + 1] = lookup[pair]
+    return flavors, np.ascontiguousarray(gpoint_flavor)
+
+
+def _minor_gas_indices(gas_names: tuple[str, ...], gas_minor,
+                       identifier_minor, minor_identifiers) -> np.ndarray:
+    identifier_map = {name: i for i, name in enumerate(identifier_minor)}
+    gas_map = {name: i + 1 for i, name in enumerate(gas_names)}
+    return _array([gas_map[gas_minor[identifier_map[name]]]
+                   for name in minor_identifiers], np.int32)
+
+
+def _scaling_gas_indices(gas_names: tuple[str, ...], names) -> np.ndarray:
+    gas_map = {name: i + 1 for i, name in enumerate(gas_names)}
+    return _array([gas_map.get(name, -1) for name in names], np.int32)
+
+
+@dataclass
+class DeviceTables:
+    """Namespace holding cached device arrays plus scalar metadata."""
+
+    _values: dict[str, object]
+
+    def __getattr__(self, name):
+        try:
+            return self._values[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
+@dataclass
+class GasOpticsResult:
+    """Gas extinction optical depth and optional SW scattering properties."""
+
+    tau: object
+    ssa: object | None = None
+    g: object | None = None
+    col_dry: object | None = None
+
+
+@dataclass
+class FluxResult:
+    flux_up: object
+    flux_dn: object
+    flux_dir: object | None = None
+
+
+@dataclass
+class PlanckSourceResult:
+    lay_source: object
+    lev_source: object
+    sfc_source: object
+
+
+@dataclass
+class _InterpolationMetadata:
+    """Driver-owned pressure/temperature indices and FP32 fractions.
+
+    Instances are created for one ``RRTMGPRadiation.__call__`` and are never
+    accepted by the exported gas/source entry points.  Keeping the object
+    private makes its table/input provenance and one-call lifetime explicit.
+    """
+
+    iatm: object
+    jt: object
+    jp: object
+    ftemp: object
+    fpress: object
+
+    def __getitem__(self, key):
+        return _InterpolationMetadata(
+            self.iatm[key], self.jt[key], self.jp[key],
+            self.ftemp[key], self.fpress[key])
+
+
+@dataclass
+class CloudOpticsResult:
+    """Band-resolved cloud extinction and scattering properties."""
+
+    tau: object
+    ssa: object
+    g: object
+
+
+@dataclass
+class HydrometeorPaths:
+    """Condensate paths (g m-2) and RRTMGP particle sizes (microns).
+
+    ``size_bounding`` is the :class:`SizeBounding` record of what
+    :func:`hydrometeor_paths` did to bring the sizes inside the loaded
+    cloud-optics tables' domain (None on the chunk views and the
+    synthetic constructions that never bound anything).
+    ``size_bounding_terms`` is the :class:`SizeBoundingTerms` a chunked
+    coupling hands back when it was asked to leave the record's path sums
+    unformed (``path_sums=False``); None otherwise.
+    """
+
+    clwp: object
+    ciwp: object
+    reliq: object
+    dgice: object
+    size_bounding: object = None
+    size_bounding_terms: object = None
+
+
+@dataclass(frozen=True)
+class CloudSizeBounds:
+    """The particle-size domain of a loaded cloud-optics table pair.
+
+    Liquid effective RADIUS and ice effective DIAMETER in microns, read
+    from the netCDF (``radliq_lwr``/``radliq_upr``, ``diamice_lwr``/
+    ``diamice_upr``); the LW and SW tables of one data release carry the
+    same domain and :meth:`from_tables` refuses a pair that does not, so
+    one bounding serves both bands.
+    """
+
+    radliq_lwr: float
+    radliq_upr: float
+    diamice_lwr: float
+    diamice_upr: float
+
+    @classmethod
+    def from_tables(cls, *tables) -> "CloudSizeBounds":
+        if not tables:
+            raise ValueError("CloudSizeBounds.from_tables needs a table")
+        bounds = {
+            (float(t.radliq_lwr), float(t.radliq_upr),
+             float(t.diamice_lwr), float(t.diamice_upr))
+            for t in tables}
+        if len(bounds) != 1:
+            raise ValueError(
+                "the LW and SW cloud-optics tables disagree on their "
+                f"particle-size domains: {sorted(bounds)}; one bounding "
+                "cannot serve both bands")
+        return cls(*next(iter(bounds)))
+
+
+_SHIPPED_SIZE_BOUNDS: list = []
+
+
+def shipped_cloud_size_bounds() -> CloudSizeBounds:
+    """The size domain of the shipped (v1.9) LW and SW cloud tables."""
+    if not _SHIPPED_SIZE_BOUNDS:
+        _SHIPPED_SIZE_BOUNDS.append(CloudSizeBounds.from_tables(
+            load_cloud_tables("lw"), load_cloud_tables("sw")))
+    return _SHIPPED_SIZE_BOUNDS[0]
+
+
+SIZE_BOUNDING_FIELDS = (
+    "liquid_cells", "liquid_below_cells", "liquid_above_cells",
+    "liquid_below_columns", "liquid_above_columns",
+    "liquid_above_path_fraction",
+    "ice_cells", "ice_below_cells", "ice_above_cells",
+    "ice_below_columns", "ice_above_columns",
+    "ice_above_path_fraction",
+    "liquid_sentinel_cells", "ice_sentinel_cells",
+    "liquid_above_radiative_fraction", "ice_above_radiative_fraction",
+    "liquid_unsampled_cells", "ice_unsampled_cells",
+    "liquid_sentinel_radiative_fraction", "ice_sentinel_radiative_fraction")
+
+#: The radius Morrison's kernel writes where a species had no mass at its
+#: last call (morrison.cu morrison_finalize_levels, microns).  A cell that
+#: gained the species since, through the transport between two
+#: microphysics calls, carries this beside real mass at radiation time.
+MORRISON_NO_MASS_RADIUS_UM = 25.0
+
+
+@dataclass(frozen=True)
+class SizeBounding:
+    """What bringing the particle sizes into the table domain touched.
+
+    Cells are (column, layer) pairs that carry the species' condensate
+    path; columns are the ones with at least one such cell.  ``*_above``
+    cells left the domain through the UPPER bound and were carried
+    geometrically (the in-cloud path scaled by bound/size, the size set
+    to the bound, so the layer's extinction is the one a larger table
+    would have given in the geometric-optics limit where extinction per
+    unit mass goes as 1/size); ``*_below`` cells were clipped to the
+    lower bound.  ``*_above_path_fraction`` is the share of the species'
+    total IN-CLOUD path that sat in the carried cells: a count of what
+    the coupling handed the optics, not a radiative weight, because the
+    in-cloud path is the grid-mean path over max(0.01, cloud fraction)
+    and the McICA generator samples a cell cloudy with probability
+    equal to its cloud fraction (never, at fraction 0).  On the T255
+    control's checkpoints the cells with fraction 0 held 18 percent of
+    the in-cloud ice path and 0.4 percent of the grid-mean ice path.
+    ``*_above_radiative_fraction`` weights every cell's in-cloud path by
+    its cloud fraction (the grid-mean condensate the overlap generator
+    radiates in expectation), so it is the radiative weight of the
+    treatment; ``*_unsampled_cells`` counts the cells with path whose
+    cloud fraction is 0 (their sizes are bounded and counted but never
+    radiate); ``*_sentinel_radiative_fraction`` is the same weight for
+    the cells that carried the scheme's no-mass radius beside mass.
+    Without a cloud fraction the coupling treats every cell with path as
+    overcast, and the radiative fractions equal the in-cloud ones.
+    Values are 0-d arrays on the array module that built them until
+    :meth:`host` is called.
+    """
+
+    liquid_cells: object
+    liquid_below_cells: object
+    liquid_above_cells: object
+    liquid_below_columns: object
+    liquid_above_columns: object
+    liquid_above_path_fraction: object
+    ice_cells: object
+    ice_below_cells: object
+    ice_above_cells: object
+    ice_below_columns: object
+    ice_above_columns: object
+    ice_above_path_fraction: object
+    #: Cells with mass whose scheme radius was the kernel's no-mass
+    #: sentinel and were given the moment reconstruction instead
+    #: (Morrison only; 0 elsewhere).
+    liquid_sentinel_cells: object = 0
+    ice_sentinel_cells: object = 0
+    liquid_above_radiative_fraction: object = 0.0
+    ice_above_radiative_fraction: object = 0.0
+    liquid_unsampled_cells: object = 0
+    ice_unsampled_cells: object = 0
+    liquid_sentinel_radiative_fraction: object = 0.0
+    ice_sentinel_radiative_fraction: object = 0.0
+
+    def host(self) -> dict:
+        out = {}
+        for name in SIZE_BOUNDING_FIELDS:
+            value = getattr(self, name)
+            if hasattr(value, "get"):
+                value = value.get()
+            value = float(np.asarray(value))
+            out[name] = value if name.endswith("fraction") else int(value)
+        return out
+
+
+SIZE_TREATMENT_CARRY = "carry"
+SIZE_TREATMENT_CLIP = "clip"
+SIZE_TREATMENTS = (SIZE_TREATMENT_CARRY, SIZE_TREATMENT_CLIP)
+
+#: Bulk densities (kg m-3) of Morrison's cloud ice and snow (the
+#: kernel's MRHOI and MRHOS: the sphere-equivalent mass-diameter relation
+#: its effective radius 3 / (2 lambda) is defined with) and of the ice the
+#: RRTMGP cloud table is indexed by.  The table's size axis is the
+#: effective diameter of solid ice, D_eff = (3/2) V / A: its extinction
+#: at 10 um reads 0.322 m2/g against the geometric 3 / (rho D) =
+#: 3 / (917 kg/m3 * 10 um) = 0.327, so a particle of bulk density rho_x
+#: and sphere-equivalent diameter D_x carries the area per unit mass of
+#: solid ice of diameter D_x * rho_x / rho_ice, and that is the size the
+#: table must be read at.  Reading it at D_x itself (every tree before
+#: 2026-09-04) gave a 500 um Morrison snowflake the extinction of a solid
+#: 500 um ice sphere, one ninth of its own.
+MORRISON_ICE_DENSITY_KG_M3 = 500.0
+MORRISON_SNOW_DENSITY_KG_M3 = 100.0
+RRTMGP_ICE_TABLE_DENSITY_KG_M3 = 917.0
+
+
+@dataclass(frozen=True)
+class SizeBoundingTerms:
+    """What the record's path fractions reduce over, unreduced.
+
+    A coupling that runs the grid one column chunk at a time cannot form
+    the ``*_fraction`` fields of :class:`SizeBounding` from its chunks: a
+    float32 sum over the whole grid and the sum of per-chunk float32 sums
+    are not the same bits, and the record is written into every
+    checkpoint.  So :func:`bound_cloud_sizes` called with
+    ``path_sums=False`` leaves the fractions unformed and hands these
+    back instead -- the in-cloud paths BEFORE the carry, the cells whose
+    size left the domain through the upper bound, and the cells that
+    carried the scheme's no-mass sentinel beside mass (already
+    intersected with the cells that carry path; None without a sentinel
+    coupling) -- for the caller to assemble over the whole grid and hand
+    to :func:`finish_size_bounding`, which reduces them once with the
+    same expressions the one-call form uses.  The counts of the record
+    are exact integers and add across chunks as they are.
+    """
+
+    clwp: object
+    ciwp: object
+    liquid_above: object
+    ice_above: object
+    liquid_sentinel: object = None
+    ice_sentinel: object = None
+
+
+def _size_bounding_fraction(part, whole, *, xp, dtype):
+    return xp.where(whole > 0, part / xp.maximum(whole, dtype.type(1.0e-30)),
+                    dtype.type(0.0))
+
+
+def _size_bounding_path_sums(terms: SizeBoundingTerms, weight, *, xp, dtype) -> dict:
+    """The ten path reductions of the record, in the one-call form's
+    expressions: ``weight`` is the layer cloud fraction array or the
+    scalar 1 of an overcast coupling."""
+    clwp, ciwp = terms.clwp, terms.ciwp
+    liquid_above, ice_above = terms.liquid_above, terms.ice_above
+    zero = dtype.type(0.0)
+    sums = {
+        "total_liquid": xp.sum(clwp),
+        "total_ice": xp.sum(ciwp),
+        "liquid_carried": xp.sum(xp.where(liquid_above, clwp, zero)),
+        "ice_carried": xp.sum(xp.where(ice_above, ciwp, zero)),
+    }
+    # The radiative weight of a cell is its in-cloud path times the
+    # fraction of subcolumns the overlap generator makes cloudy there.
+    sums["liquid_radiative"] = xp.sum(clwp * weight)
+    sums["ice_radiative"] = xp.sum(ciwp * weight)
+    sums["liquid_carried_radiative"] = xp.sum(
+        xp.where(liquid_above, clwp * weight, zero))
+    sums["ice_carried_radiative"] = xp.sum(
+        xp.where(ice_above, ciwp * weight, zero))
+    if terms.liquid_sentinel is None:
+        sums["liquid_sentinel_radiative"] = zero
+        sums["ice_sentinel_radiative"] = zero
+    else:
+        sums["liquid_sentinel_radiative"] = xp.sum(xp.where(
+            terms.liquid_sentinel, clwp * weight, zero))
+        sums["ice_sentinel_radiative"] = xp.sum(xp.where(
+            terms.ice_sentinel, ciwp * weight, zero))
+    return sums
+
+
+def size_bounding_column_sums(terms: SizeBoundingTerms, cldfra, *, xp) -> dict:
+    """The ten path reductions of the record PER COLUMN: each value is
+    ``(ncol,)``, the layer sum of what :func:`_size_bounding_path_sums`
+    sums over every cell at once.
+
+    For a coupling that runs the grid a latitude band at a time.  The
+    record's fractions are ratios of whole-grid sums, so a band cannot
+    form them from its own cells and the sum of per-band scalars is not
+    the whole grid's sum bit for bit; the per-column sums are assembled
+    into whole-grid planes by the caller and reduced once
+    (:func:`size_bounding_fractions_from_sums`), the same operand in the
+    same order whatever the band count.  The layer sum inside a column is
+    column-local and so is identical whatever the band.
+    """
+    dtype = terms.clwp.dtype
+    weight = (dtype.type(1.0) if cldfra is None
+              else xp.asarray(cldfra, dtype=dtype))
+    clwp, ciwp = terms.clwp, terms.ciwp
+    liquid_above, ice_above = terms.liquid_above, terms.ice_above
+    zero = dtype.type(0.0)
+    ncol = int(clwp.shape[0])
+
+    def column(value):
+        return xp.sum(value, axis=1)
+
+    sums = {
+        "total_liquid": column(clwp),
+        "total_ice": column(ciwp),
+        "liquid_carried": column(xp.where(liquid_above, clwp, zero)),
+        "ice_carried": column(xp.where(ice_above, ciwp, zero)),
+        "liquid_radiative": column(clwp * weight),
+        "ice_radiative": column(ciwp * weight),
+        "liquid_carried_radiative": column(
+            xp.where(liquid_above, clwp * weight, zero)),
+        "ice_carried_radiative": column(
+            xp.where(ice_above, ciwp * weight, zero)),
+    }
+    if terms.liquid_sentinel is None:
+        sums["liquid_sentinel_radiative"] = xp.zeros(ncol, dtype=dtype)
+        sums["ice_sentinel_radiative"] = xp.zeros(ncol, dtype=dtype)
+    else:
+        sums["liquid_sentinel_radiative"] = column(xp.where(
+            terms.liquid_sentinel, clwp * weight, zero))
+        sums["ice_sentinel_radiative"] = column(xp.where(
+            terms.ice_sentinel, ciwp * weight, zero))
+    return sums
+
+
+SIZE_BOUNDING_SUM_NAMES = (
+    "total_liquid", "total_ice", "liquid_carried", "ice_carried",
+    "liquid_radiative", "ice_radiative", "liquid_carried_radiative",
+    "ice_carried_radiative", "liquid_sentinel_radiative",
+    "ice_sentinel_radiative")
+
+
+def size_bounding_fractions_from_sums(sums: dict) -> dict[str, float]:
+    """The record's six ``*_fraction`` fields from whole-grid path sums
+    (host floats), in the one-call form's expressions."""
+    dtype = np.dtype(np.float32)
+    values = {name: np.asarray(sums[name], dtype=dtype)
+              for name in SIZE_BOUNDING_SUM_NAMES}
+    fractions = _size_bounding_fractions(values, xp=np, dtype=dtype)
+    return {name: float(value) for name, value in fractions.items()}
+
+
+def _size_bounding_fractions(sums: dict, *, xp, dtype) -> dict:
+    fraction = lambda part, whole: _size_bounding_fraction(  # noqa: E731
+        part, whole, xp=xp, dtype=dtype)
+    return {
+        "liquid_above_path_fraction": fraction(
+            sums["liquid_carried"], sums["total_liquid"]),
+        "ice_above_path_fraction": fraction(
+            sums["ice_carried"], sums["total_ice"]),
+        "liquid_above_radiative_fraction": fraction(
+            sums["liquid_carried_radiative"], sums["liquid_radiative"]),
+        "ice_above_radiative_fraction": fraction(
+            sums["ice_carried_radiative"], sums["ice_radiative"]),
+        "liquid_sentinel_radiative_fraction": fraction(
+            sums["liquid_sentinel_radiative"], sums["liquid_radiative"]),
+        "ice_sentinel_radiative_fraction": fraction(
+            sums["ice_sentinel_radiative"], sums["ice_radiative"]),
+    }
+
+
+SIZE_BOUNDING_COUNT_FIELDS = tuple(
+    name for name in SIZE_BOUNDING_FIELDS if not name.endswith("fraction"))
+
+
+def add_size_bounding_counts(total: SizeBounding | None,
+                             record: SizeBounding) -> SizeBounding:
+    """``total`` plus one chunk's counts (the fraction fields stay as
+    ``record`` left them: None on a deferred record)."""
+    if total is None:
+        return record
+    return dataclasses.replace(total, **{
+        name: getattr(total, name) + getattr(record, name)
+        for name in SIZE_BOUNDING_COUNT_FIELDS})
+
+
+def finish_size_bounding(counts: SizeBounding, terms: SizeBoundingTerms,
+                         cldfra, *, xp) -> SizeBounding:
+    """The record of a chunked coupling: ``counts`` summed over the
+    chunks, the fractions reduced over the whole-grid ``terms`` here,
+    once, exactly as :func:`bound_cloud_sizes` reduces them in one call
+    on the whole grid."""
+    dtype = terms.clwp.dtype
+    weight = (dtype.type(1.0) if cldfra is None
+              else xp.asarray(cldfra, dtype=dtype))
+    sums = _size_bounding_path_sums(terms, weight, xp=xp, dtype=dtype)
+    return dataclasses.replace(
+        counts, **_size_bounding_fractions(sums, xp=xp, dtype=dtype))
+
+
+def bound_cloud_sizes(clwp, ciwp, reliq, dgice, bounds: CloudSizeBounds, *,
+                      xp, treatment: str = SIZE_TREATMENT_CARRY,
+                      sentinel_counts=None, cldfra=None,
+                      sentinel_masks=None,
+                      path_sums: bool = True) -> HydrometeorPaths:
+    """Bring liquid radius and ice diameter inside ``bounds``, counted.
+
+    Upstream RTE+RRTMGP refuses a size outside its table
+    (``mo_cloud_optics_rrtmgp.F90``: "liquid effective radius is out of
+    bounds") and leaves the host model to keep them inside; the shipped
+    v1.9 domain is 2.5-21.5 um for the liquid radius and 10-180 um for
+    the ice diameter, and a two-moment scheme's snow (radius 15-3000 um
+    in Morrison) and freshly nucleated ice leave it routinely.  Above
+    the upper bound the layer is carried geometrically: extinction of a
+    particle much larger than the wavelength is its cross-section, so
+    per unit mass it goes as 1/size, and scaling the in-cloud path by
+    bound/size at the bound's single-scattering albedo and asymmetry
+    reproduces that limit instead of radiating 500 um snow as 180 um ice
+    (2.8x the extinction).  Below the lower bound the size is clipped
+    (the small-particle limit is not a scaling of the table's end and
+    the mass there is small); both are counted so the treatment is never
+    silent.  Cells whose path is zero get the clip only (the kernel does
+    not read their size) and are not counted.
+
+    ``treatment="clip"`` clips above the upper bound as well, at the full
+    path: the WRF-transcribed explicit-radius and P3 couplings use it
+    because their arithmetic is fixture-pinned to module_ra_rrtmg's own
+    size cap and snow discount, which already bound the oversize their
+    way; the carry on top would discount twice.  The count record is the
+    same under both.
+
+    ``cldfra`` (the layer cloud fraction the paths were divided by, or
+    None for an overcast coupling) weights the ``*_radiative_fraction``
+    fields of the record (see :class:`SizeBounding`); ``sentinel_masks``
+    is the optional ``(liquid, ice)`` pair of boolean cell masks the
+    Morrison coupling reports its no-mass-radius cells through.
+
+    ``path_sums=False`` is the chunked coupling's form: the counts are
+    formed for these columns and the fraction fields are left None, and
+    the result carries the :class:`SizeBoundingTerms` the caller
+    assembles over the whole grid for :func:`finish_size_bounding`.  The
+    bounded paths and sizes are the same under both forms.
+    """
+    if treatment not in SIZE_TREATMENTS:
+        raise ValueError(
+            f"treatment must be one of {SIZE_TREATMENTS}, got {treatment!r}")
+    dtype = clwp.dtype
+    liq_lwr, liq_upr = dtype.type(bounds.radliq_lwr), dtype.type(bounds.radliq_upr)
+    ice_lwr, ice_upr = dtype.type(bounds.diamice_lwr), dtype.type(bounds.diamice_upr)
+    liquid = clwp > 0
+    ice = ciwp > 0
+    liquid_above = liquid & (reliq > liq_upr)
+    liquid_below = liquid & (reliq < liq_lwr)
+    ice_above = ice & (dgice > ice_upr)
+    ice_below = ice & (dgice < ice_lwr)
+    # The radiative weight of a cell is its in-cloud path times the
+    # fraction of subcolumns the overlap generator makes cloudy there.
+    if cldfra is None:
+        weight = dtype.type(1.0)
+        liquid_unsampled = xp.zeros((), dtype=xp.int64)
+        ice_unsampled = xp.zeros((), dtype=xp.int64)
+    else:
+        weight = xp.asarray(cldfra, dtype=dtype)
+        liquid_unsampled = xp.count_nonzero(liquid & (weight <= 0))
+        ice_unsampled = xp.count_nonzero(ice & (weight <= 0))
+    if sentinel_masks is None:
+        liquid_sentinel = ice_sentinel = None
+    else:
+        liquid_sentinel_mask, ice_sentinel_mask = sentinel_masks
+        liquid_sentinel = liquid & liquid_sentinel_mask
+        ice_sentinel = ice & ice_sentinel_mask
+    # The terms reduce over the in-cloud paths BEFORE the carry below.
+    terms = SizeBoundingTerms(
+        clwp=clwp, ciwp=ciwp, liquid_above=liquid_above, ice_above=ice_above,
+        liquid_sentinel=liquid_sentinel, ice_sentinel=ice_sentinel)
+    if path_sums:
+        fractions = _size_bounding_fractions(
+            _size_bounding_path_sums(terms, weight, xp=xp, dtype=dtype),
+            xp=xp, dtype=dtype)
+        carried_terms = None
+    else:
+        fractions = {name: None for name in SIZE_BOUNDING_FIELDS
+                     if name.endswith("fraction")}
+        carried_terms = terms
+    if treatment == SIZE_TREATMENT_CARRY:
+        clwp = xp.ascontiguousarray(xp.where(
+            liquid_above, clwp * (liq_upr / xp.maximum(reliq, liq_upr)), clwp))
+        ciwp = xp.ascontiguousarray(xp.where(
+            ice_above, ciwp * (ice_upr / xp.maximum(dgice, ice_upr)), ciwp))
+    reliq = xp.ascontiguousarray(xp.clip(reliq, liq_lwr, liq_upr))
+    dgice = xp.ascontiguousarray(xp.clip(dgice, ice_lwr, ice_upr))
+
+    def count(mask):
+        return xp.count_nonzero(mask)
+
+    def columns(mask):
+        return xp.count_nonzero(xp.any(mask, axis=1))
+
+    bounding = SizeBounding(
+        liquid_cells=count(liquid),
+        liquid_below_cells=count(liquid_below),
+        liquid_above_cells=count(liquid_above),
+        liquid_below_columns=columns(liquid_below),
+        liquid_above_columns=columns(liquid_above),
+        ice_cells=count(ice),
+        ice_below_cells=count(ice_below),
+        ice_above_cells=count(ice_above),
+        ice_below_columns=columns(ice_below),
+        ice_above_columns=columns(ice_above),
+        liquid_unsampled_cells=liquid_unsampled,
+        ice_unsampled_cells=ice_unsampled,
+        **fractions,
+        **(sentinel_counts or {}),
+    )
+    return HydrometeorPaths(clwp, ciwp, reliq, dgice, bounding, carried_terms)
+
+
+@dataclass(frozen=True)
+class _RadiationColumnChunk:
+    """One solver chunk's synthetic upper atmosphere and interpolation."""
+
+    profile: _RadiationColumnProfile
+    paths: HydrometeorPaths
+    cldfra: object
+    metadata: _InterpolationMetadata
+
+
+def _prepare_above_model_chunk(
+        *, tables, play, plev, tlay, tlev, qv, paths, cldfra, columns,
+        p_top: float, kind: str,
+        pressure_floor: float = RRTMGP_TOA_PRESSURE_PA, xp=None,
+        validate_top: bool = True, validate: bool = True,
+        uniform_top: bool = False, scratch: bool = False,
+) -> _RadiationColumnChunk:
+    """Build every above-model temporary for exactly ``columns``.
+
+    The model-layer columns remain full-domain inputs, but the synthetic
+    thermodynamic cap, clear cloud/path layers, and gas-table interpolation
+    coordinates are deliberately materialized only for the active solver
+    chunk.  In particular, an irregular final slice retains its true column
+    count rather than allocating or exposing a padded ``column_chunk`` tail.
+
+    ``scratch`` RETURNS VIEWS OF REUSED BUFFERS, and that puts the caller
+    under a contract: finish with the returned chunk before the next call
+    of the same ``kind`` and shape, because that call overwrites it.  The
+    driver's chunk loop satisfies this by construction -- it consumes each
+    chunk and drops it inside one iteration -- and it is the only caller
+    that opts in.  OFF BY DEFAULT, so a caller that collects chunks and
+    compares them afterwards still gets independent arrays; the test that
+    does exactly that is what established the contract needed stating.
+    """
+    if xp is None:
+        import cupy as xp
+
+    profile = _extend_above_model_profile(
+        play[columns], plev[columns], tlay[columns], tlev[columns],
+        qv[columns], p_top=p_top, kind=kind,
+        pressure_floor=pressure_floor, xp=xp, validate_top=validate_top,
+        uniform_top=uniform_top)
+    # Distinct names: all five are live at once, so they must never share
+    # a buffer.  `kind` keeps the LW and SW passes apart even where their
+    # shapes coincide.
+    chunk_paths = HydrometeorPaths(*(
+        _append_clear_upper_layers(
+            value[columns], profile.upper_nlay, xp=xp,
+            scratch=(f"clear.{kind}.{name}" if scratch else None))
+        for name, value in (("clwp", paths.clwp), ("ciwp", paths.ciwp),
+                            ("reliq", paths.reliq), ("dgice", paths.dgice))))
+    chunk_cldfra = _append_clear_upper_layers(
+        cldfra[columns], profile.upper_nlay, xp=xp,
+        scratch=(f"clear.{kind}.cldfra" if scratch else None))
+    metadata = _interpolation_metadata(
+        tables, profile.play, profile.tlay, validate=validate,
+        scratch=(f"meta.{kind}" if scratch else None))
+    return _RadiationColumnChunk(
+        profile=profile, paths=chunk_paths, cldfra=chunk_cldfra,
+        metadata=metadata)
+
+
+# Shared-workspace counterpart to SCRATCH_SLOT_LIFETIME_AUDIT.  Each value
+# names the operation that completely writes the slot after every reuse and
+# before its first consumer.  RTE "carried" entries are identical-offset views
+# of values fully produced in the same chunk's immediately preceding optics
+# phase; no value is carried across chunks or domains.
+RRTMGP_WORKSPACE_LIFETIME_AUDIT = {
+    "lw_optics": {
+        "gas_tau": "rrtmgp_gas_optics kernel",
+        "vmr": "full zero fill plus complete active-gas assignment",
+        "cld_tau": "rrtmgp_cloud_optics kernel",
+        "cld_ssa": "rrtmgp_cloud_optics kernel",
+        "cld_asy": "rrtmgp_cloud_optics kernel",
+        "col_dry": "complete expression assignment",
+        "mcica_mask": "rrtmgp_mcica_maxran kernel",
+    },
+    "lw_rte": {
+        # Only what the phase READS BACK.  With the finalize fused into the
+        # solver, the carried set is what the solver combines in registers:
+        # gas_tau, the two band cloud cubes it reads, and the McICA mask.
+        # cld_asy and col_dry are dead here; the RTE outputs lie over them.
+        "gas_tau": "same-chunk lw_optics producer at identical offset",
+        "vmr": "same-chunk lw_optics producer at identical offset",
+        "cld_tau": "same-chunk lw_optics producer at identical offset",
+        "cld_ssa": "same-chunk lw_optics producer at identical offset",
+        "mcica_mask": "same-chunk lw_optics producer at identical offset",
+        # lay_source/lev_source/sfc_source are GONE: the solver derives
+        # them from play/tlay/tlev/tsfc/vmr + metadata, which are the
+        # carried slots and the caller's own arrays.
+        "emiss_gpt": "complete band-expansion assignment",
+        "incident": "full zero fill",
+        "flux_up": "rrtmgp_lw_noscat kernel",
+        "flux_dn": "rrtmgp_lw_noscat kernel",
+    },
+    "sw_optics": {
+        "gas_tau": "rrtmgp_gas_optics kernel",
+        "gas_ssa": "rrtmgp_gas_optics kernel",
+        "vmr": "full zero fill plus complete active-gas assignment",
+        "cld_tau": "rrtmgp_cloud_optics kernel",
+        "cld_ssa": "rrtmgp_cloud_optics kernel",
+        "cld_asy": "rrtmgp_cloud_optics kernel",
+        "col_dry": "complete expression assignment",
+        "mcica_mask": "rrtmgp_mcica_maxran kernel",
+    },
+    "sw_rte": {
+        # As in lw_rte, the carried set is what the fused solver reads:
+        # both gas cubes, all three band cloud cubes, and the mask.  vmr
+        # and col_dry are dead here -- SW builds no Planck source.
+        "gas_tau": "same-chunk sw_optics producer at identical offset",
+        "gas_ssa": "same-chunk sw_optics producer at identical offset",
+        "cld_tau": "same-chunk sw_optics producer at identical offset",
+        "cld_ssa": "same-chunk sw_optics producer at identical offset",
+        "cld_asy": "same-chunk sw_optics producer at identical offset",
+        "mcica_mask": "same-chunk sw_optics producer at identical offset",
+        "albedo_gpt": "complete surface broadcast assignment",
+        "inc_gpt": "complete solar broadcast assignment",
+        "mu0": "complete cosine broadcast assignment",
+        "flux_up": "rrtmgp_sw_2stream kernel",
+        "flux_dn": "rrtmgp_sw_2stream kernel",
+        "flux_dir": "rrtmgp_sw_2stream kernel",
+    },
+}
+
+
+_VALIDATION_MESSAGES = (
+    (1 << 0, "play is non-finite or outside the gas-table pressure range"),
+    (1 << 1, "plev is non-finite or negative"),
+    (1 << 2, "tlay is non-finite or outside the gas-table temperature range"),
+    (1 << 3, "tlev is non-finite or outside the LW temperature range"),
+    (1 << 4, "tsfc is non-finite or outside the LW temperature range"),
+    (1 << 5, "qv is non-finite or negative"),
+    (1 << 6, "qc is non-finite or negative"),
+    (1 << 7, "qr is non-finite or negative"),
+    (1 << 8, "qi is non-finite or negative"),
+    (1 << 9, "qs is non-finite or negative"),
+    (1 << 10, "cldfra is non-finite or outside [0, 1]"),
+    (1 << 11, "nc is non-finite or negative"),
+    (1 << 12, "nr is non-finite or negative"),
+    (1 << 13, "ni is non-finite or negative"),
+    (1 << 14, "ns is non-finite or negative"),
+    (1 << 15, "effc is non-finite or negative"),
+    (1 << 16, "effr is non-finite or negative"),
+    (1 << 17, "effi is non-finite or negative"),
+    (1 << 18, "effs is non-finite or negative"),
+    (1 << 19, "surface emissivity is non-finite or outside [0, 1]"),
+    (1 << 20, "the bottom four layer pressures are not bottom-to-top"),
+    (1 << 21, "pressure thickness or Exner is non-positive"),
+    (1 << 22, "effc is outside the physical-plausibility band "
+              "(microns contract; radii writer unit defect?)"),
+    (1 << 23, "effi is outside the physical-plausibility band "
+              "(microns contract; radii writer unit defect?)"),
+    (1 << 24, "effs is outside the physical-plausibility band "
+              "(microns contract; radii writer unit defect?)"),
+)
+
+
+@dataclass
+class RFMIPResult:
+    lw_up: object
+    lw_dn: object
+    sw_up: object
+    sw_dn: object
+
+
+_RFMIP_GAS_NAMES = {
+    "co2": "carbon_dioxide", "n2o": "nitrous_oxide",
+    "co": "carbon_monoxide", "ch4": "methane", "o2": "oxygen",
+    "n2": "nitrogen", "ccl4": "carbon_tetrachloride",
+    "cfc11": "cfc11", "cfc12": "cfc12", "cfc22": "hcfc22",
+    "hfc143a": "hfc143a", "hfc125": "hfc125", "hfc23": "hfc23",
+    "hfc32": "hfc32", "hfc134a": "hfc134a", "cf4": "cf4",
+}
+
+
+# NOAA Global Monitoring Laboratory, "Globally averaged marine surface
+# annual mean CO2", dry-air mole fraction in ppm.  Pinned 2026-07-16 from
+# https://gml.noaa.gov/webdata/ccgg/trends/co2/co2_annmean_gl.txt
+# (file creation 2026-07-05; DOI https://doi.org/10.15138/9N0H-ZH07).
+# The source begins in 1979.  Dates outside the pinned range hold the nearest
+# published annual mean unless the case declares an override.  Runtime
+# performs no network access.
+_NOAA_GML_CO2_ANNUAL_PPM = {
+    1979: 336.85, 1980: 338.91, 1981: 340.11, 1982: 340.85,
+    1983: 342.53, 1984: 344.07, 1985: 345.54, 1986: 346.97,
+    1987: 348.68, 1988: 351.16, 1989: 352.79, 1990: 354.06,
+    1991: 355.40, 1992: 356.09, 1993: 356.84, 1994: 358.33,
+    1995: 360.18, 1996: 361.93, 1997: 363.04, 1998: 365.70,
+    1999: 367.80, 2000: 368.96, 2001: 370.57, 2002: 372.58,
+    2003: 375.14, 2004: 376.95, 2005: 378.98, 2006: 381.15,
+    2007: 382.90, 2008: 385.02, 2009: 386.50, 2010: 388.75,
+    2011: 390.62, 2012: 392.65, 2013: 395.40, 2014: 397.34,
+    2015: 399.65, 2016: 403.07, 2017: 405.22, 2018: 407.61,
+    2019: 410.07, 2020: 412.44, 2021: 414.70, 2022: 417.08,
+    2023: 419.35, 2024: 422.79, 2025: 425.64,
+}
+
+
+def trace_gases(valid_date: date | datetime,
+                override: Mapping[str, float] | None = None
+                ) -> dict[str, float]:
+    """Select date-indexed well-mixed gas VMRs, then apply case overrides.
+
+    NOAA's annual global CO2 mean is selected by calendar year, holding the
+    earliest/latest published value outside the table range.  Overrides are
+    mole fractions and win over the dated selection.
+    """
+    if not isinstance(valid_date, (date, datetime)):
+        raise TypeError("trace-gas selection date must be a date or datetime")
+    years = tuple(_NOAA_GML_CO2_ANNUAL_PPM)
+    selected_year = max((year for year in years if year <= valid_date.year),
+                        default=min(years))
+    selected = {
+        "co2": _NOAA_GML_CO2_ANNUAL_PPM[selected_year] * 1.0e-6,
+    }
+    if override is None:
+        return selected
+    if not isinstance(override, Mapping):
+        raise TypeError("trace-gas override must be a mapping or None")
+    unknown = sorted(set(override) - set(_RFMIP_GAS_NAMES))
+    if unknown:
+        raise ValueError(
+            f"unknown trace gas(es) {unknown} in override; known well-mixed "
+            f"gases: {sorted(_RFMIP_GAS_NAMES)}")
+    for gas, raw_value in override.items():
+        if isinstance(raw_value, bool):
+            raise ValueError(
+                f"trace-gas override[{gas!r}] = {raw_value!r} must be a "
+                "finite mole fraction in (0, 1e-2)")
+        value = float(raw_value)
+        if not np.isfinite(value) or not 0.0 < value < 1.0e-2:
+            raise ValueError(
+                f"trace-gas override[{gas!r}] = {value!r} must be a finite "
+                "mole fraction in (0, 1e-2)")
+        selected[gas] = value
+    return selected
+
+
+def _minor_gpoint_csr(limits: np.ndarray, ngpt: int
+                      ) -> tuple[np.ndarray, np.ndarray]:
+    """Invert ``minor_limits_gpt`` into a per-g-point entry list.
+
+    ``limits`` gives each minor entry an INCLUSIVE g-point range; the kernel
+    wants the transpose -- given a g-point, which entries apply.  Returned as
+    CSR: ``start[g]:start[g + 1]`` slices ``index``, and the entries inside a
+    slice are ascending in ``m``, which is the order the scanning loop
+    visited them in.  That ordering is the bit-exactness argument: the same
+    additions accumulate into ``tau_abs`` in the same sequence.
+    """
+    limits = np.asarray(limits, dtype=np.int32)
+    if limits.ndim != 2 or limits.shape[1] != 2:
+        raise ValueError("minor g-point limits must have shape (nminor,2)")
+    ngpt = int(ngpt)
+    counts = np.zeros(ngpt + 1, dtype=np.int64)
+    for lower, upper in limits:
+        if not (0 <= lower <= upper < ngpt):
+            raise ValueError(
+                f"minor g-point range ({lower},{upper}) outside 0..{ngpt - 1}")
+        counts[lower + 1:upper + 2] += 1
+    start = np.cumsum(counts).astype(np.int32)
+    index = np.empty(int(start[-1]), dtype=np.int32)
+    cursor = start[:-1].copy()
+    for m, (lower, upper) in enumerate(limits):
+        for gpt in range(int(lower), int(upper) + 1):
+            index[cursor[gpt]] = m
+            cursor[gpt] += 1
+    # An empty list would still need a valid pointer to launch with.
+    if index.size == 0:
+        index = np.zeros(1, dtype=np.int32)
+    return np.ascontiguousarray(start), np.ascontiguousarray(index)
+
+
+@dataclass
+class GasTables:
+    kind: str
+    gas_names: tuple[str, ...]
+    gas_index: Mapping[str, int]
+    nband: int
+    ngpt: int
+    ntemp: int
+    npres: int
+    neta: int
+    press_ref: np.ndarray
+    temp_ref: np.ndarray
+    press_ref_trop: float
+    vmr_ref: np.ndarray
+    band_lims_gpt: np.ndarray
+    gpoint_bands: np.ndarray
+    flavor: np.ndarray
+    gpoint_flavor: np.ndarray
+    kmajor: np.ndarray
+    kminor_lower: np.ndarray
+    kminor_upper: np.ndarray
+    minor_limits_gpt_lower: np.ndarray
+    minor_limits_gpt_upper: np.ndarray
+    minor_scales_with_density_lower: np.ndarray
+    minor_scales_with_density_upper: np.ndarray
+    scale_by_complement_lower: np.ndarray
+    scale_by_complement_upper: np.ndarray
+    idx_minor_lower: np.ndarray
+    idx_minor_upper: np.ndarray
+    idx_minor_scaling_lower: np.ndarray
+    idx_minor_scaling_upper: np.ndarray
+    kminor_start_lower: np.ndarray
+    kminor_start_upper: np.ndarray
+    #: Derived in __post_init__, never read from the netCDF: for each
+    #: atmosphere half, the minor entries that cover each g-point, as CSR
+    #: (``start[ngpt + 1]`` offsets into ``list``).  See the kernel's minor
+    #: loop -- these are the 6% of (g-point, entry) pairs that are not a
+    #: skipped iteration.  Declared as fields so ``to_device`` uploads them
+    #: and ``packed_arrays`` counts them like every other table.
+    minor_gpt_start_lower: np.ndarray = None
+    minor_gpt_list_lower: np.ndarray = None
+    minor_gpt_start_upper: np.ndarray = None
+    minor_gpt_list_upper: np.ndarray = None
+    rayleigh: np.ndarray | None = None
+    planck_fraction: np.ndarray | None = None
+    temperature_planck: np.ndarray | None = None
+    totplnk: np.ndarray | None = None
+    solar_source: np.ndarray | None = None
+    tsi_default: float | None = None
+    optimal_angle_fit: np.ndarray | None = None
+    #: PER CUDA DEVICE, not per process.  ``load_gas_tables`` is
+    #: ``lru_cache``d on the kind alone, so one ``GasTables`` object serves
+    #: the whole process; memoizing ONE ``DeviceTables`` on it handed every
+    #: device the pointers of whichever device uploaded first.  MEASURED on a
+    #: dual-4090 box: with device 0 touched first, ``gas_lw.kmajor`` lives on
+    #: device 0 and a physics step on device 1 dies with
+    #: CUDA_ERROR_ILLEGAL_ADDRESS inside RRTMGP; touch device 1 first and the
+    #: failure moves to device 0.  Consumer Ada has no P2P to paper over it,
+    #: and an illegal address destroys the CUDA context for the whole
+    #: process, so one such step takes every later run down with it.
+    #: The tables are duplicated per card -- see ``preflight
+    #: .k_distribution_bytes``, which counts them once per PROCESS and is
+    #: therefore a per-device figure that must be multiplied by the number of
+    #: cards a run actually uses.
+    _device: dict = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        for half in ("lower", "upper"):
+            if getattr(self, f"minor_gpt_start_{half}") is None:
+                start, index = _minor_gpoint_csr(
+                    getattr(self, f"minor_limits_gpt_{half}"), self.ngpt)
+                object.__setattr__(self, f"minor_gpt_start_{half}", start)
+                object.__setattr__(self, f"minor_gpt_list_{half}", index)
+
+    @property
+    def ngas(self) -> int:
+        return len(self.gas_names)
+
+    @property
+    def nflav(self) -> int:
+        return self.flavor.shape[0]
+
+    def packed_arrays(self) -> dict[str, np.ndarray]:
+        return {name: value for name, value in vars(self).items()
+                if isinstance(value, np.ndarray)}
+
+    def to_device(self) -> DeviceTables:
+        """The k-distribution on the CURRENT device, uploaded once per card."""
+        import cupy as cp
+
+        dev = cp.cuda.runtime.getDevice()
+        if dev not in self._device:
+            values: dict[str, object] = {}
+            for name, value in vars(self).items():
+                if isinstance(value, np.ndarray):
+                    dtype = (cp.float32 if np.issubdtype(value.dtype,
+                                                         np.floating)
+                             else cp.int32 if np.issubdtype(value.dtype,
+                                                            np.integer)
+                             else cp.bool_)
+                    values[name] = cp.ascontiguousarray(cp.asarray(value,
+                                                                   dtype=dtype))
+                elif not name.startswith("_"):
+                    values[name] = value
+            self._device[dev] = DeviceTables(values)
+        return self._device[dev]
+
+
+@dataclass
+class CloudTables:
+    kind: str
+    nband: int
+    nsize_liq: int
+    nsize_ice: int
+    nrghice: int
+    radliq_lwr: float
+    radliq_upr: float
+    diamice_lwr: float
+    diamice_upr: float
+    extliq: np.ndarray
+    ssaliq: np.ndarray
+    asyliq: np.ndarray
+    extice: np.ndarray
+    ssaice: np.ndarray
+    asyice: np.ndarray
+    #: PER CUDA DEVICE -- see GasTables._device for the measurement.
+    _device: dict = field(default_factory=dict, init=False, repr=False)
+
+    @property
+    def liq_step_size(self) -> float:
+        return (self.radliq_upr - self.radliq_lwr) / (self.nsize_liq - 1)
+
+    @property
+    def ice_step_size(self) -> float:
+        return (self.diamice_upr - self.diamice_lwr) / (self.nsize_ice - 1)
+
+    def to_device(self) -> DeviceTables:
+        """The cloud optics tables on the CURRENT device, once per card."""
+        import cupy as cp
+
+        dev = cp.cuda.runtime.getDevice()
+        if dev not in self._device:
+            values = {name: (cp.ascontiguousarray(cp.asarray(value,
+                                                               dtype=cp.float32))
+                             if isinstance(value, np.ndarray) else value)
+                      for name, value in vars(self).items()
+                      if not name.startswith("_")}
+            self._device[dev] = DeviceTables(values)
+        return self._device[dev]
+
+
+@lru_cache(maxsize=2)
+def load_gas_tables(kind: str) -> GasTables:
+    """Load and pack the v1.9 LW or SW gas k-distribution in float64."""
+    kind = kind.lower()
+    if kind not in ("lw", "sw"):
+        raise ValueError("kind must be 'lw' or 'sw'")
+    filename = ("rrtmgp-gas-lw-g256.nc" if kind == "lw"
+                else "rrtmgp-gas-sw-g224.nc")
+    with Dataset(_table(filename), "r") as nc:
+        gas_names = _strings(nc["gas_names"])
+        gas_minor = _strings(nc["gas_minor"])
+        identifier_minor = _strings(nc["identifier_minor"])
+        band_lims = _array(nc["bnd_limits_gpt"][:] - 1, np.int32)
+        key_species = _array(nc["key_species"][:], np.int32)
+        flavor, gpoint_flavor = _make_flavors(key_species, band_lims)
+        gpoint_bands = np.empty(len(nc.dimensions["gpt"]), np.int32)
+        for iband, (start, end) in enumerate(band_lims):
+            gpoint_bands[start:end + 1] = iband
+
+        lower_names = _strings(nc["minor_gases_lower"])
+        upper_names = _strings(nc["minor_gases_upper"])
+        scaling_lower = _strings(nc["scaling_gas_lower"])
+        scaling_upper = _strings(nc["scaling_gas_upper"])
+        kwargs = dict(
+            kind=kind,
+            gas_names=gas_names,
+            gas_index={name: i + 1 for i, name in enumerate(gas_names)},
+            nband=len(nc.dimensions["bnd"]),
+            ngpt=len(nc.dimensions["gpt"]),
+            ntemp=len(nc.dimensions["temperature"]),
+            npres=len(nc.dimensions["pressure"]),
+            neta=len(nc.dimensions["mixing_fraction"]),
+            press_ref=_array(nc["press_ref"][:], np.float64),
+            temp_ref=_array(nc["temp_ref"][:], np.float64),
+            press_ref_trop=float(nc["press_ref_trop"].getValue()),
+            # NetCDF dimension order is (temperature, absorber, atmosphere).
+            # The numerical kernels use (atmosphere, absorber, temperature).
+            vmr_ref=_array(np.transpose(nc["vmr_ref"][:], (2, 1, 0)),
+                           np.float64),
+            band_lims_gpt=band_lims,
+            gpoint_bands=np.ascontiguousarray(gpoint_bands),
+            flavor=flavor,
+            gpoint_flavor=gpoint_flavor,
+            # Kernel layouts are selected from declared NetCDF dimension
+            # names, never from an assumed positional file order.
+            kmajor=_packed_variable(
+                nc["kmajor"],
+                ("temperature", "mixing_fraction", "pressure_interp", "gpt"),
+                np.float64),
+            kminor_lower=_packed_variable(
+                nc["kminor_lower"],
+                ("temperature", "mixing_fraction", "contributors_lower"),
+                np.float64),
+            kminor_upper=_packed_variable(
+                nc["kminor_upper"],
+                ("temperature", "mixing_fraction", "contributors_upper"),
+                np.float64),
+            minor_limits_gpt_lower=_array(
+                nc["minor_limits_gpt_lower"][:] - 1, np.int32),
+            minor_limits_gpt_upper=_array(
+                nc["minor_limits_gpt_upper"][:] - 1, np.int32),
+            minor_scales_with_density_lower=_array(
+                nc["minor_scales_with_density_lower"][:], bool),
+            minor_scales_with_density_upper=_array(
+                nc["minor_scales_with_density_upper"][:], bool),
+            scale_by_complement_lower=_array(
+                nc["scale_by_complement_lower"][:], bool),
+            scale_by_complement_upper=_array(
+                nc["scale_by_complement_upper"][:], bool),
+            idx_minor_lower=_minor_gas_indices(
+                gas_names, gas_minor, identifier_minor, lower_names),
+            idx_minor_upper=_minor_gas_indices(
+                gas_names, gas_minor, identifier_minor, upper_names),
+            idx_minor_scaling_lower=_scaling_gas_indices(
+                gas_names, scaling_lower),
+            idx_minor_scaling_upper=_scaling_gas_indices(
+                gas_names, scaling_upper),
+            kminor_start_lower=_array(
+                nc["kminor_start_lower"][:] - 1, np.int32),
+            kminor_start_upper=_array(
+                nc["kminor_start_upper"][:] - 1, np.int32),
+        )
+        if kind == "lw":
+            kwargs.update(
+                planck_fraction=_packed_variable(
+                    nc["plank_fraction"],
+                    ("temperature", "mixing_fraction", "pressure_interp",
+                     "gpt"), np.float64),
+                temperature_planck=_array(nc["temperature_Planck"][:],
+                                          np.float64),
+                totplnk=_array(np.transpose(nc["totplnk"][:]), np.float64),
+                optimal_angle_fit=_array(nc["optimal_angle_fit"][:],
+                                         np.float64),
+            )
+        else:
+            rayleigh = np.stack((nc["rayl_lower"][:],
+                                 nc["rayl_upper"][:]), axis=0)
+            quiet = _array(nc["solar_source_quiet"][:], np.float64)
+            facular = _array(nc["solar_source_facular"][:], np.float64)
+            sunspot = _array(nc["solar_source_sunspot"][:], np.float64)
+            mg = float(nc["mg_default"].getValue())
+            sb = float(nc["sb_default"].getValue())
+            solar = quiet + (mg - 0.1495954) * facular \
+                + (sb - 0.00066696) * sunspot
+            kwargs.update(
+                rayleigh=_array(rayleigh, np.float64),
+                solar_source=_array(solar, np.float64),
+                tsi_default=float(nc["tsi_default"].getValue()),
+            )
+    return GasTables(**kwargs)
+
+
+@lru_cache(maxsize=2)
+def load_cloud_tables(kind: str) -> CloudTables:
+    """Load band-resolved v1.9 liquid/ice cloud-optics tables."""
+    kind = kind.lower()
+    if kind not in ("lw", "sw"):
+        raise ValueError("kind must be 'lw' or 'sw'")
+    with Dataset(_table(f"rrtmgp-clouds-{kind}-bnd.nc"), "r") as nc:
+        return CloudTables(
+            kind=kind,
+            nband=len(nc.dimensions["nband"]),
+            nsize_liq=len(nc.dimensions["nsize_liq"]),
+            nsize_ice=len(nc.dimensions["nsize_ice"]),
+            nrghice=len(nc.dimensions["nrghice"]),
+            radliq_lwr=float(nc["radliq_lwr"].getValue()),
+            radliq_upr=float(nc["radliq_upr"].getValue()),
+            diamice_lwr=float(nc["diamice_lwr"].getValue()),
+            diamice_upr=float(nc["diamice_upr"].getValue()),
+            extliq=_array(np.transpose(nc["extliq"][:]), np.float64),
+            ssaliq=_array(np.transpose(nc["ssaliq"][:]), np.float64),
+            asyliq=_array(np.transpose(nc["asyliq"][:]), np.float64),
+            extice=_array(np.transpose(nc["extice"][:], (2, 1, 0)),
+                          np.float64),
+            ssaice=_array(np.transpose(nc["ssaice"][:], (2, 1, 0)),
+                          np.float64),
+            asyice=_array(np.transpose(nc["asyice"][:], (2, 1, 0)),
+                          np.float64),
+        )
+
+
+def hydrometeor_paths(plev, qc, qr=None, qi=None, qs=None, *,
+                      microphysics="kessler", play=None, tlay=None,
+                      nc=None, nr=None, ni=None, ns=None,
+                      effc=None, effr=None, effi=None,
+                      effs=None, cldfra=None,
+                      snow_treatment=SNOW_TREATMENT_FULL_MASS,
+                      size_bounds: CloudSizeBounds | None = None,
+                      validate=True,
+                      path_sums: bool = True) -> HydrometeorPaths:
+    """Convert hydrometeor mixing ratios to cloud-optics inputs on device.
+
+    Mixing ratios and Morrison number concentrations are per kg dry air.
+    Per WRF the radiation liquid path is cloud water only and the ice path
+    is cloud ice plus snow; rain never feeds the paths
+    (module_ra_rrtmg_sw.F:11029-11034, module_ra_rrtmg_lw.F:12488-12493:
+    ``gliqwp = qc1d(k) * pdel*100/gravmks*1000``).  When ``cldfra`` is
+    given the grid-box paths become in-cloud paths through WRF's
+    ``max(0.01, cldfrac)`` division (same lines).
+    Kessler uses a 10 micron liquid radius and 50 micron ice diameter.
+    WSM6, Thompson, and NSSL consume their scheme-native cloud/ice/snow
+    effective radii (MICRONS, the state contract) and merge ice plus snow
+    into the single RRTMGP ice species.  ``"thompson"`` serves BOTH Thompson
+    packages: mp_physics=8 (Registry.EM_COMMON:3024) and the aerosol-aware
+    mp_physics=28 (:3036) declare the same ``moist`` inventory and the same
+    ``re_cloud/re_ice/re_snow`` state, and module_physics_init.F:1005-1006
+    lists them together in one ``has_req*`` disjunction, so their radiative
+    coupling is identical -- see :data:`_MP_CLOUD_OPTICS_SCHEME`.
+    ``snow_treatment`` selects how snow joins that path:
+    ``full-snow-mass-into-ice`` keeps the adapter's original
+    full-mass merge; ``wrf-rrtmg-130um-snow-discount`` reproduces WRF
+    v4.6.1's option-4 explicit-radius coupling -- ice path from cloud ice
+    only (module_ra_rrtmg_lw.F:12500-12505, _sw.F:11040-11045), snow mass
+    multiplied by ``MIN(0.99, (130/re_s)^2)`` with ``re_s`` floored at 10
+    and capped at 130 microns (_lw.F:12242,12515-12532, _sw.F:10824,
+    11055-11067; the FP32 discount expression is bitwise-pinned by
+    tests/data/wrf_rrtmg_snow_discount_fixture.csv).  WRF's dead
+    ``gicewp`` accumulation of the 1% remainder (_lw.F:12518, _sw.F:11058
+    -- computed but never stored to ``cicewp``) is intentionally not
+    reproduced.  The mass-weighted single-species diameter remains a
+    documented adapter divergence from WRF's separate Fu snow species.
+    ``snow_treatment`` is validated for every scheme but only alters the
+    explicit-snow-radius (WSM6/Thompson/NSSL) coupling: WRF discounts snow
+    only when the scheme supplies re_snow (iceflg=5); Morrison and Kessler
+    keep WRF's merged path (_lw.F:12488-12493).
+    ``"p3"`` is mp_physics=50 and takes neither of those: WRF remaps P3's
+    single ice category ONTO the snow species and empties the ice path
+    (_lw.F:12250-12261, _sw.F:10851-10863), so the branch consumes effc and
+    effi, refuses an effs, and applies WRF's iceflg=5 discount at P3's own
+    ice radius unconditionally -- see the branch for why the compatibility
+    token does not gate it.
+    Morrison liquid size is the cloud-droplet gamma radius alone -- rain
+    carries no radiative mass, so it contributes no radius either
+    (``effr`` is accepted for interface parity with Morrison's
+    diagnostics and ignored); ice and snow combine into the one RRTMGP
+    ice species at the area-conserving size: each species first at the
+    solid-ice effective diameter that carries its area per unit mass,
+    ``2 re_x rho_x / rho_ice`` (Morrison's cloud ice at 500 and snow at
+    100 kg/m3 against the table's 917; MORRISON_*_DENSITY_KG_M3), then the
+    mass-weighted harmonic mean ``(qi + qs) / (qi / d_i + qs / d_s)``:
+    extinction of the two populations is their summed cross-section, and
+    that is the single size whose extinction at the summed mass equals
+    it.  (Until 2026-09-04 the two combined by NUMBER at their
+    sphere-equivalent sizes, which put the merged size at the cloud-ice
+    radius wherever ice crystals outnumber snow, i.e. nearly everywhere,
+    and read the table as if a 100 kg/m3 snowflake were solid ice of the
+    same diameter; on the T255 control the snow is four fifths of the
+    frozen condensate.)
+    Every branch ends in :func:`bound_cloud_sizes`: the sizes are brought
+    inside ``size_bounds`` (default: the domain of the shipped tables,
+    :func:`shipped_cloud_size_bounds`; a driver passes the bounds of the
+    tables it loaded) and the record of what that touched rides on the
+    result as ``size_bounding``.  The Morrison branch carries the oversize
+    geometrically; the WRF-transcribed explicit-radius and P3 branches
+    clip, as module_ra_rrtmg does past its own cap (their fixture-pinned
+    arithmetic already discounts the snow WRF's way).
+    """
+    import cupy as cp
+
+    if snow_treatment not in SNOW_TREATMENTS:
+        raise ValueError(
+            f"snow_treatment must be one of {SNOW_TREATMENTS}, got "
+            f"{snow_treatment!r}")
+    if size_bounds is None:
+        size_bounds = shipped_cloud_size_bounds()
+
+    plev = cp.ascontiguousarray(cp.asarray(plev, dtype=DTYPE))
+    qc = cp.ascontiguousarray(cp.asarray(qc, dtype=DTYPE))
+    if qc.ndim != 2 or plev.shape != (qc.shape[0], qc.shape[1] + 1):
+        raise ValueError("plev/qc must have shapes (ncol,nlay+1)/(ncol,nlay)")
+
+    def field(value, name):
+        if value is None:
+            return cp.zeros_like(qc)
+        return _device_profile(value, qc.shape, name)
+
+    qr, qi, qs = field(qr, "qr"), field(qi, "qi"), field(qs, "qs")
+    if validate:
+        if bool(cp.any(~cp.isfinite(plev))):
+            raise ValueError("hydrometeor pressure inputs must be finite")
+        _require_finite_nonnegative(qc=qc, qr=qr, qi=qi, qs=qs)
+    mass_path = (cp.abs(cp.diff(plev, axis=1))
+                 * DTYPE(1000.0 / 9.80665))
+    clwp = qc * mass_path
+    ciwp = (qi + qs) * mass_path
+    if cldfra is not None:
+        cldfra = _device_profile(cldfra, qc.shape, "cldfra")
+        if validate and (bool(cp.any(~cp.isfinite(cldfra)))
+                         or bool(cp.any(cldfra < 0.0))
+                         or bool(cp.any(cldfra > 1.0))):
+            raise ValueError("cldfra must be finite and within [0, 1]")
+        incloud = cp.maximum(DTYPE(0.01), cldfra)
+        clwp = clwp / incloud
+        ciwp = ciwp / incloud
+    clwp = cp.ascontiguousarray(clwp)
+    ciwp = cp.ascontiguousarray(ciwp)
+    scheme = str(microphysics).lower()
+    if scheme == "kessler":
+        return bound_cloud_sizes(
+            clwp, ciwp, cp.full_like(qc, DTYPE(10.0)),
+            cp.full_like(qc, DTYPE(50.0)), size_bounds, xp=cp, cldfra=cldfra,
+            path_sums=path_sums)
+    if scheme in ("wsm6", "thompson", "nssl"):
+        if any(x is None for x in (effc, effi, effs)):
+            raise ValueError(
+                f"{scheme} radii require effc, effi, and effs")
+        re_c, re_i, re_s = (field(value, name) for value, name in
+                            ((effc, "effc"), (effi, "effi"),
+                             (effs, "effs")))
+        if validate:
+            _require_finite_nonnegative(effc=re_c, effi=re_i, effs=re_s)
+            _require_plausible_radii_um(effc=re_c, effi=re_i, effs=re_s)
+        tiny = DTYPE(1.0e-20)
+        if snow_treatment == SNOW_TREATMENT_WRF_DISCOUNT:
+            # WRF v4.6.1 option-4 explicit-snow-radius coupling, FP32 in
+            # WRF's operation order (fixture-pinned, max_ulp 0):
+            #   resnow = MAX(10., re_s)            (_lw.F:12242, _sw.F:10824;
+            #                                       state is already microns)
+            #   factor = 0.99; if resnow > 130:
+            #       factor = MIN(0.99, (130/resnow)*(130/resnow))
+            #       resnow = 130                   (_lw.F:12515-12528)
+            #   snow path mass = qs * factor       (_lw.F:12529)
+            # and the ice path is cloud ice only (_lw.F:12500-12505).
+            re_s0 = cp.maximum(DTYPE(10.0), re_s)
+            quotient = DTYPE(130.0) / re_s0
+            factor = cp.where(
+                re_s0 > DTYPE(130.0),
+                cp.minimum(DTYPE(0.99), quotient * quotient),
+                DTYPE(0.99))
+            re_s_eff = cp.minimum(re_s0, DTYPE(130.0))
+            qs_eff = qs * factor
+            ciwp = (qi + qs_eff) * mass_path
+            if cldfra is not None:
+                ciwp = ciwp / incloud
+            ciwp = cp.ascontiguousarray(ciwp)
+        else:
+            qs_eff = qs
+            re_s_eff = re_s
+        frozen = qi + qs_eff
+        reice = cp.where(
+            frozen > tiny,
+            (qi * re_i + qs_eff * re_s_eff) / cp.maximum(frozen, tiny),
+            DTYPE(25.0))
+        reliq = cp.where(qc > tiny, re_c, DTYPE(10.0))
+        # WRF's own arithmetic (its size cap and snow discount) bounds
+        # the oversize here; the table clip is what module_ra_rrtmg does
+        # past its 140 um and it stays fixture-pinned, counted.
+        return bound_cloud_sizes(
+            clwp, ciwp, reliq, DTYPE(2.0) * reice, size_bounds, xp=cp,
+            treatment=SIZE_TREATMENT_CLIP, cldfra=cldfra,
+            path_sums=path_sums)
+    if scheme == "p3":
+        # WRF's own P3 remap, transcribed: module_ra_rrtmg_lw.F:12250-12261
+        # and module_ra_rrtmg_sw.F:10851-10863 (same lines in v4.6.1 and
+        # v4.7.1).  Under has_reqs == 0 with has_reqc and has_reqi set --
+        # which module_physics_init.F:1022-1024 then :1033 makes exactly
+        # the P3/Jensen-Ishmael case -- both wrappers do
+        #     inflg = iceflg = 5
+        #     resnow1D = MAX(10., re_ice*1.E6)
+        #     QS1D = QI3D ;  QI1D = 0. ;  reice1D = 10.
+        # so P3's single ice category is radiated as the SNOW species at
+        # P3's own ice radius and the cloud-ice path is emptied.  The
+        # iceflg == 5 snow discount then applies to it (_lw.F:12515-12532,
+        # _sw.F:11055-11067) exactly as it does for WSM6/Thompson/NSSL.
+        #
+        # WHY THE DISCOUNT IS UNCONDITIONAL HERE, unlike the branch above.
+        # There, ``snow_treatment`` exists to keep already-issued receipts
+        # on the behaviour they were issued under.  mp=50 has no issued
+        # receipts -- it had no cloud-optics row at all until this one --
+        # and WRF reaches iceflg = 5 for P3 through the remap regardless of
+        # any compatibility choice, so the WRF answer is the only answer
+        # and is the default.  ``snow_treatment`` is still validated at the
+        # top of this function; it simply does not select anything here.
+        if any(x is None for x in (effc, effi)):
+            raise ValueError("p3 radii require effc and effi")
+        if effs is not None:
+            raise ValueError(
+                "p3 supplies no snow effective radius: mp_physics=50 "
+                "declares state:re_cloud,re_ice and no re_snow "
+                "(Registry.EM_COMMON:3043) because its one ice category "
+                "spans the snow-to-graupel continuum through rime mass "
+                "and rime volume. Passing effs here would radiate a "
+                "radius the scheme never computed")
+        re_c, re_i = (field(value, name) for value, name in
+                      ((effc, "effc"), (effi, "effi")))
+        if validate:
+            _require_finite_nonnegative(effc=re_c, effi=re_i)
+            _require_plausible_radii_um(
+                bands=effective_radius_bands("p3"), effc=re_c, effi=re_i)
+            if bool(cp.any(qs > DTYPE(0.0))):
+                raise ValueError(
+                    "p3 was handed a nonzero snow mixing ratio; "
+                    "mp_physics=50 declares moist:qv,qc,qr,qi "
+                    "(Registry.EM_COMMON:3043) and allocates no qs, so a "
+                    "nonzero one means the caller mixed schemes")
+        tiny = DTYPE(1.0e-20)
+        # resnow1D = MAX(10., re_ice) -- the state contract is microns, so
+        # WRF's *1.E6 has already happened.
+        re_s = cp.maximum(DTYPE(10.0), re_i)
+        quotient = DTYPE(130.0) / re_s
+        factor = cp.where(
+            re_s > DTYPE(130.0),
+            cp.minimum(DTYPE(0.99), quotient * quotient),
+            DTYPE(0.99))
+        re_s_eff = cp.minimum(re_s, DTYPE(130.0))
+        # QS1D = QI3D, QI1D = 0: the frozen path is the discounted P3 ice
+        # mass alone.  WRF's dead ``gicewp`` accumulation of the 1%
+        # remainder (_lw.F:12518, _sw.F:11058 -- computed, never stored to
+        # ``cicewp``) is not reproduced, the same call the branch above
+        # makes; and here WRF's cicewp is a literal zero, because
+        # iceflg >= 4 rebuilds it from QI1D (_lw.F:12500-12505) which the
+        # remap set to zero.
+        qs_eff = qi * factor
+        ciwp = qs_eff * mass_path
+        if cldfra is not None:
+            ciwp = ciwp / incloud
+        ciwp = cp.ascontiguousarray(ciwp)
+        # reice1D = 10. rides an empty ice path, so the merged
+        # single-species radius is the snow radius wherever there is any
+        # frozen mass; 25 um is this adapter's clear-sky placeholder, as in
+        # the explicit-radius branch above.
+        reice = cp.where(qs_eff > tiny, re_s_eff, DTYPE(25.0))
+        reliq = cp.where(qc > tiny, re_c, DTYPE(10.0))
+        return bound_cloud_sizes(
+            clwp, ciwp, reliq, DTYPE(2.0) * reice, size_bounds, xp=cp,
+            treatment=SIZE_TREATMENT_CLIP, cldfra=cldfra,
+            path_sums=path_sums)
+    if scheme != "morrison":
+        raise ValueError(
+            "microphysics must be 'kessler', 'wsm6', 'thompson', 'nssl', "
+            "'p3', or 'morrison'")
+    if play is None or tlay is None or any(x is None for x in (nc, nr, ni, ns)):
+        raise ValueError("Morrison radii require play, tlay, nc, nr, ni, ns")
+    play = _device_profile(play, qc.shape, "play")
+    tlay = _device_profile(tlay, qc.shape, "tlay")
+    ncp, nrp = field(nc, "nc"), field(nr, "nr")
+    nip, nsp = field(ni, "ni"), field(ns, "ns")
+    if validate and (bool(cp.any(~cp.isfinite(play)))
+                     or bool(cp.any(~cp.isfinite(tlay)))):
+        raise ValueError("Morrison thermodynamic inputs must be finite")
+    if validate:
+        _require_finite_nonnegative(nc=ncp, nr=nrp, ni=nip, ns=nsp)
+    tiny = DTYPE(1.0e-20)
+
+    rho_air = play / (DTYPE(287.15) * tlay)
+    shape = DTYPE(0.0005714) * (ncp / DTYPE(1.0e6) * rho_air) \
+        + DTYPE(0.2714)
+    pgam = cp.clip(DTYPE(1.0) / (shape * shape) - DTYPE(1.0),
+                   DTYPE(2.0), DTYPE(10.0))
+    gamma_ratio = (pgam + DTYPE(1.0)) * (pgam + DTYPE(2.0)) \
+        * (pgam + DTYPE(3.0))
+    lam_c = cp.power(DTYPE(np.pi * 997.0 / 6.0) * ncp * gamma_ratio
+                     / cp.maximum(qc, tiny), DTYPE(1.0 / 3.0))
+    re_c = (pgam + DTYPE(3.0)) / cp.maximum(DTYPE(2.0) * lam_c, tiny) \
+        * DTYPE(1.0e6)
+
+    def exponential_radius(qmass, number, density):
+        lam = cp.power(DTYPE(np.pi * density) * number
+                       / cp.maximum(qmass, tiny), DTYPE(1.0 / 3.0))
+        return DTYPE(1.5e6) / cp.maximum(lam, tiny)
+
+    supplied_effective = (effc, effr, effi, effs)
+    re_c_moments = re_c
+    re_i_moments = exponential_radius(qi, nip, 500.0)
+    re_s_moments = exponential_radius(qs, nsp, 100.0)
+    sentinel_counts = {"liquid_sentinel_cells": 0, "ice_sentinel_cells": 0}
+    sentinel_masks = None
+    if any(value is not None for value in supplied_effective):
+        if any(value is None for value in supplied_effective):
+            raise ValueError("Morrison effective radii require effc/effr/"
+                             "effi/effs together")
+        re_c, re_r, re_i, re_s = (
+            field(value, name) for value, name in zip(
+                supplied_effective, ("effc", "effr", "effi", "effs")))
+        if validate:
+            _require_finite_nonnegative(
+                effc=re_c, effr=re_r, effi=re_i, effs=re_s)
+            # effr is interface parity only (ignored input, not gated).
+            _require_plausible_radii_um(effc=re_c, effi=re_i, effs=re_s)
+        # The scheme's radii describe its last update; a cell that gained
+        # the species since (the transport between two microphysics
+        # calls) carries the kernel's no-mass sentinel beside real mass.
+        # That cell takes the radius its moments give under the kernel's
+        # own size distribution (the kernel additionally bounds the
+        # slope, which this reconstruction does not; where that bound
+        # binds the two differ, and on the control's checkpoints it
+        # binds only for droplets below the table's 2.5 um floor, where
+        # the clip erases the difference).  The cell is counted.  (Until
+        # 2026-09-04 it radiated at the sentinel: 25 um, clipped to the
+        # 21.5 um table top, for a droplet population near 5 um; on the
+        # first lane arm such cells were 52 percent of the liquid cells
+        # at radiation time and 16 percent of the in-cloud liquid path;
+        # their cloud-fraction-weighted share is the record's
+        # liquid_sentinel_radiative_fraction.)
+        sentinel = DTYPE(MORRISON_NO_MASS_RADIUS_UM)
+        liquid_sentinel = (qc > 0) & (re_c == sentinel)
+        ice_sentinel = ((qi > 0) & (re_i == sentinel)) \
+            | ((qs > 0) & (re_s == sentinel))
+        re_c = cp.where(liquid_sentinel, re_c_moments, re_c)
+        re_i = cp.where((qi > 0) & (re_i == sentinel), re_i_moments, re_i)
+        re_s = cp.where((qs > 0) & (re_s == sentinel), re_s_moments, re_s)
+        sentinel_counts = {
+            "liquid_sentinel_cells": cp.count_nonzero(liquid_sentinel),
+            "ice_sentinel_cells": cp.count_nonzero(ice_sentinel)}
+        sentinel_masks = (liquid_sentinel, ice_sentinel)
+    else:
+        re_i = re_i_moments
+        re_s = re_s_moments
+    wc = cp.where((qc > 0) & (ncp > 0), ncp, DTYPE(0.0))
+    # Ice and snow masses that carry a size (a species with mass but no
+    # number has no radius to contribute and is left out of the mean, as
+    # it was out of the number-weighted one).
+    mi = cp.where((qi > 0) & (nip > 0), qi, DTYPE(0.0))
+    ms = cp.where((qs > 0) & (nsp > 0), qs, DTYPE(0.0))
+    reliq = cp.where(wc > 0, re_c, DTYPE(10.0))
+    # Each species at the solid-ice effective diameter that carries its
+    # area per unit mass (the module constants above), then the
+    # area-conserving merge: the summed cross-section of the two
+    # populations at the summed mass, i.e. mass / diameter is additive.
+    d_i = DTYPE(2.0) * re_i * DTYPE(
+        MORRISON_ICE_DENSITY_KG_M3 / RRTMGP_ICE_TABLE_DENSITY_KG_M3)
+    d_s = DTYPE(2.0) * re_s * DTYPE(
+        MORRISON_SNOW_DENSITY_KG_M3 / RRTMGP_ICE_TABLE_DENSITY_KG_M3)
+    area = mi / cp.maximum(d_i, tiny) + ms / cp.maximum(d_s, tiny)
+    dgice = cp.where(mi + ms > 0, (mi + ms) / cp.maximum(area, tiny),
+                     DTYPE(50.0))
+    return bound_cloud_sizes(clwp, ciwp, reliq, dgice, size_bounds, xp=cp,
+                             sentinel_counts=sentinel_counts, cldfra=cldfra,
+                             sentinel_masks=sentinel_masks,
+                             path_sums=path_sums)
+
+
+def cal_cldfra1(qv, qc, qi, qs, tlay, play, *, f_qc=True, f_qi=True,
+                f_qs=True):
+    """WRF icloud=1 Xu-Randall cloud fraction on device (FP32).
+
+    Exact transcription of WRF v4.6.1 ``module_radiation_driver.F``
+    ``cal_cldfra1`` (lines 3761-3986), the routine the radiation driver
+    calls for the Registry default ``icloud=1`` (driver lines 1320-1332,
+    Registry.EM_COMMON:2498).  Saturation follows Murray (1966) with the
+    driver's constants (lines 3806-3816, 3861-3865); the liquid/ice
+    saturation blend uses the condensate ice weight (line 3945) and the
+    fraction is Xu and Randall (1996) with ALPHA0=100, GAMMA=0.49,
+    QCLDMIN=1e-12, PEXP=0.25, RHGRID=1.0 plus the -6.9 ARG clamp and the
+    0.01 truncation (lines 3950-3979).
+
+    Moisture-set dispatch mirrors the driver flags: ``f_qc and f_qi and
+    f_qs`` is the Morrison-class branch (lines 3870-3877, QCLD=QI+QC+QS,
+    weight=(QI+QS)/QCLD); ``f_qc and f_qi and not f_qs`` is the branch WRF
+    comments "for P3, mp option 50 or 51" (lines 3879-3887, QCLD=QI+QC,
+    weight=QI/QCLD), for a package with one ice category and no snow
+    species; ``f_qc`` alone is the Kessler-class branch (lines 3891-3899,
+    QCLD=QC, 273.15 K phase threshold).  Rain never enters QCLD (lines
+    3904-3916).
+    """
+    import cupy as cp
+
+    qv = cp.ascontiguousarray(cp.asarray(qv, dtype=DTYPE))
+    if qv.ndim != 2:
+        raise ValueError("qv must have shape (ncol,nlay)")
+    qc = _device_profile(qc, qv.shape, "qc")
+    qi = _device_profile(qi, qv.shape, "qi")
+    qs = _device_profile(qs, qv.shape, "qs")
+    tlay = _device_profile(tlay, qv.shape, "tlay")
+    play = _device_profile(play, qv.shape, "play")
+    if not f_qc or (f_qs and not f_qi):
+        raise NotImplementedError(
+            "cal_cldfra1 port carries WRF's three F_QC arms: qc+qi+qs "
+            "(module_radiation_driver.F:3870-3877), qc+qi with no snow "
+            "species (the P3 arm, :3879-3887) and qc alone (:3891-3899). "
+            f"f_qc={bool(f_qc)}/f_qi={bool(f_qi)}/f_qs={bool(f_qs)} is "
+            "WRF's Ferrier arm (mp_physics=5) at :3902-3922, whose weight "
+            "is the F_ICE_PHY ice fraction this port does not carry -- "
+            "taking any other arm for it would weight the saturation "
+            "blend with a field that does not exist")
+    qcldmin = DTYPE(1.0e-12)
+    svpt0 = DTYPE(273.15)
+    tc = tlay - svpt0
+    esw = DTYPE(1000.0) * DTYPE(0.61078) * cp.exp(
+        DTYPE(17.2693882) * tc / (tlay - DTYPE(35.86)))
+    esi = DTYPE(1000.0) * DTYPE(0.61078) * cp.exp(
+        DTYPE(21.8745584) * tc / (tlay - DTYPE(7.66)))
+    ep2 = DTYPE(287.0) / DTYPE(461.6)
+    qvsw = ep2 * esw / (play - esw)
+    qvsi = ep2 * esi / (play - esi)
+    if f_qi and f_qs:
+        qcld = qi + qc + qs
+        weight = cp.where(qcld < qcldmin, DTYPE(0.0),
+                          (qi + qs) / cp.maximum(qcld, qcldmin))
+    elif f_qi:
+        # module_radiation_driver.F:3879-3887, "for P3, mp option 50 or
+        # 51": one ice category, no snow species, so QS never enters QCLD
+        # and the ice weight is QI/QCLD.  qs is ignored here rather than
+        # added as a zero -- a package without qs has no such array.
+        qcld = qi + qc
+        weight = cp.where(qcld < qcldmin, DTYPE(0.0),
+                          qi / cp.maximum(qcld, qcldmin))
+    else:
+        qcld = qc
+        weight = cp.where(qcld < qcldmin, DTYPE(0.0),
+                          cp.where(tlay > svpt0, DTYPE(0.0), DTYPE(1.0)))
+    qvs_weight = (DTYPE(1.0) - weight) * qvsw + weight * qvsi
+    rhum = qv / qvs_weight
+    subsat = cp.maximum(DTYPE(1.0e-10), qvs_weight - qv)
+    arg = cp.maximum(DTYPE(-6.9),
+                     DTYPE(-100.0) * qcld / cp.power(subsat, DTYPE(0.49)))
+    fraction = cp.power(cp.maximum(DTYPE(1.0e-10), rhum), DTYPE(0.25)) \
+        * (DTYPE(1.0) - cp.exp(arg))
+    fraction = cp.where(fraction < DTYPE(0.01), DTYPE(0.0), fraction)
+    return cp.ascontiguousarray(
+        cp.where(qcld < qcldmin, DTYPE(0.0),
+                 cp.where(rhum >= DTYPE(1.0), DTYPE(1.0), fraction)))
+
+
+# WRF drives the LW/SW stochastic generators with distinct seed advances
+# (module_ra_rrtmg_sw.F:11220-11222, module_ra_rrtmg_lw.F:12687-12689).
+MCICA_PERMUTESEED_SW = 1
+MCICA_PERMUTESEED_LW = 150
+
+
+_MCICA_MWC = ((18000, 1179647999), (30903, 2025259007))
+
+
+def _mcica_xorshift_step_matrix() -> list[int]:
+    """The 32 basis images of one ``s2`` xorshift, as a GF(2) matrix."""
+    cols = []
+    for bit in range(32):
+        v = 1 << bit
+        v ^= (v << 13) & 0xFFFFFFFF
+        v ^= v >> 17
+        v ^= (v << 5) & 0xFFFFFFFF
+        cols.append(v)
+    return cols
+
+
+def _mcica_gf2_apply(mat, v: int) -> int:
+    out = 0
+    while v:
+        out ^= mat[(v & -v).bit_length() - 1]
+        v &= v - 1
+    return out
+
+
+@lru_cache(maxsize=8)
+def _mcica_jump_tables(nlay: int, ngpt: int):
+    """One composed advance operator per subcolumn ``g``.
+
+    Subcolumn ``g`` begins at stream position ``permuteseed + g*nlay``.  The
+    level operators advance ``nlay * 2**j`` steps, and a thread used to walk
+    the set bits of its own ``g`` applying up to ``bit_length(ngpt-1)`` of
+    them -- with two 64-bit modulos and a 32-XOR matrix apply per level.
+    They are all powers of one map, so they commute AND compose exactly, in
+    each of the four algebras: affine mod 2**32, GF(2) matrix product, and
+    modular multiplication for the two MWC residues.  Folding them here
+    leaves the kernel one operator to apply, and lands it on the same state
+    the level-by-level walk landed on.
+
+    The fold costs one composition per ``g``, not one per set bit: ``g``'s
+    operator is the operator of ``g`` with its lowest set bit cleared,
+    composed with that bit's level.
+    """
+    import cupy as cp
+
+    ngpt = int(ngpt)
+    njump = max(1, int(ngpt - 1).bit_length())
+    # s1: affine x -> A*x + C (mod 2**32); compose f then g = (Ag*Af, Ag*Cf+Cg).
+    a, c = 69069, 1327217885
+    A, C = 1, 0
+    for _ in range(nlay):
+        A, C = (a * A) & 0xFFFFFFFF, (a * C + c) & 0xFFFFFFFF
+    lvl1 = []
+    for _ in range(njump):
+        lvl1.append((A, C))
+        A, C = (A * A) & 0xFFFFFFFF, (A * C + C) & 0xFFFFFFFF
+    # s2: GF(2) matrix power.
+    step = _mcica_xorshift_step_matrix()
+    M = [1 << i for i in range(32)]
+    for _ in range(nlay):
+        M = [_mcica_gf2_apply(step, col) for col in M]
+    lvl2 = []
+    for _ in range(njump):
+        lvl2.append(M)
+        M = [_mcica_gf2_apply(M, col) for col in M]
+    # s3/s4: MWC state advances by multiplication by b**-1 modulo a*b-1.
+    lvl_mwc = []
+    for base, modulus in _MCICA_MWC:
+        m = pow(pow(65536, -1, modulus), nlay, modulus)
+        level = []
+        for _ in range(njump):
+            level.append(m)
+            m = (m * m) % modulus
+        lvl_mwc.append(level)
+
+    # Fold, ascending-j exactly as the level walk applied them: g's operator
+    # is `rest` (g without its lowest set bit, all of whose levels are
+    # higher) applied AFTER that bit's level.
+    s1 = np.zeros((ngpt, 2), dtype=np.uint32)
+    s1[0] = (1, 0)
+    s2 = np.zeros((ngpt, 32), dtype=np.uint32)
+    s2[0] = [1 << i for i in range(32)]
+    s3 = np.ones(ngpt, dtype=np.uint32)
+    s4 = np.ones(ngpt, dtype=np.uint32)
+    for g in range(1, ngpt):
+        low = g & -g
+        j = low.bit_length() - 1
+        rest = g ^ low
+        a_j, c_j = lvl1[j]
+        a_r, c_r = int(s1[rest, 0]), int(s1[rest, 1])
+        s1[g] = ((a_r * a_j) & 0xFFFFFFFF, (a_r * c_j + c_r) & 0xFFFFFFFF)
+        rest_mat = [int(v) for v in s2[rest]]
+        s2[g] = [_mcica_gf2_apply(rest_mat, col) for col in lvl2[j]]
+        s3[g] = (int(s3[rest]) * lvl_mwc[0][j]) % _MCICA_MWC[0][1]
+        s4[g] = (int(s4[rest]) * lvl_mwc[1][j]) % _MCICA_MWC[1][1]
+    u32 = lambda a: cp.asarray(np.ascontiguousarray(a, dtype=np.uint32))
+    return njump, u32(s1.ravel()), u32(s2.ravel()), u32(s3), u32(s4)
+
+
+def mcica_cloud_masks(play, cldfra, ngpt, permuteseed, *, validate=True):
+    return _mcica_cloud_masks(
+        play, cldfra, ngpt, permuteseed, validate=validate, out=None)
+
+
+def _mcica_cloud_masks(play, cldfra, ngpt, permuteseed, *, validate, out):
+    """WRF RRTMG McICA maximum-random subcolumn cloud masks on device.
+
+    Transcribes the kissvec generator, pmid-fraction seeding, cldmin
+    floor, icld=2 maximum-random overlap walk (WRF Registry default
+    ``cldovrlp=2``, Registry.EM_COMMON:2499), and the ``CDF >= 1-cldf``
+    subcolumn decision of WRF v4.6.1 ``module_ra_rrtmg_sw.F``
+    (lines 1692-1744, 1778-1813, 1941-1977, 2008-2040) with one
+    subcolumn per g-point (line 1476).  Returns a boolean
+    ``(ncol,nlay,ngpt)`` mask; ``play`` must be bottom-to-top in Pa,
+    matching the generator's seed requirement.
+    """
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    play = cp.ascontiguousarray(cp.asarray(play, dtype=DTYPE))
+    if play.ndim != 2 or play.shape[1] < 4:
+        raise ValueError("play must have shape (ncol,nlay) with nlay >= 4")
+    cldfra = _device_profile(cldfra, play.shape, "cldfra")
+    if validate and bool(cp.any(play[:, 0] < play[:, 1])):
+        # module_ra_rrtmg_sw.F:1734-1736 stops unless pmid is supplied
+        # bottom-to-top.
+        raise ValueError(
+            "kissvec seeding requires pmid from the bottom four layers")
+    ncol, nlay = play.shape
+    mask = _workspace_output(
+        out, (ncol, nlay, int(ngpt)), "mcica_mask", dtype=cp.bool_)
+    _, j1, j2, j3, j4 = _mcica_jump_tables(int(nlay), int(ngpt))
+    # One block per column: the block shares `1 - cldfra` across its ngpt
+    # subcolumns instead of every thread rebuilding it in FP64.  ngpt is 256
+    # (LW) or 224 (SW), both legal block sizes and both whole warps; the
+    # kernel strides `g` anyway, so a clamped block stays correct.
+    threads = min(int(ngpt), 1024)
+    shared = int(nlay) * 8
+    get_kernel("rrtmgp_mcica", "rrtmgp_mcica_maxran")(
+        (int(ncol),), (threads,),
+        (play, cldfra, mask, j1, j2, j3, j4,
+         np.int32(ncol), np.int32(nlay),
+         np.int32(ngpt), np.int32(permuteseed)),
+        shared_mem=shared)
+    return mask
+
+
+def cloud_optics(tables: CloudTables, clwp, ciwp, reliq,
+                 dgice) -> CloudOpticsResult:
+    return _cloud_optics(tables, clwp, ciwp, reliq, dgice, out=None)
+
+
+def _cloud_optics(tables: CloudTables, clwp, ciwp, reliq,
+                  dgice, *, out) -> CloudOpticsResult:
+    """Interpolate v1.9 cloud tables into band-resolved FP32 optics.
+
+    Non-positive water paths are reference-defined clear-sky masks in
+    ``mo_cloud_optics_rrtmgp.F90:332-340``; the reference kernel writes zero
+    properties for them in ``mo_cloud_optics_rrtmgp_kernels.F90:45-60``.
+    """
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    clwp = cp.ascontiguousarray(cp.asarray(clwp, dtype=DTYPE))
+    if clwp.ndim != 2:
+        raise ValueError("clwp must have shape (ncol,nlay)")
+    ciwp = _device_profile(ciwp, clwp.shape, "ciwp")
+    reliq = _device_profile(reliq, clwp.shape, "reliq")
+    dgice = _device_profile(dgice, clwp.shape, "dgice")
+    d = tables.to_device()
+    shape = (*clwp.shape, tables.nband)
+    if out is None:
+        tau, ssa, asym = (cp.empty(shape, dtype=DTYPE) for _ in range(3))
+    else:
+        tau, ssa, asym = (
+            _workspace_output(value, shape, name)
+            for value, name in zip(out, ("cld_tau", "cld_ssa", "cld_asy")))
+    n = clwp.size * tables.nband
+    threads = 256
+    get_kernel("rrtmgp_cloud", "rrtmgp_cloud_optics")(
+        ((n + threads - 1) // threads,), (threads,),
+        (clwp, ciwp, reliq, dgice, d.extliq, d.ssaliq, d.asyliq,
+         d.extice, d.ssaice, d.asyice, tau, ssa, asym,
+         np.int32(clwp.size), np.int32(tables.nband),
+         np.int32(tables.nsize_liq), np.int32(tables.nsize_ice),
+         np.int32(tables.nrghice), DTYPE(tables.radliq_lwr),
+         DTYPE(tables.liq_step_size), DTYPE(tables.diamice_lwr),
+         DTYPE(tables.ice_step_size)))
+    return CloudOpticsResult(tau, ssa, asym)
+
+
+def add_cloud_optics(tables: GasTables, gas: GasOpticsResult,
+                     cloud: CloudOpticsResult,
+                     cloud_mask=None) -> GasOpticsResult:
+    """Add band cloud properties to g-point gas properties on device.
+
+    ``cloud_mask`` is an optional boolean ``(ncol,nlay,ngpt)`` McICA
+    subcolumn mask: cloud properties are applied only to cloudy
+    subcolumns, mirroring how WRF's RRTMG solvers consume the stochastic
+    ``cldfmc``/``taucmc`` arrays per g-point (module_ra_rrtmg_sw.F:
+    1951-1977, module_ra_rrtmg_lw.F:3288).  Without a mask every layer
+    with condensate is treated as overcast.
+    """
+    import cupy as cp
+
+    tau_gas = cp.ascontiguousarray(cp.asarray(gas.tau, dtype=DTYPE))
+    if tau_gas.ndim != 3 or tau_gas.shape[2] != tables.ngpt:
+        raise ValueError("gas optics do not match the gas table")
+    band_shape = (*tau_gas.shape[:2], tables.nband)
+    tau_cloud = _device_profile(cloud.tau, band_shape, "cloud.tau")
+    ssa_cloud = _device_profile(cloud.ssa, band_shape, "cloud.ssa")
+    g_cloud = _device_profile(cloud.g, band_shape, "cloud.g")
+    bands = tables.to_device().gpoint_bands
+    tc, wc, gc = (x[:, :, bands]
+                  for x in (tau_cloud, ssa_cloud, g_cloud))
+    if cloud_mask is not None:
+        mask = cp.asarray(cloud_mask)
+        if mask.shape != tau_gas.shape:
+            raise ValueError(
+                f"cloud_mask must have shape {tau_gas.shape}, "
+                f"got {mask.shape}")
+        tc = tc * mask
+    if tables.kind == "lw":
+        return GasOpticsResult(
+            cp.ascontiguousarray(tau_gas + tc * (DTYPE(1.0) - wc)),
+            col_dry=gas.col_dry)
+    ssa_gas = _device_profile(gas.ssa, tau_gas.shape, "gas.ssa")
+    g_gas = _device_profile(gas.g, tau_gas.shape, "gas.g")
+    total_tau = tau_gas + tc
+    scatter = tau_gas * ssa_gas + tc * wc
+    floor = DTYPE(3.0 * np.finfo(np.float32).tiny)
+    total_ssa = scatter / cp.maximum(floor, total_tau)
+    total_g = (tau_gas * ssa_gas * g_gas + tc * wc * gc) \
+        / cp.maximum(floor, scatter)
+    return GasOpticsResult(cp.ascontiguousarray(total_tau),
+                           cp.ascontiguousarray(total_ssa),
+                           cp.ascontiguousarray(total_g), gas.col_dry)
+
+
+def _finalize_cloud_optics(tables: GasTables, gas: GasOpticsResult,
+                           cloud: CloudOpticsResult,
+                           cloud_mask=None, *, out=None) -> GasOpticsResult:
+    """Expand/add cloud optics and, for SW, delta-scale in one kernel."""
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    tau_gas = cp.ascontiguousarray(cp.asarray(gas.tau, dtype=DTYPE))
+    if tau_gas.ndim != 3 or tau_gas.shape[2] != tables.ngpt:
+        raise ValueError("gas optics do not match the gas table")
+    band_shape = (*tau_gas.shape[:2], tables.nband)
+    tau_cloud = _device_profile(cloud.tau, band_shape, "cloud.tau")
+    ssa_cloud = _device_profile(cloud.ssa, band_shape, "cloud.ssa")
+    g_cloud = _device_profile(cloud.g, band_shape, "cloud.g")
+    if cloud_mask is None:
+        mask = tau_gas  # Valid dummy pointer; the kernels do not read it.
+        have_mask = False
+    else:
+        mask = cp.ascontiguousarray(cp.asarray(cloud_mask, dtype=cp.bool_))
+        if mask.shape != tau_gas.shape:
+            raise ValueError(
+                f"cloud_mask must have shape {tau_gas.shape}, "
+                f"got {mask.shape}")
+        have_mask = True
+
+    n = tau_gas.size
+    threads = 256
+    launch = ((n + threads - 1) // threads,), (threads,)
+    bands = tables.to_device().gpoint_bands
+    if tables.kind == "lw":
+        tau = (cp.empty_like(tau_gas) if out is None else
+               _workspace_output(out[0], tau_gas.shape, "optics_tau"))
+        get_kernel("rrtmgp_cloud", "rrtmgp_finalize_cloud_lw")(
+            *launch, (tau_gas, tau_cloud, ssa_cloud, bands, mask, tau,
+                      np.int32(n), np.int32(tables.ngpt),
+                      np.int32(tables.nband), np.int32(have_mask)))
+        return GasOpticsResult(tau=tau, col_dry=gas.col_dry)
+
+    if gas.g is not None:
+        raise ValueError("fused SW optics require the zero gas-g sentinel")
+    ssa_gas = _device_profile(gas.ssa, tau_gas.shape, "gas.ssa")
+    if out is None:
+        tau, ssa, asym = (cp.empty_like(tau_gas) for _ in range(3))
+    else:
+        tau, ssa, asym = (
+            _workspace_output(value, tau_gas.shape, name)
+            for value, name in zip(
+                out, ("optics_tau", "optics_ssa", "optics_g")))
+    get_kernel("rrtmgp_cloud", "rrtmgp_finalize_cloud_sw")(
+        *launch, (tau_gas, ssa_gas, tau_cloud, ssa_cloud, g_cloud,
+                  bands, mask, tau, ssa, asym, np.int32(n),
+                  np.int32(tables.ngpt), np.int32(tables.nband),
+                  np.int32(have_mask)))
+    return GasOpticsResult(tau, ssa, asym, gas.col_dry)
+
+
+def _surface_emissivity_bands(value, tables: GasTables, ny: int, nx: int, *,
+                              validate=True):
+    """Normalize scalar or band-first surface emissivity to (ncol,nband)."""
+    import cupy as cp
+
+    emissivity = cp.asarray(value, dtype=DTYPE)
+    ncol = ny * nx
+    if emissivity.ndim == 0:
+        bands = cp.broadcast_to(emissivity, (ncol, tables.nband))
+    elif emissivity.shape == (ny, nx):
+        bands = cp.broadcast_to(
+            emissivity.reshape(ncol, 1), (ncol, tables.nband))
+    elif emissivity.shape == (tables.nband,):
+        bands = cp.broadcast_to(emissivity[None, :], (ncol, tables.nband))
+    elif emissivity.shape == (tables.nband, ny, nx):
+        bands = emissivity.transpose(1, 2, 0).reshape(ncol, tables.nband)
+    else:
+        raise ValueError(
+            "emiss must be scalar, (ny,nx), (nband,), or (nband,ny,nx); "
+            f"got {emissivity.shape}")
+    if validate and (bool(cp.any(~cp.isfinite(bands)))
+                     or bool(cp.any(bands < 0.0))
+                     or bool(cp.any(bands > 1.0))):
+        raise ValueError("surface emissivity must be finite and within [0, 1]")
+    return cp.ascontiguousarray(bands)
+
+
+def _expand_band_to_gpoint(values, tables: GasTables, name="band_values", *,
+                           out=None):
+    """Expand band values unchanged over each band's g-points.
+
+    Transcribes ``mo_rte_lw.F90:188-191,266-268,476-496`` at fa107a1.
+    Input is ``(ncol,nband)`` after adapting Fortran's ``(nband,ncol)``.
+    """
+    import cupy as cp
+
+    values = cp.ascontiguousarray(cp.asarray(values, dtype=DTYPE))
+    if values.ndim != 2 or values.shape[1] != tables.nband:
+        raise ValueError(
+            f"{name} must have shape (ncol,{tables.nband}), got {values.shape}")
+    if out is None:
+        return cp.ascontiguousarray(
+            values[:, tables.to_device().gpoint_bands])
+    target = _workspace_output(
+        out, (values.shape[0], tables.ngpt), name)
+    # cupy.take writes the full shared view directly; advanced indexing would
+    # allocate a second call-local g-point array and defeat real sharing.
+    cp.take(values, tables.to_device().gpoint_bands, axis=1, out=target)
+    return target
+
+
+def _validation_error_messages(flags: int) -> tuple[str, ...]:
+    """Decode the production validation bitset without device dependencies."""
+    return tuple(message for bit, message in _VALIDATION_MESSAGES if flags & bit)
+
+
+def _validate_device_call_shapes(*, play, plev, tlay, tlev, tsfc, exner,
+                                 qv, qc, qr, qi, qs, cldfra, emiss,
+                                 numbers, effective):
+    """Reject every extent mismatch before the fused kernel sees a pointer."""
+    if len(play.shape) != 2:
+        raise ValueError("play must have shape (ncol,nlay)")
+    ncol, nlay = play.shape
+    if ncol < 1 or nlay < 2:
+        raise ValueError(
+            "RRTMGP profiles must contain at least one column and two layers")
+    cell_shape = (ncol, nlay)
+    level_shape = (ncol, nlay + 1)
+    expected = {
+        "plev": (plev, level_shape), "tlay": (tlay, cell_shape),
+        "tlev": (tlev, level_shape), "tsfc": (tsfc, (ncol,)),
+        "exner": (exner, cell_shape), "qv": (qv, cell_shape),
+        "qc": (qc, cell_shape), "qr": (qr, cell_shape),
+        "qi": (qi, cell_shape), "qs": (qs, cell_shape),
+        "cldfra": (cldfra, cell_shape),
+    }
+    expected.update((name, (value, cell_shape))
+                    for name, value in numbers.items())
+    expected.update((name, (value, cell_shape))
+                    for name, value in effective.items())
+    for name, (value, shape) in expected.items():
+        if value.shape != shape:
+            raise ValueError(f"{name} must have shape {shape}, got {value.shape}")
+    if len(emiss.shape) != 2 or emiss.shape[0] != ncol:
+        raise ValueError(
+            f"surface emissivity must have {ncol} columns, got {emiss.shape}")
+
+
+def _validation_flags_device(*, play, plev, tlay, tlev, tsfc, exner, qv,
+                             qc, qr, qi, qs, cldfra, emiss,
+                             numbers, effective, tables_lw, tables_sw,
+                             radii_bands=None, describe=None):
+    """Run the production predicate scan and return its host bitset.
+
+    ``describe`` opts the readback into :mod:`woof.core.health_ledger`; see
+    :func:`woof.core.microphysics.validate_surface_diagnostics`.
+    """
+    import cupy as cp
+
+    flags = cp.zeros((1,), dtype=cp.uint32)
+    _launch_validation_kernel(
+        flags, play=play, plev=plev, tlay=tlay, tlev=tlev, tsfc=tsfc,
+        exner=exner, qv=qv, qc=qc, qr=qr, qi=qi, qs=qs, cldfra=cldfra,
+        emiss=emiss, numbers=numbers, effective=effective,
+        tables_lw=tables_lw, tables_sw=tables_sw, radii_bands=radii_bands)
+    # This is the production path's sole validation synchronization/D2H read
+    # -- unless a health ledger is active, in which case it is not a read at
+    # all and the drain reports the same bitset later.
+    from woof.core import health_ledger
+
+    return health_ledger.read_status(
+        flags, site="rrtmgp", describe=describe)
+
+
+def _launch_validation_kernel(flags, *, play, plev, tlay, tlev, tsfc, exner,
+                              qv, qc, qr, qi, qs, cldfra, emiss, numbers,
+                              effective, tables_lw, tables_sw,
+                              radii_bands=None):
+    """One launch of the fused predicate scan over these columns.
+
+    The kernel ORs its bits into ``flags`` (``atomicOr``), so a driver that
+    runs the grid one column chunk at a time launches this once per chunk
+    on ONE flag word and reads it once at the end: the chunking costs no
+    synchronization and the word it reads is the word the whole grid
+    would have set.  No read happens here.
+    """
+    _validate_device_call_shapes(
+        play=play, plev=plev, tlay=tlay, tlev=tlev, tsfc=tsfc,
+        exner=exner, qv=qv, qc=qc, qr=qr, qi=qi, qs=qs,
+        cldfra=cldfra, emiss=emiss, numbers=numbers,
+        effective=effective)
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    ncol, nlay = play.shape
+    dummy = qc
+    morrison = bool(numbers)
+    have_effective = bool(effective)
+
+    def optional(fields, name):
+        return fields[name] if name in fields else dummy
+
+    n = max(play.size, plev.size, emiss.size)
+    threads = 256
+    play_lower = max(float(np.min(tables_lw.press_ref)),
+                     float(np.min(tables_sw.press_ref)))
+    play_upper = min(float(np.max(tables_lw.press_ref)),
+                     float(np.max(tables_sw.press_ref)))
+    temp_lower = max(float(np.min(tables_lw.temp_ref)),
+                     float(np.min(tables_sw.temp_ref)))
+    temp_upper = min(float(np.max(tables_lw.temp_ref)),
+                     float(np.max(tables_sw.temp_ref)))
+    if radii_bands is None:
+        radii_bands = EFFECTIVE_RADIUS_PLAUSIBLE_UM
+    get_kernel("rrtmgp_validation", "rrtmgp_validate_call")(
+        ((n + threads - 1) // threads,), (threads,), (
+            play, plev, tlay, tlev, tsfc, exner, qv, qc, qr, qi, qs,
+            cldfra,
+            optional(numbers, "nc"), optional(numbers, "nr"),
+            optional(numbers, "ni"), optional(numbers, "ns"),
+            optional(effective, "effc"), optional(effective, "effr"),
+            optional(effective, "effi"), optional(effective, "effs"),
+            emiss, flags, np.int32(ncol), np.int32(nlay),
+            np.int32(emiss.size), np.int32(morrison),
+            np.int32(have_effective), np.float64(play_lower),
+            np.float64(play_upper),
+            DTYPE(temp_lower), DTYPE(temp_upper),
+            DTYPE(radii_bands["effc"][0]), DTYPE(radii_bands["effc"][1]),
+            DTYPE(radii_bands["effi"][0]), DTYPE(radii_bands["effi"][1]),
+            DTYPE(radii_bands["effs"][0]), DTYPE(radii_bands["effs"][1])))
+
+
+def _read_validation_flags(flags, *, diagnose=None) -> None:
+    """Read the fused guards' flag word and raise on a set bit, replaying
+    the legacy diagnostics first (``diagnose``) on the immediate path.
+
+    The deferred report drops ``diagnose()``: it replays the legacy
+    validators over the LIVE arrays, and by the time a deferred drain runs
+    those arrays hold a later step.  A message built from them would name
+    the wrong values with complete confidence, which is worse than not
+    having it.  The bitset itself is exact either way.
+    """
+    from woof.core import health_ledger
+
+    def _describe(observed: int) -> None:
+        raise ValueError(
+            "RRTMGP input validation failed: "
+            + "; ".join(_validation_error_messages(observed))
+            + health_ledger.deferred_note())
+
+    # The production path's sole validation synchronization/D2H read --
+    # unless a health ledger is active, in which case it is not a read at
+    # all and the drain reports the same bitset later.
+    observed = health_ledger.read_status(
+        flags, site="rrtmgp", describe=_describe)
+    if observed:
+        if diagnose is not None:
+            diagnose()
+        raise ValueError(
+            "RRTMGP input validation failed: "
+            + "; ".join(_validation_error_messages(observed)))
+
+
+def _validate_device_call(*, diagnose=None, **profiles):
+    """Run fused guards over these columns, replaying legacy diagnostics
+    only on failure (:func:`_read_validation_flags`)."""
+    import cupy as cp
+
+    flags = cp.zeros((1,), dtype=cp.uint32)
+    _launch_validation_kernel(flags, **profiles)
+    _read_validation_flags(flags, diagnose=diagnose)
+
+
+def _raise_full_call_validation_error(*, play, plev, tlay, tlev, tsfc,
+                                      exner, qv, qc, qr, qi, qs, cldfra,
+                                      emiss, numbers, effective, tables_lw,
+                                      tables_sw, column_chunk,
+                                      radii_bands=None):
+    """Replay the former validators in their observable failure order."""
+    import cupy as cp
+
+    if bool(cp.any(~cp.isfinite(plev))):
+        raise ValueError("hydrometeor pressure inputs must be finite")
+    _require_finite_nonnegative(qc=qc, qr=qr, qi=qi, qs=qs)
+    if (bool(cp.any(~cp.isfinite(cldfra)))
+            or bool(cp.any(cldfra < 0.0))
+            or bool(cp.any(cldfra > 1.0))):
+        raise ValueError("cldfra must be finite and within [0, 1]")
+    if numbers:
+        if (bool(cp.any(~cp.isfinite(play)))
+                or bool(cp.any(~cp.isfinite(tlay)))):
+            raise ValueError("Morrison thermodynamic inputs must be finite")
+        _require_finite_nonnegative(**numbers)
+        if effective:
+            _require_finite_nonnegative(**effective)
+    if effective:
+        bands = (EFFECTIVE_RADIUS_PLAUSIBLE_UM if radii_bands is None
+                 else radii_bands)
+        _require_plausible_radii_um(bands=bands, **{
+            name: value for name, value in effective.items()
+            if name in bands})
+    if (bool(cp.any(~cp.isfinite(emiss)))
+            or bool(cp.any(emiss < 0.0))
+            or bool(cp.any(emiss > 1.0))):
+        raise ValueError("surface emissivity must be finite and within [0, 1]")
+    def replay_gas_chunk(tables, sl, *, planck):
+        _require_finite_nonnegative(qv=qv[sl])
+        _validate_host_range(
+            "play", play[sl], float(np.min(tables.press_ref)),
+            float(np.max(tables.press_ref)), "Pa")
+        _validate_host_range("plev", plev[sl], 0.0, None, "Pa")
+        _validate_host_range(
+            "tlay", tlay[sl], float(np.min(tables.temp_ref)),
+            float(np.max(tables.temp_ref)), "K")
+        if bool(cp.any(play[sl, 0] < play[sl, 1])):
+            raise ValueError(
+                "kissvec seeding requires pmid from the bottom four layers")
+        if planck:
+            for name, value in (("tlev", tlev[sl]), ("tsfc", tsfc[sl])):
+                _validate_host_range(
+                    name, value, float(np.min(tables.temp_ref)),
+                    float(np.max(tables.temp_ref)), "K")
+
+    ncol = play.shape[0]
+    for start in range(0, ncol, column_chunk):
+        sl = slice(start, min(start + column_chunk, ncol))
+        replay_gas_chunk(tables_lw, sl, planck=True)
+    for start in range(0, ncol, column_chunk):
+        sl = slice(start, min(start + column_chunk, ncol))
+        replay_gas_chunk(tables_sw, sl, planck=False)
+    dp = cp.abs(plev[:, 1:] - plev[:, :-1])
+    if (bool(cp.any(dp <= DTYPE(0.0)))
+            or bool(cp.any(exner <= DTYPE(0.0)))):
+        raise ValueError("radiation pressure thickness and Exner must be positive")
+
+
+@dataclass
+class RRTMGPRadiation:
+    """RTE+RRTMGP column driver for the frozen Phase-4 radiation slot.
+
+    State arrays remain in woof's bottom-to-top ``(nz,ny,nx)`` layout;
+    columns are packed only at the scheme boundary.  Trace gases use RFMIP
+    experiment-zero climatology plus :func:`trace_gases` date selection and
+    explicit case overrides.  Water vapor comes from the model and ozone is
+    interpolated from the median RFMIP climatological profile.  Both come
+    from the engine's :func:`woof.core.rrtmgp.load_trace_climatology`,
+    the table derived from the RFMIP input file, which is not read here.
+    """
+
+    #: RTE resolves the full level stack, so the top level's upward
+    #: longwave flux IS WRF's OLR; the driver reads this declaration to
+    #: decide whether the run's wrfout carries the field.  Unannotated on
+    #: purpose: this is a class constant, not a dataclass field.
+    publishes_olr = True
+    #: :class:`SizeBounding` counts (host ints) of the last call's
+    #: hydrometeor coupling: how many cloudy cells and columns had a
+    #: particle size outside the loaded tables' domain and were carried
+    #: or clipped.  None before the first call.
+    last_size_bounding = None
+    #: With ``column_size_bounding``: the record's ten path sums per
+    #: column of the last call, ``(ncol,)`` device arrays keyed by
+    #: :data:`SIZE_BOUNDING_SUM_NAMES`.  None otherwise.
+    last_size_bounding_columns = None
+
+    start_time: datetime
+    latitude_deg: object
+    longitude_deg: object
+    # Controller benchmark on the 250x200x49 d01 grid (2026-07-15):
+    # 256=21.9 s, 1024=5.54 s, 4096=1.71 s, 12500=1.12 s, 50000=1.36 s
+    # per call, with memory flat at 0.65 GiB.  The multi-domain default is
+    # capacity-led; keep it configurable for throughput tuning.
+    column_chunk: int = DEFAULT_COLUMN_CHUNK
+    validation_mode: str = "fused"
+    #: Hand back the size-bounding record's path sums PER COLUMN as well
+    #: (``last_size_bounding_columns``), for a driver that runs the grid a
+    #: latitude band at a time and assembles the record over the globe
+    #: (:func:`size_bounding_column_sums`).  Off, nothing changes.
+    column_size_bounding: bool = False
+    # Trace-gas policy hook (Phase 5, Task 2): a mapping of well-mixed
+    # RFMIP gas name -> mole fraction applied over the climatological
+    # values.  None applies the pinned date-indexed policy; the frozen 1974
+    # profile passes its declared 330 ppm choice explicitly.
+    trace_gas_overrides: Mapping[str, float] | None = None
+    update_count: int = field(default=0, init=False)
+    trace_vmr: dict[str, float] = field(default_factory=dict, init=False)
+
+    def __post_init__(self) -> None:
+        import cupy as cp
+
+        if not isinstance(self.start_time, datetime):
+            raise TypeError("radiation_start_time must be a datetime")
+        self.latitude_deg = cp.ascontiguousarray(
+            cp.asarray(self.latitude_deg, dtype=DTYPE))
+        self.longitude_deg = cp.ascontiguousarray(
+            cp.asarray(self.longitude_deg, dtype=DTYPE))
+        if self.latitude_deg.shape != self.longitude_deg.shape:
+            raise ValueError("radiation latitude/longitude shapes must match")
+        if self.column_chunk < 1:
+            raise ValueError("column_chunk must be positive")
+        if self.validation_mode not in ("fused", "full"):
+            raise ValueError("validation_mode must be 'fused' or 'full'")
+        self.lw_tables = load_gas_tables("lw")
+        self.sw_tables = load_gas_tables("sw")
+        if (not np.array_equal(self.lw_tables.press_ref,
+                               self.sw_tables.press_ref)
+                or not np.array_equal(self.lw_tables.temp_ref,
+                                      self.sw_tables.temp_ref)
+                or self.lw_tables.press_ref_trop
+                != self.sw_tables.press_ref_trop):
+            raise ValueError(
+                "LW/SW gas tables must share an interpolation grid")
+        if float(np.min(self.lw_tables.press_ref)) != RRTMGP_TOA_PRESSURE_PA:
+            raise ValueError(
+                "RRTMGP coefficient pressure floor drifted from the "
+                "above-model column adapter")
+        self.lw_cloud_tables = load_cloud_tables("lw")
+        self.sw_cloud_tables = load_cloud_tables("sw")
+        from woof.core.rrtmgp import load_trace_climatology
+
+        climatology = load_trace_climatology()
+        for gas in _RFMIP_GAS_NAMES:
+            self.trace_vmr[gas] = climatology.trace_vmr[gas]
+        for gas, value in trace_gases(
+                self.start_time, self.trace_gas_overrides).items():
+            if gas not in self.trace_vmr:
+                # Defensive parity with the pure policy validation: table
+                # and packaged RFMIP names must never drift silently.
+                raise ValueError(
+                    f"unknown trace gas {gas!r}; known well-mixed gases: "
+                    f"{sorted(self.trace_vmr)}")
+            self.trace_vmr[gas] = value
+        pressure = climatology.pressure_layer_pa
+        ozone = climatology.ozone_vmr
+        order = np.argsort(pressure)
+        self._ozone_logp = cp.asarray(np.log(pressure[order]), dtype=DTYPE)
+        self._ozone_vmr = cp.asarray(ozone[order], dtype=DTYPE)
+
+    @staticmethod
+    def _columns(array):
+        """Pack ``(nz,ny,nx)`` into bottom-to-top ``(ncol,nlay)``."""
+        import cupy as cp
+        return cp.ascontiguousarray(array.transpose(1, 2, 0).reshape(
+            array.shape[1] * array.shape[2], array.shape[0]))
+
+    @staticmethod
+    def _field_from_state(state, names, fallback):
+        for name in names:
+            value = getattr(state, name, None)
+            if value is not None:
+                return value
+        return fallback
+
+    def _gas_vmr(self, tables, play, qv, *, validate=True, out=None):
+        """Build the (ncol, nlay, ngas + 1) volume-mixing-ratio cube.
+
+        ONE kernel writes the whole cube.  It used to be five-plus CuPy
+        expressions -- a zero fill, a scaled h2o write, an ozone write and
+        one write per well-mixed trace gas -- each a strided store into the
+        last axis, each its own launch.  This runs once per chunk per band,
+        2364 times in a profiled hour, for 1.94 s of HOST time against
+        0.94 s of device: the stores were never the cost, the submissions
+        were.  Radiation is submission bound (HOWTO 13.5b) with 1.97 s of
+        GPU idle in it, so that host time is wall time.
+
+        ``cupy.interp`` is deliberately left alone and its output handed to
+        the kernel.  The ozone lookup is the one piece here whose last bit
+        depends on somebody else's implementation, and reproducing it in
+        CUDA would be betting bit-exactness on matching it.
+        """
+        import cupy as cp
+        from woof.globe.core.kernels import get_kernel
+
+        if not hasattr(cp, "RawModule"):
+            # The CPU stand-in: tests substitute numpy for cupy to keep this
+            # path runnable without a card.  No kernels there, so it takes
+            # the expression sequence the fused kernel replaced -- which is
+            # also the reference the fused path is gated against, bitwise,
+            # over both tables and every trace-gas set (test_rrtmgp).
+            return self._gas_vmr_expressions(
+                cp, tables, play, qv, validate=validate, out=out)
+
+        shape = (*play.shape, tables.ngas + 1)
+        # Every slot is written by the kernel below -- the zero fill is part
+        # of it -- so a fresh allocation need not be zeroed, and a reused
+        # workspace slot is still completely overwritten before its first
+        # read, exactly as RRTMGP_WORKSPACE_LIFETIME_AUDIT records.
+        vmr = (cp.empty(shape, dtype=DTYPE) if out is None
+               else _workspace_output(out, shape, "vmr"))
+        # qv is kg water / kg dry air; RRTMGP consumes mole / mole dry air.
+        if validate:
+            _require_finite_nonnegative(qv=qv)
+        qv = cp.ascontiguousarray(cp.asarray(qv, dtype=DTYPE))
+        if qv.shape != play.shape:
+            raise ValueError(
+                f"gas VMR qv must have shape {play.shape}, got {qv.shape}")
+        # float64 out of cupy.interp even from float32 tables; the kernel
+        # narrows on the store, which is the store the CuPy path did.
+        ozone = cp.interp(
+            cp.log(play).ravel(), self._ozone_logp, self._ozone_vmr)
+        if ozone.dtype != cp.float64:
+            raise TypeError(
+                "gas VMR ozone interpolation must be float64 for the fused "
+                f"fill kernel, got {ozone.dtype}")
+        # Later writes win, which is the precedence the sequence of CuPy
+        # assignments had: h2o, then ozone, then trace gases in trace_vmr
+        # order.
+        trace = tuple(
+            (int(tables.gas_index[gas]), float(value))
+            for gas, value in self.trace_vmr.items()
+            if tables.gas_index.get(gas) is not None)
+        trace_index, trace_value = _trace_vmr_device(trace, xp=cp)
+        ncells = int(play.shape[0]) * int(play.shape[1])
+        threads = 256
+        get_kernel("rrtmgp_gas", "rrtmgp_gas_vmr_fill")(
+            ((ncells + threads - 1) // threads,), (threads,), (
+                qv, ozone, trace_index, trace_value, vmr,
+                DTYPE(0.028964 / 0.018016),
+                np.int32(tables.gas_index["h2o"]),
+                np.int32(tables.gas_index["o3"]),
+                np.int32(len(trace)), np.int32(ncells),
+                np.int32(tables.ngas + 1)))
+        return vmr
+
+    def _gas_vmr_expressions(self, xp, tables, play, qv, *, validate, out):
+        """The pre-fusion VMR build, kept as the reference implementation.
+
+        Reached on the NumPy stand-in, and it is what the fused kernel is
+        gated against: the A/B runs both over both gas tables, three
+        trace-gas sets, four shapes and a deliberately dirty workspace
+        buffer, and requires bitwise equality.  An edit to one of these
+        two belongs in the other.
+        """
+        shape = (*play.shape, tables.ngas + 1)
+        if out is None:
+            vmr = xp.zeros(shape, dtype=DTYPE)
+        else:
+            vmr = _workspace_output(out, shape, "vmr")
+            # Slot zero and absent trace gases are real inputs to the gas
+            # kernel.  The full fill is the write-before-read producer for
+            # every reused byte, exactly matching zeros numerically.
+            vmr.fill(DTYPE(0.0))
+        # qv is kg water / kg dry air; RRTMGP consumes mole / mole dry air.
+        if validate:
+            _require_finite_nonnegative(qv=qv)
+        vmr[:, :, tables.gas_index["h2o"]] = (
+            qv * DTYPE(0.028964 / 0.018016))
+        vmr[:, :, tables.gas_index["o3"]] = xp.interp(
+            xp.log(play).ravel(), self._ozone_logp,
+            self._ozone_vmr).reshape(play.shape)
+        for gas, value in self.trace_vmr.items():
+            index = tables.gas_index.get(gas)
+            if index is not None:
+                vmr[:, :, index] = DTYPE(value)
+        return xp.ascontiguousarray(vmr)
+
+    @staticmethod
+    def _solar_constant(valid_time) -> float:
+        """WRF SOLCON = 1370 * ECCFAC (Paltridge & Platt eccentricity).
+
+        Transcribes ``radconst`` (module_radiation_driver.F:3504-3509) with
+        WRF's 0-based fractional julian day (frame/module_domain.F:2165):
+        1369.704 W/m2 at julian 92.75 (eccfac 0.999784).
+        """
+        hour = (valid_time.hour + valid_time.minute / 60.0
+                + valid_time.second / 3600.0
+                + valid_time.microsecond / 3.6e9)
+        julian = (valid_time.timetuple().tm_yday - 1) + hour / 24.0
+        da = 2.0 * np.pi * julian / 365.0
+        eccfac = (1.000110 + 0.034221 * np.cos(da) + 0.001280 * np.sin(da)
+                  + 0.000719 * np.cos(2.0 * da)
+                  + 0.000077 * np.sin(2.0 * da))
+        return 1370.0 * eccfac
+
+    def _cosine_zenith(self, valid_time, *, hour_offset_seconds=0.0):
+        """WRF v4.6.1 ``radconst``/``calc_coszen`` solar geometry.
+
+        This transcribes the standard path in
+        ``module_radiation_driver.F:3469-3541``.  WRF deliberately uses a
+        fixed 365-day orbital phase even in leap years.  The absolute UTC
+        ``valid_time`` supplies WRF's zero-based fractional ``julian`` and
+        its ``gmt + mod(xtime, 1440)/60`` clock; ``hour_offset_seconds``
+        shifts only the hour angle, matching the ``radt*0.5`` midpoint call.
+
+        This is geometric COSZEN only.  It does not emulate optional WRF
+        eclipse, slope-shadow, or shortwave-interpolation corrections, none
+        of which are selected by the frozen reference configuration.
+        """
+        import cupy as cp
+
+        hour = (valid_time.hour + valid_time.minute / 60.0
+                + valid_time.second / 3600.0
+                + valid_time.microsecond / 3.6e9)
+        julian = valid_time.timetuple().tm_yday - 1.0 + hour / 24.0
+        degrad = np.pi / 180.0
+        dpd = 360.0 / 365.0
+        if julian >= 80.0:
+            solar_longitude = dpd * (julian - 80.0)
+        else:
+            solar_longitude = dpd * (julian + 285.0)
+        declination = np.arcsin(
+            np.sin(23.5 * degrad)
+            * np.sin(solar_longitude * degrad))
+        da = 2.0 * np.pi * (julian - 1.0) / 365.0
+        equation = 229.18 * (
+            0.000075 + 0.001868 * np.cos(da) - 0.032077 * np.sin(da)
+            - 0.014615 * np.cos(2.0 * da) - 0.04089 * np.sin(2.0 * da))
+        solar_minutes = (60.0 * (hour + hour_offset_seconds / 3600.0)
+                         + equation + 4.0 * self.longitude_deg)
+        hour_angle = cp.deg2rad(solar_minutes / 4.0 - 180.0)
+        latitude = cp.deg2rad(self.latitude_deg)
+        mu = (cp.sin(latitude) * DTYPE(np.sin(declination))
+              + cp.cos(latitude) * DTYPE(np.cos(declination))
+              * cp.cos(hour_angle))
+        return cp.clip(mu, DTYPE(-1.0), DTYPE(1.0))
+
+    def __call__(self, *, atmosphere, fields, state, cfg):
+        pressure = atmosphere["pressure"]
+        nz, ny, nx = pressure.shape
+        full_validation = self.validation_mode == "full"
+        if self.latitude_deg.shape != (ny, nx):
+            raise ValueError("radiation latitude/longitude must match state grid")
+        declared_p_top = getattr(state, "p_top", None)
+        if declared_p_top is not None:
+            lw_upper, _ = rrtmgp_above_model_layer_counts(declared_p_top)
+            if nz + lw_upper > 128:
+                raise ValueError(
+                    "RRTMGP radiation supports at most 128 layers including "
+                    f"the above-model column, got {nz + lw_upper}")
+        if atmosphere["exner"].shape != pressure.shape:
+            raise ValueError(
+                f"exner must have shape {pressure.shape}, "
+                f"got {atmosphere['exner'].shape}")
+        if fields["tsk"].size != ny * nx:
+            raise ValueError(
+                f"tsfc must have {ny * nx} surface values, "
+                f"got {fields['tsk'].size}")
+
+        import cupy as cp
+
+        ncol = ny * nx
+        # Every input stays in its (nz, ny, nx) layout and is packed into
+        # bottom-to-top (ncol, nlay) columns ONE CHUNK AT A TIME by the
+        # packers below (`packer[columns]`, element for element what
+        # `_columns(field)[columns]` read), and the cloud preparation that
+        # follows runs on the same chunks the two solver loops run on.
+        # Until 2026-09-05 the driver packed every input whole (seventeen
+        # full-grid copies at T533, 3.3 GiB, beside the native batch that
+        # already holds every field) and ran cal_cldfra1 and
+        # hydrometeor_paths on the whole grid before the chunk loops; the
+        # levelled temporaries of that preparation were the model's
+        # device peak, and the T533 probe of record died inside
+        # hydrometeor_paths at 19.9 GiB with 49 full-grid 196 MiB arrays
+        # named there and 42 in cal_cldfra1 (tests/test_rrtmgp.py pins
+        # the chunked preparation to the whole-grid one, bit for bit).
+        p_interface = atmosphere["p_interface"]
+        if declared_p_top is None:
+            # Legacy/synthetic direct callers do not carry BaseState.p_top.
+            # Production always takes the scalar path above, so this fallback
+            # does not add a synchronization to the forecast radiation loop.
+            p_top = float(cp.asnumpy(
+                cp.asarray(p_interface[-1]).reshape(-1)[0]))
+        else:
+            p_top = float(declared_p_top)
+        # Both v1.9 gas tables share their lower pressure bound.  Clamp the
+        # interface exactly as the upstream RFMIP example does.  For the reference case
+        # this is now the appended TOA interface, not the 100-hPa model top.
+        toa_floor = DTYPE(RRTMGP_TOA_PRESSURE_PA)
+
+        def clamp_top(interfaces):
+            interfaces[:, -1] = cp.maximum(interfaces[:, -1], toa_floor)
+            return interfaces
+
+        profile_p_top = max(p_top, RRTMGP_TOA_PRESSURE_PA)
+        # WRF's RRTMG driver bounds its radiation temperatures to the
+        # k-distribution table domain instead of refusing cold air, and
+        # this port follows it on the cold side only: polar-night air at
+        # a global model's 1 hPa top cools below the tables' 160 K floor
+        # under RRTMGP's own longwave cooling (measured 159.27 K on the
+        # tlev top interface at T255 hour 4.3, 2026-09-01), so
+        # [120, 160) K radiates as 160 K -- the layer emission error is
+        # at most (160/159.3)^4 - 1 ~ 1.8% of an already tiny 1-2 hPa
+        # flux.  Below 120 K is not weather and still refuses through
+        # the range gate downstream; the prognostic state is never
+        # touched, only the radiation feed.
+        cold_floor = DTYPE(160.0)
+        cold_garbage = DTYPE(120.0)
+
+        def floor_cold(temperature):
+            return cp.where(
+                (temperature >= cold_garbage) & (temperature < cold_floor),
+                cold_floor, temperature)
+
+        play = _ColumnPacker(pressure, xp=cp)
+        plev = _ColumnPacker(p_interface, xp=cp, transform=clamp_top)
+        tlay = _ColumnPacker(
+            atmosphere["temperature"], xp=cp, transform=floor_cold)
+        # The interface temperatures are formed from the clamped
+        # interfaces and the UNFLOORED layer temperatures, then floored.
+        tlev = _InterfaceTemperatureColumns(
+            play, plev, _ColumnPacker(atmosphere["temperature"], xp=cp),
+            transform=floor_cold)
+        exner = _ColumnPacker(atmosphere["exner"], xp=cp, dtype=DTYPE)
+        qv = _ColumnPacker(atmosphere["qv"], xp=cp)
+        tsfc = _device_profile(fields["tsk"].reshape(-1), (ncol,), "tsfc")
+        # ONE reduction per firing buys the whole above-model fast path.
+        # WRF's mass coordinate fills the top interface from a scalar
+        # (physics.py `p_interface[nz] = state.p_top`), so this is true by
+        # construction -- but the chunk loops below are bit-exact only while
+        # it holds, so it is checked rather than assumed.  Exact equality,
+        # not the tolerance `_validate_model_top_plane` uses: a one-ULP
+        # spread would be invisible to that and would still change the
+        # synthetic cap.
+        top_interface = cp.maximum(
+            cp.asarray(p_interface[-1]).reshape(-1), toa_floor)
+        uniform_top = bool(cp.all(top_interface == top_interface[0]))
+        if declared_p_top is None:
+            # Once per firing, not once per chunk: it synchronizes, and
+            # the top interface does not vary across the chunks that follow.
+            _validate_model_top_plane(top_interface, profile_p_top, xp=cp)
+        del top_interface
+
+        qc_source = self._field_from_state(state, ("qc",), atmosphere["qc"])
+        qi_source = self._field_from_state(state, ("qi",), atmosphere["qi"])
+        qr_source = self._field_from_state(state, ("qr",), None)
+        qs_source = self._field_from_state(state, ("qs",), None)
+        qc_cols = _ColumnPacker(qc_source, xp=cp)
+        qi_cols = _ColumnPacker(qi_source, xp=cp)
+        qr_cols = (_ColumnPacker(qr_source, xp=cp) if qr_source is not None
+                   else _ZeroColumns(qc_cols.shape, dtype=qc_source.dtype,
+                                     xp=cp))
+        qs_cols = (_ColumnPacker(qs_source, xp=cp) if qs_source is not None
+                   else _ZeroColumns(qi_cols.shape, dtype=qi_source.dtype,
+                                     xp=cp))
+        mp_physics = int(getattr(cfg, "mp_physics", 1))
+        # Fail-closed table with its WRF citations; see
+        # _MP_CLOUD_OPTICS_SCHEME.  mp=28 (THOMPSONAERO) resolves to
+        # "thompson" -- the same coupling classic Thompson gets, which is
+        # what Registry.EM_COMMON:3036 and module_physics_init.F:1005-1006
+        # say.  Until 2026-08-01 this was a ``.get(mp_physics, "kessler")``
+        # default and mp=28 silently landed on Kessler: no scheme radii,
+        # and f_qi = f_qs = False into cal_cldfra1, so an overcast ice
+        # cloud radiated as clear sky.
+        scheme = cloud_optics_scheme(mp_physics)
+        # The snow radiative treatment is bound to the compatibility
+        # receipt token (fail closed on unknown values): -v2 selects the
+        # WRF option-4 snow discount, -v1 and native 'none' keep the
+        # original full-mass merge, so no already-issued run is relabeled.
+        static_kwargs = {
+            "snow_treatment": snow_treatment_for_compatibility(
+                str(getattr(cfg, "wrf_rrtmg_compatibility", "none"))),
+            # The domain of the tables THIS driver loaded, never a literal:
+            # a table release with another domain moves the bounds with it.
+            "size_bounds": CloudSizeBounds.from_tables(
+                self.lw_cloud_tables, self.sw_cloud_tables),
+        }
+        # The coupling's per-column inputs beyond the four species, as
+        # packers; packed per chunk beside them.
+        column_kwargs = {}
+        numbers = {}
+        effective_fields = {}
+        if scheme == "morrison":
+            for category, names in {
+                    "nc": ("nc", "qnc"), "nr": ("nr", "qnr"),
+                    "ni": ("ni", "qni"), "ns": ("ns", "qns")}.items():
+                value = self._field_from_state(state, names, None)
+                if value is None:
+                    raise ValueError(
+                        f"Morrison radiation coupling requires state.{names[0]} "
+                        f"or state.{names[1]}")
+                numbers[category] = _ColumnPacker(value, xp=cp)
+            column_kwargs.update({"play": play, "tlay": tlay, **numbers})
+            # These diagnostics describe the just-completed Morrison update and
+            # therefore become cloud optics on the *next* radiation call.  On
+            # initialisation they are zero-filled state storage, not valid PSD
+            # diagnostics, so retain the number-moment reconstruction until the
+            # named post-RK contract has accepted at least one update.
+            physics = getattr(state, "physics", None)
+            have_effective = (getattr(physics, "microphysics_updates", 0) > 0)
+            effective = {
+                name: (self._field_from_state(state, (name,), None)
+                       if have_effective else None)
+                for name in ("effc", "effr", "effi", "effs")}
+            if any(value is not None for value in effective.values()):
+                if any(value is None for value in effective.values()):
+                    raise ValueError(
+                        "Morrison radiation coupling requires all of state."
+                        "effc/effr/effi/effs")
+                effective_fields = {
+                    name: _ColumnPacker(value, xp=cp)
+                    for name, value in effective.items()}
+                column_kwargs.update(effective_fields)
+        elif scheme == "p3":
+            # state.effc/state.effi ARE WRF's diag_effc_3d/diag_effi_3d in
+            # woof's micron convention (woof/core/p3.py writes them from
+            # module_mp_p3.F:1557 and :1610).  There is no state.effs to
+            # ask for: mp=50 allocates none (woof/core/state.py), which is
+            # the same fact as Registry.EM_COMMON:3043's missing re_snow.
+            effective = {
+                name: self._field_from_state(state, (name,), None)
+                for name in ("effc", "effi")}
+            if any(value is None for value in effective.values()):
+                raise ValueError(
+                    "p3 radiation coupling requires state.effc/effi")
+            packed_effective = {
+                name: _ColumnPacker(value, xp=cp)
+                for name, value in effective.items()}
+            column_kwargs.update(packed_effective)
+            # The VALIDATION view carries a third entry the PATH view does
+            # not.  WRF hands its wrappers a resnow1D for P3 and its value
+            # is MAX(10., re_ice*1.E6) (module_ra_rrtmg_lw.F:12256,
+            # module_ra_rrtmg_sw.F:10857) -- the snow radius the coupling
+            # uses IS the ice radius, so the plausibility band belongs on
+            # it.  Leaving the slot empty would not skip the check: the
+            # fused validator has one has-radii flag for all four slots and
+            # substitutes qc for a missing one, which is a mixing ratio and
+            # fails the micron band every time.
+            effective_fields = dict(packed_effective)
+            effective_fields["effs"] = packed_effective["effi"]
+        elif scheme in ("wsm6", "thompson", "nssl"):
+            effective = {
+                name: self._field_from_state(state, (name,), None)
+                for name in ("effc", "effi", "effs")}
+            if any(value is None for value in effective.values()):
+                raise ValueError(
+                    f"{scheme} radiation coupling requires "
+                    "state.effc/effi/effs")
+            effective_fields = {
+                name: _ColumnPacker(value, xp=cp)
+                for name, value in effective.items()}
+            column_kwargs.update(effective_fields)
+        # WRF radiation driver, icloud=1 default: CLDFRA from cal_cldfra1
+        # (module_radiation_driver.F:1320-1332), grid-box paths divided by
+        # max(0.01, CLDFRA) into in-cloud paths, and McICA subcolumn masks
+        # per g-point in the chunk loops below.
+        # F_QI and F_QS are read separately because P3 separates them:
+        # mp=50 is ice-active with no snow species at all
+        # (Registry.EM_COMMON:3043), which is what selects cal_cldfra1's
+        # own P3 arm (module_radiation_driver.F:3879-3887).  Every other
+        # scheme in the table answers the same to both, so nothing else
+        # moves.
+        ice_active = scheme_is_ice_active(scheme)
+        snow_species = scheme_has_snow_species(scheme)
+        active_bl = mynn_bl_cloud_active(
+            getattr(cfg, "bl_pbl_physics", 0), getattr(cfg, "icloud_bl", 0))
+        bl_fields = ({name: _ColumnPacker(fields[name], xp=cp)
+                      for name in ("qc_bl", "qi_bl", "cldfra_bl")}
+                     if active_bl else None)
+        bl_options = {
+            "bl_pbl_physics": getattr(cfg, "bl_pbl_physics", 0),
+            "icloud_bl": getattr(cfg, "icloud_bl", 0),
+            "itimestep": (wrf_itimestep(state.elapsed_seconds, cfg.dt)
+                          if active_bl else 1),
+        }
+
+        def cloud_fraction(sl):
+            """This chunk's (qc, qi, cldfra) as the optics see them: WRF's
+            cal_cldfra1, then the MYNN boundary-layer cloud merge (which
+            returns its inputs untouched away from MYNN)."""
+            qc_chunk, qi_chunk = qc_cols[sl], qi_cols[sl]
+            fraction = cal_cldfra1(
+                qv[sl], qc_chunk, qi_chunk, qs_cols[sl], tlay[sl], play[sl],
+                f_qc=True, f_qi=ice_active, f_qs=snow_species)
+            return merge_mynn_bl_clouds(
+                qc_chunk, qi_chunk, fraction,
+                qc_bl=bl_fields["qc_bl"][sl] if active_bl else None,
+                qi_bl=bl_fields["qi_bl"][sl] if active_bl else None,
+                cldfra_bl=bl_fields["cldfra_bl"][sl] if active_bl else None,
+                **bl_options)
+
+        def condensate(sl):
+            """This chunk's (qc, qi) as the paths see them."""
+            if not active_bl:
+                return qc_cols[sl], qi_cols[sl]
+            qc_chunk, qi_chunk, _ = cloud_fraction(sl)
+            return qc_chunk, qi_chunk
+
+        def packed(packers, sl):
+            return {name: packer[sl] for name, packer in packers.items()}
+
+        emiss_bands = _surface_emissivity_bands(
+            fields["emiss"], self.lw_tables, ny, nx, validate=False)
+        radii_bands = effective_radius_bands(scheme)
+        slices = _column_slices(ncol, self.column_chunk)
+        # First pass over the chunks: the cloud fraction into its
+        # whole-grid array (the overlap below and both solver loops read
+        # it by chunk), and in fused mode the validation kernel over every
+        # chunk into ONE flag word, read once afterwards.
+        cldfra = cp.empty((ncol, nz), dtype=DTYPE)
+        flags = None if full_validation else cp.zeros((1,), dtype=cp.uint32)
+        for sl in slices:
+            qc_chunk, qi_chunk, cldfra_chunk = cloud_fraction(sl)
+            cldfra[sl] = cldfra_chunk
+            if flags is not None:
+                _launch_validation_kernel(
+                    flags, play=play[sl], plev=plev[sl], tlay=tlay[sl],
+                    tlev=tlev[sl], tsfc=tsfc[sl], exner=exner[sl],
+                    qv=qv[sl], qc=qc_chunk, qr=qr_cols[sl], qi=qi_chunk,
+                    qs=qs_cols[sl], cldfra=cldfra_chunk,
+                    emiss=emiss_bands[sl], numbers=packed(numbers, sl),
+                    effective=packed(effective_fields, sl),
+                    tables_lw=self.lw_tables, tables_sw=self.sw_tables,
+                    radii_bands=radii_bands)
+            del qc_chunk, qi_chunk, cldfra_chunk
+
+        def legacy_replay():
+            # The legacy validators read whole-grid extrema into their
+            # messages, so they are handed the whole grid packed at once:
+            # the memory shape the full mode always had, on a path the
+            # production (fused) mode reaches only to describe a failure.
+            every = slice(0, ncol)
+            qc_whole, qi_whole, cldfra_whole = cloud_fraction(every)
+            _raise_full_call_validation_error(
+                play=play[every], plev=plev[every], tlay=tlay[every],
+                tlev=tlev[every], tsfc=tsfc, exner=exner[every],
+                qv=qv[every], qc=qc_whole, qr=qr_cols[every], qi=qi_whole,
+                qs=qs_cols[every], cldfra=cldfra_whole, emiss=emiss_bands,
+                numbers=packed(numbers, every),
+                effective=packed(effective_fields, every),
+                tables_lw=self.lw_tables, tables_sw=self.sw_tables,
+                column_chunk=self.column_chunk, radii_bands=radii_bands)
+
+        if full_validation:
+            # Validate the caller-supplied model column before constructing
+            # WRF's synthetic above-model atmosphere.  Otherwise full mode
+            # can report an appended cap pressure as the observed minimum,
+            # while the fused production validator diagnoses the original
+            # input.  Full mode exists to replay that legacy diagnostic
+            # contract exactly, so run the common replay up front and let the
+            # downstream cap solvers operate on already-valid profiles.
+            legacy_replay()
+        else:
+            _read_validation_flags(flags, diagnose=legacy_replay)
+        del flags
+        # Invalid hydrometeors are rejected above, before these path/radius
+        # allocations and arithmetic.  Second pass: the in-cloud paths and
+        # sizes chunk by chunk into their whole-grid arrays, the
+        # size-bounding record's counts added across the chunks and its
+        # path sums reduced ONCE over the whole grid (SizeBoundingTerms), so
+        # the record is the record the one-call coupling wrote.
+        clwp = cp.empty((ncol, nz), dtype=DTYPE)
+        ciwp = cp.empty_like(clwp)
+        reliq = cp.empty_like(clwp)
+        dgice = cp.empty_like(clwp)
+        unbounded_clwp = cp.empty_like(clwp)
+        unbounded_ciwp = cp.empty_like(clwp)
+        liquid_above = cp.empty((ncol, nz), dtype=cp.bool_)
+        ice_above = cp.empty_like(liquid_above)
+        sentinel = scheme == "morrison" and bool(effective_fields)
+        liquid_sentinel = cp.empty_like(liquid_above) if sentinel else None
+        ice_sentinel = cp.empty_like(liquid_above) if sentinel else None
+        counts = None
+        for sl in slices:
+            qc_chunk, qi_chunk = condensate(sl)
+            chunk = hydrometeor_paths(
+                plev[sl], qc_chunk, qr_cols[sl], qi_chunk, qs_cols[sl],
+                microphysics=scheme, cldfra=cldfra[sl], validate=False,
+                path_sums=False, **static_kwargs,
+                **packed(column_kwargs, sl))
+            clwp[sl] = chunk.clwp
+            ciwp[sl] = chunk.ciwp
+            reliq[sl] = chunk.reliq
+            dgice[sl] = chunk.dgice
+            terms = chunk.size_bounding_terms
+            unbounded_clwp[sl] = terms.clwp
+            unbounded_ciwp[sl] = terms.ciwp
+            liquid_above[sl] = terms.liquid_above
+            ice_above[sl] = terms.ice_above
+            if (terms.liquid_sentinel is None) == sentinel:
+                raise ValueError(
+                    "the size-bounding record's sentinel terms do not match "
+                    f"the {scheme} coupling (sentinel cells "
+                    f"{'expected' if sentinel else 'not expected'})")
+            if sentinel:
+                liquid_sentinel[sl] = terms.liquid_sentinel
+                ice_sentinel[sl] = terms.ice_sentinel
+            counts = add_size_bounding_counts(counts, chunk.size_bounding)
+            del chunk, terms, qc_chunk, qi_chunk
+        whole_terms = SizeBoundingTerms(
+            clwp=unbounded_clwp, ciwp=unbounded_ciwp,
+            liquid_above=liquid_above, ice_above=ice_above,
+            liquid_sentinel=liquid_sentinel, ice_sentinel=ice_sentinel)
+        bounding = finish_size_bounding(counts, whole_terms, cldfra, xp=cp)
+        # A banded driver assembles the record over the globe from these
+        # per-column sums; the one-call fractions above stay the record
+        # of THIS call's columns.
+        self.last_size_bounding_columns = (
+            size_bounding_column_sums(whole_terms, cldfra, xp=cp)
+            if self.column_size_bounding else None)
+        del (unbounded_clwp, unbounded_ciwp, liquid_above, ice_above,
+             liquid_sentinel, ice_sentinel, counts, whole_terms)
+        paths = HydrometeorPaths(clwp, ciwp, reliq, dgice, bounding)
+
+        # One host round trip per firing (the model-top check above already
+        # synchronizes): the bounding counts are diagnostics the runtime
+        # books, never an input to the optics.
+        self.last_size_bounding = paths.size_bounding.host()
+        # Column total cloud cover under the maximum-random overlap the
+        # McICA generator draws from (bottom-to-top walk; the pair rule of
+        # Geleyn and Hollingsworth 1979): what a sky observer would call
+        # the cloud fraction of this column.
+        cldfra_total = max_random_total_cloud_cover(cldfra, xp=cp)
+
+        workspace = getattr(self, "chunk_workspace", None)
+        if workspace is not None:
+            if (int(workspace.nz) != nz
+                    or int(workspace.column_chunk) != self.column_chunk
+                    or float(workspace.p_top) != p_top):
+                raise ValueError(
+                    "RRTMGP adapter/workspace shape drift: "
+                    f"adapter nz/chunk/p_top={(nz, self.column_chunk, p_top)}, "
+                    "workspace "
+                    f"{(workspace.nz, workspace.column_chunk, workspace.p_top)}")
+
+        lw_up = cp.empty((ncol, nz + 1), dtype=DTYPE)
+        lw_dn = cp.empty_like(lw_up)
+        for start in range(0, ncol, self.column_chunk):
+            sl = slice(start, min(start + self.column_chunk, ncol))
+            chunk_ncol = sl.stop - sl.start
+            lw_chunk = _prepare_above_model_chunk(
+                tables=self.lw_tables, play=play, plev=plev, tlay=tlay,
+                tlev=tlev, qv=qv, paths=paths, cldfra=cldfra, columns=sl,
+                p_top=profile_p_top, kind="lw",
+                pressure_floor=RRTMGP_TOA_PRESSURE_PA, xp=cp,
+                validate_top=False,
+                validate=full_validation, uniform_top=uniform_top,
+                scratch=workspace is not None)
+            lw_profile = lw_chunk.profile
+            lw_paths = lw_chunk.paths
+            lw_cldfra = lw_chunk.cldfra
+            chunk_metadata = lw_chunk.metadata
+            if workspace is None:
+                vmr_lw = self._gas_vmr(
+                    self.lw_tables, lw_profile.play, lw_profile.qv,
+                    validate=full_validation)
+                gas_lw = _gas_optics(
+                    self.lw_tables, lw_profile.play, lw_profile.plev,
+                    lw_profile.tlay, vmr_lw,
+                    metadata=chunk_metadata, validate=full_validation,
+                    zero_g_sentinel=True)
+                cld_lw = cloud_optics(
+                    self.lw_cloud_tables, lw_paths.clwp, lw_paths.ciwp,
+                    lw_paths.reliq, lw_paths.dgice)
+                mask_lw = mcica_cloud_masks(
+                    lw_profile.play, lw_cldfra, self.lw_tables.ngpt,
+                    MCICA_PERMUTESEED_LW, validate=full_validation)
+                optics_lw = _finalize_cloud_optics(
+                    self.lw_tables, gas_lw, cld_lw, cloud_mask=mask_lw)
+                del mask_lw
+                # (workspace-less path: finalize kept, nothing to carry)
+                sources = _planck_sources(
+                    self.lw_tables, lw_profile.play, lw_profile.plev,
+                    lw_profile.tlay, lw_profile.tlev, tsfc[sl],
+                    vmr_lw, metadata=chunk_metadata,
+                    validate=full_validation)
+                emiss = _expand_band_to_gpoint(
+                    emiss_bands[sl], self.lw_tables, "surface emissivity")
+                flux = lw_rte(
+                    optics_lw.tau, sources.lay_source, sources.lev_source,
+                    sources.sfc_source, emiss, top_at_1=False)
+                del optics_lw
+            else:
+                # SCRATCH_SLOT_LIFETIME_AUDIT analogue: every optics slot is
+                # a kernel output or full fill before its first read in this
+                # chunk.  The RTE layout preserves common-slot offsets and
+                # overwrites only the now-dead mask tail with its own outputs.
+                work = workspace.phase("lw_optics", chunk_ncol)
+                vmr_lw = self._gas_vmr(
+                    self.lw_tables, lw_profile.play, lw_profile.qv,
+                    validate=full_validation, out=work["vmr"])
+                gas_lw = _gas_optics(
+                    self.lw_tables, lw_profile.play, lw_profile.plev,
+                    lw_profile.tlay, vmr_lw,
+                    metadata=chunk_metadata, validate=full_validation,
+                    zero_g_sentinel=True, out=(work["gas_tau"],),
+                    col_dry_out=work["col_dry"])
+                cld_lw = _cloud_optics(
+                    self.lw_cloud_tables, lw_paths.clwp, lw_paths.ciwp,
+                    lw_paths.reliq, lw_paths.dgice,
+                    out=(work["cld_tau"], work["cld_ssa"],
+                         work["cld_asy"]))
+                mask_lw = _mcica_cloud_masks(
+                    lw_profile.play, lw_cldfra, self.lw_tables.ngpt,
+                    MCICA_PERMUTESEED_LW, validate=full_validation,
+                    out=work["mcica_mask"])
+                # No finalize: the solver combines gas, cloud and mask in
+                # registers (FusedCloudOptics).  gas_tau, both band cloud
+                # cubes and the mask are CARRIED slots of the rte phase,
+                # so the views below stay valid across the phase() call.
+                work = workspace.phase("lw_rte", chunk_ncol)
+                # No Planck kernel: the solver derives lay/lev/sfc itself.
+                planck_in = PlanckInputs(
+                    tables=self.lw_tables, play=lw_profile.play,
+                    tlay=lw_profile.tlay, tlev=lw_profile.tlev,
+                    tsfc=tsfc[sl], vmr=vmr_lw, metadata=chunk_metadata)
+                emiss = _expand_band_to_gpoint(
+                    emiss_bands[sl], self.lw_tables, "surface emissivity",
+                    out=work["emiss_gpt"])
+                flux = _lw_rte(
+                    gas_lw.tau, None, None, None, emiss, top_at_1=False,
+                    out=(work["flux_up"], work["flux_dn"]),
+                    incident_out=work["incident"],
+                    fused_cloud=FusedCloudOptics(
+                        tables=self.lw_tables, cloud=cld_lw, mask=mask_lw),
+                    planck=planck_in)
+                del mask_lw, planck_in
+            lw_up[sl] = _model_flux_interfaces(
+                flux.flux_up, nz, xp=cp)
+            lw_dn[sl] = _model_flux_interfaces(
+                flux.flux_dn, nz, xp=cp)
+            del vmr_lw, gas_lw, cld_lw, emiss, flux
+            del chunk_metadata, lw_profile, lw_paths, lw_cldfra, lw_chunk
+            # ``work`` is the phase view mapping and every value in it is a
+            # view of the workspace backing, so the name keeps the whole
+            # allocation alive past the loop.  Rebind rather than ``del``:
+            # the name does not exist on the workspace-less branch.
+            work = None
+
+        valid_time = (self.start_time
+                      + timedelta(seconds=float(state.elapsed_seconds)))
+        # WRF evaluates the HOUR ANGLE at the CENTER of the radiation
+        # interval: calc_coszen receives xtime + radt*0.5 inside the
+        # Solar_step block (module_radiation_driver.F:1206-1208, 'jararias
+        # 2013/08/10') while declination/EOT stay at the call-time julian
+        # (:3514-3541); that coszen is what RRTMG SW consumes (driver:2636).
+        from woof.globe.core.physics import (
+            _model_clock_dt, _physics_interval_seconds)
+        radt_minutes = cfg.radt if cfg.radt > 0.0 else cfg.radt_minutes
+        radt_seconds = _physics_interval_seconds(
+            radt_minutes, _model_clock_dt(cfg))
+        mu_raw = self._cosine_zenith(
+            valid_time, hour_offset_seconds=0.5 * radt_seconds)
+        daylight = mu_raw > DTYPE(0.0)
+        mu = cp.where(daylight, mu_raw, DTYPE(1.0)).reshape(-1)
+        albedo_surface = cp.asarray(
+            fields["albedo"], dtype=DTYPE).reshape(-1)
+        solar = _solar_source_device(self.sw_tables)
+        # WRF scales every SW band by scon/rrsw_scon so TOA irradiance
+        # equals radconst's SOLCON (module_ra_rrtmg_sw.F:10872 'scon =
+        # solcon*(1-obscur)', 9867-9871 'solvar(ib) = scon/rrsw_scon');
+        # the RRTMGP-native equivalent normalizes the g-point source total
+        # (the shipped table sums to tsi_default = 1360.8577 W/m2).
+        solar = solar * DTYPE(
+            self._solar_constant(valid_time)
+            / float(np.sum(np.asarray(self.sw_tables.solar_source,
+                                      dtype=np.float64))))
+        sw_up = cp.empty_like(lw_up)
+        sw_dn = cp.empty_like(lw_up)
+        for start in range(0, ncol, self.column_chunk):
+            sl = slice(start, min(start + self.column_chunk, ncol))
+            chunk_ncol = sl.stop - sl.start
+            sw_chunk = _prepare_above_model_chunk(
+                tables=self.sw_tables, play=play, plev=plev, tlay=tlay,
+                tlev=tlev, qv=qv, paths=paths, cldfra=cldfra, columns=sl,
+                p_top=profile_p_top, kind="sw",
+                pressure_floor=RRTMGP_TOA_PRESSURE_PA, xp=cp,
+                validate_top=False,
+                validate=full_validation, uniform_top=uniform_top,
+                scratch=workspace is not None)
+            sw_profile = sw_chunk.profile
+            sw_paths = sw_chunk.paths
+            sw_cldfra = sw_chunk.cldfra
+            chunk_metadata = sw_chunk.metadata
+            if workspace is None:
+                vmr_sw = self._gas_vmr(
+                    self.sw_tables, sw_profile.play, sw_profile.qv,
+                    validate=full_validation)
+                gas_sw = _gas_optics(
+                    self.sw_tables, sw_profile.play, sw_profile.plev,
+                    sw_profile.tlay, vmr_sw,
+                    metadata=chunk_metadata, validate=full_validation,
+                    zero_g_sentinel=True)
+                cld_sw = cloud_optics(
+                    self.sw_cloud_tables, sw_paths.clwp, sw_paths.ciwp,
+                    sw_paths.reliq, sw_paths.dgice)
+                mask_sw = mcica_cloud_masks(
+                    sw_profile.play, sw_cldfra, self.sw_tables.ngpt,
+                    MCICA_PERMUTESEED_SW, validate=full_validation)
+                optics_sw = _finalize_cloud_optics(
+                    self.sw_tables, gas_sw, cld_sw, cloud_mask=mask_sw)
+                del mask_sw
+                # (workspace-less path: finalize kept)
+                albedo = cp.ascontiguousarray(cp.broadcast_to(
+                    albedo_surface[sl, None],
+                    (chunk_ncol, self.sw_tables.ngpt)))
+                inc = cp.ascontiguousarray(cp.broadcast_to(
+                    solar[None, :],
+                    (chunk_ncol, self.sw_tables.ngpt)))
+                flux = sw_rte(
+                    optics_sw.tau, optics_sw.ssa, optics_sw.g, mu[sl],
+                    albedo, albedo, inc, top_at_1=False)
+                del optics_sw
+            else:
+                work = workspace.phase("sw_optics", chunk_ncol)
+                vmr_sw = self._gas_vmr(
+                    self.sw_tables, sw_profile.play, sw_profile.qv,
+                    validate=full_validation, out=work["vmr"])
+                gas_sw = _gas_optics(
+                    self.sw_tables, sw_profile.play, sw_profile.plev,
+                    sw_profile.tlay, vmr_sw,
+                    metadata=chunk_metadata, validate=full_validation,
+                    zero_g_sentinel=True,
+                    out=(work["gas_tau"], work["gas_ssa"]),
+                    col_dry_out=work["col_dry"])
+                cld_sw = _cloud_optics(
+                    self.sw_cloud_tables, sw_paths.clwp, sw_paths.ciwp,
+                    sw_paths.reliq, sw_paths.dgice,
+                    out=(work["cld_tau"], work["cld_ssa"],
+                         work["cld_asy"]))
+                mask_sw = _mcica_cloud_masks(
+                    sw_profile.play, sw_cldfra, self.sw_tables.ngpt,
+                    MCICA_PERMUTESEED_SW, validate=full_validation,
+                    out=work["mcica_mask"])
+                # No finalize; see the LW branch.
+                work = workspace.phase("sw_rte", chunk_ncol)
+                albedo = work["albedo_gpt"]
+                albedo[...] = albedo_surface[sl, None]
+                inc = work["inc_gpt"]
+                inc[...] = solar[None, :]
+                mu_chunk = work["mu0"]
+                mu_chunk[...] = mu[sl, None]
+                flux = _sw_rte(
+                    gas_sw.tau, gas_sw.ssa, None, mu_chunk,
+                    albedo, albedo, inc, top_at_1=False,
+                    out=(work["flux_up"], work["flux_dn"],
+                         work["flux_dir"]),
+                    fused_cloud=FusedCloudOptics(
+                        tables=self.sw_tables, cloud=cld_sw, mask=mask_sw))
+                del mask_sw
+            mask = daylight.reshape(-1)[sl, None]
+            sw_up[sl] = cp.where(
+                mask, _model_flux_interfaces(flux.flux_up, nz, xp=cp),
+                DTYPE(0.0))
+            sw_dn[sl] = cp.where(
+                mask, _model_flux_interfaces(flux.flux_dn, nz, xp=cp),
+                DTYPE(0.0))
+            del vmr_sw, gas_sw, cld_sw
+            del albedo, inc, flux, mask, chunk_metadata
+            del sw_profile, sw_paths, sw_cldfra, sw_chunk
+            # As in the LW loop: ``work`` and the materialized mu0 broadcast
+            # are workspace views and hold the backing alive past the loop.
+            work = mu_chunk = None
+
+        result = _fluxes_to_radiation(
+            lw_up, lw_dn, sw_up, sw_dn, plev, exner, ny=ny, nx=nx,
+            coszen=mu_raw, cldfra_total=cldfra_total,
+            validate=full_validation, column_chunk=self.column_chunk)
+        # Release hook.  The shipped SharedRRTMGPChunkWorkspace has no
+        # ``on_call_end``, so it keeps its persistent behaviour with no
+        # branch and no cost; a workspace that CAN hand its bytes back
+        # between firings does so here, after the last chunk of both bands
+        # has been consumed and _fluxes_to_radiation has read the model
+        # fluxes out of the per-call arrays.  Deliberately not in a finally:
+        # a call that raised leaves the backing intact for the traceback and
+        # for whatever inspects the workspace afterwards.
+        release = getattr(workspace, "on_call_end", None)
+        if release is not None:
+            release()
+        self.update_count += 1
+        return result
+
+
+def _device_profile(value, shape, name):
+    import cupy as cp
+    out = cp.ascontiguousarray(cp.asarray(value, dtype=DTYPE))
+    if out.shape != shape:
+        raise ValueError(f"{name} must have shape {shape}, got {out.shape}")
+    return out
+
+
+def _column_slices(ncol: int, column_chunk: int) -> tuple[slice, ...]:
+    """The solver's column chunks in order: ``column_chunk`` wide with a
+    ragged tail, the slices the two RTE loops form."""
+    ncol = int(ncol)
+    column_chunk = int(column_chunk)
+    if column_chunk < 1:
+        raise ValueError("column_chunk must be positive")
+    return tuple(slice(start, min(start + column_chunk, ncol))
+                 for start in range(0, ncol, column_chunk))
+
+
+class _ColumnPacker:
+    """Bottom-to-top ``(ncol, nlay)`` columns of an ``(nlay, ny, nx)``
+    field, packed on demand for exactly the columns asked for.
+
+    ``packer[columns]`` is element for element what
+    ``RRTMGPRadiation._columns(field)[columns]`` read (element ``(c, k)``
+    is ``field[k, c // nx, c % nx]``), as a fresh contiguous array of the
+    slice's width and never wider: the field stays where its owner holds
+    it and the driver's per-firing footprint carries no full-grid copy of
+    it.  Until 2026-09-05 the driver packed every input whole before its
+    chunk loops (seventeen of them at T533, 3.3 GiB, beside the native
+    batch that already holds every field).  ``dtype`` casts the packed
+    columns (the validator's exner); ``transform`` is applied to them
+    (the model-top clamp, the cold floor) and may write in place, the
+    columns being the packer's own copy.
+    """
+
+    __slots__ = ("_flat", "_xp", "_dtype", "_transform", "shape")
+
+    def __init__(self, field, *, xp, dtype=None, transform=None):
+        if field.ndim != 3:
+            raise ValueError(
+                "column packer needs an (nlay, ny, nx) field, got "
+                f"{tuple(field.shape)}")
+        nlay = int(field.shape[0])
+        self._flat = field.reshape(nlay, -1)
+        self._xp = xp
+        self._dtype = dtype
+        self._transform = transform
+        self.shape = (int(self._flat.shape[1]), nlay)
+
+    def __getitem__(self, columns):
+        # ``array`` with ``copy=True``: a one-column field's transposed
+        # view is already contiguous and ``ascontiguousarray`` would hand
+        # the owner's bytes to the transform.
+        out = self._xp.array(
+            self._flat[:, columns].T, dtype=self._dtype, copy=True,
+            order="C")
+        if self._transform is not None:
+            out = self._transform(out)
+        return out
+
+
+class _ZeroColumns:
+    """The columns of an absent species: zeros for exactly the columns
+    asked for (was one full-grid ``zeros_like`` per absent species)."""
+
+    __slots__ = ("shape", "_dtype", "_xp")
+
+    def __init__(self, shape, *, dtype, xp):
+        self.shape = (int(shape[0]), int(shape[1]))
+        self._dtype = dtype
+        self._xp = xp
+
+    def __getitem__(self, columns):
+        start, stop, step = columns.indices(self.shape[0])
+        if step != 1:
+            raise ValueError("column slices are contiguous")
+        return self._xp.zeros((max(0, stop - start), self.shape[1]),
+                              dtype=self._dtype)
+
+
+class _InterfaceTemperatureColumns:
+    """``tlev`` for exactly the columns asked for: the interface
+    temperatures (:func:`_interface_temperatures`) of the packed layer
+    pressures, clamped interfaces and UNFLOORED layer temperatures, then
+    ``transform`` (the cold floor), in the order the whole-grid form built
+    them."""
+
+    __slots__ = ("_play", "_plev", "_tlay", "_transform", "shape")
+
+    def __init__(self, play, plev, tlay, *, transform=None):
+        self._play = play
+        self._plev = plev
+        self._tlay = tlay
+        self._transform = transform
+        self.shape = (int(play.shape[0]), int(play.shape[1]) + 1)
+
+    def __getitem__(self, columns):
+        tlev = _interface_temperatures(
+            self._play[columns], self._plev[columns], self._tlay[columns])
+        if self._transform is not None:
+            tlev = self._transform(tlev)
+        return tlev
+
+
+def _workspace_output(out, shape, name, *, dtype=DTYPE):
+    """Return an exact contiguous output view, allocating only if absent."""
+    import cupy as cp
+
+    shape = tuple(int(extent) for extent in shape)
+    if out is None:
+        return cp.empty(shape, dtype=dtype)
+    if tuple(out.shape) != shape:
+        raise ValueError(
+            f"RRTMGP workspace {name} shape {tuple(out.shape)} != {shape}")
+    if np.dtype(out.dtype) != np.dtype(dtype):
+        raise ValueError(
+            f"RRTMGP workspace {name} dtype {out.dtype} != {np.dtype(dtype)}")
+    if not bool(out.flags.c_contiguous):
+        raise ValueError(f"RRTMGP workspace {name} must be C-contiguous")
+    return out
+
+
+def _interface_temperatures(play, plev, tlay):
+    """Construct pressure-weighted level temperatures.
+
+    Exact transcription of ``mo_gas_optics_rrtmgp.F90:890-909`` at the
+    pinned fa107a1 commit, including pressure-linear boundary extrapolation
+    and the reference's pressure-weighted interior interpolation.
+    """
+    import cupy as cp
+
+    play = cp.ascontiguousarray(cp.asarray(play, dtype=DTYPE))
+    if play.ndim != 2 or play.shape[1] < 2:
+        raise ValueError("play must have shape (ncol,nlay), nlay >= 2")
+    ncol, nlay = play.shape
+    plev = _device_profile(plev, (ncol, nlay + 1), "plev")
+    tlay = _device_profile(tlay, (ncol, nlay), "tlay")
+    tlev = cp.empty((ncol, nlay + 1), dtype=DTYPE)
+    tlev[:, 0] = tlay[:, 0] + (plev[:, 0] - play[:, 0]) * (
+        tlay[:, 1] - tlay[:, 0]) / (play[:, 1] - play[:, 0])
+    tlev[:, -1] = tlay[:, -1] + (plev[:, -1] - play[:, -1]) * (
+        tlay[:, -1] - tlay[:, -2]) / (play[:, -1] - play[:, -2])
+    tlev[:, 1:-1] = (
+        play[:, :-1] * tlay[:, :-1] * (plev[:, 1:-1] - play[:, 1:])
+        + play[:, 1:] * tlay[:, 1:] * (play[:, :-1] - plev[:, 1:-1])
+    ) / (plev[:, 1:-1] * (play[:, :-1] - play[:, 1:]))
+    return cp.ascontiguousarray(tlev)
+
+
+def _validate_host_range(name, value, lower, upper, unit):
+    """Validate a device profile on the host before launching RRTMGP."""
+    import cupy as cp
+
+    host = np.asarray(cp.asnumpy(value), dtype=np.float64)
+    if host.size == 0 or not np.all(np.isfinite(host)):
+        raise ValueError(f"{name} range contains non-finite values")
+    observed = (float(np.min(host)), float(np.max(host)))
+    if observed[0] < lower or (upper is not None and observed[1] > upper):
+        bound = (f"[{lower:.9g}, {upper:.9g}]" if upper is not None
+                 else f"[{lower:.9g}, infinity)")
+        raise ValueError(
+            f"{name} range [{observed[0]:.9g}, {observed[1]:.9g}] {unit} "
+            f"is outside allowed range {bound} {unit}")
+
+
+def _require_finite_nonnegative(**fields):
+    """Reject upstream physics defects instead of silently clearing them."""
+    import cupy as cp
+
+    for name, value in fields.items():
+        finite = cp.isfinite(value)
+        negative = finite & (value < 0.0)
+        invalid = ~finite | negative
+        if bool(cp.any(invalid)):
+            # This replay runs only after the fused production predicate has
+            # already failed.  Spend the extra failure-path synchronizations
+            # to preserve the actual upstream defect in the capsule instead
+            # of reducing a multi-million-cell field to a generic label.
+            flat_index = int(cp.asnumpy(cp.argmax(invalid.reshape(-1))))
+            first_value = float(cp.asnumpy(value.reshape(-1)[flat_index]))
+            negative_count = int(cp.asnumpy(cp.count_nonzero(negative)))
+            nonfinite_count = int(cp.asnumpy(cp.count_nonzero(~finite)))
+            index = tuple(int(part) for part in np.unravel_index(
+                flat_index, tuple(int(extent) for extent in value.shape)))
+            raise ValueError(
+                f"{name} must be finite and non-negative: "
+                f"first_index={index}, first_value={first_value:.9g}, "
+                f"negative_count={negative_count}, "
+                f"nonfinite_count={nonfinite_count}")
+
+
+def _require_plausible_radii_um(*, bands=None, **fields):
+    """Gate the micron contract of every radiation-facing radii writer.
+
+    Keyword names select the band from ``bands``, which defaults to
+    :data:`EFFECTIVE_RADIUS_PLAUSIBLE_UM`; a scheme whose declared range
+    is wider than the generic one passes its own map from
+    :func:`effective_radius_bands`.  A writer that emits metres (or any
+    other metric prefix) lands outside its band on background-filled cells
+    alone and fails here instead of silently radiating at a clip floor.
+    """
+    import cupy as cp
+
+    if bands is None:
+        bands = EFFECTIVE_RADIUS_PLAUSIBLE_UM
+    for name, value in fields.items():
+        lower, upper = bands[name]
+        if bool(cp.any(value < DTYPE(lower))) \
+                or bool(cp.any(value > DTYPE(upper))):
+            raise ValueError(
+                f"{name} is outside the physical-plausibility band "
+                f"[{lower}, {upper}] microns; the state contract is "
+                "microns -- a radii writer probably emitted another unit")
+
+
+def max_random_total_cloud_cover(cldfra, *, xp):
+    """Column cloud cover of ``(ncol, nlay)`` layer fractions, bottom-to-top,
+    under maximum-random overlap (adjacent cloudy layers maximally
+    overlapped, cloud groups separated by clear layers randomly): the
+    clear-sky probability walk ``clear *= (1 - max(c_k, c_{k-1})) /
+    (1 - c_{k-1})``, the overlap the McICA generator samples."""
+    dtype = cldfra.dtype
+    one = dtype.type(1.0)
+    previous = cldfra[:, 0]
+    clear = one - previous
+    for k in range(1, cldfra.shape[1]):
+        current = cldfra[:, k]
+        below = one - previous
+        clear = xp.where(
+            below > 0, clear * (one - xp.maximum(current, previous)) / xp.maximum(below, dtype.type(1.0e-30)),
+            dtype.type(0.0))
+        previous = current
+    return xp.clip(one - clear, dtype.type(0.0), one)
+
+
+def _fluxes_to_radiation(lw_up, lw_dn, sw_up, sw_dn, plev, exner, *,
+                         ny, nx, coszen=None, cldfra_total=None,
+                         validate=True, column_chunk=None):
+    """Map bottom-to-top broadband column fluxes into the radiation slot.
+
+    Besides WRF's SWDOWN/GLW/GSW/OLR the slot carries the other three
+    broadband carriers a top-of-atmosphere and surface energy budget
+    needs (all W m-2, positive in the direction named): ``swupt`` and
+    ``swdnt``, the upward and downward shortwave at the TOP level of
+    the same bottom-to-top stack OLR reads (the model-top interface;
+    RRTMGP's appended above-model column ends there for the SW as for
+    the LW), and ``lwupb``, the upward longwave at the surface level as
+    the LW solver formed it from the skin temperature and the band
+    emissivities.
+
+    ``plev`` and ``exner`` are ``(ncol, nlay+1)`` and ``(ncol, nlay)``
+    column arrays, or column packers (anything whose ``[columns]`` packs
+    exactly those columns, :class:`_ColumnPacker`).  The heating rates
+    are formed ``column_chunk`` columns at a time (every column at once
+    when None) straight into their ``(nlay, ny, nx)`` arrays: the same
+    arithmetic per cell either way, and no full-grid pressure thickness,
+    net flux or convergence array beside the fluxes.
+    """
+    import cupy as cp
+    from woof.core import constants
+    from woof.globe.core.physics import RadiationResult
+
+    ncol = ny * nx
+    exner_shape = tuple(int(extent) for extent in exner.shape)
+    if len(exner_shape) != 2 or exner_shape[0] != ncol:
+        raise ValueError("exner columns must have shape (ny*nx,nlay)")
+    nlay = exner_shape[1]
+    level_shape = (ncol, nlay + 1)
+    lw_up = _device_profile(lw_up, level_shape, "lw_up")
+    lw_dn = _device_profile(lw_dn, level_shape, "lw_dn")
+    sw_up = _device_profile(sw_up, level_shape, "sw_up")
+    sw_dn = _device_profile(sw_dn, level_shape, "sw_dn")
+    if tuple(int(extent) for extent in plev.shape) != level_shape:
+        raise ValueError(
+            f"plev must have shape {level_shape}, got {tuple(plev.shape)}")
+    rthratenlw = cp.empty((nlay, ny, nx), dtype=DTYPE)
+    rthratensw = cp.empty_like(rthratenlw)
+    lw_columns = rthratenlw.reshape(nlay, ncol)
+    sw_columns = rthratensw.reshape(nlay, ncol)
+    scale = DTYPE(constants.G / constants.CP)
+    for sl in _column_slices(
+            ncol, ncol if column_chunk is None else column_chunk):
+        width = sl.stop - sl.start
+        plev_columns = _device_profile(plev[sl], (width, nlay + 1), "plev")
+        exner_columns = _device_profile(exner[sl], (width, nlay), "exner")
+        dp = cp.abs(plev_columns[:, 1:] - plev_columns[:, :-1])
+        if validate and (bool(cp.any(dp <= DTYPE(0.0)))
+                         or bool(cp.any(exner_columns <= DTYPE(0.0)))):
+            raise ValueError(
+                "radiation pressure thickness and Exner must be positive")
+        for flux_up, flux_dn, heating in (
+                (lw_up, lw_dn, lw_columns), (sw_up, sw_dn, sw_columns)):
+            # RTE+RRTMGP ``rte/extensions/mo_heating_rates.F90:30-63``
+            # diagnoses temperature tendency from pressure-coordinate flux
+            # convergence.  The frozen woof slot consumes potential-
+            # temperature tendency.  Column (c, k) lands at [k, c // nx,
+            # c % nx], the transpose the whole-grid form took.
+            net_down = flux_dn[sl] - flux_up[sl]
+            convergence = net_down[:, 1:] - net_down[:, :-1]
+            heating[:, sl] = (scale * convergence / dp / exner_columns).T
+
+    return RadiationResult(
+        rthratenlw=rthratenlw,
+        rthratensw=rthratensw,
+        swdown=cp.ascontiguousarray(sw_dn[:, 0].reshape(ny, nx)),
+        glw=cp.ascontiguousarray(lw_dn[:, 0].reshape(ny, nx)),
+        # OLR: the upward longwave flux at the TOP level of the same
+        # bottom-to-top level stack whose level 0 supplies GLW above.
+        olr=cp.ascontiguousarray(lw_up[:, -1].reshape(ny, nx)),
+        gsw=cp.ascontiguousarray(
+            (sw_dn[:, 0] - sw_up[:, 0]).reshape(ny, nx)),
+        coszen=(None if coszen is None else cp.ascontiguousarray(
+            cp.asarray(coszen, dtype=DTYPE).reshape(ny, nx))),
+        swupt=cp.ascontiguousarray(sw_up[:, -1].reshape(ny, nx)),
+        swdnt=cp.ascontiguousarray(sw_dn[:, -1].reshape(ny, nx)),
+        lwupb=cp.ascontiguousarray(lw_up[:, 0].reshape(ny, nx)),
+        cldfra_total=(None if cldfra_total is None else cp.ascontiguousarray(
+            cp.asarray(cldfra_total, dtype=DTYPE).reshape(ny, nx))))
+
+
+def _interpolation_metadata(tables: GasTables, play, tlay, *,
+                            validate=True,
+                            scratch: str | None = None,
+                            ) -> _InterpolationMetadata:
+    """Compute driver-owned reference interpolation coordinates once.
+
+    The CUDA prepass transcribes the expressions formerly evaluated inside
+    each gas-optics call and inside Planck's g-point loop.  It is intentionally
+    recomputed for every radiation call; no cross-call cache or public reuse
+    contract is kept.
+    """
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    play = cp.ascontiguousarray(cp.asarray(play, dtype=DTYPE))
+    if play.ndim != 2:
+        raise ValueError("play must be a 2-D (ncol,nlay) array")
+    tlay = _device_profile(tlay, play.shape, "tlay")
+    if validate:
+        _validate_host_range("play", play, float(np.min(tables.press_ref)),
+                             float(np.max(tables.press_ref)), "Pa")
+        _validate_host_range("tlay", tlay, float(np.min(tables.temp_ref)),
+                             float(np.max(tables.temp_ref)), "K")
+    d = tables.to_device()
+    if scratch is None:
+        integer = tuple(cp.empty(play.shape, dtype=cp.int32) for _ in range(3))
+        fraction = tuple(cp.empty(play.shape, dtype=DTYPE) for _ in range(2))
+    else:
+        # The prepass writes every element of all five, so a reused buffer
+        # needs nothing established first.
+        integer = tuple(
+            _chunk_scratch(f"{scratch}.{name}", play.shape, xp=cp,
+                           dtype=cp.int32)[0]
+            for name in ("iatm", "jt", "jp"))
+        fraction = tuple(
+            _chunk_scratch(f"{scratch}.{name}", play.shape, xp=cp)[0]
+            for name in ("ftemp", "fpress"))
+    n = play.size
+    threads = 256
+    get_kernel("rrtmgp_gas", "rrtmgp_interpolation_prepass")(
+        ((n + threads - 1) // threads,), (threads,), (
+            play, tlay, d.press_ref, d.temp_ref,
+            DTYPE(tables.press_ref_trop), *integer, *fraction,
+            np.int32(n), np.int32(tables.ntemp), np.int32(tables.npres)))
+    return _InterpolationMetadata(*integer, *fraction)
+
+
+def _normalize_interpolation_metadata(metadata, shape):
+    import cupy as cp
+
+    def profile(value, dtype, name):
+        out = cp.ascontiguousarray(cp.asarray(value, dtype=dtype))
+        if out.shape != shape:
+            raise ValueError(
+                f"interpolation metadata {name} must have shape {shape}, "
+                f"got {out.shape}")
+        return out
+
+    if not isinstance(metadata, _InterpolationMetadata):
+        raise TypeError("metadata must be driver-owned interpolation metadata")
+    return _InterpolationMetadata(
+        profile(metadata.iatm, cp.int32, "iatm"),
+        profile(metadata.jt, cp.int32, "jt"),
+        profile(metadata.jp, cp.int32, "jp"),
+        profile(metadata.ftemp, DTYPE, "ftemp"),
+        profile(metadata.fpress, DTYPE, "fpress"))
+
+
+def gas_optics(tables: GasTables, play, plev, tlay, vmr) -> GasOpticsResult:
+    """Compute FP32 gas optical properties on device.
+
+    ``vmr`` has shape ``(ncol,nlay,ngas+1)``; slot zero is reserved for dry
+    air and ignored on input.  The CUDA transcription uses one thread per
+    (column, layer) cell and retains the reference pressure/temperature/eta
+    interpolation, all available minor gases, and SW Rayleigh scattering.
+    """
+    return _gas_optics(
+        tables, play, plev, tlay, vmr, metadata=None, validate=True,
+        zero_g_sentinel=False, out=None, col_dry_out=None)
+
+
+def _gas_optics(tables: GasTables, play, plev, tlay, vmr, *, metadata,
+                validate, zero_g_sentinel, out=None,
+                col_dry_out=None) -> GasOpticsResult:
+    """Internal gas optics path supporting one-call shared metadata."""
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    play = cp.ascontiguousarray(cp.asarray(play, dtype=DTYPE))
+    if play.ndim != 2:
+        raise ValueError("play must be a 2-D (ncol,nlay) array")
+    ncol, nlay = play.shape
+    plev = _device_profile(plev, (ncol, nlay + 1), "plev")
+    tlay = _device_profile(tlay, (ncol, nlay), "tlay")
+    vmr = _device_profile(vmr, (ncol, nlay, tables.ngas + 1), "vmr")
+    if validate:
+        _validate_host_range("play", play, float(np.min(tables.press_ref)),
+                             float(np.max(tables.press_ref)), "Pa")
+        _validate_host_range("plev", plev, 0.0, None, "Pa")
+        _validate_host_range("tlay", tlay, float(np.min(tables.temp_ref)),
+                             float(np.max(tables.temp_ref)), "K")
+    if metadata is None:
+        metadata = _interpolation_metadata(
+            tables, play, tlay, validate=False)
+    else:
+        metadata = _normalize_interpolation_metadata(metadata, play.shape)
+    d = tables.to_device()
+    shape = (ncol, nlay, tables.ngpt)
+    if out is None:
+        tau = cp.empty(shape, dtype=DTYPE)
+        ssa = (cp.empty_like(tau) if tables.kind == "sw"
+               else cp.empty((1,), dtype=DTYPE))
+    else:
+        tau = _workspace_output(out[0], shape, "gas_tau")
+        ssa = (_workspace_output(out[1], shape, "gas_ssa")
+               if tables.kind == "sw" else tau)
+    # LW has no Rayleigh array; pass a valid dummy pointer which is never read.
+    rayleigh = (d.rayleigh if tables.rayleigh is not None
+                else (tau if out is not None
+                      else cp.empty((1,), dtype=DTYPE)))
+    # One block per cell (see the kernel).  64 threads was swept
+    # against 32/96/128 at both band widths and won at both; the
+    # kernel strides the g-point axis, so any block size is
+    # correct and only the sweep decides this one.
+    threads = min(64, int(tables.ngpt))
+    blocks = int(ncol) * int(nlay)
+    shared = 4 * max(int(tables.minor_limits_gpt_lower.shape[0]),
+                     int(tables.minor_limits_gpt_upper.shape[0]))
+    kernel = get_kernel("rrtmgp_gas", "rrtmgp_gas_optics")
+    kernel((blocks,), (threads,), (
+        play, plev, tlay, vmr, metadata.iatm, metadata.jt, metadata.jp,
+        metadata.ftemp, metadata.fpress, d.vmr_ref, d.flavor,
+        d.gpoint_flavor, d.kmajor, d.kminor_lower, d.kminor_upper,
+        d.minor_limits_gpt_lower, d.minor_limits_gpt_upper,
+        d.minor_scales_with_density_lower,
+        d.minor_scales_with_density_upper, d.scale_by_complement_lower,
+        d.scale_by_complement_upper, d.idx_minor_lower, d.idx_minor_upper,
+        d.idx_minor_scaling_lower, d.idx_minor_scaling_upper,
+        d.kminor_start_lower, d.kminor_start_upper,
+        d.minor_gpt_start_lower, d.minor_gpt_list_lower,
+        d.minor_gpt_start_upper, d.minor_gpt_list_upper,
+        rayleigh, tau, ssa,
+        np.int32(ncol), np.int32(nlay), np.int32(tables.ngas),
+        np.int32(tables.nflav), np.int32(tables.ngpt),
+        np.int32(tables.ntemp), np.int32(tables.npres),
+        np.int32(tables.neta),
+        np.int32(tables.kminor_lower.shape[2]),
+        np.int32(tables.kminor_upper.shape[2]),
+        np.int32(tables.gas_index["h2o"]),
+        np.int32(tables.kind == "sw"),
+        np.int32(tables.minor_limits_gpt_lower.shape[0]),
+        np.int32(tables.minor_limits_gpt_upper.shape[0])),
+        shared_mem=shared)
+    h2o = vmr[:, :, tables.gas_index["h2o"]]
+    fact = DTYPE(1.0) / (DTYPE(1.0) + h2o)
+    m_air = (DTYPE(0.028964) + DTYPE(0.018016) * h2o) * fact
+    col_dry_value = (cp.abs(plev[:, 1:] - plev[:, :-1])
+                     * DTYPE(6.02214076e23) * fact
+                     / (DTYPE(10000.0) * m_air * DTYPE(9.80665)))
+    if col_dry_out is None:
+        col_dry = col_dry_value
+    else:
+        col_dry = _workspace_output(
+            col_dry_out, (ncol, nlay), "col_dry")
+        col_dry[...] = col_dry_value
+    if tables.kind == "lw":
+        return GasOpticsResult(tau=tau, col_dry=col_dry)
+    # The zero-field sentinel is private to the production fused finalizer.
+    # Exported gas_optics retains its historical allocated zero array.
+    asym = None if zero_g_sentinel else cp.zeros_like(tau)
+    return GasOpticsResult(tau=tau, ssa=ssa, g=asym, col_dry=col_dry)
+
+
+def delta_scale(tau, ssa, g):
+    """Return reference-default delta-scaled FP32 two-stream properties."""
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    tau = cp.ascontiguousarray(cp.asarray(tau, dtype=DTYPE))
+    ssa = _device_profile(ssa, tau.shape, "ssa")
+    g = _device_profile(g, tau.shape, "g")
+    out = tuple(cp.empty_like(tau) for _ in range(3))
+    n = tau.size
+    threads = 256
+    get_kernel("rrtmgp_rte", "rrtmgp_delta_scale")(
+        ((n + threads - 1) // threads,), (threads,),
+        (tau, ssa, g, *out, np.int32(n)))
+    return out
+
+
+
+class FusedCloudOptics(NamedTuple):
+    """Band cloud optics + McICA mask, combined INSIDE the RTE solvers.
+
+    Two fusions failed here for named reasons: gas+finalize forced a
+    pipeline reorder (13.5f), and Planck->solver dragged scattered gathers
+    into a deliberately low-occupancy kernel (13.6f).  This one has
+    neither: nothing reorders, and the solver's added reads are coalesced
+    streams of the same element index it already walks -- band arrays 16x
+    smaller than the cube, the mask a byte plane.  The finalize kernels
+    and their g-point cube round trip then do not exist on this path.
+    """
+
+    tables: "GasTables"
+    cloud: "CloudOpticsResult"
+    mask: object  # bool (ncol,nlay,ngpt) McICA mask, or None
+
+
+def _fused_cloud_args(fused, tau, ncol, nlay, ngpt):
+    """Resolve FusedCloudOptics into the solver's trailing fz arguments.
+
+    Validation mirrors _finalize_cloud_optics.  When ``fused`` is None the
+    fz pointers are the tau array itself -- the same valid-dummy-pointer
+    convention that launcher already uses for an absent mask -- and
+    ``fz_on`` is 0, so the kernel never dereferences them.
+    """
+    import cupy as cp
+
+    if fused is None:
+        z = np.int32(0)
+        return (tau, tau, tau, tau, tau, z, z, z)
+    tables, cloud = fused.tables, fused.cloud
+    if ngpt != tables.ngpt:
+        raise ValueError("fused cloud optics do not match the gas table")
+    band_shape = (ncol, nlay, tables.nband)
+    cld_tau = _device_profile(cloud.tau, band_shape, "cloud.tau")
+    cld_ssa = _device_profile(cloud.ssa, band_shape, "cloud.ssa")
+    cld_asy = _device_profile(cloud.g, band_shape, "cloud.g")
+    if fused.mask is None:
+        mask, have_mask = tau, 0
+    else:
+        mask = cp.ascontiguousarray(cp.asarray(fused.mask, dtype=cp.bool_))
+        if mask.shape != (ncol, nlay, ngpt):
+            raise ValueError(
+                f"fused cloud mask must have shape {(ncol, nlay, ngpt)}, "
+                f"got {mask.shape}")
+        have_mask = 1
+    bands = tables.to_device().gpoint_bands
+    return (cld_tau, cld_ssa, cld_asy, bands, mask,
+            np.int32(tables.nband), np.int32(have_mask), np.int32(1))
+
+
+
+class PlanckInputs(NamedTuple):
+    """What the LW solver needs to derive its own Planck sources.
+
+    Passing this instead of `lay_source`/`lev_source`/`sfc_source` deletes
+    all three from the workspace -- 455 MiB of the binding phase at the
+    default chunk -- and the round trip an ablation priced at 38% of the
+    solver.  See `rrtmgp_planck_common.cuh` for why it costs no array:
+    `pfrac` does not chain.
+    """
+
+    tables: "GasTables"
+    play: object
+    tlay: object
+    tlev: object
+    tsfc: object
+    vmr: object
+    metadata: object
+
+
+def _planck_solver_args(planck, tau, ncol, nlay, ngpt):
+    """Resolve PlanckInputs into the solver's trailing pk arguments.
+
+    ``None`` yields the valid-dummy-pointer convention the fz arguments
+    already use: the pointers are the tau array and ``pk_on`` is 0, so the
+    kernel never dereferences them and reads lay/lev/sfc_source instead.
+    """
+    import cupy as cp
+
+    if planck is None:
+        z = np.int32(0)
+        # 17 pointer parameters then 7 integers; the last is pk_on = 0.
+        return (tau,) * 17 + (z,) * 7
+    t = planck.tables
+    if t.kind != "lw":
+        raise ValueError("in-solver Planck requires LW gas tables")
+    if ngpt != t.ngpt:
+        raise ValueError("Planck inputs do not match the gas table")
+    d = t.to_device()
+    play = _device_profile(planck.play, (ncol, nlay), "planck.play")
+    tlay = _device_profile(planck.tlay, (ncol, nlay), "planck.tlay")
+    tlev = _device_profile(planck.tlev, (ncol, nlay + 1), "planck.tlev")
+    tsfc = _device_profile(planck.tsfc, (ncol,), "planck.tsfc")
+    vmr = cp.ascontiguousarray(cp.asarray(planck.vmr, dtype=DTYPE))
+    if vmr.shape != (ncol, nlay, t.ngas + 1):
+        raise ValueError(
+            f"planck.vmr must have shape {(ncol, nlay, t.ngas + 1)}, "
+            f"got {vmr.shape}")
+    m = planck.metadata
+    return (play, tlay, tlev, tsfc, vmr, m.iatm, m.jt, m.jp, m.ftemp,
+            m.fpress, d.temp_ref, d.vmr_ref, d.flavor, d.gpoint_flavor,
+            d.gpoint_bands, d.planck_fraction, d.totplnk,
+            np.int32(t.ngas), np.int32(t.ntemp), np.int32(t.npres),
+            np.int32(t.neta), np.int32(t.nband),
+            np.int32(t.totplnk.shape[0]), np.int32(1))
+
+
+def lw_rte(tau, lay_source, lev_source, sfc_source, sfc_emis,
+           incident_flux=None, *, top_at_1: bool) -> FluxResult:
+    """Run the FP32 one-angle LW no-scattering solver on device."""
+    return _lw_rte(
+        tau, lay_source, lev_source, sfc_source, sfc_emis,
+        incident_flux=incident_flux, top_at_1=top_at_1,
+        out=None, incident_out=None)
+
+
+def _rte_kernel(func: str, nlay: int):
+    """One RTE kernel, compiled for this run's layer count.
+
+    The column arrays are declared ``[RRTMGP_MAX_LAYERS]``; leaving that at
+    the 128-layer ceiling would spend 40% of the frame on layers a 74-layer
+    column never touches, and the frame is exactly what
+    :func:`_rte_gpt_tile` divides the L2 budget by.  So the waste costs
+    g-point parallelism, not merely bytes.
+    """
+    from woof.globe.core.kernels import get_kernel_int_defines
+    return get_kernel_int_defines(
+        "rrtmgp_rte", func, (("RRTMGP_MAX_LAYERS", int(nlay)),))
+
+
+@lru_cache(maxsize=1)
+def _rte_sm_count() -> int:
+    import cupy as cp
+    return int(cp.cuda.Device().attributes["MultiProcessorCount"])
+
+
+#: Threads per SM to aim for in the RTE stage kernels -- one 256-thread block.
+_RTE_BLOCK = 256
+
+#: A fold group is one block, so it cannot exceed the maximum block width.
+_RTE_MAX_FOLD_BLOCK = 1024
+
+
+def _rte_gpt_tile(kernel, ncol: int, ngpt: int, *,
+                  fold: bool = False) -> int:
+    """How many g-points per column to hold in flight in the RTE solvers.
+
+    Each thread integrates one g-point of one column and carries the whole
+    column in local memory, so these kernels want SM COVERAGE and nothing
+    beyond it: past about one block per SM the extra threads only multiply
+    the live local working set and the solver slows down again.  More
+    parallelism is emphatically not monotonically better here.
+
+    Measured on this 70-SM card, sweeping the tile at fixed ncol:
+
+        ncol  256   tile   4     8    16    32    64   128   256
+        lw ms       4.27  2.50  1.39  0.82  0.56  0.76  0.90
+        ncol 1024   tile   4     8    16    32    64   128   256
+        lw ms       5.18  3.01  2.06  3.03  3.76  5.64  6.39
+        sw ms       6.41  3.76  3.91  4.84  5.69
+
+    Both LW optima land on 16,384 threads and SW's on 8,192 -- that is
+    64 and 32 blocks against 70 SMs.  The optimum is a THREAD COUNT: it does
+    not move when the per-thread frame changes, which is what rules this out
+    as a cache-footprint effect (the same sweep run against a 42% smaller
+    frame peaks at the same tile, not a proportionally larger one).
+    """
+    # SM coverage scaled by how big a column frame the kernel carries.  The
+    # single-coverage rule was measured when BOTH solvers spilled ~1.2-2.7 kB
+    # per thread; halving the LW frame to 592 B (and trimming SW to 2088)
+    # moved LW's optimum and left SW's where it was.  Re-swept at ncol 1024:
+    #
+    #     tile      8      16      24      32      48      64
+    #     LW ms  2.369   1.417   1.414   1.267   1.635   1.579
+    #     SW ms  3.345   2.575   3.020   3.259   3.862   3.864
+    #
+    # LW wants two blocks per SM now, SW still wants one.  Reading the frame
+    # off the compiled kernel keeps this exact if either changes again.
+    frame = 0
+    if kernel is not None:
+        try:
+            frame = int(kernel.attributes["local_size_bytes"])
+        except Exception:                                # pragma: no cover
+            frame = 0
+    coverage = 2 if 0 < frame <= 1024 else 1
+    # Measurement override, so the two settings can be INTERLEAVED in one
+    # session (13.5 trap 3).  Comparing a block of runs against a block taken
+    # later cost me a wrong answer here: the control moved 7.7% between the
+    # groups and the normaliser does not survive a regime change (13.5e).
+    forced = os.environ.get("WOOF_RTE_TILE_COVERAGE", "").strip()
+    if forced:
+        coverage = max(1, int(forced))
+    # A FOLDING kernel writes no partial fluxes, so the tile the
+    # partial-writing kernel wanted is not the tile this one wants -- the
+    # third time in this file that a constant went stale when the thing it
+    # was tuned against changed shape.  Re-swept, LW, nlay 99:
+    #
+    #     ncol      tile 32   tile 64  tile 128
+    #     1024       1.249     0.971     1.166
+    #      912       1.195     0.912     1.091
+    #
+    # and the optimum is a THREAD COUNT, not a tile: it held at 65536
+    # across ncol 256, 512 and 1024.  That is 1024 threads per SM here, so
+    # it scales with the card the way the coverage rule below does.
+    target = (_rte_sm_count() * 1024 if fold
+              else _rte_sm_count() * _RTE_BLOCK * coverage)
+    tile, cap = 1, min(max(1, target // max(1, int(ncol))), int(ngpt))
+    while tile * 2 <= cap:
+        tile *= 2
+    if fold:
+        # The fold group is a block and every pass must be full, because the
+        # kernel's `gpt >= ngpt` guard is NOT block-uniform and a short last
+        # pass would strand threads at a barrier.  So the tile has to DIVIDE
+        # the band as well as fit in it -- ngpt 224 admits no power of two
+        # above 32, which is the ceiling on the SW fold.
+        while tile > 1 and int(ngpt) % tile:
+            tile //= 2
+    return max(1, min(tile, int(ngpt)))
+
+
+def _lw_rte(tau, lay_source, lev_source, sfc_source, sfc_emis,
+            incident_flux=None, *, top_at_1: bool, out,
+            incident_out, fused_cloud=None,
+            planck=None) -> FluxResult:
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    tau = cp.ascontiguousarray(cp.asarray(tau, dtype=DTYPE))
+    if tau.ndim != 3:
+        raise ValueError("tau must have shape (ncol,nlay,ngpt)")
+    ncol, nlay, ngpt = tau.shape
+    if nlay > 128:
+        # The ceiling's owner is the Planck-source kernel's fixed
+        # pfrac[128] (see _planck_sources), not the RTE: the solver
+        # kernels compile RRTMGP_MAX_LAYERS to this run's nlay.  This
+        # door-level copy stays because the LW chain feeds on Planck
+        # sources either way (fused or precomputed), and a taller column
+        # must refuse HERE, before any device allocation, rather than
+        # inside whichever stage first touches the fixed array
+        # (re-justified, stale-guard audit 2026-08-25).
+        raise ValueError(
+            "RRTMGP CUDA LW supports at most 128 layers (the Planck-"
+            f"source kernel's fixed pfrac[128]); got {nlay}")
+    if planck is None:
+        lay_source = _device_profile(lay_source, tau.shape, "lay_source")
+        lev_source = _device_profile(
+            lev_source, (ncol, nlay + 1, ngpt), "lev_source")
+        sfc_source = _device_profile(sfc_source, (ncol, ngpt), "sfc_source")
+    else:
+        # Derived in the kernel; these are valid dummy pointers it never
+        # dereferences, the same convention the fz arguments use.
+        lay_source = lev_source = sfc_source = tau
+    sfc_emis = _device_profile(sfc_emis, (ncol, ngpt), "sfc_emis")
+    if incident_flux is None:
+        if incident_out is None:
+            incident = cp.zeros((ncol, ngpt), dtype=DTYPE)
+        else:
+            incident = _workspace_output(
+                incident_out, (ncol, ngpt), "incident")
+            incident.fill(DTYPE(0.0))
+    else:
+        incident = _device_profile(
+            incident_flux, (ncol, ngpt), "incident_flux")
+    flux_shape = (ncol, nlay + 1)
+    if out is None:
+        up = cp.empty(flux_shape, dtype=DTYPE)
+        down = cp.empty_like(up)
+    else:
+        up = _workspace_output(out[0], flux_shape, "flux_up")
+        down = _workspace_output(out[1], flux_shape, "flux_dn")
+    fz = _fused_cloud_args(fused_cloud, tau, ncol, nlay, ngpt)
+    pk = _planck_solver_args(planck, tau, ncol, nlay, ngpt)
+    stage = _rte_kernel("rrtmgp_lw_noscat", nlay)
+    fold = _rte_kernel("rrtmgp_lw_flux_reduce", nlay)
+    nlev = nlay + 1
+    tile = _rte_gpt_tile(stage, ncol, ngpt, fold=True)
+    # The folding path gives each COLUMN its own block, so the block is
+    # the fold group and no partial block can strand a thread at a
+    # barrier: grid is exactly ncol and blockDim is exactly the tile.
+    # `ngpt % tile` keeps the last pass full, so the kernel's `gpt >= ngpt`
+    # guard -- which is NOT block-uniform -- can never fire on this path.
+    # Folding is worth it from tile 32 up; below that the fold costs more
+    # than the scatter it removes (measured: at tile 16 it LOSES).
+    warp_fold = 1 if (tile >= 32 and ngpt % tile == 0
+                      and tile <= _RTE_MAX_FOLD_BLOCK) else 0
+    if warp_fold:
+        part_up, part_dn = up, down
+        threads, stage_blocks, shared = tile, ncol, tile * 4
+    else:
+        part_up = cp.empty((tile, nlev, ncol), dtype=DTYPE)
+        part_dn = cp.empty_like(part_up)
+        threads = _RTE_BLOCK
+        stage_blocks = (ncol * tile + threads - 1) // threads
+        shared = 0
+    fold_blocks = (ncol * nlev + _RTE_BLOCK - 1) // _RTE_BLOCK
+    # Tiles are walked in ascending g-point order and each fold appends to the
+    # running flux, so the FP32 addition sequence is the one the single-thread
+    # column loop produced -- see rrtmgp_rte.cu.
+    for gpt0 in range(0, ngpt, tile):
+        stage((stage_blocks,), (threads,), (
+            tau, lay_source, lev_source, sfc_source, sfc_emis, incident,
+            part_up, part_dn, np.int32(ncol), np.int32(nlay),
+            np.int32(ngpt), np.int32(gpt0), np.int32(tile),
+            np.int32(top_at_1), np.int32(warp_fold)) + fz + pk,
+            shared_mem=shared)
+        if not warp_fold:
+            fold((fold_blocks,), (_RTE_BLOCK,), (
+                part_up, part_dn, up, down, np.int32(ncol), np.int32(nlev),
+                np.int32(gpt0), np.int32(min(tile, ngpt - gpt0))))
+    return FluxResult(up, down)
+
+
+def sw_rte(tau, ssa, g, mu0, sfc_alb_dir, sfc_alb_dif, inc_flux_dir,
+           *, top_at_1: bool) -> FluxResult:
+    """Run the FP32 delta-scaled PIFM two-stream SW solver on device."""
+    return _sw_rte(
+        tau, ssa, g, mu0, sfc_alb_dir, sfc_alb_dif, inc_flux_dir,
+        top_at_1=top_at_1, out=None)
+
+
+def _sw_rte(tau, ssa, g, mu0, sfc_alb_dir, sfc_alb_dif, inc_flux_dir,
+            *, top_at_1: bool, out, fused_cloud=None) -> FluxResult:
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    tau = cp.ascontiguousarray(cp.asarray(tau, dtype=DTYPE))
+    if tau.ndim != 3:
+        raise ValueError("tau must have shape (ncol,nlay,ngpt)")
+    ncol, nlay, ngpt = tau.shape
+    # No layer ceiling: the SW solver compiles RRTMGP_MAX_LAYERS to this
+    # run's nlay and no kernel on the SW chain holds fixed per-layer
+    # thread storage.  A 128-layer refusal used to sit here, inherited
+    # from the days before per-run specialization; the ceiling's real
+    # owner is the LW Planck-source kernel's pfrac[128], which has its
+    # own raise (retired here 2026-08-25, stale-guard audit -- proven by
+    # a 160-layer transparent-atmosphere run reproducing the analytic
+    # direct beam on the measurement card).
+    ssa = _device_profile(ssa, tau.shape, "ssa")
+    # On the fused path the asym cube does not exist; the ssa array is the
+    # valid-dummy pointer for the never-read parameter.
+    g = (ssa if (fused_cloud is not None and g is None)
+         else _device_profile(g, tau.shape, "g"))
+    mu0 = cp.asarray(mu0, dtype=DTYPE)
+    if mu0.shape == (ncol,):
+        mu0 = cp.broadcast_to(mu0[:, None], (ncol, nlay))
+    mu0 = _device_profile(mu0, (ncol, nlay), "mu0")
+    alb_dir = _device_profile(sfc_alb_dir, (ncol, ngpt), "sfc_alb_dir")
+    alb_dif = _device_profile(sfc_alb_dif, (ncol, ngpt), "sfc_alb_dif")
+    inc = _device_profile(inc_flux_dir, (ncol, ngpt), "inc_flux_dir")
+    flux_shape = (ncol, nlay + 1)
+    if out is None:
+        up = cp.empty(flux_shape, dtype=DTYPE)
+        down = cp.empty_like(up)
+        direct = cp.empty_like(up)
+    else:
+        up, down, direct = (
+            _workspace_output(value, flux_shape, name)
+            for value, name in zip(
+                out, ("flux_up", "flux_dn", "flux_dir")))
+    fz = _fused_cloud_args(fused_cloud, tau, ncol, nlay, ngpt)
+    stage = _rte_kernel("rrtmgp_sw_2stream", nlay)
+    fold = _rte_kernel("rrtmgp_sw_flux_reduce", nlay)
+    nlev = nlay + 1
+    tile = _rte_gpt_tile(stage, ncol, ngpt, fold=True)
+    # Same block fold as the LW solver, and rejected once for the same
+    # reason it now pays: the earlier SW measurement (+0.078 s) was taken
+    # at tile 16, which is below the tile where folding starts to earn its
+    # barriers at all.  SW has THREE partial arrays, so it has more scatter
+    # to delete -- but ngpt 224 admits no power of two above 32, so 32 is
+    # the widest fold SW can have.  Measured there: 2.992 -> 1.968 ms.
+    warp_fold = 1 if (tile >= 32 and ngpt % tile == 0
+                      and tile <= _RTE_MAX_FOLD_BLOCK) else 0
+    if warp_fold:
+        part_up, part_dn, part_dir = up, down, direct
+        threads, stage_blocks, shared = tile, ncol, tile * 4
+    else:
+        part_up = cp.empty((tile, nlev, ncol), dtype=DTYPE)
+        part_dn = cp.empty_like(part_up)
+        part_dir = cp.empty_like(part_up)
+        threads = _RTE_BLOCK
+        stage_blocks = (ncol * tile + threads - 1) // threads
+        shared = 0
+    fold_blocks = (ncol * nlev + _RTE_BLOCK - 1) // _RTE_BLOCK
+    for gpt0 in range(0, ngpt, tile):
+        stage((stage_blocks,), (threads,), (
+            tau, ssa, g, mu0, alb_dir, alb_dif, inc,
+            part_up, part_dn, part_dir,
+            np.int32(ncol), np.int32(nlay), np.int32(ngpt),
+            np.int32(gpt0), np.int32(tile), np.int32(top_at_1),
+            np.int32(0), np.int32(warp_fold)) + fz, shared_mem=shared)
+        if not warp_fold:
+            fold((fold_blocks,), (_RTE_BLOCK,), (
+                part_up, part_dn, part_dir, up, down, direct,
+                np.int32(ncol), np.int32(nlev),
+                np.int32(gpt0), np.int32(min(tile, ngpt - gpt0))))
+    return FluxResult(up, down, direct)
+
+
+def planck_sources(tables: GasTables, play, plev, tlay, tlev, tsfc,
+                   vmr) -> PlanckSourceResult:
+    """Compute FP32 RRTMGP LW Planck sources on device."""
+    return _planck_sources(
+        tables, play, plev, tlay, tlev, tsfc, vmr,
+        metadata=None, validate=True, out=None)
+
+
+def _planck_sources(tables: GasTables, play, plev, tlay, tlev, tsfc,
+                    vmr, *, metadata, validate, out=None) -> PlanckSourceResult:
+    """Internal Planck path supporting driver-owned shared metadata."""
+    import cupy as cp
+    from woof.globe.core.kernels import get_kernel
+
+    if tables.kind != "lw":
+        raise ValueError("Planck sources require LW gas tables")
+    play = cp.ascontiguousarray(cp.asarray(play, dtype=DTYPE))
+    if play.ndim != 2:
+        raise ValueError("play must have shape (ncol,nlay)")
+    ncol, nlay = play.shape
+    if nlay > 128:
+        # The OWNER of the RRTMGP layer ceiling: this kernel holds a fixed
+        # per-thread pfrac[128] and its device-side guard is a bare
+        # `return`, so without this raise a taller column came back as
+        # uninitialized source arrays that read as valid radiation
+        # (stale-guard audit 2026-08-25).  The RTE solvers themselves
+        # compile RRTMGP_MAX_LAYERS to this run's nlay and carry no such
+        # ceiling.
+        raise ValueError(
+            "RRTMGP CUDA Planck sources support at most 128 layers: the "
+            "rrtmgp_planck_sources kernel holds a fixed pfrac[128] per "
+            f"thread and this profile has {nlay} layers")
+    # plev is validated because it is part of the public gas/source profile
+    # contract even though Planck interpolation itself only consumes play.
+    plev = _device_profile(plev, (ncol, nlay + 1), "plev")
+    tlay = _device_profile(tlay, (ncol, nlay), "tlay")
+    tlev = _device_profile(tlev, (ncol, nlay + 1), "tlev")
+    tsfc = _device_profile(tsfc, (ncol,), "tsfc")
+    vmr = _device_profile(vmr, (ncol, nlay, tables.ngas + 1), "vmr")
+    if validate:
+        _validate_host_range("play", play, float(np.min(tables.press_ref)),
+                             float(np.max(tables.press_ref)), "Pa")
+        _validate_host_range("plev", plev, 0.0, None, "Pa")
+        for name, value in (("tlay", tlay), ("tlev", tlev), ("tsfc", tsfc)):
+            _validate_host_range(name, value, float(np.min(tables.temp_ref)),
+                                 float(np.max(tables.temp_ref)), "K")
+    if metadata is None:
+        metadata = _interpolation_metadata(
+            tables, play, tlay, validate=False)
+    else:
+        metadata = _normalize_interpolation_metadata(metadata, play.shape)
+    d = tables.to_device()
+    shapes = ((ncol, nlay, tables.ngpt),
+              (ncol, nlay + 1, tables.ngpt),
+              (ncol, tables.ngpt))
+    if out is None:
+        lay = cp.empty(shapes[0], dtype=DTYPE)
+        lev = cp.empty(shapes[1], dtype=DTYPE)
+        sfc = cp.empty(shapes[2], dtype=DTYPE)
+    else:
+        lay, lev, sfc = (
+            _workspace_output(value, shape, name)
+            for value, shape, name in zip(
+                out, shapes, ("lay_source", "lev_source", "sfc_source")))
+    # One thread per (column, g-point); see the kernel for why the g-point
+    # loop it replaces was independent.
+    threads = 128
+    cells = int(ncol) * int(tables.ngpt)
+    get_kernel("rrtmgp_gas", "rrtmgp_planck_sources")(
+        ((cells + threads - 1) // threads,), (threads,),
+        (play, tlay, tlev, tsfc, vmr, metadata.iatm, metadata.jt,
+         metadata.jp, metadata.ftemp, metadata.fpress, d.temp_ref,
+         d.vmr_ref, d.flavor,
+         d.gpoint_flavor, d.gpoint_bands, d.planck_fraction, d.totplnk,
+         lay, lev, sfc, np.int32(ncol), np.int32(nlay),
+         np.int32(tables.ngas), np.int32(tables.ngpt),
+         np.int32(tables.ntemp), np.int32(tables.npres),
+         np.int32(tables.neta), np.int32(tables.nband),
+         np.int32(tables.totplnk.shape[0])))
+    return PlanckSourceResult(lay, lev, sfc)
+
+
+def _rfmip_profiles(tables, sites, experiments, inputs=None):
+    from woof.core.rfmip_upstream import fetch_rfmip
+
+    sites = np.asarray(sites, dtype=np.intp)
+    experiments = np.asarray(experiments, dtype=np.intp)
+    source = fetch_rfmip("rfmip-clear-sky-inputs.nc", path=inputs)
+    with Dataset(source, "r") as nc:
+        nc.set_auto_mask(False)
+        nsite, nexp = sites.size, experiments.size
+        play_site = np.asarray(nc["pres_layer"][sites], np.float64)
+        plev_site = np.asarray(nc["pres_level"][sites], np.float64)
+        play = np.broadcast_to(play_site[None], (nexp, *play_site.shape))
+        plev = np.broadcast_to(
+            plev_site[None], (nexp, *plev_site.shape)).copy()
+        # The RFMIP top boundary is 0.01 Pa, below the coefficient grid.
+        # Match the upstream example's explicit input sanitization.
+        top = 0 if play_site[0, 0] < play_site[0, -1] else -1
+        plev[..., top] = tables.press_ref[-1] + np.finfo(np.float64).eps
+        tlay = np.asarray(nc["temp_layer"][experiments][:, sites], np.float64)
+        tlev = np.asarray(nc["temp_level"][experiments][:, sites], np.float64)
+        tsfc = np.asarray(
+            nc["surface_temperature"][experiments][:, sites], np.float64)
+        vmr = np.zeros((*tlay.shape, tables.ngas + 1), np.float64)
+        vmr[..., tables.gas_index["h2o"]] = np.asarray(
+            nc["water_vapor"][experiments][:, sites], np.float64)
+        vmr[..., tables.gas_index["o3"]] = np.asarray(
+            nc["ozone"][experiments][:, sites], np.float64)
+        for gas, rfmip_name in _RFMIP_GAS_NAMES.items():
+            variable = nc[rfmip_name + "_GM"]
+            scale = float(getattr(variable, "units", "1").replace(" ", ""))
+            values = np.asarray(variable[experiments], np.float64) * scale
+            vmr[..., tables.gas_index[gas]] = values[:, None, None]
+        emiss = np.asarray(nc["surface_emissivity"][sites], np.float64)
+        albedo = np.asarray(nc["surface_albedo"][sites], np.float64)
+        sza = np.asarray(nc["solar_zenith_angle"][sites], np.float64)
+        tsi = np.asarray(nc["total_solar_irradiance"][sites], np.float64)
+    def flat(a):
+        return np.ascontiguousarray(a.reshape(nexp * nsite, *a.shape[2:]))
+    return (flat(play), flat(plev), flat(tlay), flat(tlev),
+            np.ascontiguousarray(tsfc.reshape(-1)),
+            flat(vmr), np.tile(emiss, nexp), np.tile(albedo, nexp),
+            np.tile(sza, nexp), np.tile(tsi, nexp))
+
+
+def rfmip_clear_sky(*, sites=None, experiments=None,
+                    inputs=None) -> RFMIPResult:
+    """Run the RFMIP clear-sky oracle profiles on the GPU.
+
+    This reproduces the upstream physics-index-1/forcing-index-1 examples:
+    one-angle LW, default solar spectrum normalized to each RFMIP TSI, and
+    nighttime columns explicitly zeroed after the SW solve.
+
+    The RFMIP input file is not shipped by the engine from 2.8.0 on (see
+    :mod:`woof.core.rfmip_upstream`): ``inputs`` names a local copy, and
+    without it the pinned upstream file is fetched into the RFMIP cache.
+    Either way its SHA-256 is verified before a byte is read.
+    """
+    import cupy as cp
+
+    sites = np.arange(100) if sites is None else np.asarray(sites)
+    experiments = (np.arange(18) if experiments is None
+                   else np.asarray(experiments))
+    lw = load_gas_tables("lw")
+    (play, plev, tlay, tlev, tsfc, vmr, emiss, _albedo,
+     _sza, _tsi) = _rfmip_profiles(lw, sites, experiments, inputs)
+    dplay = cp.asarray(play, dtype=DTYPE)
+    dplev = cp.asarray(plev, dtype=DTYPE)
+    dtlay = cp.asarray(tlay, dtype=DTYPE)
+    dvmr = cp.asarray(vmr, dtype=DTYPE)
+    optics_lw = gas_optics(lw, dplay, dplev, dtlay, dvmr)
+    sources = planck_sources(
+        lw, dplay, dplev, dtlay, cp.asarray(tlev, dtype=DTYPE),
+        cp.asarray(tsfc, dtype=DTYPE), dvmr)
+    emis = cp.asarray(emiss, dtype=DTYPE)
+    emis_band = cp.broadcast_to(emis[:, None], (play.shape[0], lw.nband))
+    emis_gpt = _expand_band_to_gpoint(
+        emis_band, lw, "RFMIP surface emissivity")
+    lw_flux = lw_rte(optics_lw.tau, sources.lay_source,
+                     sources.lev_source, sources.sfc_source, emis_gpt,
+                     top_at_1=True)
+
+    sw = load_gas_tables("sw")
+    (play, plev, tlay, _tlev, _tsfc, vmr, _emiss, albedo,
+     sza, tsi) = _rfmip_profiles(sw, sites, experiments, inputs)
+    optics_sw = gas_optics(
+        sw, cp.asarray(play, dtype=DTYPE), cp.asarray(plev, dtype=DTYPE),
+        cp.asarray(tlay, dtype=DTYPE), cp.asarray(vmr, dtype=DTYPE))
+    tau, ssa, asym = delta_scale(optics_sw.tau, optics_sw.ssa, optics_sw.g)
+    mu_raw = cp.cos(cp.asarray(sza, dtype=DTYPE) * DTYPE(np.pi / 180.0))
+    daylight = mu_raw > DTYPE(0.0)
+    mu = cp.where(daylight, mu_raw, DTYPE(1.0))
+    alb = cp.asarray(albedo, dtype=DTYPE)
+    alb_gpt = cp.ascontiguousarray(cp.broadcast_to(
+        alb[:, None], (play.shape[0], sw.ngpt)))
+    inc = _normalized_solar_incident(sw.solar_source, tsi)
+    sw_flux = sw_rte(tau, ssa, asym, mu, alb_gpt, alb_gpt, inc,
+                     top_at_1=True)
+    mask = daylight[:, None]
+    sw_up = cp.where(mask, sw_flux.flux_up, DTYPE(0.0))
+    sw_dn = cp.where(mask, sw_flux.flux_dn, DTYPE(0.0))
+    return RFMIPResult(lw_flux.flux_up, lw_flux.flux_dn, sw_up, sw_dn)
+
+
+def _normalized_solar_incident(solar_source, tsi):
+    """Normalize a solar spectrum with a binding float64 host reduction."""
+    import cupy as cp
+
+    solar_host = np.asarray(solar_source, dtype=np.float64)
+    norm = np.sum(solar_host, dtype=np.float64)
+    if not np.isfinite(norm) or norm <= 0.0:
+        raise ValueError("solar-source normalization must be finite and positive")
+    scale = np.asarray(tsi, dtype=np.float64) / norm
+    solar = cp.asarray(solar_host, dtype=DTYPE)
+    scale_device = cp.asarray(scale, dtype=DTYPE)
+    return cp.ascontiguousarray(solar[None, :] * scale_device[:, None])
+
+
+__all__ = ["CloudOpticsResult", "CloudTables", "DATA_DIR", "FluxResult",
+           "GasOpticsResult", "GasTables", "HydrometeorPaths",
+           "MCICA_PERMUTESEED_LW", "MCICA_PERMUTESEED_SW",
+           "PlanckSourceResult", "RFMIPResult", "RRTMGPRadiation",
+           "RRTMGP_TOA_PRESSURE_PA",
+           "add_cloud_optics", "cal_cldfra1",
+           "CloudSizeBounds", "SizeBounding", "SIZE_BOUNDING_FIELDS",
+           "SIZE_TREATMENTS", "SIZE_TREATMENT_CARRY", "SIZE_TREATMENT_CLIP",
+           "MORRISON_ICE_DENSITY_KG_M3", "MORRISON_SNOW_DENSITY_KG_M3",
+           "RRTMGP_ICE_TABLE_DENSITY_KG_M3", "MORRISON_NO_MASS_RADIUS_UM",
+           "shipped_cloud_size_bounds", "bound_cloud_sizes",
+           "size_bounding_column_sums", "size_bounding_fractions_from_sums",
+           "SIZE_BOUNDING_SUM_NAMES",
+           "max_random_total_cloud_cover",
+           "cloud_optics", "delta_scale", "gas_optics",
+           "hydrometeor_paths", "load_cloud_tables", "load_gas_tables",
+           "lw_rte", "mcica_cloud_masks", "planck_sources",
+           "rfmip_clear_sky", "rrtmgp_above_model_layer_counts",
+           "sw_rte", "trace_gases"]

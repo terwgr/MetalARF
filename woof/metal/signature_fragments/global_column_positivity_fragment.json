@@ -1,0 +1,90 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/model.py",
+      "cuda_symbol": "ReferencePhysics.global_column_positivity_fragment",
+      "layout_version": 1,
+      "module": "global_column_positivity_fragment",
+      "name": "global_column_positivity_fragment",
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "ncolumn",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "qv",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "repaired_qv",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "negative_mass",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "unfillable_mass",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "rescale",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "repaired_qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "negative_mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "unfillable_mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rescale": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_fixer_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

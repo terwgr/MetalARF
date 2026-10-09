@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout e8640af4ae130c82fe9ed06e8aa73d2501f9e7c2bb5a1cf37023802f9fc5c0c5.
+struct ThompsonGraupelFalloutColumnMaskResources {
+    device const float *entry_active [[id(0)]];
+    device const float *qg [[id(1)]];
+    device float *active_columns [[id(2)]];
+};
+struct ThompsonGraupelFalloutColumnMaskParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonGraupelFalloutColumnMaskParams) == 12, "thompson_graupel_fallout_column_mask parameter ABI size changed");

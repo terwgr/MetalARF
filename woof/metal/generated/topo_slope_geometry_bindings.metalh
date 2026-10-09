@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout e53cc58f6293eee2bd8a9151a2222b3741d97d682f6623af3f9be6cb79ce8b63.
+struct TopoSlopeGeometryResources {
+    device const float *ht [[id(0)]];
+    device const float *msftx [[id(1)]];
+    device const float *msfty [[id(2)]];
+    device const float *sina [[id(3)]];
+    device const float *cosa [[id(4)]];
+    device float *slope [[id(5)]];
+    device float *slp_azi [[id(6)]];
+};
+struct TopoSlopeGeometryParams {
+    float rdx;
+    float rdy;
+    int nx;
+    int ny;
+};
+static_assert(sizeof(TopoSlopeGeometryParams) == 16, "topo_slope_geometry parameter ABI size changed");

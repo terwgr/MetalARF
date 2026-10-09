@@ -1,0 +1,56 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_room_balance_inputs_fragment",
+      "module": "urban_bem_room_balance_inputs_fragment",
+      "source": "woof/metal/shaders/urban_bem_room_balance_inputs_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_bem: per-floor thermodynamic inputs and bem_fluxvent room totals",
+      "resources": [
+        ["active_cols", "int32", "read"], ["utype", "int32", "read"],
+        ["building_nlev", "int32", "read"], ["class_int", "int32", "read"],
+        ["class_float", "float", "read"], ["bs", "float", "read"],
+        ["tlev_src", "float", "read"], ["hum_src", "float", "read"],
+        ["interp", "float", "read"], ["occupancy_sensible", "float", "read"],
+        ["occupancy_latent", "float", "read"], ["hscond", "float", "read"],
+        ["cpint", "float", "read_write"], ["rhoint", "float", "read_write"],
+        ["vollev", "float", "read_write"], ["tlev", "float", "read_write"],
+        ["tout", "float", "read_write"], ["latent", "float", "read_write"],
+        ["humout", "float", "read_write"], ["rhoout", "float", "read_write"],
+        ["humlev", "float", "read_write"], ["beta", "float", "read_write"],
+        ["qb", "float", "read_write"], ["hsroo", "float", "read_write"],
+        ["volroo", "float", "read_write"], ["hlroo", "float", "read_write"],
+        ["shumroo", "float", "read_write"], ["cop", "float", "read_write"],
+        ["timeon", "float", "read_write"], ["timeoff", "float", "read_write"],
+        ["targtemp", "float", "read_write"], ["gaptemp", "float", "read_write"],
+        ["targhum", "float", "read_write"], ["gaphum", "float", "read_write"],
+        ["swcond", "int32", "read_write"], ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]], "utype": [["ncol"]],
+        "building_nlev": [["ncol", 15]], "class_int": [["class_int_len"]],
+        "class_float": [["class_float_len"]], "bs": [["ncol", 2]],
+        "tlev_src": [["ncol", 15, 18]], "hum_src": [["ncol", 15, 18]],
+        "interp": [["ncol", 7, 18]], "occupancy_sensible": [["nitem_building"]],
+        "occupancy_latent": [["nitem_building"]], "hscond": [["nitem"]],
+        "cpint": [["nitem"]], "rhoint": [["nitem"]], "vollev": [["nitem"]],
+        "tlev": [["nitem"]], "tout": [["nitem"]], "latent": [["nitem"]],
+        "humout": [["nitem"]], "rhoout": [["nitem"]], "humlev": [["nitem"]],
+        "beta": [["nitem"]], "qb": [["nitem"]], "hsroo": [["nitem"]],
+        "volroo": [["nitem"]], "hlroo": [["nitem"]], "shumroo": [["nitem"]],
+        "cop": [["nitem"]], "timeon": [["nitem"]], "timeoff": [["nitem"]],
+        "targtemp": [["nitem"]], "gaptemp": [["nitem"]],
+        "targhum": [["nitem"]], "gaphum": [["nitem"]],
+        "swcond": [["nitem"]], "error": [["nitem"]]
+      },
+      "parameters": [
+        ["ncol", "int32"], ["nitem", "int32"], ["nitem_building", "int32"], ["nurbm", "int32"],
+        ["class_float_len", "int32"], ["class_int_len", "int32"],
+        ["dz_u", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32", "soft-gfk-pow-glibc-2.39"]
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "global_semilag_vector_weights_fragment_bindings.metalh"
+#include "global_semilag_vordiv_combine_fragment_bindings.metalh"

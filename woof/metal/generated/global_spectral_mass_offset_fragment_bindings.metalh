@@ -1,0 +1,9 @@
+// Generated from kernel_signatures.json; layout 32e39d47538d088e43fb0a45f1ebdb7d447e2e2ff44e0631269c0e712d24019e.
+struct GlobalSpectralMassOffsetFragmentResources {
+    device ulong *coefficients [[id(0)]];
+    device const ulong *offset [[id(1)]];
+};
+struct GlobalSpectralMassOffsetFragmentParams {
+    int reserved;
+};
+static_assert(sizeof(GlobalSpectralMassOffsetFragmentParams) == 4, "global_spectral_mass_offset_fragment parameter ABI size changed");

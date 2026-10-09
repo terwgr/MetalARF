@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 2ffaf62b42c668f03644601fc65687f69e7e60beee1125686e558005826e4253.
+struct NestBlendTerrainResources {
+    device const float *interpolated [[id(0)]];
+    device float *fine [[id(1)]];
+};
+struct NestBlendTerrainParams {
+    int spec_bdy_width;
+    int blend_width;
+    int nk;
+    int ny;
+    int nx;
+    int domain_ny;
+    int domain_nx;
+    int j0;
+    int i0;
+};
+static_assert(sizeof(NestBlendTerrainParams) == 36, "nest_blend_terrain parameter ABI size changed");

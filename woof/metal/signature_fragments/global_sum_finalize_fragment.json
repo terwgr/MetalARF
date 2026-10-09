@@ -1,0 +1,22 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_row_mean",
+      "layout_version": 1,
+      "module": "global_sum_finalize_fragment",
+      "name": "global_sum_finalize_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["partial_sums", "float64_bits", "read"],
+        ["total", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "partial_sums": [["any_1d"]], "total": [[1]]
+      },
+      "source": "woof/metal/shaders/global_sum_finalize_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

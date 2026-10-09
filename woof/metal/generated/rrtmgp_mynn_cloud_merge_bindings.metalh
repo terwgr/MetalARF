@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 0d0f4dcbe43484a42935087f16cd68708920533c1bd4778d44df88e626181a51.
+struct RrtmgpMynnCloudMergeResources {
+    device float *qc [[id(0)]];
+    device float *qi [[id(1)]];
+    device float *cldfra [[id(2)]];
+    device const float *qc_bl [[id(3)]];
+    device const float *qi_bl [[id(4)]];
+    device const float *cldfra_bl [[id(5)]];
+};
+struct RrtmgpMynnCloudMergeParams {
+    int ncell;
+    int ncol;
+    int nlay;
+    int has_cldfra;
+    int replace_cldfra;
+};
+static_assert(sizeof(RrtmgpMynnCloudMergeParams) == 20, "rrtmgp_mynn_cloud_merge parameter ABI size changed");

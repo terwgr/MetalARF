@@ -1,0 +1,46 @@
+{
+  "kernels": [
+    {
+      "name": "p3_entry_prepare",
+      "module": "p3_entry",
+      "source": "woof/metal/shaders/p3_entry.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_prep",
+      "resources": [
+        ["theta", "float", "read"], ["pressure", "float", "read"],
+        ["qv", "float", "read_write"],
+        ["h_diabatic", "float", "read_write"],
+        ["temperature", "float", "read_write"], ["tmparr1", "float", "read_write"],
+        ["zdbz", "float", "read_write"], ["effc", "float", "read_write"],
+        ["effi", "float", "read_write"], ["vmi", "float", "read_write"],
+        ["di", "float", "read_write"], ["rhopo", "float", "read_write"],
+        ["prt_liq", "float", "read_write"], ["prt_sol", "float", "read_write"],
+        ["flags", "float", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]],
+        "qv": [["nz", "ny", "nx"]],
+        "h_diabatic": [["nz", "ny", "nx"]],
+        "temperature": [["nz", "ny", "nx"]],
+        "tmparr1": [["nz", "ny", "nx"]],
+        "zdbz": [["nz", "ny", "nx"]],
+        "effc": [["nz", "ny", "nx"]],
+        "effi": [["nz", "ny", "nx"]],
+        "vmi": [["nz", "ny", "nx"]],
+        "di": [["nz", "ny", "nx"]],
+        "rhopo": [["nz", "ny", "nx"]],
+        "prt_liq": [["ny", "nx"]],
+        "prt_sol": [["ny", "nx"]],
+        "flags": [[2, "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["exponent", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

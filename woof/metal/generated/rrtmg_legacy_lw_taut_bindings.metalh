@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout fe56fba404a47e0017eb804876d23ca93591ff683d053d8b6d27f6daef81b829.
+struct RrtmgLegacyLwTautResources {
+    device const float *taug [[id(0)]];
+    device const float *taua [[id(1)]];
+    device const int *ngb [[id(2)]];
+    device float *taut [[id(3)]];
+};
+struct RrtmgLegacyLwTautParams {
+    int ncol;
+    int nl;
+    int ngpt;
+    int nbnd;
+};
+static_assert(sizeof(RrtmgLegacyLwTautParams) == 16, "rrtmg_legacy_lw_taut parameter ABI size changed");

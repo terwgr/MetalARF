@@ -1,0 +1,24 @@
+// Generated from kernel_signatures.json; layout f2322ae5464ac14a642bc61311b1c12bbb11241f3bd099121a48ae239c52d6ea.
+struct NtiedtkeMomentumProfileResources {
+    device const int *ldcum [[id(0)]];
+    device const int *ktype [[id(1)]];
+    device const int *kcbot [[id(2)]];
+    device const int *kctop [[id(3)]];
+    device const int *kdpl [[id(4)]];
+    device const int *idtop [[id(5)]];
+    device const float *puen [[id(6)]];
+    device const float *pven [[id(7)]];
+    device const float *pmfu [[id(8)]];
+    device const float *pmfd [[id(9)]];
+    device const float *pmfude_rate [[id(10)]];
+    device const float *pmfdde_rate [[id(11)]];
+    device float *puu [[id(12)]];
+    device float *pvu [[id(13)]];
+    device float *pud [[id(14)]];
+    device float *pvd [[id(15)]];
+};
+struct NtiedtkeMomentumProfileParams {
+    int ncol;
+    int klev;
+};
+static_assert(sizeof(NtiedtkeMomentumProfileParams) == 8, "ntiedtke_momentum_profile parameter ABI size changed");

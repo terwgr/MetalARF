@@ -1,0 +1,31 @@
+// Generated from kernel_signatures.json; layout 91412e7187c2febf63ef568de86604a27d9541d6508a270ad0908f3d04398d9e.
+struct HexFctCellScalesFragmentResources {
+    device const float *old_scalar [[id(0)]];
+    device const float *rho_old [[id(1)]];
+    device const float *target_density [[id(2)]];
+    device const float *high_vertical [[id(3)]];
+    device const float *vertical_velocity [[id(4)]];
+    device const float *rdnw [[id(5)]];
+    device const float *horizontal_residual [[id(6)]];
+    device const float *upwind_flux [[id(7)]];
+    device const int *edges_on_cell [[id(8)]];
+    device const int *cells_on_edge [[id(9)]];
+    device const int *n_edges_on_cell [[id(10)]];
+    device const float *edge_signs [[id(11)]];
+    device const float *area_cell [[id(12)]];
+    device const float *inv_area_cell [[id(13)]];
+    device float *mass [[id(14)]];
+    device float *scale_in [[id(15)]];
+    device float *scale_out [[id(16)]];
+    device float *vertical_residual [[id(17)]];
+};
+struct HexFctCellScalesFragmentParams {
+    int nlev;
+    int ncells;
+    int storage_cells;
+    int nedges;
+    int max_edges;
+    float dt;
+    int use_inverse_area;
+};
+static_assert(sizeof(HexFctCellScalesFragmentParams) == 28, "hex_fct_cell_scales_fragment parameter ABI size changed");

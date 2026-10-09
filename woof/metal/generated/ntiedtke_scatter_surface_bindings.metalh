@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout ac9bd33d7c92ce686e19ffd9037a3957872e4604b543d6862e4d7d4007a6e888.
+struct NtiedtkeScatterSurfaceResources {
+    device const float *source [[id(0)]];
+    device float *target [[id(1)]];
+};
+struct NtiedtkeScatterSurfaceParams {
+    int full_ncol;
+    int start;
+    int count;
+    int width;
+};
+static_assert(sizeof(NtiedtkeScatterSurfaceParams) == 16, "ntiedtke_scatter_surface parameter ABI size changed");

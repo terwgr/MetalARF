@@ -1,0 +1,26 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_saturation_closure_finalize",
+      "layout_version": 1,
+      "module": "global_saturation_closure_finalize_fragment",
+      "name": "global_saturation_closure_finalize_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["partial_status", "uint32", "read"],
+        ["partial_repair_max", "float64_bits", "read"],
+        ["status", "uint32", "read_write"],
+        ["maximum_repair", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "partial_status": [["any_1d"]],
+        "partial_repair_max": [["any_1d"]],
+        "status": [[1]], "maximum_repair": [[1]]
+      },
+      "source": "woof/metal/shaders/global_saturation_closure_finalize_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

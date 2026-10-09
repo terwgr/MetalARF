@@ -1,0 +1,27 @@
+// Generated from kernel_signatures.json; layout 81f6fca3462936ba1f3a8ef197f0db323053cff947f4843f0d23a7c254f02245.
+struct Wsm6PrepareResources {
+    device const float *thb [[id(0)]];
+    device const float *thp [[id(1)]];
+    device const float *p [[id(2)]];
+    device const float *alt [[id(3)]];
+    device const float *phb [[id(4)]];
+    device const float *php [[id(5)]];
+    device float *theta [[id(6)]];
+    device float *den [[id(7)]];
+    device float *pii [[id(8)]];
+    device float *dz [[id(9)]];
+    device float *z8w [[id(10)]];
+    device float *h_diabatic [[id(11)]];
+};
+struct Wsm6PrepareParams {
+    int nz;
+    int ny;
+    int nx;
+    int nzi;
+    int thb_3d;
+    int phb_3d;
+    float p0;
+    float rcp;
+    float gravity;
+};
+static_assert(sizeof(Wsm6PrepareParams) == 36, "wsm6_prepare parameter ABI size changed");

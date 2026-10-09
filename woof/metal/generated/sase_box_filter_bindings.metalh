@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout d6805adb26079b54e149afe5f21d4ff00240ed44409dbb155201bff52a673317.
+struct SaseBoxFilterResources {
+    device const float *f [[id(0)]];
+    device float *out [[id(1)]];
+};
+struct SaseBoxFilterParams {
+    int width;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseBoxFilterParams) == 16, "sase_box_filter parameter ABI size changed");

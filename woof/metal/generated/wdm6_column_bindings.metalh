@@ -1,0 +1,38 @@
+// Generated from kernel_signatures.json; layout c607adfe1bedc7b6baf88c15d29f927462e046f5dd1be2904545caaee22e1061.
+struct Wdm6ColumnResources {
+    device float *theta [[id(0)]];
+    device float *qv [[id(1)]];
+    device float *qc [[id(2)]];
+    device float *qi [[id(3)]];
+    device float *qr [[id(4)]];
+    device float *qs [[id(5)]];
+    device float *qg [[id(6)]];
+    device float *nn [[id(7)]];
+    device float *nc [[id(8)]];
+    device float *nr [[id(9)]];
+    device const float *den [[id(10)]];
+    device const float *p [[id(11)]];
+    device const float *pii [[id(12)]];
+    device const float *dz [[id(13)]];
+    device const float *xland [[id(14)]];
+    device float *rainnc [[id(15)]];
+    device float *rainncv [[id(16)]];
+    device float *snownc [[id(17)]];
+    device float *snowncv [[id(18)]];
+    device float *graupelnc [[id(19)]];
+    device float *graupelncv [[id(20)]];
+    device float *sr [[id(21)]];
+    device float *effc [[id(22)]];
+    device float *effi [[id(23)]];
+    device float *effs [[id(24)]];
+    device int *count_status [[id(25)]];
+};
+struct Wdm6ColumnParams {
+    float dt;
+    int hail_opt;
+    int nz;
+    int ny;
+    int nx;
+    int status_words;
+};
+static_assert(sizeof(Wdm6ColumnParams) == 24, "wdm6_column parameter ABI size changed");

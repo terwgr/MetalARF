@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout ab1a4232e80637f094f7e7275145fdb6b3aba761129de922679d2042d856bb9d.
+struct JacobiEighFp64BatchedResources {
+    device const ulong *a_in [[id(0)]];
+    device ulong *work [[id(1)]];
+    device ulong *w_out [[id(2)]];
+    device ulong *v_out [[id(3)]];
+    device int *status_out [[id(4)]];
+};
+struct JacobiEighFp64BatchedParams {
+    int n_matrices;
+    int k;
+    int m;
+    int tpb;
+    int sweep_cap;
+};
+static_assert(sizeof(JacobiEighFp64BatchedParams) == 20, "jacobi_eigh_fp64_batched parameter ABI size changed");

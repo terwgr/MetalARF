@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout 55dc97e44c35555b2fc55e099138468b4bcdc36d747b403c2e2d8db5f0c5f0ef.
+struct GlobalSurfaceFalloutCoolingFragmentResources {
+    device const ulong *surface_temperature [[id(0)]];
+    device const ulong *snow [[id(1)]];
+    device const ulong *graupel [[id(2)]];
+    device const ulong *heat_capacity [[id(3)]];
+    device const ulong *latent_heat_fusion [[id(4)]];
+    device ulong *updated_surface_temperature [[id(5)]];
+};
+struct GlobalSurfaceFalloutCoolingFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalSurfaceFalloutCoolingFragmentParams) == 4, "global_surface_fallout_cooling_fragment parameter ABI size changed");

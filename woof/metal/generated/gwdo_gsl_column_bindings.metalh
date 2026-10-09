@@ -1,0 +1,43 @@
+// Generated from kernel_signatures.json; layout 342ab33db781aea8241e07237d40ff9c4f940dd1b1b3ee03d7ea447bb5cd5ba1.
+struct GwdoGslColumnResources {
+    device const float *u [[id(0)]];
+    device const float *v [[id(1)]];
+    device const float *t [[id(2)]];
+    device const float *qv [[id(3)]];
+    device const float *p [[id(4)]];
+    device const float *p_interface [[id(5)]];
+    device const float *pi [[id(6)]];
+    device const float *zi [[id(7)]];
+    device const float *dz [[id(8)]];
+    device const float *var [[id(9)]];
+    device const float *oc1 [[id(10)]];
+    device const float *oa4 [[id(11)]];
+    device const float *ol4 [[id(12)]];
+    device const float *varss [[id(13)]];
+    device const float *oc1ss [[id(14)]];
+    device const float *oa4ss [[id(15)]];
+    device const float *ol4ss [[id(16)]];
+    device const float *sina [[id(17)]];
+    device const float *cosa [[id(18)]];
+    device const float *xland [[id(19)]];
+    device const float *br [[id(20)]];
+    device const float *hpbl [[id(21)]];
+    device const int *kpbl [[id(22)]];
+    device float *du [[id(23)]];
+    device float *dv [[id(24)]];
+};
+struct GwdoGslColumnParams {
+    float dxmeter;
+    float deltim;
+    float g;
+    float cp;
+    float rd;
+    float fv;
+    float pi_c;
+    int kpblmax;
+    int nz;
+    int ny;
+    int nx;
+    int nstat;
+};
+static_assert(sizeof(GwdoGslColumnParams) == 48, "gwdo_gsl_column parameter ABI size changed");

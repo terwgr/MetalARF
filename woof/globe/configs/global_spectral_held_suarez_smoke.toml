@@ -1,0 +1,42 @@
+[global_spectral]
+schema = "gpuwm.global-spectral-run/v1"
+name = "primitive-dry-t10-held-suarez-one-day"
+model = "primitive-dry"
+acknowledgement = "research-only-global-spectral-v1"
+backend = "numpy"
+precision = "float64"
+
+[grid]
+truncation = 10
+dealias_factor = 1.5
+
+[time]
+dt_s = 300.0
+duration_s = 86400.0
+output_interval_s = 10800.0
+integrator = "ssprk3"
+maximum_cfl = 0.65
+
+[diffusion]
+enabled = true
+order = 4
+e_folding_time_s_at_truncation = 21600.0
+preserve_degree = 1
+divergence_strength = 1.5
+pressure_strength = 0.25
+
+[primitive]
+sigma_half = [0.0, 0.15, 0.4, 0.7, 1.0]
+surface_pressure_pa = 100000.0
+surface_temperature_k = 288.0
+top_temperature_k = 215.0
+temperature_perturbation_k = 0.25
+zonal_wavenumber = 4
+held_suarez = true
+mass_fixer = true
+
+[gates]
+transform_roundtrip_relative_linf = 5.0e-11
+transform_parseval_relative_error = 5.0e-12
+mass_relative_drift = 1.0e-10
+williamson_normalized_l2 = 1.0e-8

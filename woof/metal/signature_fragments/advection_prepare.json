@@ -1,0 +1,30 @@
+{
+  "kernels": [
+    {
+      "name": "total_theta",
+      "module": "advection",
+      "source": "woof/metal/shaders/advection_prepare.metal",
+      "cuda_source": "woof/core/state.py",
+      "cuda_symbol": "DomainState.total_theta",
+      "resources": [
+        ["thp", "float", "read"],
+        ["thb", "float", "read"],
+        ["theta", "float", "read_write"]
+      ],
+      "shapes": {
+        "thp": [["nz", "ny", "nx"]],
+        "thb": [["nz"], ["nz", "ny", "nx"]],
+        "theta": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["base3d", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    }
+  ]
+}

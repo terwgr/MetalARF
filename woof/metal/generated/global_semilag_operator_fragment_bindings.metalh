@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 6ba837355ab8cc81278787d6a7e56475347d891a224149ffd79db0142fae959b.
+struct GlobalSemilagOperatorFragmentResources {
+    device const ulong *theta [[id(0)]];
+    device const ulong *logps [[id(1)]];
+    device const ulong *divergence [[id(2)]];
+    device const ulong *b_matrix [[id(3)]];
+    device const ulong *c_matrix [[id(4)]];
+    device const ulong *weight [[id(5)]];
+    device ulong *phi_l [[id(6)]];
+    device ulong *x_t [[id(7)]];
+};
+struct GlobalSemilagOperatorFragmentParams {
+    int nlevel;
+    int ndegree;
+    int mcount;
+};
+static_assert(sizeof(GlobalSemilagOperatorFragmentParams) == 12, "global_semilag_operator_fragment parameter ABI size changed");

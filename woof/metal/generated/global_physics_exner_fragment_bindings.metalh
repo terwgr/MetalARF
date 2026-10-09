@@ -1,0 +1,9 @@
+// Generated from kernel_signatures.json; layout 36242fcba1ebde7723ee61b35e21e79068d3957cba802bcfe2a20e66d7406f43.
+struct GlobalPhysicsExnerFragmentResources {
+    device const ulong *pressure [[id(0)]];
+    device ulong *exner [[id(1)]];
+};
+struct GlobalPhysicsExnerFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalPhysicsExnerFragmentParams) == 4, "global_physics_exner_fragment parameter ABI size changed");

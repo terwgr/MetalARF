@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 301219b7ac716c90de799a54492e5813dc5f3fda436ad9436c0ed99067acd6f0.
+struct SpectralFinalStatsResources {
+    device const float *original [[id(0)]];
+    device const float *output [[id(1)]];
+    device float *stats [[id(2)]];
+};
+struct SpectralFinalStatsParams {
+    int count;
+    int partial_count;
+};
+static_assert(sizeof(SpectralFinalStatsParams) == 8, "spectral_final_stats parameter ABI size changed");

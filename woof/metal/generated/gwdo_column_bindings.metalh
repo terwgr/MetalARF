@@ -1,0 +1,33 @@
+// Generated from kernel_signatures.json; layout b24d39eb9d0a924dea605580917c206801fdb9a1d11f9055ec33ae9d06722cd3.
+struct GwdoColumnResources {
+    device const float *u [[id(0)]];
+    device const float *v [[id(1)]];
+    device const float *t [[id(2)]];
+    device const float *qv [[id(3)]];
+    device const float *p [[id(4)]];
+    device const float *p_interface [[id(5)]];
+    device const float *pi [[id(6)]];
+    device const float *zi [[id(7)]];
+    device const float *var [[id(8)]];
+    device const float *oc1 [[id(9)]];
+    device const float *oa4 [[id(10)]];
+    device const float *ol4 [[id(11)]];
+    device const float *sina [[id(12)]];
+    device const float *cosa [[id(13)]];
+    device float *du [[id(14)]];
+    device float *dv [[id(15)]];
+};
+struct GwdoColumnParams {
+    float dxmeter;
+    float deltim;
+    float g_;
+    float cp_;
+    float rd_;
+    float fv_;
+    float pi_;
+    int nz;
+    int ny;
+    int nx;
+    int nstat;
+};
+static_assert(sizeof(GwdoColumnParams) == 44, "gwdo_column parameter ABI size changed");

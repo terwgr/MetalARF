@@ -1,0 +1,53 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_indoor_radiation_fragment",
+      "module": "urban_bem_indoor_radiation_fragment",
+      "source": "woof/metal/shaders/urban_bem_indoor_radiation_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_bem: per-building bem_int_rsrad and bem_int_rlrad with source-order six-surface packing",
+      "resources": [
+        ["active_cols", "int32", "read"],
+        ["utype", "int32", "read"],
+        ["building_nlev", "int32", "read"],
+        ["class_float", "float", "read"],
+        ["bs", "float", "read"],
+        ["rsw", "float", "read"],
+        ["tw", "float", "read"],
+        ["twlev", "float", "read"],
+        ["tflev", "float", "read"],
+        ["tglev", "float", "read"],
+        ["tr", "float", "read"],
+        ["rsint", "float", "read_write"],
+        ["rlint", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]],
+        "utype": [["ncol"]],
+        "building_nlev": [["ncol", 15]],
+        "class_float": [["class_float_len"]],
+        "bs": [["ncol", 2]],
+        "rsw": [["ncol", 4, 18]],
+        "tw": [["ncol", 15, 10, 18, 4]],
+        "twlev": [["ncol", 15, 18, 4]],
+        "tflev": [["ncol", 15, 10, 17, 2]],
+        "tglev": [["ncol", 15, 10, 2]],
+        "tr": [["ncol", 10, 18, 2]],
+        "rsint": [["nitem", 6]],
+        "rlint": [["nitem", 6]],
+        "error": [["nitem"]]
+      },
+      "parameters": [
+        ["ncol", "int32"],
+        ["nitem", "int32"],
+        ["nurbm", "int32"],
+        ["class_float_len", "int32"],
+        ["dz_u", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32", "soft64-rn-bit-ops", "soft-gfk-log-glibc-2.39", "soft-gfk-atan-glibc-2.39"]
+    }
+  ]
+}

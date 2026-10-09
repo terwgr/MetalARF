@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "name": "hex_density_tendency_fragment",
+      "module": "hex_density_tendency_fragment",
+      "source": "woof/metal/shaders/hex_density_tendency_fragment.metal",
+      "cuda_source": "woof/hex/dynamics.py",
+      "cuda_symbol": "density_tendency",
+      "resources": [
+        ["horizontal", "float", "read"], ["rho_w", "float", "read"],
+        ["rdzw", "float", "read"], ["physics_tendency", "float", "read"],
+        ["tendency", "float", "read_write"]
+      ],
+      "shapes": {
+        "horizontal": [["any_1d"]], "rho_w": [["any_1d"]],
+        "rdzw": [["any_1d"]], "physics_tendency": [["any_1d"]],
+        "tendency": [["any_1d"]]
+      },
+      "parameters": [["nlev", "int32"], ["ncells", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

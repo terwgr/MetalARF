@@ -1,0 +1,29 @@
+// Generated from kernel_signatures.json; layout 28a7737b560076ddcd3b5fffd08dbee88f9e613248ba63d96591755109ee1a22.
+struct UrbanBemAtmosphereGatherFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const float *column_x [[id(1)]];
+    device const float *qv [[id(2)]];
+    device float *ua1d [[id(3)]];
+    device float *va1d [[id(4)]];
+    device float *pt1d [[id(5)]];
+    device float *da1d [[id(6)]];
+    device float *pr1d [[id(7)]];
+    device float *pt01d [[id(8)]];
+    device float *z1d [[id(9)]];
+    device float *qv1d [[id(10)]];
+    device float *a_u1d [[id(11)]];
+    device float *a_v1d [[id(12)]];
+    device float *a_t1d [[id(13)]];
+    device float *a_e1d [[id(14)]];
+    device float *b_u1d [[id(15)]];
+    device float *b_v1d [[id(16)]];
+    device float *b_t1d [[id(17)]];
+    device float *b_ac1d [[id(18)]];
+    device float *b_e1d [[id(19)]];
+    device int *error [[id(20)]];
+};
+struct UrbanBemAtmosphereGatherFragmentParams {
+    int ncol;
+    int nz;
+};
+static_assert(sizeof(UrbanBemAtmosphereGatherFragmentParams) == 8, "urban_bem_atmosphere_gather_fragment parameter ABI size changed");

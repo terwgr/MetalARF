@@ -1,0 +1,438 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_frozen_vapor_cloud_network",
+      "module": "thompson_frozen_vapor_network",
+      "source": "woof/metal/shaders/thompson_frozen_vapor_network.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_frozen_vapor_cloud_network",
+      "resources": [
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "ice_deposition_partition",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ice_to_snow_mass",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ice_to_snow_number",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcs_racs1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tmr_racs1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcs_racs2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tmr_racs2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcr_sacr1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tms_sacr1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcr_sacr2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tms_sacr2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_racs1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_racs2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_sacr1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_sacr2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcg_racg",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tmr_racg",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcr_gacr",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_racg",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_gacr",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "rain_to_ice_mass",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "rain_to_ice_number",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "rain_to_graupel_mass",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "rain_to_graupel_number",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number_shadow",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_velocity_boost",
+          "float",
+          "read_write"
+        ],
+        [
+          "rain_cloud_efficiency",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cloud_to_ice_mass",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cloud_to_ice_number",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ice_deposition_partition": [
+          [
+            3520
+          ]
+        ],
+        "ice_to_snow_mass": [
+          [
+            3520
+          ]
+        ],
+        "ice_to_snow_number": [
+          [
+            3520
+          ]
+        ],
+        "tcs_racs1": [
+          [
+            455877
+          ]
+        ],
+        "tmr_racs1": [
+          [
+            455877
+          ]
+        ],
+        "tcs_racs2": [
+          [
+            455877
+          ]
+        ],
+        "tmr_racs2": [
+          [
+            455877
+          ]
+        ],
+        "tcr_sacr1": [
+          [
+            455877
+          ]
+        ],
+        "tms_sacr1": [
+          [
+            455877
+          ]
+        ],
+        "tcr_sacr2": [
+          [
+            455877
+          ]
+        ],
+        "tms_sacr2": [
+          [
+            455877
+          ]
+        ],
+        "tnr_racs1": [
+          [
+            455877
+          ]
+        ],
+        "tnr_racs2": [
+          [
+            455877
+          ]
+        ],
+        "tnr_sacr1": [
+          [
+            455877
+          ]
+        ],
+        "tnr_sacr2": [
+          [
+            455877
+          ]
+        ],
+        "tcg_racg": [
+          [
+            1874161
+          ]
+        ],
+        "tmr_racg": [
+          [
+            1874161
+          ]
+        ],
+        "tcr_gacr": [
+          [
+            1874161
+          ]
+        ],
+        "tnr_racg": [
+          [
+            1874161
+          ]
+        ],
+        "tnr_gacr": [
+          [
+            1874161
+          ]
+        ],
+        "rain_to_ice_mass": [
+          [
+            3388275
+          ]
+        ],
+        "rain_to_ice_number": [
+          [
+            3388275
+          ]
+        ],
+        "rain_to_graupel_mass": [
+          [
+            3388275
+          ]
+        ],
+        "rain_to_graupel_number": [
+          [
+            3388275
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number_shadow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow_velocity_boost": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rain_cloud_efficiency": [
+          [
+            10000
+          ]
+        ],
+        "cloud_to_ice_mass": [
+          [
+            9157500
+          ]
+        ],
+        "cloud_to_ice_number": [
+          [
+            9157500
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "track_graupel_number",
+          "int32"
+        ],
+        [
+          "include_snow_rime_conversion",
+          "int32"
+        ],
+        [
+          "include_cold_rain",
+          "int32"
+        ],
+        [
+          "include_cold_cloud",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "kernels": [
+    {
+      "name": "hex_vertex_kinematics_fragment",
+      "module": "hex_kinematic_diagnostics_fragment",
+      "source": "woof/metal/shaders/hex_kinematic_diagnostics_fragment.metal",
+      "cuda_source": "woof/hex/diagnostics.py",
+      "cuda_symbol": "compute_solve_diagnostics",
+      "resources": [["normal_velocity", "float", "read"], ["edges_on_vertex", "int32", "read"], ["edge_signs", "float", "read"], ["dc_edge", "float", "read"], ["dv_edge", "float", "read"], ["area_triangle", "float", "read"], ["inv_area_triangle", "float", "read"], ["vorticity", "float", "read_write"], ["ke_vertex", "float", "read_write"]],
+      "shapes": {"normal_velocity": [["any_1d"]], "edges_on_vertex": [["any_1d"]], "edge_signs": [["any_1d"]], "dc_edge": [["any_1d"]], "dv_edge": [["any_1d"]], "area_triangle": [["any_1d"]], "inv_area_triangle": [["any_1d"]], "vorticity": [["any_1d"]], "ke_vertex": [["any_1d"]]},
+      "parameters": [["nlev", "int32"], ["nedges", "int32"], ["nvertices", "int32"], ["max_vertex_edges", "int32"], ["use_inverse", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "hex_cell_kinematics_fragment",
+      "module": "hex_kinematic_diagnostics_fragment",
+      "source": "woof/metal/shaders/hex_kinematic_diagnostics_fragment.metal",
+      "cuda_source": "woof/hex/diagnostics.py",
+      "cuda_symbol": "compute_solve_diagnostics",
+      "resources": [["normal_velocity", "float", "read"], ["edges_on_cell", "int32", "read"], ["n_edges_on_cell", "int32", "read"], ["cell_signs", "float", "read"], ["dc_edge", "float", "read"], ["dv_edge", "float", "read"], ["area_cell", "float", "read"], ["inv_area_cell", "float", "read"], ["divergence", "float", "read_write"], ["ke_raw", "float", "read_write"]],
+      "shapes": {"normal_velocity": [["any_1d"]], "edges_on_cell": [["any_1d"]], "n_edges_on_cell": [["any_1d"]], "cell_signs": [["any_1d"]], "dc_edge": [["any_1d"]], "dv_edge": [["any_1d"]], "area_cell": [["any_1d"]], "inv_area_cell": [["any_1d"]], "divergence": [["any_1d"]], "ke_raw": [["any_1d"]]},
+      "parameters": [["nlev", "int32"], ["ncells", "int32"], ["nedges", "int32"], ["max_cell_edges", "int32"], ["use_inverse", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "hex_cell_ke_finish_fragment",
+      "module": "hex_kinematic_diagnostics_fragment",
+      "source": "woof/metal/shaders/hex_kinematic_diagnostics_fragment.metal",
+      "cuda_source": "woof/hex/diagnostics.py",
+      "cuda_symbol": "compute_solve_diagnostics",
+      "resources": [["ke_raw", "float", "read"], ["ke_vertex", "float", "read"], ["vertices_on_cell", "int32", "read"], ["n_edges_on_cell", "int32", "read"], ["kite_index", "int32", "read"], ["kite_areas", "float", "read"], ["area_cell", "float", "read"], ["inv_area_cell", "float", "read"], ["kinetic_energy", "float", "read_write"]],
+      "shapes": {"ke_raw": [["any_1d"]], "ke_vertex": [["any_1d"]], "vertices_on_cell": [["any_1d"]], "n_edges_on_cell": [["any_1d"]], "kite_index": [["any_1d"]], "kite_areas": [["any_1d"]], "area_cell": [["any_1d"]], "inv_area_cell": [["any_1d"]], "kinetic_energy": [["any_1d"]]},
+      "parameters": [["nlev", "int32"], ["ncells", "int32"], ["nvertices", "int32"], ["max_cell_edges", "int32"], ["max_vertex_edges", "int32"], ["use_inverse", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    }
+  ]
+}

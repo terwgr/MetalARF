@@ -1,0 +1,1220 @@
+# `woof run-plan`: driving woof from a program
+
+Every other front door in woof talks to a person. `woof run-plan`
+talks to a program: one versioned JSON plan in, one append-only JSONL
+event stream out. A GUI, a scheduler or a fleet controller drives it as
+a subprocess and never parses a line of human output.
+
+Nothing about the model changes. The plan is an **envelope** over the
+config system: it resolves through the same loader `woof run` uses and
+executes through the same `runtime.run_experiment`. There is no second
+config format.
+
+```
+woof run-plan PLAN.json          # run it, stream events
+python -m woof.runplan PLAN.json # the same command, same flags
+
+woof run-plan --resolve  PLAN.json   # what will run, and every value nobody typed
+woof run-plan --estimate PLAN.json   # what it will cost
+woof run-plan --probe                # what this machine can do
+```
+
+Exit codes: **0** when the last event was `completed`, **1** when it was
+`failed`, **2** on a refused plan (nothing started), **75** when it was
+`failed` after `source_behind` (a source lead passed its late time; the
+frames written and the checkpoint at the seam are kept), **130** on Ctrl-C.
+
+---
+
+## The plan document: `gpuwm.run-plan.v1`
+
+```json
+{
+  "schema": "gpuwm.run-plan.v1",
+  "name": "overnight-run",
+  "route": "experiment",
+  "config": { "path": "conus3km.toml" },
+  "output_root": "runs/overnight",
+  "fetch":  { "args": ["--source", "gfs", "--cycle", "2026080700", "--hours", "12", "--out", "data"] },
+  "run_options": { "device": 0, "dry_run": false, "restart": null, "health_debug": false }
+}
+```
+
+| key | required | meaning |
+|---|---|---|
+| `schema` | yes | must be exactly `gpuwm.run-plan.v1` |
+| `name` | yes | this run's label; carried on every event |
+| `route` | yes | which existing front door executes it (see below) |
+| `config` | yes | exactly one of `{"path": ...}`, `{"inline": "<TOML text>"}` or `{"intent": {...}}` |
+| `output_root` | no | **the run directory itself**, not a parent. Default `out/run`, woof run's own |
+| `fetch` | no | `{"args": [...]}`, the argv list `woof fetch` itself takes |
+| `run_options` | no | the subset the route declares |
+
+Relative paths resolve against **the plan file's own directory**, so a
+plan and its config travel together.
+
+Unknown top-level keys, unknown `run_options`, an unknown `route` and an
+unknown `schema` are all **refused**, never ignored: a dropped key runs
+a default under the name of your value.
+
+`fetch.args` is validated by building woof's **real** fetch parser and
+handing it the list. There is no second copy of the fetch flag table
+here, so a flag added to `woof fetch` is accepted here on the same
+commit, and a typo is refused before the run claims a directory.
+
+### `config.intent`: submitting a shape instead of a config
+
+A front end that collects "here, this big, this long, from this source"
+has intent, not a config. `config.intent` hands that intent to the
+`woof domain` wizard, which writes the complete TOML: the same wizard,
+the same refusals, the same emitted bytes a person gets from the CLI.
+
+```json
+"config": { "intent": {
+  "point": "35.2,-97.4",
+  "ladder": "12-3",
+  "source": "era5",
+  "cycle": "latest",
+  "hours": 12,
+  "vram_gib": 24
+}}
+```
+
+Every intent key is a `woof domain` flag, one to one. Nothing here is a
+second config format, and no value is validated twice: the wizard's own
+parser is what accepts or refuses each one.
+
+| intent key | flag | intent key | flag |
+|---|---|---|---|
+| `point` | `--point LAT,LON` | `hours` | `--hours` |
+| `polygon` | `--polygon` | `source` | `--source` |
+| `buffer_km` | `--buffer-km` | `cycle` | `--cycle` |
+| `projection` | `--projection` | `forecast_start_hour` | `--forecast-start-hour` |
+| `name` | `--name` | `data_dir` | `--data-dir` |
+| `card` | `--card` | `forcing` | `--forcing` |
+| `vram_gib` | `--vram-gib` | `vtable` | `--vtable` |
+| `ladder` | `--ladder` | `geog_root` | `--geog-root` |
+| `root_dx_km` | `--root-dx` | `chain` | `--chain` |
+| `physics_profile` | `--physics-profile` | `physics_choices` | `--physics-choices` |
+
+`physics_choices` is an object, family to scheme (`{"microphysics":
+"thompson-mp8", "pbl": "myj", "surface_layer": "eta-similarity"}`),
+and reaches the wizard as the JSON its flag takes. The wizard checks it
+the way `woof physics-catalog --check` does and writes it over the
+suite (`physics_profile`, or the default at the finest grid, the one
+the check names for the same grid) the way
+`woof physics-catalog --into` writes a mix, on every size its fit
+tries, so the card is priced for the schemes that run. The suite is then
+the base, not an assertion: the chain's stages are not told the config
+is that suite, and a plan that also sets `run_options.physics_profile`
+is refused, because the preparer would refuse the config it makes. The
+run manifest's `physics` records `choices`, `base_suite`, the
+`components` they resolve to and the suite they make, or null. The
+HRRR route runs its namelists, which have no key for `moist_cq`, so a
+mix from HRRR is written with the value that route's importer runs:
+the suite's own when the mix is a shipped suite, and `false` otherwise.
+
+A `physics_profile` with no `physics_choices` is the suite the wizard
+writes. The chain's stages are told the config is that suite only where
+the written file is that suite on every domain, the conflict check
+`woof go` derives its `--physics-profile` with. With nests it usually
+is not: the wizard turns cumulus off on nests below the gray zone and
+steps their sixth-order damping down the ladder, so a tree whose suite
+has cumulus, or damps harder than the nests' ladder, runs its file as
+written, the suite on the root; a cumulus-free suite that the ladder
+leaves unchanged is still asserted. A suite named in
+`run_options.physics_profile` is always asserted.
+
+`point` or `polygon` is required (there is no default place), and so is
+`cycle`. `--out` is deliberately **not** exposed: run-plan owns where the
+generated config lands, so a plan cannot write outside its run directory.
+
+The generated TOML is carried **verbatim** on the `resolved_plan` event
+and in `--resolve`, as `generated_config`. The caller never typed it, so
+it is the one thing they cannot look up: show it.
+
+**There is no `nx`/`ny`.** Domain size is *fitted* by the wizard's VRAM
+estimator from the ladder and the card budget; it is an output, not an
+input. Each fitted size is reported in `automatic_resolutions` with
+`basis: "fitted_to_vram_budget"`.
+
+**Output cadence is a first-class control.** `history_interval_s` sets
+the root domain's write interval and `nest_history_interval_s` every
+nest's; they default to 3600 s and 900 s. Both map to new `woof domain`
+flags (`--history-interval`, `--nest-history-interval`).
+
+The engine's rule is that a cadence must be a whole number of seconds
+**and** a whole number of *that domain's* time steps, judged against the
+exact rational `dt`, so a nest's cadence must divide the nest's step,
+not the root's. The wizard round-trips its emitted bytes through the
+real loader before writing, so a bad value is refused with the loader's
+own sentence and no file lands.
+
+#### Which sources an intent drives is derived, not listed
+
+Whether an intent can drive a source is **derived from its registry
+row**, never from a list of model names kept in run-plan
+(`woof.runplan.intent_drivability`): the row must be runnable, declare
+a forcing cadence (so `woof domain` can emit its `namelist.wps`), have
+an acquisition route, and sit on an implementation route one of this
+door's chains executes. A row added to the registry with those facts is
+intent-drivable with zero code change here. An intent naming a source
+that fails a fact is refused up front **with that fact** (a missing
+acquisition route, a missing cadence, no runnable implementation
+route, a member selection the route's own grammar cannot bind),
+never with "unknown source".
+
+A member set is no longer one of those facts. An ensemble row
+resolves its default or config-selected member through its
+acquisition route's grammar, and the staged chain verifies the member
+identity of the messages that arrive before preparation consumes
+them, so an intent naming an ensemble source drives it.
+
+`woof domain` writes a `[case_data]` table (the declared inputs a
+config-driven run needs) only for the combined-GRIB1 decode family
+(`era5` today), so those sources run on the `experiment` route and
+every other drivable source runs on `prepared`. An intent naming a
+source on the wrong route is refused naming the right one.
+
+### Routes
+
+| route | what it is | source |
+|---|---|---|
+| `experiment` | the config-driven route: one experiment TOML with its `[case_data]` inputs, prepared and integrated in this process, what `woof run CONFIG` executes | era5 |
+| `prepared` | the native prepared-cache chain, in the documented order | **gfs**, **hrrr**, or any packaged mapped source with a table fetch route (icon-eu, rap, rrfs, hrrr-prs, gem-gdps, aifs, aigfs, ecmwf-open-data, the registry's facts decide, not this list) |
+
+ERA5 through the public ARCO store is keyless; an ERA5 intent naming no
+provider already uses it. Only the Copernicus CDS provider and ERA5 ensemble
+members need a Copernicus key. The `prepared` + `gfs` path is also public and
+runs end to end on a machine with no credentials at all.
+
+The route reads the config's own `[fetch].source` and drives that
+source's documented chain. Neither chain is re-implemented here.
+
+**gfs** runs `woof go`: the documented chain, and the only thing that
+relays the integrity digests between stages without a person carrying
+them. run-plan builds the same argparse namespace the `go` subcommand
+builds and hands `go_main` an observer, with trees allowed: a
+multi-domain config keeps the same preparation stages and dispatches
+the forecast to `woof-prepared-tree-forecast`, binding the sha256 of
+the hierarchy document rw-wps left in the prepared root. `go`'s other
+refusals (an ERA5 `[case_data]` config, another source) surface
+verbatim as a `failed` event, and the interactive `woof go` command
+keeps its own tree refusal.
+
+**A packaged mapped source** (icon-eu, rap, rrfs, hrrr-prs, …) runs the
+**staged chain**: `woof fetch` (its table acquisition route) →
+`woof prep` (rw-wps's declarative mapped arm, the packaged profile
+already bound) → the prepared forecast runner, in process. The
+preparation's arguments are relayed from the fetch route's own
+published handoff (`prep-arguments.json`: the ordered `--input-list`,
+every `--supplement` role binding, the manifest authoring flag); the
+chain appends explicit `run_options.supplement` bindings and the four values the handoff declares are the
+caller's, `--wps-namelist` (the wizard's emission beside the config),
+`--experiment-config`, `--geog-root` and `--output-root`. The forecast
+is bound off the bundle exactly as `woof sim` binds it
+(`stage_cli.resolve_bundle` + `sim_command`), then rendered by `go`'s
+render stage. Which source lands on this chain is the registry row's
+answer (`runner = "mapped_composition_v1"`, a composed packaged
+profile, a table fetch route, no member set), never a name list.
+
+**hrrr** runs its own chain, because `go` refuses the source by
+construction (`ORCHESTRATED_SOURCES = ("gfs",)`): fetch →
+`tools.prepare_hrrr_wrf` → `prepared_single_domain_forecast`. The
+stages and their order are the wizard's own printed chain
+(`domain_wizard.hrrr_route_commands`), driven rather than printed, with
+every stage's refusals left alone. It reuses `go`'s stage primitive, so
+capture, heartbeats and failure replay are identical on both chains.
+
+One thing is *added* to the HRRR chain: **`--wps-namelist`**. The
+runner's HRRR manifest requires a `wps_namelist` role (the prepared
+cache identity's `namelist_sha256` **is** that file's digest on this
+route), and the preparer only publishes the portable bundle (`proof.json`,
+the role-keyed source manifest, the experiment authority) when handed
+that flag. The printed chain never passed it, so the bundle it produced
+could not be read by the single-domain runner at all and HRRR was sent
+to a benchmark script instead. Passing it makes a single-domain HRRR
+bundle structurally identical to a GFS one at the run step: same runner,
+same digests, same in-process observer.
+
+The forecast stage's inputs come from the preparer's published
+`portable_bundle` handoff (in `public-wrapper-result.json`), not from
+re-derivation. Three of them are not guessable: `proof.json` lives at
+the **output root**, not inside the prepared cache; `--prepared-root` is
+that same root; and `--experiment-config` / `--wps-namelist` must be the
+**published copies** (`experiment.toml`, `namelist.wps`), because the
+runner checks each supplied file's name and digest against the portable
+manifest. The relayed digests are cross-checked against `proof.json` on
+disk before the forecast starts.
+
+Multi-domain HRRR runs too, on a four-stage chain: the fetch, the root
+preparation, `woof.hrrr_hierarchy_direct` to build `d02..dNN` from the
+sealed root, and then the same `woof-prepared-tree-forecast` the GFS
+tree uses. Multi-domain GFS runs, as above. A nested HRRR tree can also
+*move* a nest: the hierarchy stage seals the statics corridor, see
+moving nests, above.
+
+`physics_profile` is passed to the HRRR preparer only when the plan
+states it (as an intent key or a run option). The route owns its own
+physics gate, the emitted TOML records physics as numbers rather than a
+profile id, and a default invented at this layer would silently outrank
+the preparer's own.
+
+`prepared` additionally takes the `data_dir` run option (where the
+fetch lands). The `experiment` route does not: it declares its inputs
+in `[case_data]` instead.
+
+Routes are named generically. A route is a way of running the model,
+never a particular experiment.
+
+#### Moving nests (`[relocation]`) by route
+
+A moving nest is a config with a `[relocation]` follow source:
+`[relocation.follow]` or `[[relocation.move]]`. Enabled `[relocation]`
+with neither is a *bounds-only* nest: it constrains where the nest may
+sit, the nest does not move, and none of this section applies to it.
+
+**Nothing to add to the plan document.** A moving nest is declared in
+the config, and every door reads it from there
+(`woof.static.corridor.config_declares_follow_source`: one predicate,
+shared by `woof go`, the printed `rw-wps` line and run-plan, so they
+cannot disagree). There is no `run_options` key for it: a caller that
+could ask for a moving nest and separately forget the statics it moves
+onto would be a caller that can prepare a bundle its own forecast stage
+refuses.
+
+| chain | how a moving nest gets its statics |
+|---|---|
+| `experiment` | the route holds the geography source for the whole run and rebuilds each footprint at move time. Nothing prepared, nothing priced. |
+| `prepared` + gfs | the preparation seals a **statics corridor** and the tree runner crops it. Run-plan composes `--statics-corridor` on the rw-wps prepare stage. |
+| `prepared` + hrrr | the same corridor, sealed by the **hierarchy stage**. Run-plan composes `--statics-corridor` on `woof.hrrr_hierarchy_direct`. |
+| `prepared` + a packaged mapped source | the same corridor, sealed by mapped hierarchy preparation. Run-plan composes `--statics-corridor` on `woof prep`, which forwards it to `woof.mapped_direct`. Every source using this preparation contract inherits the capability. |
+
+The preparation dispatcher (`woof.source_cli.preparation_runners`) owns each
+implementation's hierarchy schema and corridor stage. Run planning and the
+cyclone menu derive moving-statics support from those existing implementation
+rows; they keep no separate source eligibility list. Other workflows can query
+`source_preparation_outputs` without importing either workflow. A new source
+using an existing mapping and preparation implementation inherits its outputs.
+
+These declarations describe available machinery. Actual admission still binds
+the source state, forcing window, geographic coverage and prepared artifacts
+through the ordinary readers. A missing hierarchy or corridor writer is an
+implementation gap; a missing or invalid corridor in a particular bundle is an
+input requirement. Reuse includes the corridor flag in its argument binding,
+so a previous stationary preparation is retained and rebuilt for a moving run.
+
+On every corridor-sealing prepared chain the preparation seals child-resolution
+statics over the ground each child can reach during the run (its declared
+footprint widened by what its follow settings, itinerary and
+`reach_speed_m_s` let it and every moving ancestor travel, clipped to its
+frame; see docs/prepared-followers.md) beside the other
+hierarchy artifacts, digest-bound into the preparation document, and the
+tree runner (`woof-prepared-tree-forecast`) crops each new footprint's
+statics out of that corridor at move time: the run stays fully sealed,
+no runtime ingest. A bundle prepared *without* a
+corridor refuses a follow config at the tree runner's preflight with
+the flag named as the remedy, and a corridor that fails digest or
+geometry verification refuses loudly rather than running the nest
+silently static.
+
+**Which stage carries the flag differs, and that is the only
+difference.** On GFS the whole hierarchy is prepared inside rw-wps, so
+the corridor rides `woof.source_cli` (`woof go` derives it from the
+config, and run-plan drives `go`). HRRR prepares its root first and
+builds `d02..dNN` in a separate stage, and only *that* stage knows the
+children exist or holds `--geog-root`: its root preparer would refuse
+the flag. So the HRRR corridor is sealed by
+`woof.hrrr_hierarchy_direct --statics-corridor`, into
+`hierarchy-artifacts/statics-corridor/` and bound into `receipt.json`,
+which is the same relative path and the same digest discipline the GFS
+bundle uses in `proof.json`. The tree runner reads whichever document
+matched its pinned digest and cannot tell the two apart.
+
+All of it is derived from one predicate
+(`woof.static.corridor.config_declares_follow_source`) and emitted by
+one function (`woof.static.corridor.emit_statics_corridor_set`), so
+neither chain can drift into a second corridor format or a second
+reading of what "a moving nest" means.
+
+**`--resolve` says so before anything runs.** The decision is a record
+of its own plus an `automatic_resolutions` entry:
+
+```json
+"moving_nest": {"chain":"prepared:go","delivery":"statics_corridor",
+                "relocation_grid_id":2,"statics_corridor":true}
+```
+```json
+{"scope":"preparation","key":"statics_corridor","value":true,
+ "basis":"relocation_follow","note":"the config declares a [relocation] follow source on d02, so the prepare stage is composed with --statics-corridor …"}
+```
+
+`moving_nest` is `null` for a config that moves no nest, and that plan
+resolves and prepares exactly as it did before this existed.
+
+**`--estimate` prices it.** The corridor is the largest single thing
+the preparation writes for a moving nest, and it is not inferable from
+the domain sizes a caller already has: it is *the ground the nest can
+reach, at child resolution*, the declared footprint widened by what the
+follow settings, itinerary and `reach_speed_m_s` let it and every moving
+ancestor travel over the run, clipped to its frame. A 6 h tree with a
+9 km 301×335 root, a 3 km nest at (94, 30) that moves up to 8 parent
+cells every 30 minutes, and a 1 km and a 500 m nest riding inside it,
+prices its 500 m corridor at 3846×2694 cells of the 5418×6030 frame:
+
+```json
+"corridor": {
+  "domains": [{"domain":"d04","grid_id":4,"parent_id":3,"frame_grid_id":1,
+               "corridor_nx":3846,"corridor_ny":2694,"cells":10361124,
+               "planes_per_cell":97,"bytes_per_cell":776,
+               "host_bytes":8040232224,
+               "window_child_cells":[750,750,3846,2694],
+               "frame_child_cells":[5418,6030],"whole_frame":false}, …],
+  "host_bytes": …, "host_gib": …, "basis": "…"
+}
+```
+
+`whole_frame` is true when the reach covers the frame, as it does over a
+long run. `unbounded` says why when nothing bounds the reach at all: a
+dormant nest, whose start is chosen when it fires.
+
+Every child is priced, not only the one that relocates: run-plan passes
+the flag bare, which the preparation reads as "every child domain".
+Disk and host are the same figure to within container headers: the
+cache is an uncompressed NPZ of exactly those arrays, loaded whole by
+the runner's preflight. It adds **no GPU residency**, so the `vram`
+block is identical with and without a corridor and the VRAM gate is
+unchanged. `host_bytes` is `0` with an empty `domains` list when no
+nest moves.
+
+**A chain that could not feed a moving nest would refuse at resolve
+time, not minutes in.** Every chain this front door dispatches to can
+feed one today, so nothing reachable takes that path, but the
+machinery stays, because the alternative is a plan that fetches,
+prepares a root and builds a hierarchy before the forecast preflight
+rejects it. A chain added without an answer to "and where does a moving
+nest get its statics on it?" fails the delivery table's completeness
+test rather than falling through to whatever the chain happened to do.
+
+### `run_options`
+
+| option | default | meaning |
+|---|---|---|
+| `device` | `null` | GPU index or full `GPU-…` UUID; sets `CUDA_VISIBLE_DEVICES` before anything can create a context |
+| `dry_run` | `false` | resolve and validate, emit `resolved_plan`, stop before any device work |
+| `restart` | `null` | a `gpuwmrst` checkpoint to continue from |
+| `render_products` | `null` | which products the render stage draws: `woof render --products`' own spec (a comma-separated list, or `all`), or `none` to skip rendering. Absent leaves the default set unchanged. `prepared` route only |
+| `render_section` | `null` | the line every `xsec:` term of `render_products` is cut along, `woof render --section`'s own value (`lat,lon,lat,lon`, or a JSON file resolved relative to the plan); carried to every render the run draws. An `xsec:` term with no line, or a line the renderer cannot read, is refused when the plan is built |
+| `geog_root` | `null` | static geography tree (`prepared` route only) |
+| `supplement` | `[]` | repeatable `ROLE=PATH` preparation donor bindings, resolved relative to the plan. HRRR accepts `PMSL=GRIB` inside `data_dir` and binds explicit donor hashes in a run-local source manifest. Mapped routes forward the bindings to their preparer. GFS and existing prepared bundles reject this option. |
+| `data_dir` | `null` | where the fetch lands (`prepared` route only) |
+| `transport` | `null` | the one host the fetch stage pins, the value `woof fetch --transport` takes; wins over the config's `[fetch] transport`, and `automatic_resolutions` records which one was used (`prepared` route only) |
+| `cycle` | `null` | `woof go --cycle`: the cycle the run starts from (`YYYY-MM-DDTHH`, or `latest`, resolved once under the run's posting rule); wins over the config's `[fetch] cycle` or the intent's `cycle`. A `config.path` configuration is re-timed (start time, delayed nests, WPS and route namelists) into `<run_dir>/cycle-config/`; an inline one is refused. A site schedule names the cycle rather than launching `latest` (`prepared` route only) |
+| `physics_profile` | `null` | passed to the HRRR preparer when stated (`prepared` route only) |
+| `health_debug` | `false` | enable debug phase health attribution |
+
+`run-plan` integrates in **this** process rather than re-executing under
+woof's own supervisor, so the pid in the manifest is the pid doing the
+model work and the caller owns restart policy. That choice is reported
+in `automatic_resolutions` on every run, never assumed.
+
+---
+
+## The event stream: `gpuwm.run-plan.event.v1`
+
+One JSON object per line, appended to `<run_dir>/events.jsonl` **and**
+mirrored verbatim to stdout. Every line carries the same four envelope
+keys, with the event's own fields flattened alongside:
+
+```json
+{"schema_version":"gpuwm.run-plan.event.v1","sequence":7,"emitted_unix_ms":1786087223348,"event":"model_progress","domain":1,"outer_step":3,"model_seconds":180.0,"wall_seconds":4.21,"speed_x":42.75,"step_ms":1403.2,"phase":"post-d01-sync"}
+```
+
+`sequence` is monotonic **and dense**, starting at 1. A gap means a lost
+or reordered line, never a skipped one, and the reader refuses it.
+
+| `event` | fields | when |
+|---|---|---|
+| `plan_accepted` | `name`, `route`, `plan_source`, `plan_sha256`, `run_dir`, `manifest_path`, `events_path`, `pid`, `run_id` | first line, always |
+| `resolved_plan` | `configuration`, `automatic_resolutions`, `config_sha256`, `config_source`, `run_options` | after the config loads, before any device work |
+| `stage_started` | `stage`, `phase` | a stage opens |
+| `stage_finished` | `stage`, `wall_seconds`, `phases`, (`receipts`, `outcome`) | that stage closes |
+| `model_progress` | `domain`, `outer_step`, `model_seconds`, `wall_seconds`, `speed_x`, `step_ms`, `phase`, (`domains`) | each outer step |
+| `output_committed` | `domain`, `valid_time`, `path` | a wrfout is durable on disk |
+| `first_products_ready` | `domain`, `valid_time`, `frame`, `paths`, `render_products`, `render_seconds`, `seconds_from_plan_accepted`, `complete` | the first frame's pictures are on disk, while the forecast runs on; `complete` is false when the renderer exited nonzero partway (the pictures it drew are kept and finalize draws the frame again) |
+| `model_progress` (polled) | as above plus `source: "stage_progress_file"`, `step_ms: null` | a `prepared` stage that runs as a subprocess, sampled from its own progress file |
+| `prepare_head_ready` | `head_sha256` | a chained preparation published its head: `prepare` has just closed and the forecast starts while the later boundary intervals are prepared |
+| `prepare_sealed` | `prepared_root`, `prepared` | that preparation sealed (its `proof.json` is written), while the forecast runs on |
+| `boundary_wait_started` | `interval`, `reason`, `cause`, `model_elapsed_seconds`, `model_valid_time` | the forecast reached a boundary interval the preparation has not built yet (`cause: "preparation"`) |
+| `boundary_wait_finished` | `interval`, `seconds`, `cause`, `model_elapsed_seconds`, `model_valid_time` | that interval arrived after `seconds` of waiting |
+| `posting_schedule` | `source`, `member`, `cycle`, `as_posted`, `shape`, `streams`, `why`, `late_after_minutes`, `start_needs`, `expected_ready_at`, `expected_final_at`, `leads`, `schedule_path`, `table_sha256` | once, when a window fetched as its source posts resolves: when each lead is expected and when it counts as late |
+| `lead_posted` | `source`, `cycle`, `lead`, `valid_time`, `expected_at`, `first_seen_at`, `minutes_after_expected`, `posted_when_first_asked`, `endpoint` | once per lead, when one host first holds all of it (negative minutes: earlier than its row; `posted_when_first_asked` true: it was already up at the first ask, so the minutes only bound its posting) |
+| `lead_ready` | `source`, `cycle`, `lead`, `valid_time`, `bytes`, `fetch_seconds`, `marker_sha256` | once per lead, when it is fetched and verified |
+| `source_wait_started` | `phase`, `source`, `cycle`, `lead`, `valid_time`, `expected_at`, `late_at`, `waited_seconds`, `model_elapsed_seconds`, `model_valid_time`, `interval`, `reason` | the run is blocked on a source lead not posted yet; `phase` is `start` (before the first step; model time and `interval` null) or `seam` |
+| `source_wait_progress` | as `source_wait_started`, `waited_seconds` current | every 60 s while that wait lasts, so a reader tailing the stream can tell a wait from a hang |
+| `source_wait_finished` | `phase`, `source`, `cycle`, `lead`, `waited_seconds`, `first_seen_at`, `model_elapsed_seconds`, `model_valid_time` | the lead arrived |
+| `source_behind` | `source`, `cycle`, `lead`, `valid_time`, `expected_at`, `late_at`, `late_after_minutes`, `last_answer`, `model_elapsed_seconds`, `model_valid_time`, `frames_kept`, `checkpoint` | just before `failed`: a lead passed its `late_at`; the frames through that time and the checkpoint at the seam are kept, and the run exits 75 |
+| `warning` | `code`, `message`, (`detail`, `folder`) | anything worth saying, nothing worth stopping for; `folder` is the scratch folder a `compose_scratch_may_not_fit` warning measured |
+| `completed` | `dry_run`, `run_dir`, `receipt_path`, `receipts`, `outputs_committed`, `first_products_seconds`, `summary` | last line, exit 0 |
+| `failed` | `stage`, `error_class`, `message`, `remedy`, `run_dir`, `receipts`, (`folders`) | last line, nonzero exit; `folders` lists the folders a refusal names as the place to act (a scratch folder to make room in), which a page keeps in the words it shows; after `source_behind`, `error_class` is `SourceBehind` and the exit code 75 |
+
+`stage` ∈ `fetch`, `prepare`, `initialize`, `forecast`, `finalize`.
+`fetch` appears only when the plan declares one; every other stage
+always emits its pair, so a stage timeline has no holes to interpret.
+A chained preparation (a single domain; see PIPELINE-STAGES.md) is the
+one stage whose work outlives its pair: `prepare` closes at the head,
+`prepare_head_ready` follows, the `forecast` stage opens while the later
+boundary intervals are still being prepared, and `prepare_sealed` marks
+the end of the preparation wherever it lands among the forecast's
+events. A domain tree, and a preparation that declines chaining, closes
+`prepare` at its seal as before.
+The finer pipeline phases inside a stage are not lost: they arrive on
+`stage_started.phase` and the full ordered list on
+`stage_finished.phases`.
+
+`speed_x` and `step_ms` are `null` rather than an infinity when no wall
+time has elapsed yet. A rate over no elapsed wall is undefined, not
+large.
+
+`domains` appears only on a domain tree with more than one clock: a
+list of `{domain, model_seconds}` giving each grid's own clock, the
+`domain`/`model_seconds` pair at the top level staying the root's. Its
+absence means the root **is** the tree, so single-domain consumers see
+the stream they always saw.
+
+`output_committed` is raised at the moment the file is genuinely durable
+(after the writer has fsynced it, validated it against its own
+inventory and renamed it onto its final name) so the event never
+announces a file that is merely queued. On the domain-tree route it
+arrives from the per-domain writer thread, which is why the stream
+serializes writes under a lock.
+
+---
+
+## `cycle: "latest"`
+
+`latest` was already implemented across the fetch machinery before this
+front door existed; run-plan does not reimplement it. What it adds is
+that the **resolved** cycle is recorded rather than the question.
+
+`resolve_latest_cycle` walks candidate cycles backwards (GFS/GDAS: 6-hourly,
+~48 h; HRRR: hourly, 12 h) and accepts the first whose objects for the
+**final requested forecast hour** are all published on S3, for HRRR both
+the `wrfnat` and its `wrfprs` sibling, since during a live publication
+one can appear before the other. So **completeness is structural**: a
+partially uploaded cycle cannot win, and the fetched window is complete
+by construction. There is no "cycle still receiving files" state to
+detect, because such a cycle is never selected.
+
+run-plan resolves `latest` **before** the fetch stage runs and rewrites
+the argv with the concrete cycle, for two reasons: a plan that records
+`latest` records a question whose answer changes every six hours, and
+resolving once removes the window where this front door could report one
+cycle while the fetch downloads the next. It is the rule the wizard
+already applies to its emitted `[fetch]` table: *the resolved cycle,
+never the literal `latest`*.
+
+The concrete cycle lands in `automatic_resolutions`:
+
+```json
+{"scope": "fetch", "key": "cycle", "value": "2026-08-07T12",
+ "basis": "resolved_latest",
+ "note": "the newest cycle whose objects for the final requested hour are all published; a partially uploaded cycle cannot win, so the window is complete by construction"}
+```
+
+If the resolved cycle is not the newest the clock allows, newer cycles
+exist but are still publishing: the run will initialize from older data
+than a caller may assume. That is a **`warning` event, never a refusal**:
+
+```json
+{"event": "warning", "code": "latest_cycle_is_not_the_newest",
+ "cycle": "2026-08-07T00", "source": "gfs", "age_hours": 20, "last_hour": 6}
+```
+
+`latest` is matched case-insensitively here. `woof fetch` compares bare
+equality while the wizard and the interactive door lower-case first, so
+`--cycle Latest` works on two of the three front doors today; a machine
+interface should not inherit that coin flip.
+
+ERA5 has no `latest`: it is a reanalysis published days late, and both
+the fetch and the wizard refuse it by name.
+
+---
+
+## Planning before the data exists
+
+`--resolve` and `--estimate` answer *what would this run be*, which has
+to work before anything is downloaded. They load the config with the
+input-existence check off, so the geometry, physics and VRAM estimate
+come back from a plan whose forcing has not been fetched yet.
+
+Nothing is skipped silently. The answer carries the full inventory:
+
+```json
+"inputs_present": false,
+"declared_inputs": [
+  {"role": "forcing", "path": ".../era5-combined.grib", "kind": "file", "present": false},
+  {"role": "vtable",  "path": ".../Vtable.ERA5_CDO",    "kind": "file", "present": true},
+  ...
+]
+```
+
+A **run** keeps the check on. The `resolved_plan` event carries the same
+inventory, then the fetch stage runs, and the gate fires after it: one
+refusal naming every missing input, rather than discovering them one at
+a time inside preparation.
+
+## The minimum domain size
+
+`--resolve` reports the floor, and it is **derived from the engine**, not
+transcribed:
+
+```json
+"domain_size_floor": {
+  "root_mass_points": {"nx": 60, "ny": 48},
+  "nest_span_mass_points": 12,
+  "clearance_rows": 10,
+  "basis": "the wizard's fit loop bisects grid scale between _MIN_SCALE and _MAX_SCALE; ... Domain size is FITTED from the ladder and the VRAM budget -- there is no nx/ny input to set."
+}
+```
+
+60 × 48 is the smallest layout that still hosts the deepest ladder with
+full Davies/blend clearance; a nest span below 12 mass points is refused
+outright; `clearance_rows` is `spec_bdy_width + blend_width`. The numbers
+are computed from the wizard's own fit bracket at call time, so they move
+when it moves: a constant copied into a front end would be right until
+somebody tuned the bracket, then wrong silently.
+
+When a shape does not fit, the refusal carries the wizard's own sentence
+(which names the budget, the layout it bottomed out at, and what to
+change) **and** this floor beside it.
+
+---
+
+## stdout is the machine channel
+
+stdout carries JSONL and nothing else. Everything a person would want to
+read (the resolved-config report, the wizard's sizing table and next
+steps, warnings, the feedback advisory) goes to **stderr**.
+
+This is enforced, not hoped for: `run_plan_main` binds the real stdout
+for the event stream and then redirects `sys.stdout` to stderr for the
+whole run. The pipeline and the wizard print with plain `print()` and
+are correct to; they simply do not get the machine channel.
+
+---
+
+## Attaching to a running run
+
+`<run_dir>/run-manifest.json` (`gpuwm.run-manifest.v1`) is written
+before any work starts and names every stream a consumer may want,
+including the two `run-plan` does not own:
+
+```json
+{
+  "schema": "gpuwm.run-manifest.v1",
+  "pid": 24188,
+  "process": {"pid": 24188, "start": "…", "boot": "…"},
+  "started_at_utc": "2026-08-07T18:00:12.104Z",
+  "plan_sha256": "…",
+  "run_dir":     "…/runs/overnight",
+  "outputs_dir": "…/runs/overnight",
+  "events_path":           "…/runs/overnight/events.jsonl",
+  "events_schema":         "gpuwm.run-plan.event.v1",
+  "progress_path":         "…/runs/overnight/run-progress.json",
+  "progress_schema":       "gpuwm.run-progress/v1",
+  "failure_capsule_path":  "…/runs/overnight/failure-capsule.json",
+  "failure_capsule_schema":"gpuwm.failure-capsule/v3"
+}
+```
+
+### Reattach: read the heartbeat, don't own the pipe
+
+1. Read `run-manifest.json` for the paths and the pid. A pid names a
+   process only until it ends; after a crash or a restart another
+   program can hold the same number. `process` is the run's own
+   identity: the process's creation time (`start`, as the operating
+   system reports it) and, on Linux, the boot it belongs to (`boot`,
+   `/proc/sys/kernel/random/boot_id`). The run is alive only while the
+   process holding `pid` has that same identity (`woof.proc_identity`
+   compares them); a manifest without `process` cannot prove which
+   process it named, so treat its run as ended and never signal its pid.
+2. Read `run-progress.json` for **current state**. That file is the
+   authoritative anchor: atomically republished on every step, and what
+   woof's own recovery reads.
+3. Replay `events.jsonl` from byte zero for **history**. It is the
+   complete record, never rotated or truncated. Then tail it for live
+   detail.
+
+`run-plan` publishes **no progress state of its own**.
+`woof.supervisor` already writes `run-progress.json`, and it stays the
+only writer of it: the run-plan observer *composes* with
+`supervisor.RuntimeHeartbeat` rather than replacing it, so a run-plan
+run leaves exactly the heartbeat a `woof run` leaves.
+
+A consumer that treats the event stream as the anchor will be wrong
+exactly once: after a crash between the last event flush and the process
+exit. The heartbeat is the thing that is durable by design.
+
+A torn final line in `events.jsonl` means the writer died mid-flush.
+`read_events` refuses it by default rather than trimming it, because a
+reader that silently drops a partial line cannot tell "still going" from
+"died here". Pass `allow_partial_tail=True` once you have established
+which.
+
+One process writes a run's stream at a time. While a stream is open its
+writer holds `.events.jsonl.owner` beside it: the process id, when that
+process was created, the host and a random token. A second
+`woof run-plan` or `woof go` aimed at a folder whose stream a live
+process is writing is refused before it writes a record, and the refusal
+names that process. An owner file left by a process that has ended, or
+whose process id now belongs to a different process, is taken over; one
+written on another machine is never taken over, and the refusal names
+the file to delete once nothing runs there. The next writer to open a
+stream that ends in a torn line moves those bytes to
+`events.jsonl.torn-<UTC time>` beside it, cuts the stream back to its
+last whole record and continues the numbering from there, so the history
+replays again and nothing the dead writer left is thrown away. The first
+record it then writes is a `warning` with code `event_tail_recovered`,
+whose `preserved_path` names the file the cut bytes went to.
+
+### Do not touch the checkout a run is reading
+
+If the run is executing out of a git checkout, leave that checkout
+alone until it finishes. Committing to it, staging into it, or merely
+dropping a scratch file beside it will fail the run, and by design: the
+HRRR hierarchy stage samples `git status --short` when it publishes and
+refuses a tree with anything uncommitted in it
+(`public HRRR hierarchy requires a completely clean source tree`)
+because a bundle stamped with a commit it was not actually built from
+is a provenance claim that is false. `git status --short` reports
+untracked files too, so an editor swap file is enough to do it.
+
+Nothing about this is specific to moving nests; it is just easy to hit
+on the prepared HRRR route, where the hierarchy stage runs minutes into
+a run rather than at the start. Work in a second worktree, or run from
+an installed package: an install has no worktree to dirty, and its
+identity comes from the sealed distribution manifest or from pip's own
+`RECORD`, neither of which an edit elsewhere on the box can move.
+
+---
+
+## Nothing silent: `automatic_resolutions`
+
+Every value the pipeline chose on its own appears in the
+`resolved_plan` event and in `--resolve`, one entry each:
+
+```json
+[
+  {"scope":"plan","key":"output_root","value":"…/out/run","basis":"front_door_default"},
+  {"scope":"run_options","key":"device","value":null,"basis":"schema_default"},
+  {"scope":"experiment","key":"blend_width","value":5,"basis":"schema_default"},
+  {"scope":"domain","grid_id":2,"key":"dt","value":20.0,"exact":"20",
+   "basis":"derived_from_parent_time_step_ratio",
+   "note":"parent d01 step divided by parent_time_step_ratio=3"},
+  {"scope":"execution","key":"execution_mode","value":"in_process","basis":"front_door_contract"}
+]
+```
+
+A front end can render that list and a reader can see, before the run,
+every number nobody typed. The per-domain timestep is the flagship case:
+it changes the model's answer, nobody writes it, and until now it
+appeared only inside a printed report.
+
+Library warnings (`woof.explain.warn`) reach the stream as `warning`
+events with `code: "library_warning"`, the same fact as fields rather
+than as a line to recognize.
+
+---
+
+## Query modes
+
+Each prints exactly one JSON document to stdout and runs nothing.
+
+**`--resolve PLAN.json`** → `gpuwm.run-plan.resolved.v1`. The fully
+resolved configuration (the objects the model will actually run, not a
+re-read of the TOML), `automatic_resolutions`, `moving_nest`, and any
+warnings the load produced. This is the "what will this do?" answer, and
+it creates nothing on disk. It is also where a plan that cannot run is
+refused: a moving nest on a chain whose preparation cannot feed one is
+rejected here, from the config alone, rather than after the fetch.
+
+For an intent plan, `memory` is the card memory the wizard fitted the
+grid to: `peak_envelope_bytes` of the binding phase (`binding_phase`)
+against `budget_bytes`, with `alloc_estimate_bytes`, the `free_bytes` and
+`vram_gib` it was sized from, and `sizing_basis` (`declared-capacity`
+for a named card, `measured-available` for this machine's GPU). Every
+source fills it, including one whose inputs are fetched only when the
+run starts, so a front end reads how close a draft is to its card from
+this record rather than from the words printed beside it. It is `null`
+for a plan that names its own config; `--estimate` prices that one.
+
+An intent whose grid does not fit its card is refused at exit 2: the
+sentence goes to stderr, and stdout carries the memory refusal document
+every memory refusal prints (`arwen.configuration-error.v1`, `kind`
+`memory`). Its `error` is the whole refusal and its `memory` holds
+`peak_envelope_bytes`, `budget_bytes` and `binding_phase` for the layout
+that was priced, whether or not preprocessing is priced for the source.
+`--estimate` refuses the same intent the same way. Any other refusal
+prints nothing on stdout.
+
+**`--estimate PLAN.json`** → `gpuwm.run-plan.estimate.v1`. VRAM from
+`woof.core.preflight`'s own itemization: the arithmetic `woof check`
+reports, on the CPU, with no CUDA context.
+
+`vram.envelope_basis` says which figure you got. It is `"resident"` for
+a plan with no `[tiles]`, and every number beside it is unchanged. It is
+`"streamed"` when the config's `[tiles]` table resolves to streaming, and
+then `peak_envelope_bytes` is what the card actually has to hold
+(`nbuffers` tile buffers of the compute window, priced off the same
+`tilestream.autoplan` footprint the run attaches with, **plus the
+measured RRTMGP per-call transient**) not the resident itemization,
+which describes a run that will not happen. A `vram.streamed` block
+carries the tiling, the resident figure it replaced, the two terms of the
+peak (`vram_bytes`, what the tiling holds between radiation calls, and
+`radiation_transient_bytes`, what an RRTMGP step allocates and frees on
+top of it from the first step onward, zero on the rungs that run no
+radiation), and `host_bytes`: on a streamed plan the domain lives in
+pinned host RAM, so that is a **requirement** of the plan and not a spare
+number. `peak_envelope_bytes` keeps its meaning across both (it is the
+figure to compare against a card) and only gains accuracy.
+
+Output-frame counts per domain, which are exact. A `corridor` block sizing the statics corridor
+a moving nest's preparation will seal (disk and host; zero VRAM), from
+the corridor module's own arithmetic rather than an estimate that
+merely agrees with it.
+
+A `download` block prices the download the run will make: the plan's
+own `fetch` block when it has one, otherwise the config's `[fetch]`
+table, which is what the prepared route downloads from. It counts the
+objects the fetch will request the way the fetch counts them and prices
+each at the size measured for its source and byte transport in
+`woof/data/download-bytes.v1.json` (`bytes` left on disk,
+`transfer_bytes` moved over the network, `objects`, `leads`, `source`,
+`mode`, `basis`). The transport is the one the fetch will take: a GFS
+or GDAS cycle older than the grib-filter host keeps is read as whole
+objects from the archive when no mode is named, and is priced that
+way. A route that composes files after the transfer (a GEFS a/b pair,
+a GDPS valid time) keeps the objects beside the composed copy, so
+both are counted in `bytes` and only the objects in `transfer_bytes`.
+A download already on disk is not counted again: all of the
+managed download folder, which is keyed to the request, and in a
+folder named by hand (`data_dir`, or a fetch's `out`) only the files a
+fetch receipt of the same request names, for the leads this request
+asks for. A `disk` block gives
+`bytes`, the whole of what the run writes: the download, the
+preparation (priced per grid cell from real preparations of the same
+chain), the history files, the kept checkpoints and the pictures, each
+also given on its own. It is the
+projection `woof run-plan` refuses on before its download, and the
+figure the event page compares with free disk. A source or transport
+with no measured size is left out by name in `disk.unpriced` and
+`download.basis`, never priced at a guess. Where this package has no
+measured number (wall time for an arbitrary configuration) the field is
+`null` **with its `basis` stated**. A front end showing an invented
+duration would be showing woof's name on a number woof never
+measured.
+
+**`--catalog`** → `gpuwm.run-plan.catalog.v1`. The renderer's product
+catalog: what may go in `render_products`. Asked of the renderer, never
+transcribed: on a box with the Rust engine that is its own
+`--list-products` (150 slugs plus the `all`/`direct`/`derived`/`heavy`/
+`windowed` group keywords); on a box with no usable engine it is
+`engine: null`, `products: null` and the staging remedy in `error`,
+because `woof render` refuses there rather than answering from a second
+engine, and a picker built against one catalog and run against the other
+would offer products that do not exist. The parse is checked against the renderer's own declared
+count, and a disagreement is reported in `parse_warning` with the raw
+output carried, rather than silently returning a short list.
+
+**`--sources`** → `gpuwm.run-plan.sources.v1`. The source registry's own
+rows: every registered source with its display name, aliases, kind, file
+family, decoder, products, forecast horizon, cadence, packaged profile,
+coverage window (or `null` for a global product), maturity, credential
+prerequisites, and how its bytes are acquired, a table route, its own
+legacy transport, or the table's named refusal carried verbatim. The rows
+come out in the registry's order, so a picker shows the engine's order
+rather than one it invented, and a model added to the registry appears
+here with **no code change** on either side of the seam.
+
+`display_name` is the registry's display-name column: the name a person
+would say (`HRRR (pressure levels)`, `GEM GDPS (Canadian global)`), not
+the id. `title` carries the same string, so a consumer already reading
+it shows the name with no change; a row that declares no name reads back
+as its id.
+
+`credentials` is what the row declares must be **configured** before its
+bytes can be acquired, resolved against the box that answered:
+`required`, a one-line `summary`, and an `items` entry per credential
+with `display_name`, `location_kind` (`home_file` / `env_var`),
+`location`, `location_display` (the path or variable as it is on this
+box), `needed_for`, `breakage`, `obtain_url`, `present`, and the
+`status_message` to show. Existence only ever leaves the door: the
+credential's value is never read. A row that declares nothing says
+exactly that; it does **not** say the source is public, which is a
+promise about a provider the registry cannot make. Adding a source that
+needs an account key is one registry row, and no front end carries an
+exception table for it.
+
+Read `run_plan.intent_supported` before offering a launch. The registry
+is wider than this front door: it declares more rows than a run-plan
+**intent** (a point, a cycle, a source) can drive, and the field is the
+**derived** verdict of `woof.runplan.intent_drivability`, registry
+facts, never a hand-kept list, so a registered source with a runnable
+route, a forcing cadence, an acquisition route and an executable chain
+is intent-drivable the moment its row lands. `run_plan.intent_routes`
+names the route(s), `run_plan.intent_chain` the prepared-route chain
+the dispatch would take, and, on an undrivable row,
+`run_plan.intent_refusal` carries the derived sentence naming the
+missing fact (no acquisition route, no cadence, no runnable route, a
+member the route's grammar cannot bind). Every row is listed either
+way,
+because a truthful "not from an intent" beats a short menu.
+The envelope carries `gpuwm_version` and the registry's `readiness_rule`
+and `certification_rule`, so the maturity words a front end shows are the
+engine's and not a second vocabulary. The document is roughly 65 kB.
+
+**`--physics-profiles`** → `gpuwm.run-plan.physics-profiles.v1`. The
+per-source physics menu: every registered source crossed with every
+shipped physics suite, computed against the same admissibility rules
+that refuse at emission. This is the answer to "what can THIS model
+actually run", which nothing could ask before: a front end that wanted
+a physics list had to type one, and a typed list cannot know that the
+native HRRR route refuses every Kain-Fritsch suite because its 3 km grid
+resolves its own convection.
+
+`profiles[]` is the source-independent half, in the wizard door's own
+order (nocturnally valid suites first): `summary`, the scheme selectors,
+`day_only` with its reason, `maturity` (the physics registry's template
+maturity plus the verification word), `vertical_levels` (the level-count
+window every component of the suite accepts, from the same preflight
+that refuses a 130-level YSU configuration), and the full `switches`
+table.
+
+`sources[]` is the per-source half, in registry order, and its
+`profiles[]` list is parallel to the top-level one so a consumer can zip
+them. Each cell carries `profile_id`, `admissible`, `why_not` (the
+route's own refusal sentence, **verbatim**, never paraphrased, so the
+menu and the refusal read as one gate), `is_default`, `day_only`,
+`maturity`, and `select_with` (the flag to pass, or `omit
+--physics-profile` for the default).
+
+Each source row also carries `default_profile_id` (what a bare run on
+that source binds) with `default_basis` saying why, `admissible_count`,
+and `nocturnal_remedy`: the way forward when a daytime-only suite meets
+a window with local night **on this source**. That field is what the
+wizard's own nocturnal refusal now prints, so a printed remedy can never
+name a suite the active source's route then refuses.
+
+The default is **derived**, not tabled: the door's declared default when
+this source's route admits it and it runs both radiation streams, else
+the next suite in the listed order that satisfies both. A source added
+to the registry gets a working default with **no code change**, and so
+does a suite added to the shipped list.
+
+`spacing_defaults` is the default by grid spacing, which binds ahead of
+`default_profile_id` when the run's finest grid is finer than a row's
+`finest_dx_below_m`. Each row names its suite (`profile_id`), its
+`basis`, and whether this source's route admits it: `admitted` for a
+single domain and `admitted_nested` for a domain with nests, each with
+the route's own sentence (`why_not`, `why_not_nested`) when it does not.
+Today there is one row: below 1 km the default is Thompson with
+MYNN and RUC on both radiation streams, the suite that kept coastal fog
+and stratus. A run the row does not admit keeps `default_profile_id`.
+`admitted_nested` equals `admitted` for every source today: the one
+stage that answered differently for a tree, the nested HRRR hierarchy's
+soil pin, now pins the soil column its land surface runs.
+
+A plan whose `physics_choices` name no suite records their base in the
+run manifest from the configuration the plan resolved to, so an `auto`
+ladder, whose depth only its fit knows, records the default of the
+ladder the fit landed on.
+
+`admissibility_rules[]` names the rules the cells were computed against
+and who owns each one, the route emission gate with its declared
+`required_physics` / `admitted_pbl_physics` /
+`admitted_radiation_pairs` / `supported_microphysics`, the registry's
+land-surface offer declaration, the nocturnal-validity predicate, and
+the vertical-level bounds, so a front end can say *why* a cell is
+closed without reimplementing the reasoning. The document is roughly
+250 kB.
+
+**`--probe`** → `gpuwm.run-plan.probe.v1`. Device inventory (name, UUID,
+driver, VRAM total/used/free) read through NVML only: **no CUDA context
+is created**, so it is safe to poll on a busy card. Plus route and schema
+inventories, and a readiness section delegating to `woof doctor`.
+
+That readiness section **does** create a context: doctor verifies the
+estate by execution, including a subprocess that imports CuPy and runs a
+2×2 matmul. Pass `--no-readiness` for the NVML-only document when
+polling.
+
+---
+
+## Python API
+
+```python
+from woof.runplan import (load_plan, resolve_plan, estimate_plan,
+                           probe_environment, execute_plan,
+                           EventStream, read_events)
+
+plan = load_plan("PLAN.json")
+resolution, exp, data = resolve_plan(plan)         # no device work
+with EventStream(plan.run_dir / "events.jsonl") as events:
+    exit_code = execute_plan(plan, events=events)
+
+history = read_events(plan.run_dir / "events.jsonl")
+```
+
+`EventStream(path, mirror=...)`: `mirror` defaults to stdout; pass
+`None` for the file only, or any writable stream.
+
+## The observer seam
+
+`run-plan` adds no private hooks. It uses the `progress_callback`
+protocol `runtime.run_experiment` already accepted, plus one new
+optional hook discovered the same way the existing ones are:
+
+| hook | added by | raised at |
+|---|---|---|
+| `progress_callback(**event)` | pre-existing | each outer step |
+| `.preparing(phase)` | pre-existing | each preparation phase |
+| `.starting()` / `.complete()` / `.failed()` | pre-existing | lifecycle |
+| `.output_committed(domain=, valid_time=, path=)` | **new** | `runtime._output_committed`, and the per-domain async writer once the file is durable |
+
+Any object carrying those attributes works. A `progress_callback`
+without `output_committed` is unaffected: the hook is discovered by
+name, and absent means nothing happens.
+
+---
+
+## What the `prepared` route does not reach yet
+
+Single-domain **gfs** and **hrrr** both run, and so do **GFS domain
+trees**: `rw-wps` prepares the whole hierarchy in one call, and run-plan
+owns the relay the manual chain used to need a person for, the
+forecast stage reads the hierarchy document the preparation left in the
+prepared root (`proof.json` or `receipt.json`, matched on schema
+against the tree runner's own table) and binds its digest for
+`woof-prepared-tree-forecast`. The estimate is tree-aware
+(`peak_envelope_bytes` beside the pool request) and `model_progress`
+carries a per-domain clock list when the tree has more than one domain.
+**Multi-domain HRRR** runs as well, on the four-stage chain described
+under Routes. **A moving nest on a nested HRRR tree** runs too, as of
+the corridor emission on `woof.hrrr_hierarchy_direct`: the tree runner
+was always source-agnostic about relocation (it wants a sealed statics
+corridor and does not care which preparation sealed it) and what was
+missing was purely that nothing on the HRRR path wrote one. It was a
+preparation-side change, and that is where it was made; run-plan's part
+was to stop refusing and to compose the flag on the right stage.
+
+---
+
+## Selective rendering
+
+Both chains end in `woof render`, and both take the same filter:
+
+```json
+"run_options": { "render_products": "composite_reflectivity,sbcape" }
+"run_options": { "render_products": "all" }
+"run_options": { "render_products": "none" }     // skip the stage
+```
+
+The value is `woof render --products`' own spec, passed through
+**verbatim**: this front door does not parse or validate it, because the
+render command owns that vocabulary and a second copy of it here is the
+enumeration drift `render.py`'s own catalog code already refuses to pay
+for. Absent leaves the default set exactly as it was, so `woof go`'s
+own behaviour is unchanged.
+
+A vertical section (`xsec:<fill>[/<overlay>...]`) is cut along the line
+in `render_section`, the same value `woof go --section` and `woof render
+--section` take; the plan is refused before anything is fetched when it
+names an `xsec:` term and no line:
+
+```json
+"run_options": { "render_products": "composite_reflectivity,xsec:QCLOUD=0.01,0.1/wa",
+                 "render_section": "38.3,-99.0,38.3,-98.4" }
+```
+
+`none` lives in the same field as the product list rather than in a
+separate boolean, so "which products" has one answer and not two that
+can disagree; it is not a product name in the catalog, so it cannot
+collide with one.
+
+Ask `run-plan --catalog` for the list. It is **not** an intent key:
+intent mirrors `woof domain`'s flags one for one, and the wizard writes
+configs, not pictures.
+
+The HRRR chain has no render step in its printed form; run-plan gives it
+`go`'s, so the option means the same thing on both sources.
+
+---
+
+## Time to first plot
+
+The first picture used to wait for the last timestep. It no longer does.
+
+The first frame a forecast commits is the **analysis**: the state the
+run was initialised from. WRF's history alarm is true at `t = 0`
+(`Clock.history_due`), so that frame is written before a single step is
+integrated, and the per-domain writer raises `output_committed` for it
+the moment it is fsynced, self-validated and renamed. On a two-hour run
+that finished picture then sat on disk for the whole forecast, waiting
+for the finalize stage to notice it.
+
+A run that sets `render_products` now renders that frame as it lands, on
+a worker thread, concurrent with the forecast, and emits:
+
+```json
+{"event":"first_products_ready","domain":1,"valid_time":"2026-07-28T05:00:00","frame":".../wrfout_d01_2026-07-28_05_00_00","paths":["...png"],"render_products":"refl,t2","render_seconds":3.9,"seconds_from_plan_accepted":118.7}
+```
+
+`seconds_from_plan_accepted` **is** the TTFP number: wall clock from the
+instant the plan was accepted (the instant the person who launched it
+started waiting) to the instant the pictures were readable. It is
+measured by the engine, on every run, and it lands in `events.jsonl`
+beside everything else. The `completed` event repeats it as
+`first_products_seconds` (null when nothing was published early), so
+comparing two runs does not mean scanning two streams.
+
+It is measured accurately: the event is emitted before the frame is
+digested and before the receipt is written, because both of those are
+bookkeeping for the finalize stage and hashing a 362 MB history frame
+first would have put a second of it inside the number.
+
+Default ON where it can apply, and inert everywhere else. A plan that
+names no products (the default) or names `none` gets exactly the
+behaviour it had before; the `experiment` route has no `render_products`
+option at all and is untouched. There is no second switch.
+
+**It does not contend with the forecast.** The render is a separate
+`python -m woof.cli render` process driving the CPU-side Rust renderer.
+It imports cupy as a transitive dependency of the package and creates no
+CUDA context: measured with the driver itself, `cuCtxGetCurrent`
+returning `CUDA_ERROR_NOT_INITIALIZED`, and pinned as a test. The
+forecast keeps the card for its whole run.
+
+**Finalize does not redo the work, and does not take that on trust.**
+The early render leaves `first-products.json` beside the pictures naming
+the frame it read and every PNG it wrote, all by sha256. The finalize
+stage collects the render, then drops that frame from its own list only
+when the frame still hashes to the recorded digest, every recorded
+picture is on disk hashing to its recorded digest, and `render_products`
+has not changed. Any other answer (a deleted picture, an edited frame,
+a different product spec, a render still running) and the frame is
+simply rendered again. Byte-identity between the two paths is a property
+of construction: the early render runs the command `render_command`
+composes from the same plan, in the same working directory, with the
+same environment, naming one frame instead of all of them.
+
+Pictures are published by `os.replace` out of a scratch directory, so a
+reader watching the render output sees a whole PNG or none.
+
+`woof go` reads the receipt off disk the same way, whether or not the
+chain hosted the render that wrote it: it does not, because `go` asks
+the runner subprocess for the early render on its command line and keeps
+its process isolation. Every digest check above still gates the skip.
+
+**What the receipt's clock means.** `published_unix_ms` is the wall-clock
+instant at which every picture named in `written` was readable at its
+final path under the render directory, and the receipt carries that
+sentence in its own `measures` field. A picture found there with a later
+mtime was rewritten afterwards, so the instant no longer describes
+anything on disk; the chain checks that before it quotes the number, and
+falls back to the earliest picture's own mtime (labelled as the coarser
+measurement) when it does not hold. Before that check, `go` could print
+`time to first plot 0m 46s (first-products receipt)` for a run whose
+earliest published PNG carried 2m 45s.
+
+### Measured
+
+A real seven-frame `d01-12km` run, 362 MB analysis frame, products
+`refl,t2,wind10,precip`, on the RTX 5090 box with the vendored Rust
+renderer:
+
+| | wall | output |
+|---|---:|---:|
+| early render, analysis frame alone | 17.0 s | 4 png |
+| finalize render, all 7 frames (before) | 116.0 s | 28 png |
+| finalize render, other 6 frames (after) | 100.0 s | 24 png |
+| `output_committed` → returns to the writer thread | 0.0007 s | |
+
+`17.0 + 100.0 = 117.0` against `116.0` for one batch, so splitting the
+work costs nothing measurable, and the 17 s is hidden under a forecast
+that is still running. The product set is unchanged: 28 pictures either
+way, 4 of them published by the early render and skipped at finalize
+with the message
+
+```
+-- render: 1 frame already published by the early render (4 picture(s), digests verified): wrfout_d01_...
+```
+
+All four early pictures are **byte-identical** to the same frame
+rendered inside the seven-frame finalize batch.
+
+What this buys on a live run is the render delta (100 s of the 116 s
+moves off the critical path) **plus the entire forecast wall time**,
+because the first plot no longer waits for the last timestep. Against
+the reference HRRR budget (208.6 s fetch, 27 s prepare, both measured)
+the emitted number for this frame was `seconds_from_plan_accepted:
+253.2`.
+
+### What fetch ordering does and does not buy
+
+The other half of TTFP is the download, which on a live HRRR run is
+~85% of it. The analysis frame needs only the analysis hour's files, so
+the obvious lever is to fetch those first and let the boundary hours
+stream while preparation runs.
+
+**They are already fetched first.** Every ladder builder
+(`gfs_forecast_hours`, `gdas_forecast_hours`, `hrrr_forecast_hours`)
+returns an ascending `range` beginning at the forecast-start lead, and
+every fetch loop walks it in order: HRRR fetching both of an hour's
+products before touching the next hour. Reordering therefore buys
+**zero seconds**; there is nothing to reorder. That property was
+incidental and is now pinned (`tests/test_fetch_analysis_first.py`), because
+it is what any future overlap work would stand on.
+
+Pinned alongside it is the property such work would have to preserve:
+`SHA256SUMS` (the artifact preparation binds through
+`--source-manifest-sha256`) is **byte-identical whatever order the
+hours land in**, proven by fetching the same window forwards and
+backwards and comparing, not by reading the `sorted` call that makes it
+true. The payload files come out byte-for-byte identical too.
+
+The gain that ordering was supposed to unlock is **overlap**:
+preparation starting on the analysis hour while boundaries download.
+That is not available today, and the obstacle is not the digest
+discipline: it is the shape of preparation:
+
+* Root preparation is one pass over the whole series. The decoder is
+  invoked once with the series file, and the same loop that builds the
+  initial condition from `snapshots[0]` accumulates every snapshot's
+  perimeter into the boundary tables and seals them into the prepared
+  cache (`gfs_direct.py`). There is no later "LBC step" to defer to.
+* Three independent gates refuse a one-time series outright
+  (`gfs_direct._read_series`, `gfs_direct.prepare_gfs_wrf`,
+  `ingest/lateral_bc.build_lateral_boundaries`), and the HRRR preparer
+  refuses if any hour's atmosphere or soil file is missing.
+* The sealed manifest binds the **role set**, not just the bytes:
+  preparation refuses when the manifest's declared roles differ from the
+  ones it was asked for. Preparing from a subset means authoring a
+  manifest over that subset, which is a different sealed artifact with a
+  different digest, and the runner binds exactly one
+  `--source-manifest-sha256`.
+
+Splitting that is a preparation-format change (an IC-only artifact, a
+runner that can start from one, and a second seal for the boundary
+extension), not plumbing. It was **not** done here, because the only
+ways to do it quickly all weaken a digest binding to win seconds. The
+receiving end for a future attempt already exists: the fetch receipt is
+republished after every completed hour, with `forecast_hours` naming the
+verified prefix, so "the analysis is on disk and checked" is already an
+observable event.
+
+Fetch **parallelism** is separately debunked on this link: six
+concurrent streams aggregate 20.2 MB/s against 17.9 MB/s for one, a
+1.29x that is bandwidth-limited, not a 6x. It is also the wrong
+direction: concurrency stops the analysis hour landing first, which is
+the one property the overlap work above would need.

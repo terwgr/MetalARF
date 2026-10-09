@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout 8bdffc6770075e924a76a1c8bd1ee939594b519fed4803b18fd440d9f847133b.
+struct ThompsonFinalPhaseCleanupWithColumnsResources {
+    device float *qc [[id(0)]];
+    device float *qi [[id(1)]];
+    device float *ni [[id(2)]];
+    device float *temperature [[id(3)]];
+    device const float *pressure [[id(4)]];
+    device float *qv [[id(5)]];
+    device const float *micro_columns [[id(6)]];
+};
+struct ThompsonFinalPhaseCleanupWithColumnsParams {
+    int ncol;
+    int size;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonFinalPhaseCleanupWithColumnsParams) == 20, "thompson_final_phase_cleanup_with_columns parameter ABI size changed");

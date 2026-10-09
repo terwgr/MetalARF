@@ -1,0 +1,716 @@
+#ifndef WOOF_SOFT_BINARY64_METALH
+#define WOOF_SOFT_BINARY64_METALH
+
+// Integer-only IEEE-754 binary64 base operations for MSL.
+//
+// Values are passed and returned as the uint64_t-compatible MSL `ulong` bit
+// pattern. No native floating-point arithmetic appears in this header. The
+// finite add/mul/div paths retain three rounding bits (guard, round, sticky)
+// and use round-to-nearest, ties-to-even when packing the result.
+
+enum Soft64Kind : uint {
+    SOFT64_ZERO = 0u,
+    SOFT64_FINITE = 1u,
+    SOFT64_INFINITY = 2u,
+    SOFT64_NAN = 3u
+};
+
+struct Soft64Decoded {
+    uint kind;
+    bool sign;
+    int exponent;
+    ulong significand;
+};
+
+struct Soft64Wide {
+    ulong hi;
+    ulong lo;
+};
+
+struct Soft64I32Result {
+    bool valid;
+    int value;
+};
+
+struct Soft64U32Result {
+    bool valid;
+    uint value;
+};
+
+static inline ulong soft64_sign_mask() { return 0x8000000000000000ul; }
+static inline ulong soft64_exp_mask()  { return 0x7ff0000000000000ul; }
+static inline ulong soft64_frac_mask() { return 0x000ffffffffffffful; }
+static inline ulong soft64_hidden()    { return 0x0010000000000000ul; }
+static inline ulong soft64_qnan()      { return 0x7ff8000000000000ul; }
+static inline ulong soft64_inf()       { return 0x7ff0000000000000ul; }
+
+static inline bool soft64_sign(ulong bits)
+{ return (bits & soft64_sign_mask()) != 0ul; }
+
+static inline ulong soft64_abs_bits(ulong bits)
+{ return bits & ~soft64_sign_mask(); }
+
+static inline ulong soft64_negate_bits(ulong bits)
+{ return bits ^ soft64_sign_mask(); }
+
+static inline bool soft64_is_nan(ulong bits)
+{
+    return (bits & soft64_exp_mask()) == soft64_exp_mask()
+        && (bits & soft64_frac_mask()) != 0ul;
+}
+
+static inline bool soft64_is_signaling_nan(ulong bits)
+{
+    return soft64_is_nan(bits) && (bits & 0x0008000000000000ul) == 0ul;
+}
+
+static inline bool soft64_is_infinite(ulong bits)
+{
+    return (bits & ~soft64_sign_mask()) == soft64_inf();
+}
+
+static inline bool soft64_is_zero(ulong bits)
+{ return (bits & ~soft64_sign_mask()) == 0ul; }
+
+static inline bool soft64_is_finite(ulong bits)
+{ return (bits & soft64_exp_mask()) != soft64_exp_mask(); }
+
+static inline ulong soft64_quiet_nan(ulong bits)
+{ return bits | 0x0008000000000000ul; }
+
+static inline Soft64Decoded soft64_decode(ulong bits)
+{
+    Soft64Decoded d;
+    d.sign = soft64_sign(bits);
+    const uint efield = uint((bits >> 52) & 0x7fful);
+    const ulong fraction = bits & soft64_frac_mask();
+    if (efield == 0x7ffu) {
+        d.kind = fraction == 0ul ? SOFT64_INFINITY : SOFT64_NAN;
+        d.exponent = 0;
+        d.significand = fraction;
+        return d;
+    }
+    if (efield == 0u) {
+        if (fraction == 0ul) {
+            d.kind = SOFT64_ZERO;
+            d.exponent = -1022;
+            d.significand = 0ul;
+            return d;
+        }
+        d.kind = SOFT64_FINITE;
+        d.exponent = -1022;
+        d.significand = fraction;
+        while (d.significand < soft64_hidden()) {
+            d.significand <<= 1;
+            d.exponent -= 1;
+        }
+        return d;
+    }
+    d.kind = SOFT64_FINITE;
+    d.exponent = int(efield) - 1023;
+    d.significand = soft64_hidden() | fraction;
+    return d;
+}
+
+static inline ulong soft64_shift_right_jam(ulong value, uint distance)
+{
+    if (distance == 0u) return value;
+    if (distance < 64u) {
+        const ulong mask = (1ul << distance) - 1ul;
+        const ulong lost = value & mask;
+        return (value >> distance) | ulong(lost != 0ul);
+    }
+    return ulong(value != 0ul);
+}
+
+static inline ulong soft64_round_shift_even(ulong value, uint distance)
+{
+    if (distance == 0u) return value;
+    if (distance > 64u) return 0ul;
+    if (distance == 64u) {
+        const ulong halfway_value = 0x8000000000000000ul;
+        return ulong(value > halfway_value
+                     || (value == halfway_value && false));
+    }
+    const ulong truncated = value >> distance;
+    const ulong mask = (1ul << distance) - 1ul;
+    const ulong remainder = value & mask;
+    const ulong halfway_value = 1ul << (distance - 1u);
+    const bool increment = remainder > halfway_value
+        || (remainder == halfway_value && (truncated & 1ul) != 0ul);
+    return truncated + ulong(increment);
+}
+
+static inline ulong soft64_pack_extended(bool sign, int exponent, ulong ext)
+{
+    const ulong signbits = sign ? soft64_sign_mask() : 0ul;
+    if (ext == 0ul) return signbits;
+
+    // Normalize a rounded carry first, then left-normalize cancellation.
+    if ((ext & 0x0100000000000000ul) != 0ul) {
+        ext = soft64_shift_right_jam(ext, 1u);
+        exponent += 1;
+    }
+    while ((ext & 0x0080000000000000ul) == 0ul && exponent > -1022) {
+        ext <<= 1;
+        exponent -= 1;
+    }
+    if (exponent < -1022) {
+        const int distance = -1022 - exponent;
+        ext = soft64_shift_right_jam(ext, uint(distance));
+        exponent = -1022;
+    }
+
+    ulong significand = ext >> 3;
+    const uint roundbits = uint(ext & 7ul);
+    if (roundbits > 4u || (roundbits == 4u && (significand & 1ul) != 0ul))
+        significand += 1ul;
+
+    if (significand == 0ul) return signbits;
+    if (exponent == -1022 && significand < soft64_hidden()) {
+        // Gradual underflow: the rounded significand is the subnormal payload.
+        return signbits | significand;
+    }
+    if (significand >= 0x0020000000000000ul) {
+        significand >>= 1;
+        exponent += 1;
+    }
+    if (exponent > 1023) return signbits | soft64_inf();
+
+    const ulong efield = ulong(exponent + 1023) << 52;
+    return signbits | efield | (significand & soft64_frac_mask());
+}
+
+static inline int soft64_compare_magnitude(ulong a, ulong b)
+{
+    const ulong ma = a & ~soft64_sign_mask();
+    const ulong mb = b & ~soft64_sign_mask();
+    return ma < mb ? -1 : (ma > mb ? 1 : 0);
+}
+
+// Return -1, 0, 1, or 2 for less, equal, greater, or unordered.
+static inline int soft64_compare(ulong a, ulong b)
+{
+    if (soft64_is_nan(a) || soft64_is_nan(b)) return 2;
+    if (soft64_is_zero(a) && soft64_is_zero(b)) return 0;
+    const bool sa = soft64_sign(a), sb = soft64_sign(b);
+    if (sa != sb) return sa ? -1 : 1;
+    const int mag = soft64_compare_magnitude(a, b);
+    return sa ? -mag : mag;
+}
+
+static inline bool soft64_equal(ulong a, ulong b)
+{ return soft64_compare(a, b) == 0; }
+static inline bool soft64_less(ulong a, ulong b)
+{ return soft64_compare(a, b) == -1; }
+static inline bool soft64_less_equal(ulong a, ulong b)
+{ const int c = soft64_compare(a, b); return c == -1 || c == 0; }
+static inline bool soft64_greater(ulong a, ulong b)
+{ return soft64_compare(a, b) == 1; }
+static inline bool soft64_greater_equal(ulong a, ulong b)
+{ const int c = soft64_compare(a, b); return c == 1 || c == 0; }
+
+static inline ulong soft64_add_sub(ulong a, ulong b, bool subtract_b)
+{
+    if (soft64_is_nan(a)) return soft64_quiet_nan(a);
+    if (soft64_is_nan(b)) return soft64_quiet_nan(b);
+
+    Soft64Decoded da = soft64_decode(a);
+    Soft64Decoded db = soft64_decode(b);
+    const bool sa = da.sign;
+    const bool sb = db.sign != subtract_b;
+    const ulong sign_a = sa ? soft64_sign_mask() : 0ul;
+    const ulong sign_b = sb ? soft64_sign_mask() : 0ul;
+
+    if (da.kind == SOFT64_INFINITY || db.kind == SOFT64_INFINITY) {
+        if (da.kind == SOFT64_INFINITY && db.kind == SOFT64_INFINITY) {
+            return sa == sb ? sign_a | soft64_inf() : soft64_qnan();
+        }
+        return da.kind == SOFT64_INFINITY ? sign_a | soft64_inf()
+                                           : sign_b | soft64_inf();
+    }
+    if (da.kind == SOFT64_ZERO && db.kind == SOFT64_ZERO)
+        return (sa && sb) ? soft64_sign_mask() : 0ul;
+    if (da.kind == SOFT64_ZERO)
+        return sign_b | (b & ~soft64_sign_mask());
+    if (db.kind == SOFT64_ZERO) return a;
+
+    // Order finite operands by magnitude before subtraction/alignment.
+    bool a_larger = da.exponent > db.exponent
+        || (da.exponent == db.exponent && da.significand >= db.significand);
+    const Soft64Decoded large = a_larger ? da : db;
+    const Soft64Decoded small = a_larger ? db : da;
+    const bool large_sign = a_larger ? sa : sb;
+    const bool small_sign = a_larger ? sb : sa;
+    const uint distance = uint(large.exponent - small.exponent);
+    const ulong large_ext = large.significand << 3;
+    const ulong small_ext = soft64_shift_right_jam(small.significand << 3,
+                                                    distance);
+    if (large_sign == small_sign)
+        return soft64_pack_extended(large_sign, large.exponent,
+                                   large_ext + small_ext);
+    if (large_ext == small_ext) return 0ul;
+    return soft64_pack_extended(large_sign, large.exponent,
+                                large_ext - small_ext);
+}
+
+static inline ulong soft64_add(ulong a, ulong b)
+{ return soft64_add_sub(a, b, false); }
+
+static inline ulong soft64_sub(ulong a, ulong b)
+{ return soft64_add_sub(a, b, true); }
+
+static inline Soft64Wide soft64_multiply_wide(ulong a, ulong b)
+{
+    const ulong a0 = ulong(uint(a)), a1 = a >> 32;
+    const ulong b0 = ulong(uint(b)), b1 = b >> 32;
+    const ulong p00 = a0 * b0;
+    const ulong p01 = a0 * b1;
+    const ulong p10 = a1 * b0;
+    const ulong p11 = a1 * b1;
+
+    ulong lo = p00;
+    ulong hi = p11;
+    const ulong add01 = p01 << 32;
+    lo += add01;
+    hi += (p01 >> 32) + ulong(lo < add01);
+    const ulong add10 = p10 << 32;
+    const ulong before10 = lo;
+    lo += add10;
+    hi += (p10 >> 32) + ulong(lo < before10);
+    Soft64Wide out;
+    out.hi = hi;
+    out.lo = lo;
+    return out;
+}
+
+static inline ulong soft64_wide_shift_right_jam(Soft64Wide value,
+                                                uint distance)
+{
+    if (distance == 0u) return value.lo;
+    if (distance < 64u) {
+        const ulong lostmask = (1ul << distance) - 1ul;
+        const ulong lost = value.lo & lostmask;
+        return ((value.hi << (64u - distance)) | (value.lo >> distance))
+             | ulong(lost != 0ul);
+    }
+    if (distance == 64u)
+        return value.hi | ulong(value.lo != 0ul);
+    if (distance < 128u) {
+        const uint high_distance = distance - 64u;
+        const ulong lostmask = (1ul << high_distance) - 1ul;
+        const ulong lost = value.lo | (value.hi & lostmask);
+        return (value.hi >> high_distance) | ulong(lost != 0ul);
+    }
+    return ulong(value.hi != 0ul || value.lo != 0ul);
+}
+
+// Square root using a 128-bit integer radicand and exact integer search.
+// The scaled root contains the 53-bit significand and three RN-even rounding
+// bits; the residual is retained as sticky. No native FP64 path is involved.
+static inline int soft64_wide_compare(Soft64Wide a, Soft64Wide b)
+{
+    if (a.hi != b.hi) return a.hi < b.hi ? -1 : 1;
+    return a.lo < b.lo ? -1 : (a.lo > b.lo ? 1 : 0);
+}
+
+static inline ulong soft64_sqrt(ulong bits)
+{
+    if (soft64_is_nan(bits)) return soft64_quiet_nan(bits);
+    if (soft64_is_zero(bits) || soft64_is_infinite(bits))
+        return soft64_sign(bits) && !soft64_is_zero(bits) ? soft64_qnan() : bits;
+    if (soft64_sign(bits)) return soft64_qnan();
+
+    Soft64Decoded d = soft64_decode(bits);
+    Soft64Wide radicand;
+    if ((d.exponent % 2) != 0) {
+        radicand.hi = d.significand >> 5;
+        radicand.lo = d.significand << 59;
+        d.exponent -= 1;
+    } else {
+        radicand.hi = d.significand >> 6;
+        radicand.lo = d.significand << 58;
+    }
+    ulong lo = 1ul << 55;
+    ulong hi = 1ul << 57;
+    while (lo + 1ul < hi) {
+        const ulong mid = (lo + hi) >> 1;
+        const Soft64Wide square = soft64_multiply_wide(mid, mid);
+        if (soft64_wide_compare(square, radicand) <= 0) lo = mid;
+        else hi = mid;
+    }
+    const Soft64Wide square = soft64_multiply_wide(lo, lo);
+    const ulong ext = lo | ulong(soft64_wide_compare(square, radicand) != 0);
+    return soft64_pack_extended(false, d.exponent / 2, ext);
+}
+
+static inline ulong soft64_mul(ulong a, ulong b)
+{
+    if (soft64_is_nan(a)) return soft64_quiet_nan(a);
+    if (soft64_is_nan(b)) return soft64_quiet_nan(b);
+    const bool sign = soft64_sign(a) != soft64_sign(b);
+    const ulong signbits = sign ? soft64_sign_mask() : 0ul;
+    const bool az = soft64_is_zero(a), bz = soft64_is_zero(b);
+    const bool ai = soft64_is_infinite(a), bi = soft64_is_infinite(b);
+    if ((az && bi) || (bz && ai)) return soft64_qnan();
+    if (ai || bi) return signbits | soft64_inf();
+    if (az || bz) return signbits;
+
+    const Soft64Decoded da = soft64_decode(a);
+    const Soft64Decoded db = soft64_decode(b);
+    const Soft64Wide product = soft64_multiply_wide(da.significand,
+                                                    db.significand);
+    const bool carry = (product.hi & (1ul << 41)) != 0ul; // product bit 105
+    const int exponent = da.exponent + db.exponent + int(carry);
+    const uint shift = carry ? 50u : 49u;
+    const ulong ext = soft64_wide_shift_right_jam(product, shift);
+    return soft64_pack_extended(sign, exponent, ext);
+}
+
+// Keep both words during FMA alignment; the existing wide-to-ulong shift
+// is used only after product/addend cancellation has been resolved.
+static inline Soft64Wide soft64_wide_align_right_jam(Soft64Wide value,
+                                                    uint distance)
+{
+    if (distance == 0u) return value;
+    Soft64Wide out;
+    out.hi = 0ul;
+    if (distance < 64u) {
+        out.hi = value.hi >> distance;
+        out.lo = (value.hi << (64u - distance)) | (value.lo >> distance)
+            | ulong((value.lo & ((1ul << distance) - 1ul)) != 0ul);
+    } else if (distance == 64u) {
+        out.lo = value.hi | ulong(value.lo != 0ul);
+    } else if (distance < 128u) {
+        const uint high_distance = distance - 64u;
+        out.lo = (value.hi >> high_distance)
+            | ulong(value.lo != 0ul
+                    || (value.hi & ((1ul << high_distance) - 1ul)) != 0ul);
+    } else {
+        out.lo = ulong(value.hi != 0ul || value.lo != 0ul);
+    }
+    return out;
+}
+
+// Binary64 FMA: quiet the first NaN, reject 0*infinity and opposing
+// infinities, and retain IEEE RN-even signed-zero behavior. Align the exact
+// 106-bit product and 53-bit addend at bit 126 in a 128-bit accumulator;
+// nearby operands remain exact through cancellation, while remote tails
+// are jammed below the rounding bits. Normalize and pack once, including
+// gradual underflow: there is no intermediate product rounding/overflow.
+static inline ulong soft64_fma(ulong a, ulong b, ulong c)
+{
+    if (soft64_is_nan(a)) return soft64_quiet_nan(a);
+    if (soft64_is_nan(b)) return soft64_quiet_nan(b);
+    if (soft64_is_nan(c)) return soft64_quiet_nan(c);
+    const bool product_sign = soft64_sign(a) != soft64_sign(b);
+    const bool c_sign = soft64_sign(c);
+    const bool az = soft64_is_zero(a), bz = soft64_is_zero(b);
+    const bool ai = soft64_is_infinite(a), bi = soft64_is_infinite(b);
+    if ((az && bi) || (bz && ai)) return soft64_qnan();
+    if (ai || bi) {
+        if (soft64_is_infinite(c) && product_sign != c_sign)
+            return soft64_qnan();
+        return (product_sign ? soft64_sign_mask() : 0ul) | soft64_inf();
+    }
+    if (soft64_is_infinite(c)) return c;
+    if (az || bz) {
+        if (!soft64_is_zero(c)) return c;
+        return product_sign && c_sign ? soft64_sign_mask() : 0ul;
+    }
+    if (soft64_is_zero(c)) return soft64_mul(a, b);
+
+    const Soft64Decoded da = soft64_decode(a);
+    const Soft64Decoded db = soft64_decode(b);
+    const Soft64Decoded dc = soft64_decode(c);
+    const Soft64Wide product = soft64_multiply_wide(da.significand,
+                                                   db.significand);
+    const bool product_carry = (product.hi & (1ul << 41)) != 0ul;
+    const uint product_shift = product_carry ? 21u : 22u;
+    Soft64Wide pw;
+    pw.hi = (product.hi << product_shift)
+          | (product.lo >> (64u - product_shift));
+    pw.lo = product.lo << product_shift;
+    Soft64Wide cw;
+    cw.hi = dc.significand << 10; // 53-bit addend shifted left by 74
+    cw.lo = 0ul;
+    const int pe = da.exponent + db.exponent + int(product_carry);
+    int exponent = pe > dc.exponent ? pe : dc.exponent;
+    pw = soft64_wide_align_right_jam(pw, uint(exponent - pe));
+    cw = soft64_wide_align_right_jam(cw, uint(exponent - dc.exponent));
+
+    Soft64Wide sum;
+    bool sign = product_sign;
+    if (product_sign == c_sign) {
+        sum.lo = pw.lo + cw.lo;
+        sum.hi = pw.hi + cw.hi + ulong(sum.lo < pw.lo);
+    } else {
+        const int order = soft64_wide_compare(pw, cw);
+        if (order == 0) return 0ul; // exact cancellation rounds to +0
+        const Soft64Wide large = order > 0 ? pw : cw;
+        const Soft64Wide small = order > 0 ? cw : pw;
+        sign = order > 0 ? product_sign : c_sign;
+        sum.lo = large.lo - small.lo;
+        sum.hi = large.hi - small.hi - ulong(large.lo < small.lo);
+    }
+    if ((sum.hi & (1ul << 63)) != 0ul) {
+        sum = soft64_wide_align_right_jam(sum, 1u);
+        exponent += 1;
+    } else {
+        while ((sum.hi & (1ul << 62)) == 0ul) {
+            sum.hi = (sum.hi << 1) | (sum.lo >> 63);
+            sum.lo <<= 1;
+            exponent -= 1;
+        }
+    }
+    const ulong ext = soft64_wide_shift_right_jam(sum, 71u);
+    return soft64_pack_extended(sign, exponent, ext);
+}
+
+static inline ulong soft64_div(ulong a, ulong b)
+{
+    if (soft64_is_nan(a)) return soft64_quiet_nan(a);
+    if (soft64_is_nan(b)) return soft64_quiet_nan(b);
+    const bool sign = soft64_sign(a) != soft64_sign(b);
+    const ulong signbits = sign ? soft64_sign_mask() : 0ul;
+    const bool az = soft64_is_zero(a), bz = soft64_is_zero(b);
+    const bool ai = soft64_is_infinite(a), bi = soft64_is_infinite(b);
+    if ((az && bz) || (ai && bi)) return soft64_qnan();
+    if (ai || bz) return signbits | soft64_inf();
+    if (az || bi) return signbits;
+
+    const Soft64Decoded da = soft64_decode(a);
+    const Soft64Decoded db = soft64_decode(b);
+    ulong numerator = da.significand;
+    int exponent = da.exponent - db.exponent;
+    if (numerator < db.significand) {
+        numerator <<= 1;
+        exponent -= 1;
+    }
+    ulong remainder = numerator - db.significand;
+    ulong quotient = soft64_hidden() << 3;
+    for (int bit = 54; bit >= 0; --bit) {
+        remainder <<= 1;
+        if (remainder >= db.significand) {
+            remainder -= db.significand;
+            quotient |= 1ul << uint(bit);
+        }
+    }
+    if (remainder != 0ul) quotient |= 1ul; // sticky bit
+    return soft64_pack_extended(sign, exponent, quotient);
+}
+
+static inline ulong soft64_from_f32_bits(uint bits)
+{
+    const ulong signbits = (bits & 0x80000000u) != 0u
+        ? soft64_sign_mask() : 0ul;
+    const uint efield = (bits >> 23) & 0xffu;
+    const uint fraction = bits & 0x007fffffu;
+    if (efield == 0xffu) {
+        if (fraction == 0u) return signbits | soft64_inf();
+        ulong payload = ulong(fraction) << 29;
+        payload |= 0x0008000000000000ul;
+        return signbits | soft64_exp_mask() | (payload & soft64_frac_mask());
+    }
+    if (efield == 0u) {
+        if (fraction == 0u) return signbits;
+        uint sig = fraction;
+        int exponent = -126;
+        while (sig < 0x00800000u) {
+            sig <<= 1;
+            exponent -= 1;
+        }
+        return signbits | (ulong(exponent + 1023) << 52)
+             | ((ulong(sig) << 29) & soft64_frac_mask());
+    }
+    const int exponent = int(efield) - 127;
+    const ulong sig = ulong(0x00800000u | fraction) << 29;
+    return signbits | (ulong(exponent + 1023) << 52)
+         | (sig & soft64_frac_mask());
+}
+
+static inline uint soft64_to_f32_bits(ulong bits)
+{
+    const uint signbits = soft64_sign(bits) ? 0x80000000u : 0u;
+    if (soft64_is_nan(bits)) {
+        uint payload = uint((bits & soft64_frac_mask()) >> 29);
+        payload |= 0x00400000u; // quiet while retaining the leading payload
+        return signbits | 0x7f800000u | (payload & 0x007fffffu);
+    }
+    if (soft64_is_infinite(bits)) return signbits | 0x7f800000u;
+    if (soft64_is_zero(bits)) return signbits;
+
+    const Soft64Decoded d = soft64_decode(bits);
+    if (d.exponent > 127) return signbits | 0x7f800000u;
+    if (d.exponent >= -126) {
+        ulong rounded = soft64_round_shift_even(d.significand, 29u);
+        int exponent = d.exponent;
+        if (rounded >= 0x01000000ul) {
+            rounded >>= 1;
+            exponent += 1;
+        }
+        if (exponent > 127) return signbits | 0x7f800000u;
+        return signbits | (uint(exponent + 127) << 23)
+             | (uint(rounded) & 0x007fffffu);
+    }
+
+    // Subnormal float32 fraction = value / 2^-149, rounded RN-even.
+    const int distance = -d.exponent - 97;
+    const ulong rounded = distance > 0
+        ? soft64_round_shift_even(d.significand, uint(distance))
+        : d.significand << uint(-distance);
+    if (rounded >= 0x00800000ul) return signbits | 0x00800000u;
+    return signbits | uint(rounded);
+}
+
+// Bit-preserving counterparts to CUDA's __double_as_longlong /
+// __longlong_as_double boundary. The representation remains an integer word.
+static inline ulong soft64_from_i64_bits(long word)
+{ return as_type<ulong>(word); }
+
+static inline long soft64_to_i64_bits(ulong bits)
+{ return as_type<long>(bits); }
+
+static inline ulong soft64_from_u64_bits(ulong word)
+{ return word; }
+
+// Correctly rounded integer-to-binary64 conversion, entirely in integer
+// operations. `uint32` and `int32` values are exact; the u64 form uses RN-even.
+static inline ulong soft64_from_u64(ulong value)
+{
+    if (value == 0ul) return 0ul;
+    int top = 63;
+    while (((value >> uint(top)) & 1ul) == 0ul) top -= 1;
+    ulong significand;
+    int exponent = top;
+    if (top <= 52) {
+        significand = value << uint(52 - top);
+    } else {
+        significand = soft64_round_shift_even(value, uint(top - 52));
+        if (significand >= 0x0020000000000000ul) {
+            significand >>= 1;
+            exponent += 1;
+        }
+    }
+    return (ulong(exponent + 1023) << 52)
+         | (significand & soft64_frac_mask());
+}
+
+static inline ulong soft64_from_u32(uint value)
+{ return soft64_from_u64(ulong(value)); }
+
+static inline ulong soft64_from_i32(int value)
+{
+    const bool sign = value < 0;
+    const uint magnitude = sign ? (0u - uint(value)) : uint(value);
+    const ulong bits = soft64_from_u64(ulong(magnitude));
+    return sign && magnitude != 0u ? bits | soft64_sign_mask() : bits;
+}
+
+// IEEE rint-style round-to-integral, ties-to-even, retaining binary64 format.
+// A half tie rounds to signed zero, matching the even integer zero.
+static inline ulong soft64_rint_bits(ulong bits)
+{
+    if (soft64_is_nan(bits)) return soft64_quiet_nan(bits);
+    if (soft64_is_infinite(bits) || soft64_is_zero(bits)) return bits;
+    const Soft64Decoded d = soft64_decode(bits);
+    const ulong signbits = d.sign ? soft64_sign_mask() : 0ul;
+    if (d.exponent < -1) return signbits;
+    if (d.exponent == -1) {
+        if (d.significand == soft64_hidden()) return signbits;
+        return soft64_from_u64(1ul) | signbits;
+    }
+    if (d.exponent >= 52) return bits;
+
+    const uint distance = uint(52 - d.exponent);
+    ulong integer = d.significand >> distance;
+    const ulong mask = (1ul << distance) - 1ul;
+    const ulong remainder = d.significand & mask;
+    const ulong halfway_value = 1ul << (distance - 1u);
+    if (remainder > halfway_value
+            || (remainder == halfway_value && (integer & 1ul) != 0ul))
+        integer += 1ul;
+    if (integer == 0ul) return signbits;
+    return soft64_from_u64(integer) | signbits;
+}
+
+static inline Soft64I32Result soft64_to_i32_rn(ulong bits)
+{
+    Soft64I32Result out;
+    out.valid = false;
+    out.value = 0;
+    if (!soft64_is_finite(bits)) return out;
+    const ulong rounded = soft64_rint_bits(bits);
+    if (soft64_is_zero(rounded)) {
+        out.valid = true;
+        return out;
+    }
+    const Soft64Decoded d = soft64_decode(rounded);
+    if (d.exponent > 31) return out;
+    const ulong magnitude = d.exponent < 0 ? 0ul
+        : d.significand >> uint(52 - d.exponent);
+    if (d.sign) {
+        if (magnitude > 0x80000000ul) return out;
+        out.value = magnitude == 0x80000000ul
+            ? as_type<int>(0x80000000u) : -int(uint(magnitude));
+    } else {
+        if (magnitude > 0x7ffffffful) return out;
+        out.value = int(uint(magnitude));
+    }
+    out.valid = true;
+    return out;
+}
+
+// CUDA __double2int_rz-compatible truncation on its defined finite in-range
+// domain. Out-of-range and non-finite inputs are explicit refusals (valid=false)
+// rather than inheriting an unspecified hardware sentinel.
+static inline Soft64I32Result soft64_to_i32_rz(ulong bits)
+{
+    Soft64I32Result out;
+    out.valid = false;
+    out.value = 0;
+    if (!soft64_is_finite(bits)) return out;
+    if (soft64_is_zero(bits)) {
+        out.valid = true;
+        return out;
+    }
+    const Soft64Decoded d = soft64_decode(bits);
+    if (d.exponent > 31) return out;
+    const ulong magnitude = d.exponent < 0 ? 0ul
+        : d.significand >> uint(52 - d.exponent);
+    if (d.sign) {
+        if (magnitude > 0x80000000ul) return out;
+        out.value = magnitude == 0x80000000ul
+            ? as_type<int>(0x80000000u) : -int(uint(magnitude));
+    } else {
+        if (magnitude > 0x7ffffffful) return out;
+        out.value = int(uint(magnitude));
+    }
+    out.valid = true;
+    return out;
+}
+
+// CUDA float-to-unsigned casts truncate toward zero. This defined-domain
+// helper rejects negative nonzero, non-finite, and out-of-range inputs.
+static inline Soft64U32Result soft64_to_u32_rz(ulong bits)
+{
+    Soft64U32Result out;
+    out.valid = false;
+    out.value = 0u;
+    if (!soft64_is_finite(bits)) return out;
+    if (soft64_is_zero(bits)) {
+        out.valid = true;
+        return out;
+    }
+    const Soft64Decoded d = soft64_decode(bits);
+    if (d.exponent > 31) return out;
+    const ulong magnitude = d.exponent < 0 ? 0ul
+        : d.significand >> uint(52 - d.exponent);
+    if (d.sign) return out;
+    if (magnitude > 0xfffffffful) return out;
+    out.value = uint(magnitude);
+    out.valid = true;
+    return out;
+}
+
+#endif // WOOF_SOFT_BINARY64_METALH

@@ -1,0 +1,43 @@
+{
+  "kernels": [
+    {
+      "name": "hex_interface_velocity_terrain_fragment",
+      "module": "hex_interface_velocity_terrain_fragment",
+      "source": "woof/metal/shaders/hex_interface_velocity_terrain_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_interface_velocity",
+      "resources": [
+        ["rho", "float", "read"],
+        ["rho_u", "float", "read"],
+        ["n_edges_on_cell", "int32", "read"],
+        ["edges_on_cell", "int32", "read"],
+        ["edge_sign", "float", "read"],
+        ["zb_cell", "float", "read"],
+        ["zb3_cell", "float", "read"],
+        ["fzm", "float", "read"],
+        ["fzp", "float", "read"],
+        ["velocity", "float", "read_write"]
+      ],
+      "shapes": {
+        "rho": [["any_1d"]],
+        "rho_u": [["any_1d"]],
+        "n_edges_on_cell": [["any_1d"]],
+        "edges_on_cell": [["any_1d"]],
+        "edge_sign": [["any_1d"]],
+        "zb_cell": [["any_1d"]],
+        "zb3_cell": [["any_1d"]],
+        "fzm": [["any_1d"]],
+        "fzp": [["any_1d"]],
+        "velocity": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlev", "int32"], ["ncells", "int32"], ["nedges", "int32"],
+        ["max_edges", "int32"], ["cf1", "float32"],
+        ["cf2", "float32"], ["cf3", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

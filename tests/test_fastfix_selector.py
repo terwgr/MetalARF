@@ -1,0 +1,458 @@
+"""The fast-fix lane's selector, and the list it cannot select.
+
+``tools/battery/fastfix.py`` decides which suites a change has to run before
+it is published.  That makes it a thing that can be silently wrong, which is
+the exact failure mode the 2026-08-13 test-estate audit was chartered to
+find -- a gate that reports green while measuring nothing.  A selector with
+no gate of its own would be the audit's own finding, rebuilt.
+
+So this file pins the two properties the audit's validation established, in
+both directions:
+
+* a real defect commit must still be caught (``6e9c690f0`` ->
+  ``tests/test_pd_advection.py``), and
+* a change the selector structurally cannot analyse must fall back to the
+  ALWAYS list rather than selecting nothing.
+
+plus the manifest hygiene on ``tools/battery/always_files.txt``, in the
+shape ``tests/test_stage1_manifest.py`` established for the stage-1 list.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import pathlib
+import subprocess
+
+import pytest
+
+REPOSITORY_ROOT = pathlib.Path(__file__).resolve().parents[1]
+SELECTOR = REPOSITORY_ROOT / "tools" / "battery" / "fastfix.py"
+ALWAYS_LIST = REPOSITORY_ROOT / "tools" / "battery" / "always_files.txt"
+
+#: The commit the audit validated the depth-0 setting against.  It touched
+#: woof/core/moist.py and woof/core/dycore.py and broke two things: the
+#: cp.ElementwiseKernel the numpy-substituted CPU backend cannot execute
+#: (caught by the test below) and a stale FTZ route receipt (caught only by
+#: the ALWAYS list).  One commit, both halves of the design.
+VALIDATION_COMMIT = "6e9c690f0"
+VALIDATION_CATCH = "tests/test_pd_advection.py"
+
+
+def _load_selector():
+    spec = importlib.util.spec_from_file_location("battery_fastfix", SELECTOR)
+    assert spec and spec.loader, SELECTOR
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+fastfix = _load_selector()
+
+
+def _have_commit(ref: str) -> bool:
+    return subprocess.run(
+        ["git", "cat-file", "-e", f"{ref}^{{commit}}"],
+        cwd=REPOSITORY_ROOT, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL).returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# The validated behaviour
+# ---------------------------------------------------------------------------
+
+
+def test_the_validation_commit_still_selects_the_test_that_catches_it():
+    """The audit's own experiment, pinned as a regression.
+
+    ``6e9c690f0`` replaced an eager ``cp.multiply/add/divide`` chain in
+    ``woof/core/moist.py`` with a ``cp.ElementwiseKernel``, which the
+    numpy-substituted CPU backend cannot execute.
+    ``tests/test_pd_advection.py`` is what fails on it.  The audit chose
+    depth 0 over depth 1 and depth 2 *because* depth 0 catches this and the
+    deeper settings add nothing but three times the cost -- so if this ever
+    stops selecting, the setting has been changed by accident.
+    """
+
+    if not _have_commit(VALIDATION_COMMIT):
+        pytest.skip(f"{VALIDATION_COMMIT} is not in this clone")
+
+    touched = fastfix.changed_files(f"{VALIDATION_COMMIT}~1",
+                                    VALIDATION_COMMIT)
+    assert "woof/core/moist.py" in touched, touched
+    assert "woof/core/dycore.py" in touched, touched
+
+    selected = fastfix.select(touched)
+    assert VALIDATION_CATCH in selected, (
+        f"{VALIDATION_CATCH} is the test that catches {VALIDATION_COMMIT}'s "
+        "CPU-backend defect, and the selector no longer picks it.  Selected "
+        f"{len(selected)} files: {sorted(selected)[:20]}...")
+    assert any("moist.py" in reason or "dycore.py" in reason
+               for reason in selected[VALIDATION_CATCH]), \
+        selected[VALIDATION_CATCH]
+
+
+def test_the_selection_stays_a_selection():
+    """Depth 0's reason to exist: it must not select most of the estate.
+
+    Transitive closure selected 441 of 591 files (75%) on this repository,
+    which is why it was rejected.  If a future edit reintroduces transitive
+    walking, this is what says so -- the failure is not "wrong answer", it
+    is "no longer a selector", and that is measurable.
+    """
+
+    if not _have_commit(VALIDATION_COMMIT):
+        pytest.skip(f"{VALIDATION_COMMIT} is not in this clone")
+
+    touched = fastfix.changed_files(f"{VALIDATION_COMMIT}~1",
+                                    VALIDATION_COMMIT)
+    selected = fastfix.select(touched)
+    total = sum(len(list((REPOSITORY_ROOT / tree).rglob("test_*.py")))
+                for tree in fastfix.TEST_TREES)
+    share = len(selected) / total
+    assert share < 0.40, (
+        f"the selector picked {len(selected)} of {total} test files "
+        f"({share:.0%}).  The audit rejected transitive closure at 75% on "
+        "the grounds that a selector which selects most of the estate is not "
+        "a selector; something has widened the walk")
+
+
+def test_a_non_python_change_falls_back_to_the_always_list():
+    """The accurate answer to a ``.cu`` edit, and it must not be silence.
+
+    Import analysis says nothing about a CUDA translation unit, a config
+    TOML or a receipt JSON.  Selecting nothing would be a lane that
+    publishes a kernel change having run no gate at all; the fallback is the
+    ALWAYS list, which is what catches the receipt half of the very commit
+    this file pins above.
+    """
+
+    always = set(fastfix.read_manifest(ALWAYS_LIST))
+    for touched in (["woof/core/kernels/morrison.cu"],
+                    ["configs/some_case.toml"],
+                    ["tools/ftz_receipt/receipt/route_inventory.json"],
+                    ["docs/public/HARDWARE.md"]):
+        selected = fastfix.select(touched)
+        assert set(selected) == always, (touched, sorted(selected))
+
+    # A .cu edit must additionally say WHY the kernel gates ran.  Updated
+    # 2026-08-29: this test previously required every reason to read exactly
+    # "always (repo-scanning gate)", which was true and useless.  The
+    # measured defect it could not see: a WSM6 kernel was switched off
+    # (`pracw = 0.0f * fminf(...)`) and the whole 172-file stage-1 leg ran
+    # twice, pristine and injected, with ZERO differing node ids.  The gates
+    # that read .cu bytes are now on the ALWAYS list AND named by suffix, so
+    # a person iterating on a kernel sees the reason rather than inferring
+    # it.  The file SET is unchanged and still pinned above -- this asserts
+    # the reason, which is strictly more than before.
+    kernel_gates = fastfix._NON_PYTHON_GATES[".cu"]
+    selected = fastfix.select(["woof/core/kernels/morrison.cu"])
+    for gate in kernel_gates:
+        assert gate in selected, (gate, sorted(selected))
+        assert any("morrison.cu" in reason for reason in selected[gate]), (
+            gate, selected[gate])
+
+    # And a change of a DIFFERENT non-Python kind must not claim the kernel
+    # gates ran because of it -- otherwise the reason is decoration.
+    selected = fastfix.select(["docs/public/HARDWARE.md"])
+    for gate in kernel_gates:
+        assert selected[gate] == ["always (repo-scanning gate)"], selected[gate]
+
+
+def test_a_change_to_a_research_authority_file_runs_the_research_catalog():
+    """The catalog pins renderer sources by digest, and nothing imports them.
+
+    A renderer edit that moved local_import.rs left the recorded digest in
+    woof/data/tui/research-diagnostics.json stale three times (5e914cb3b, a
+    2.8.0 dry cut, 3aacaed10), and each time only the stage-1 leg at the cut
+    noticed.  A lane that touches any pinned file must run the catalog.
+    """
+
+    authority = json.loads((REPOSITORY_ROOT / "woof" / "data" / "tui" / "research-diagnostics.json")
+                           .read_text(encoding="utf-8"))["authority"]
+    assert authority, "the research catalog pins no authority files"
+    for path in sorted(authority):
+        assert (REPOSITORY_ROOT / path).is_file(), path
+        selected = fastfix.select([path])
+        assert "tests/test_research_catalog.py" in selected, (path, sorted(selected))
+
+
+def test_an_empty_change_still_runs_the_always_list():
+    """A selector that can return nothing is a lane that can gate nothing."""
+
+    selected = fastfix.select([])
+    assert set(selected) == set(fastfix.read_manifest(ALWAYS_LIST))
+    assert selected, "the ALWAYS list parsed to nothing"
+
+
+def test_a_touched_test_file_selects_itself():
+    selected = fastfix.select(["tests/test_stage1_manifest.py"])
+    assert "tests/test_stage1_manifest.py" in selected
+    assert "its own file was touched" in \
+        selected["tests/test_stage1_manifest.py"]
+
+
+def test_the_cheapest_file_is_offered_first():
+    """A red should arrive fast, so the order is by measured cost."""
+
+    rows = fastfix._ordered(
+        {"tests/a.py": ["x"], "tests/b.py": ["x"], "tests/c.py": ["x"]},
+        {"tests/a.py": 90.0, "tests/b.py": 0.5})
+    assert [path for path, _s, _m in rows] == [
+        "tests/b.py", "tests/c.py", "tests/a.py"]
+    # An unmeasured file is flagged, so an estimate is never read as a
+    # measurement.
+    assert [measured for _p, _s, measured in rows] == [True, False, True]
+
+
+# ---------------------------------------------------------------------------
+# The ALWAYS list itself
+# ---------------------------------------------------------------------------
+
+
+def test_the_always_list_exists_and_lists_something():
+    assert ALWAYS_LIST.is_file(), f"{ALWAYS_LIST} is missing"
+    assert fastfix.read_manifest(ALWAYS_LIST), (
+        "tools/battery/always_files.txt parsed to zero entries; every fastfix "
+        "lane would run only its selected files and no repo-scanning gate")
+
+
+@pytest.mark.parametrize("entry", fastfix.read_manifest(ALWAYS_LIST))
+def test_every_always_entry_exists(entry: str):
+    assert not pathlib.PurePosixPath(entry).is_absolute(), entry
+    assert "\\" not in entry, (
+        f"{entry} uses a backslash; forward slashes only, so the same list "
+        "works on the Windows cut box and a Linux runner")
+    assert entry.startswith("tests/") and entry.endswith(".py"), entry
+    assert (REPOSITORY_ROOT / entry).is_file(), (
+        f"{entry} is listed in tools/battery/always_files.txt but does not "
+        "exist; pytest would fail the whole lane on the missing argument")
+
+
+def test_no_always_entry_is_listed_twice():
+    entries = fastfix.read_manifest(ALWAYS_LIST)
+    duplicates = sorted({e for e in entries if entries.count(e) > 1})
+    assert not duplicates, duplicates
+
+
+def test_the_always_list_is_lf_only():
+    assert b"\r" not in ALWAYS_LIST.read_bytes(), (
+        "tools/battery/always_files.txt contains CR bytes; the repository "
+        "commits LF and .gitattributes does no conversion")
+
+
+def test_the_manifest_parse_ignores_comments():
+    """The audit's own instrument failed exactly here.
+
+    A ``grep -F`` of a path against ``stage1_files.txt`` reported
+    ``tests/test_stage1_manifest.py`` as ON the list; the string occurs only
+    inside a comment.  The finding survived -- the gate on the stage-1 list
+    was not on the stage-1 list -- but only because the instrument was
+    re-checked.  Every consumer of these files parses through
+    ``read_manifest``, and this is what pins that it strips comments.
+    """
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = pathlib.Path(tmp) / "list.txt"
+        path.write_text(
+            "# tests/test_commented_out.py is the gate\n"
+            "\n"
+            "   # indented comment mentioning tests/test_also_not.py\n"
+            "tests/test_real.py\n"
+            "\n",
+            encoding="utf-8", newline="\n")
+        assert fastfix.read_manifest(path) == ["tests/test_real.py"]
+
+
+def test_a_receipt_gate_is_not_reachable_from_the_code_it_inventories():
+    """The ALWAYS list's premise, stated precisely enough to be true.
+
+    The audit reported ``tests/test_ftz_route_inventory.py`` as "a MISS at
+    every depth".  Building the index here shows that is *nearly* right and
+    worth sharpening: the file does import ``tools.ftz_receipt.
+    route_inventory``, its own generator, so touching THAT selects it.  What
+    it has no edge to is the code it inventories -- the cupy
+    kernel-construction sites in ``woof/core/``.  The receipt goes stale
+    when someone edits a kernel site, and that is the edit with no edge.
+
+    Which is the same conclusion (this gate must be unconditional) resting
+    on a claim that survives being checked.  ``6e9c690f0`` is the worked
+    example: it touched ``woof/core/moist.py`` and
+    ``woof/core/dycore.py``, added two ``cp.ElementwiseKernel`` sites, and
+    left the receipt stale.
+    """
+
+    _modules, importers = fastfix.build_index()
+    gate = "tests/test_ftz_route_inventory.py"
+
+    for inventoried in ("woof/core/moist.py", "woof/core/dycore.py"):
+        assert gate not in importers.get(inventoried, set()), (
+            f"{gate} now has a direct import edge from {inventoried}.  The "
+            "ALWAYS list exists because it did not; if that has changed, "
+            "re-state the premise rather than deleting the entry")
+
+    # ...and it is on the ALWAYS list, which is the coverage that closes it.
+    assert gate in fastfix.read_manifest(ALWAYS_LIST)
+
+    # The positive control: the index is not simply empty for those files.
+    assert importers.get("woof/core/moist.py"), (
+        "no test imports woof/core/moist.py, so the assertion above passes "
+        "vacuously and proves nothing")
+
+
+# ---------------------------------------------------------------------------
+# The two silent-drop defects.  Both were live at the 2026-08-31 sweep and
+# both share one shape: the selector answers "nothing to run" and is WRONG,
+# with no error anywhere, which is the audit's own finding rebuilt inside
+# the tool the audit built.
+# ---------------------------------------------------------------------------
+
+def _probe_tree(root: pathlib.Path) -> None:
+    """A minimal repository the selector can walk: product trees + tests.
+
+    Every tree ``build_index`` reads exists, so the walk is the real one;
+    it is simply a tree this test owns.  The always list is written empty
+    so the selection under assertion is the import edge and nothing else.
+    """
+
+    for tree in (*fastfix.PRODUCT_TREES, *fastfix.TEST_TREES):
+        (root / tree).mkdir(parents=True, exist_ok=True)
+    battery = root / "tools" / "battery"
+    battery.mkdir(parents=True, exist_ok=True)
+    (battery / "always_files.txt").write_text(
+        "# no repo-scanning gate in the probe tree\n",
+        encoding="utf-8", newline="\n")
+
+
+def test_a_deleted_product_module_still_selects_the_tests_that_import_it(
+        tmp_path):
+    """Deleting a module is when import analysis matters MOST.
+
+    THE BREAKAGE.  ``build_index`` walks the working tree as it is now, so
+    a module deleted in the range under test has no entry in ``modules``,
+    ``importers.get(path)`` is empty, and the lane runs NOTHING -- while
+    the tests that still import the deleted name are precisely the ones
+    about to fail at collection.  The selector was silent in the one case
+    it should have been loudest.
+
+    The fix needs no git access, because the evidence is still in the test
+    file: the import statement naming the gone module.  The index keys that
+    edge at the path the module WOULD occupy, which is byte-identical to
+    the path it did occupy, so the lookup answers the same whether or not
+    the file exists.
+
+    Written as a real deletion rather than a mocked index: the whole defect
+    was that the on-disk walk and the lookup disagreed, and a fake index
+    cannot reproduce a disagreement between two things it replaces.  The
+    deletion happens in a tree of this test's own rather than in the
+    working tree, because a probe module appearing and vanishing inside
+    ``gpuwm/`` is shared state every other ``-n`` worker walks.
+    """
+
+    _probe_tree(tmp_path)
+    product = tmp_path / "woof" / "_fastfix_deletion_probe.py"
+    test_file = (tmp_path / "tests"
+                 / "test_fastfix_deletion_probe_importer.py")
+    product.write_text("VALUE = 1\n", encoding="utf-8", newline="\n")
+    test_file.write_text(
+        "from woof import _fastfix_deletion_probe\n\n\n"
+        "def test_probe():\n"
+        "    assert _fastfix_deletion_probe.VALUE == 1\n",
+        encoding="utf-8", newline="\n")
+    rel = "woof/_fastfix_deletion_probe.py"
+    importer = "tests/test_fastfix_deletion_probe_importer.py"
+
+    present = fastfix.select([rel], root=tmp_path)
+    assert importer in present, (
+        "the control failed: the selector does not see this edge even "
+        "while the module exists, so the deletion half proves nothing")
+
+    product.unlink()                          # the defect's exact scenario
+    absent = fastfix.select([rel], root=tmp_path)
+    assert importer in absent, (
+        "a deleted product module selected nothing; the tests that "
+        "import it are the ones that break")
+
+
+def test_an_unparseable_test_file_is_named_rather_than_dropped(tmp_path):
+    """A test file that does not parse is not one that does not matter.
+
+    THE BREAKAGE.  ``_parse`` returns ``None`` on SyntaxError and the index
+    skipped the file, which removes every import edge that file owns.  A
+    lane editing a module only that file imports then selects nothing and
+    reports a green fast-fix leg -- and a file is unparseable exactly when
+    it is mid-edit or broken, which is when its edges matter most.
+
+    Refusing by name, because the alternative is a warning nobody reads on
+    a leg whose entire output is "0 selected".
+
+    The broken file is written into a tree of this test's own.  In the
+    working tree it was a file that does not parse, sitting in ``tests/``,
+    for as long as this test took to run: under ``-n`` any worker that
+    walked ``tests/`` in that window refused with ``UnreadableTestFile``
+    naming a probe it had never heard of, and any tool collecting
+    ``tests/`` saw a syntax error.
+    """
+
+    _probe_tree(tmp_path)
+    broken = tmp_path / "tests" / "test_fastfix_unparseable_probe.py"
+    broken.write_text("def test_x(:\n    pass\n",
+                      encoding="utf-8", newline="\n")
+
+    with pytest.raises(fastfix.UnreadableTestFile) as caught:
+        fastfix.build_index(tmp_path)
+    message = str(caught.value)
+    assert "tests/test_fastfix_unparseable_probe.py" in message, message
+    # The refusal must name the BREAKAGE, not merely the file.
+    assert "reports green" in message, message
+
+
+def test_the_probe_tree_is_the_tree_the_selector_walked(tmp_path):
+    """The control for both tests above: ``root`` is obeyed, not decorative.
+
+    A ``root`` the walk ignored would leave both probes measuring the
+    repository again -- the same shared state, with the reassurance of a
+    parameter.  So a module that exists ONLY in the probe tree must be
+    seen there and must not be seen in the repository, and nothing may be
+    written into the repository to make that true.
+    """
+
+    _probe_tree(tmp_path)
+    (tmp_path / "woof" / "_fastfix_root_probe.py").write_text(
+        "VALUE = 1\n", encoding="utf-8", newline="\n")
+    (tmp_path / "tests" / "test_fastfix_root_probe_importer.py").write_text(
+        "from woof import _fastfix_root_probe\n\n\n"
+        "def test_probe():\n"
+        "    assert _fastfix_root_probe.VALUE == 1\n",
+        encoding="utf-8", newline="\n")
+    rel = "woof/_fastfix_root_probe.py"
+    importer = "tests/test_fastfix_root_probe_importer.py"
+
+    assert importer in fastfix.select([rel], root=tmp_path)
+    assert importer not in fastfix.select([rel])
+    assert not (REPOSITORY_ROOT / rel).exists()
+
+
+def test_a_rename_still_selects_the_tests_that_import_the_old_name():
+    """Rename detection summarises away the half that breaks things.
+
+    ``git diff --name-only`` detects renames by default and reports only
+    the NEW path.  For test selection that is the wrong summary: a rename
+    breaks the tests importing the OLD name, and they are reachable only
+    from the old path.  ``--no-renames`` reports it as a delete plus an
+    add, so both halves reach the selector and the delete half is answered
+    by the same synthetic-path edge the test above pins.
+
+    Pinned on the flag rather than by staging a rename, because the flag IS
+    the fix and a staged rename would additionally depend on this
+    repository's rename-detection thresholds.
+    """
+
+    source = SELECTOR.read_text(encoding="utf-8")
+    assert '"--no-renames"' in source, (
+        "changed_files no longer passes --no-renames, so a renamed module "
+        "reports only its new path and the tests importing the old name "
+        "are not selected")

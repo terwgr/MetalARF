@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout b9221a8c5478b73afc3e52e263adb3829a3e710825e4bd4dd1d1297933e83487.
+struct GlobalSurfaceEmissionFragmentResources {
+    device const ulong *surface_temperature [[id(0)]];
+    device const ulong *emissivity [[id(1)]];
+    device const ulong *stefan_boltzmann [[id(2)]];
+    device ulong *surface_emission [[id(3)]];
+};
+struct GlobalSurfaceEmissionFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalSurfaceEmissionFragmentParams) == 4, "global_surface_emission_fragment parameter ABI size changed");

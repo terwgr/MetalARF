@@ -1,0 +1,63 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_mcica_prepare_seed",
+      "module": "rrtmgp_mcica_family",
+      "source": "woof/metal/shaders/rrtmgp_mcica_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_mcica.cu",
+      "cuda_symbol": "rrtmgp_mcica_maxran",
+      "resources": [
+        ["play", "float", "read"],
+        ["seed", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "play": [["ncol", "nlay"]],
+        "seed": [["ncol", 4]]
+      },
+      "parameters": [
+        ["ncol", "int32"], ["nlay", "int32"],
+        ["permuteseed", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops", "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "rrtmgp_mcica_maxran",
+      "module": "rrtmgp_mcica_family",
+      "source": "woof/metal/shaders/rrtmgp_mcica_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_mcica.cu",
+      "cuda_symbol": "rrtmgp_mcica_maxran",
+      "resources": [
+        ["cldfra", "float", "read"],
+        ["seed", "uint32", "read"],
+        ["jump_s1", "uint32", "read"],
+        ["jump_s2", "uint32", "read"],
+        ["jump_s3", "uint32", "read"],
+        ["jump_s4", "uint32", "read"],
+        ["mask_words", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "cldfra": [["ncol", "nlay"]],
+        "seed": [["ncol", 4]],
+        "jump_s1": [["ngpt", 2]],
+        "jump_s2": [[32, "ngpt"]],
+        "jump_s3": [["ngpt"]],
+        "jump_s4": [["ngpt"]],
+        "mask_words": [["nmask_words"]]
+      },
+      "parameters": [
+        ["ncol", "int32"], ["nlay", "int32"],
+        ["ngpt", "int32"], ["nmask_words", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops", "dependency-marked-unverified"
+      ]
+    }
+  ],
+  "blocked_exports": {}
+}

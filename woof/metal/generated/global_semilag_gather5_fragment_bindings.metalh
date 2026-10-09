@@ -1,0 +1,24 @@
+// Generated from kernel_signatures.json; layout ccb463330169601cb2749f46819d4099755a060457371b129b67eafb11b0f911.
+struct GlobalSemilagGather5FragmentResources {
+    device const ulong *source [[id(0)]];
+    device const ulong *xi [[id(1)]];
+    device const ulong *phi [[id(2)]];
+    device const ulong *level [[id(3)]];
+    device const ulong *lat_ext [[id(4)]];
+    device const ulong *mrden [[id(5)]];
+    device const int *mlut [[id(6)]];
+    device const int *rowoff [[id(7)]];
+    device const int *rowshift [[id(8)]];
+    device const ulong *lut_scale [[id(9)]];
+    device ulong *destination [[id(10)]];
+};
+struct GlobalSemilagGather5FragmentParams {
+    int nfield;
+    int nlevel;
+    int nlat;
+    int nlon;
+    int lookup_bins;
+    int quasi_monotone;
+    int surface_mode;
+};
+static_assert(sizeof(GlobalSemilagGather5FragmentParams) == 28, "global_semilag_gather5_fragment parameter ABI size changed");

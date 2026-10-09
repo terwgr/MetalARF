@@ -1,0 +1,51 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_atmosphere_interp_fragment",
+      "module": "urban_bem_atmosphere_interp_fragment",
+      "source": "woof/metal/shaders/urban_bem_atmosphere_interp_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_interpol",
+      "resources": [
+        ["active_cols", "int32", "read"],
+        ["utype", "int32", "read"],
+        ["nzu_class", "int32", "read"],
+        ["z", "float", "read"],
+        ["z_u", "float", "read"],
+        ["ua", "float", "read"],
+        ["va", "float", "read"],
+        ["pt", "float", "read"],
+        ["pt0", "float", "read"],
+        ["pr", "float", "read"],
+        ["da", "float", "read"],
+        ["qv", "float", "read"],
+        ["interp", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]],
+        "utype": [["ncol"]],
+        "nzu_class": [["nurbm"]],
+        "z": [["ncol", "nz+1"]],
+        "z_u": [[19]],
+        "ua": [["ncol", "nz"]],
+        "va": [["ncol", "nz"]],
+        "pt": [["ncol", "nz"]],
+        "pt0": [["ncol", "nz"]],
+        "pr": [["ncol", "nz"]],
+        "da": [["ncol", "nz"]],
+        "qv": [["ncol", "nz"]],
+        "interp": [["ncol", 7, 18]],
+        "error": [["ncol"]]
+      },
+      "parameters": [
+        ["ncol", "int32"],
+        ["nz", "int32"],
+        ["nurbm", "int32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

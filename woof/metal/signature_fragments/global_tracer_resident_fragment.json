@@ -1,0 +1,1122 @@
+{
+  "kernels": [
+    {
+      "name": "global_tracer_pack_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._advance_metal",
+      "resources": [
+        [
+          "tracer",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "density",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "mass",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tracer": [
+          [
+            "count"
+          ]
+        ],
+        "density": [
+          [
+            "count"
+          ]
+        ],
+        "mass": [
+          [
+            "count"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_flux_prepare_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._advance_metal",
+      "resources": [
+        [
+          "flux_u",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "flux_v",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "omega",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "x_scale",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "y_face",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "psi_x",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "psi_y",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "psi_z",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "flux_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux_v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "omega": [
+          [
+            "any_1d"
+          ]
+        ],
+        "x_scale": [
+          [
+            "any_1d"
+          ]
+        ],
+        "y_face": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi_x": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi_y": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi_z": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nlatitude",
+          "int32"
+        ],
+        [
+          "nlongitude",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_flux_prepare_resident_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._advance_metal",
+      "resources": [
+        [
+          "flux_u",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "flux_v",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "omega",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "x_scale",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "y_face",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "psi_x",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "psi_y",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "psi_z",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "flux_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux_v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "omega": [
+          [
+            "any_1d"
+          ]
+        ],
+        "x_scale": [
+          [
+            "any_1d"
+          ]
+        ],
+        "y_face": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi_x": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi_y": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi_z": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nlatitude",
+          "int32"
+        ],
+        [
+          "nlongitude",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_walled_resident_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_meridional",
+      "resources": [
+        [
+          "mass",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "density",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "psi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "centre",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "face",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "inv_width",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "sub",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "new_mass",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "new_density",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "centre": [
+          [
+            "any_1d"
+          ]
+        ],
+        "face": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_width": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub": [
+          [
+            1
+          ]
+        ],
+        "new_mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "new_density": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracer",
+          "int32"
+        ],
+        [
+          "nouter",
+          "int32"
+        ],
+        [
+          "axis_length",
+          "int32"
+        ],
+        [
+          "stride",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_courant_row_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_zonal",
+      "resources": [
+        [
+          "density",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "psi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "dt",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "row_max",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dt": [
+          [
+            1
+          ]
+        ],
+        "row_max": [
+          [
+            "nlatitude"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nlatitude",
+          "int32"
+        ],
+        [
+          "nlongitude",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_courant_row_finalize_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_zonal",
+      "resources": [
+        [
+          "row_max",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "limit",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "row_steps",
+          "int32",
+          "read_write"
+        ],
+        [
+          "summary",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "row_max": [
+          [
+            "nlatitude"
+          ]
+        ],
+        "limit": [
+          [
+            1
+          ]
+        ],
+        "row_steps": [
+          [
+            "nlatitude"
+          ]
+        ],
+        "summary": [
+          [
+            3
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlatitude",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_courant_scalar_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_scalar_courant",
+      "resources": [
+        [
+          "density",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "psi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "inv_width",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "dt",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "partial",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi": [
+          [
+            "count"
+          ]
+        ],
+        "inv_width": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dt": [
+          [
+            1
+          ]
+        ],
+        "partial": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nlatitude",
+          "int32"
+        ],
+        [
+          "nlongitude",
+          "int32"
+        ],
+        [
+          "axis",
+          "int32"
+        ],
+        [
+          "chunk",
+          "int32"
+        ],
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "nblock",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_courant_scalar_finalize_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_scalar_courant",
+      "resources": [
+        [
+          "partial",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "limit",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "summary",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "partial": [
+          [
+            "npartial"
+          ]
+        ],
+        "limit": [
+          [
+            1
+          ]
+        ],
+        "summary": [
+          [
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "npartial",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_zonal_rows_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_zonal",
+      "resources": [
+        [
+          "mass",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "density",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "psi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "row_steps",
+          "int32",
+          "read"
+        ],
+        [
+          "dt",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "new_mass",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "new_density",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "row_steps": [
+          [
+            "nlatitude"
+          ]
+        ],
+        "dt": [
+          [
+            1
+          ]
+        ],
+        "new_mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "new_density": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracer",
+          "int32"
+        ],
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nlatitude",
+          "int32"
+        ],
+        [
+          "nlongitude",
+          "int32"
+        ],
+        [
+          "iteration",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_pressure_coords_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_vertical",
+      "resources": [
+        [
+          "density",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "p_top",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "p_half",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "p_full",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p_top": [
+          [
+            1
+          ]
+        ],
+        "p_half": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p_full": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "ncolumn",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_vertical_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_vertical",
+      "resources": [
+        [
+          "mass",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "density",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "psi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "p_half",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "p_full",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "sub",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "new_mass",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "new_density",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p_half": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p_full": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sub": [
+          [
+            1
+          ]
+        ],
+        "new_mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "new_density": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracer",
+          "int32"
+        ],
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "ncolumn",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_floor_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_floor",
+      "resources": [
+        [
+          "mass",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "density",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "row_weight",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "negative",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "positive",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mass": [
+          [
+            "any_1d"
+          ]
+        ],
+        "density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "row_weight": [
+          [
+            "any_1d"
+          ]
+        ],
+        "negative": [
+          [
+            "any_1d"
+          ]
+        ],
+        "positive": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracer",
+          "int32"
+        ],
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nlatitude",
+          "int32"
+        ],
+        [
+          "nlongitude",
+          "int32"
+        ],
+        [
+          "chunk",
+          "int32"
+        ],
+        [
+          "nblock",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_tracer_floor_finalize_fragment",
+      "module": "global_tracer_resident_fragment",
+      "source": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+      "cuda_source": "woof/globe/transport.py",
+      "cuda_symbol": "GridTracerTransport._metal_floor",
+      "resources": [
+        [
+          "negative",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "positive",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "neg_total",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "pos_total",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "negative": [
+          [
+            "any_1d"
+          ]
+        ],
+        "positive": [
+          [
+            "any_1d"
+          ]
+        ],
+        "neg_total": [
+          [
+            "ntracer"
+          ]
+        ],
+        "pos_total": [
+          [
+            "ntracer"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracer",
+          "int32"
+        ],
+        [
+          "nblock",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

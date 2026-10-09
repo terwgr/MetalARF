@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout 85c4e1d6c961325d1bd3c895009e220f79e548ab08b970ad98369c403ccce776.
+struct NoahmpVegprecipPhenologyResources {
+    device const float *x [[id(0)]];
+    device const int *ix [[id(1)]];
+    device float *y [[id(2)]];
+};
+struct NoahmpVegprecipPhenologyParams {
+    int ncase;
+};
+static_assert(sizeof(NoahmpVegprecipPhenologyParams) == 4, "noahmp_vegprecip_phenology parameter ABI size changed");

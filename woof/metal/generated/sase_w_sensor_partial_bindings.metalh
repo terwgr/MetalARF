@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout e7ae7e6d4a81c35c2f0cb6d5bc9cd0f462225dd5abb80a7a117f8b5e120d7a2e.
+struct SaseWSensorPartialResources {
+    device const float *w [[id(0)]];
+    device const float *e [[id(1)]];
+    device const float *n2 [[id(2)]];
+    device ulong *partials [[id(3)]];
+};
+struct SaseWSensorPartialParams {
+    int nz;
+    int ny;
+    int nx;
+    int bw;
+    int has_n2;
+    float n2_screen;
+    float e_min;
+    int nblocks;
+};
+static_assert(sizeof(SaseWSensorPartialParams) == 32, "sase_w_sensor_partial parameter ABI size changed");

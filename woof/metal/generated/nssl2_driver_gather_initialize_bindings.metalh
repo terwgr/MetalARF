@@ -1,0 +1,36 @@
+// Generated from kernel_signatures.json; layout 52b8ceec383be61b867d983fd99c53b1159e2f28409f21ace7d7ceaccd414f11.
+struct Nssl2DriverGatherInitializeResources {
+    device const float *air_density [[id(0)]];
+    device const float *qv [[id(1)]];
+    device const float *qc [[id(2)]];
+    device const float *qr [[id(3)]];
+    device const float *qi [[id(4)]];
+    device const float *qs [[id(5)]];
+    device const float *qg [[id(6)]];
+    device const float *qh [[id(7)]];
+    device const float *qndrop [[id(8)]];
+    device const float *qnr [[id(9)]];
+    device const float *qni [[id(10)]];
+    device const float *qns [[id(11)]];
+    device const float *qng [[id(12)]];
+    device const float *qnh [[id(13)]];
+    device const float *qnn [[id(14)]];
+    device const float *qvolg [[id(15)]];
+    device const float *qvolh [[id(16)]];
+    device const float *qrcuten [[id(17)]];
+    device const float *qscuten [[id(18)]];
+    device const float *qicuten [[id(19)]];
+    device const float *qccuten [[id(20)]];
+    device float *state [[id(21)]];
+};
+struct Nssl2DriverGatherInitializeParams {
+    float dt;
+    int first_step;
+    int cu_used;
+    int n;
+    int predicted_ccn;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Nssl2DriverGatherInitializeParams) == 32, "nssl2_driver_gather_initialize parameter ABI size changed");

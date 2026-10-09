@@ -1,0 +1,76 @@
+# Jablonowski and Williamson 2006 baroclinic wave, T255 L40, semi-Lagrangian
+# arm of gate BW-1.  Physics off, tracers zero, hyperdiffusion as shipped:
+# what is measured here is the dynamical core and nothing else.
+#
+# The perturbed arm.  Its steady twin is the same file with
+# initial.perturbation_amplitude = 0.0, so the two differ in one number
+# and the steady arm measures whether the core keeps a state it did not
+# construct steady for nine days.
+#
+# dt = 300 s at T85: the analytic jet is 35 m/s and the wave reaches
+# about 45 m/s by day 9, so the advective Courant number of the Eulerian
+# arm is 0.30 and this arm's Lipschitz number is far below its 0.75 gate.
+# 777600 s is nine days; 86400/300 = 288 whole steps per day.
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-jw06-t255-sl-si"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 255
+dealias_factor = 1.5
+
+[time]
+dt_s = 300.0
+duration_s = 777600.0
+output_interval_s = 86400.0
+integrator = "sl_si"
+maximum_lipschitz = 0.75
+
+[semilag]
+quasi_monotone = true
+trajectory_iterations = 3
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+[initial]
+mode = "baroclinic_wave"
+perturbation_amplitude = 1.0
+
+[physics]
+mode = "none"
+
+[diffusion]
+enabled = true
+order = 16
+e_folding_time_s_at_truncation = 720.0
+preserve_degree = 1
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+off_centring_weight = 0.55
+
+[repair]
+mass_fixer = true
+water_fixer = false
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 1.0e-6
+transform_parseval_relative_error = 5.0e-7
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-3
+
+# The in-situ ledger is off on the T255 arms and on on the T85 ones.  It
+# is outside the config identity, so this changes no hash; what it changes
+# is the wall and the disk: a growing baroclinic wave trips the top-decile
+# spectral-growth tripwire repeatedly on BOTH integrators, and each trip
+# writes a 3.5 MB snapshot (MEASURED 2026-09-06: 270 MB per T85 arm).
+[insitu]
+enabled = false

@@ -1,0 +1,99 @@
+# T383 L40, the full native suite on the SHIPPED Eulerian core at its shipped
+# step, one forecast day from the GDAS 2026-09-01 00Z analysis, written every
+# six hours for the observation scorecard: the Eulerian half of the T383 pair,
+# so the default at this truncation is chosen by a grade and not inherited
+# from T255.
+#
+# The step is the rule's, not this day's (config.default_eulerian_step_s):
+# the largest multiple of 5 s dividing the hour whose spectral CFL
+# dt |V|max sqrt(N(N+1))/a at the strongest analysis wind on disk stays at or
+# under 0.70 of the 0.75 gate.  MEASURED 2026-09-06 (tools/arwen_global_cfl_
+# sweep.py: nine GDAS analyses over whole forecast days at T255, the day
+# maximum being the analysis's own jet at step 1 on every one, and this day
+# over a whole day at T383, where the same wind reads 1.0193 times its T255
+# value): the strongest day, 2026-08-31 00Z, implies 139.6 m/s at
+# sqrt(383*384), which admits 62 s at the rule, so 60 s.
+# On this day the reading is 0.660 at 80 s, which is 0.495 at 60 s, or 66
+# percent of the gate.  The sibling `..._dt80.toml` is the CFL-admitted step
+# the T383 pair was GRADED at (0.88 of the gate on this day), kept selectable
+# with its margin stated; a stronger day refuses it by name and the receipt's
+# `cfl` block says which step it would have admitted.
+#
+# dt arithmetic: 86400/60 = 1440 whole steps, 21600/60 = 360-step output
+# cadence, and the radiation bucket is 35 whole steps (2100 s, the whole
+# multiple of the step nearest the one-minute-per-km convention at 34.7 km).
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-gdas-t383-native-imex-24h"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 383
+dealias_factor = 1.5
+
+[time]
+dt_s = 60.0
+duration_s = 86400.0
+output_interval_s = 21600.0
+integrator = "imex_ssp3"
+maximum_cfl = 0.75
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+# analysis_mapping is the packaged authority's BARE ID, not a path: the
+# resolver globs rw-wps-<id>-*.mapping.json under gpuwm/authorities and
+# requires exactly one match, so this spelling resolves from an installed
+# wheel as well as from a checkout root.
+[initial]
+mode = "analysis"
+analysis_grib = "cases/baseline-2026090100/gdas.t00z.pgrb2.0p25.f000"
+analysis_mapping = "gdas-global"
+surface_water_kg_m2 = 500.0
+
+# start_time_utc matches the ingested GDAS cycle (2026-09-01 00Z), so the
+# RRTMGP solar geometry runs on the analysis instant.  dx_m feeds sfclay its
+# grid-spacing-dependent branches and Grell-Freitas its scale-aware closure at
+# this grid's equatorial spacing; cumulus = "gf" is the adapter default
+# (shallow arm on), so it is not repeated in the options mapping.
+# radiation_column_chunk is the tree's own sizing for this truncation.
+[physics]
+mode = "arwen-native"
+native_adapter_name = "arwen-cuda-column-suite-v1"
+native_adapter_options = { acknowledgement = "device-pending-arwen-native-physics-v1", start_time_utc = "2026-09-01T00:00:00Z", radiation = "rrtmgp", radiation_interval_s = 2100.0, radiation_column_chunk = 12500, radiation_validation_mode = "fused", surface_layer = "sfclay", sfclay_option = 1, land_surface = "noah", land_surface_interval_s = 60.0, pbl = "ysu", ysu_topdown_pblmix = 1, microphysics = "morrison", morr_rimed_ice = 1, dx_m = 34700.0 }
+
+# Order 8 at 36 min (2026-09-04): the energy ledger read the truncation band
+# fed by the resolved cascade faster than the order 4 / 4 h drain removed it
+# (a flat tail at 0.22 to 0.27 of the observed 250 hPa spectrum).  This shape
+# drains every degree above n = 0.79 T harder (1.4x at 0.82 T, 6.7x at the
+# truncation) and 250 km six times less (config.DEFAULT_DIFFUSION_ORDER).
+[diffusion]
+enabled = true
+order = 8
+e_folding_time_s_at_truncation = 2160.0
+preserve_degree = 1
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 1.0e-6
+transform_parseval_relative_error = 5.0e-7
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-3
+# physics_water_repair gate, NATIVE-suite sizing (2026-09-01): 4 x the
+# measured day-1 maximum of the T255 config of record, 43 x 2^-12 kg/m2,
+# which admits the same fp32 ledger-quantum excursion class on column
+# totals up to the 4096 kg/m2 binade while staying 100x below the smallest
+# booking-route conviction at run scale (see the T255 config of record).
+physics_water_repair_max_step_kg_m2 = 0.010498046875

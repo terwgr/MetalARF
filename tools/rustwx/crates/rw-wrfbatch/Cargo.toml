@@ -1,0 +1,94 @@
+# Headless wrfout import + Rusty Weather production batch render.
+#
+# main.rs is the source workspace's untracked rw_wrf_batch bin adapted
+# for gpuwm (all stored frames by default, --frames selection, request-
+# sized work limits); the five processing modules beside it are verbatim
+# copies of rusty-weather-ui's hardened WRF modules (see ../../VENDOR.md).
+# This crate exists so the batch path builds WITHOUT the egui UI stack
+# the source bin inherited from its host package.
+
+[package]
+name = "rw-wrfbatch"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "rw_wrfbatch"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rw_wrfbatch"
+path = "src/main.rs"
+
+# The two sibling binaries.  `rw_wrfbatch`'s one-run-per-invocation
+# contract cannot express N members at one valid time, and an observation
+# volume is not a forecast, so neither is a flag on it.
+[[bin]]
+name = "rw_ensbatch"
+path = "src/bin/ensbatch.rs"
+
+[[bin]]
+name = "rw_obsgrid"
+path = "src/bin/obsgrid.rs"
+
+# A run's products beside a reference model's own fields for the same
+# cycle and lead: two inputs of two formats on one grid and one colour
+# scale, which is neither one run's frames nor N members of one ensemble.
+[[bin]]
+name = "rw_compare"
+path = "src/bin/compare.rs"
+
+[[bin]]
+name = "rw_verify"
+path = "src/bin/verify.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+grib-core = { path = "../../../grib1_bridge/vendor/grib-core", default-features = false }
+netcrust = { path = "../../vendor/netcrust" }
+rayon.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+rw-obs = { path = "../rw-obs" }
+sha2 = "0.10"
+thiserror = { workspace = true }
+wrf-core = { git = "https://github.com/FahrenheitResearch/wrf-rust.git", rev = "93bd2ca670c13fec35bcfc27a58108e6fd71c627", package = "wrf-core", default-features = false, features = ["pure-rust-reader"] }
+rustwx-core = { path = "../rustwx-core" }
+# The GRIB2 selector extraction and the indexed public-bucket fetch
+# `rw_compare` reads its reference model's own messages with.  Already in
+# this crate's graph through rustwx-products; named here because the
+# binary calls it directly.
+rustwx-io = { path = "../rustwx-io" }
+# Reuse the audited anonymous archive listing, bounded gzip and cache transport.
+rw-nexrad = { path = "../rw-nexrad" }
+rustwx-cross-section = { path = "../rustwx-cross-section" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+rustwx-ensemble = { path = "../rustwx-ensemble" }
+rustwx-render = { path = "../rustwx-render" }
+rustwx-models = { path = "../rustwx-models" }
+rustwx-products = { path = "../rustwx-products" }
+rusty-weather = { path = "../rusty-weather" }
+rw-ingest = { path = "../rw-ingest" }
+rw-store = { path = "../rw-store" }
+# The log-pressure column walk the pressure-level charts interpolate with,
+# shared with the ML exporter.
+rw-isobaric = { path = "../rw-isobaric" }
+wx-core = { path = "../../vendor/wx-core" }
+# The vendored WSR-88D site table.  `rw_obsgrid` labels an observation
+# file's radars by POSITION against it, because the two id-carrying fields
+# a `gpuwm-obs.radar-grid` file has are both unreadable through this
+# reader (see src/obs_grid.rs).
+wx-radar = { path = "../../vendor/wx-radar" }
+
+# Test scope only; the shipped binaries do not link it.  The stored-plane
+# tests need a wrfout to exist before they can assert anything about
+# importing one, and `netcdf-writer` is this workspace's classic-NetCDF
+# emitter -- the one thing in the tree that can write a `Times`-carrying
+# record file.
+[dev-dependencies]
+netcdf-writer = { path = "../netcdf-writer" }
+rw-store = { path = "../rw-store" }

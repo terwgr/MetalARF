@@ -1,0 +1,52 @@
+{
+  "kernels": [
+    {
+      "name": "specified_relaxation",
+      "module": "spec_bdy",
+      "source": "woof/metal/shaders/spec_relax.metal",
+      "cuda_source": "woof/core/kernels/spec_bdy.cu",
+      "cuda_symbol": "specified_relaxation",
+      "resources": [
+        ["field", "float", "read"],
+        ["field_tend", "float", "read_write"],
+        ["west", "float", "read"],
+        ["west_t", "float", "read"],
+        ["east", "float", "read"],
+        ["east_t", "float", "read"],
+        ["south", "float", "read"],
+        ["south_t", "float", "read"],
+        ["north", "float", "read"],
+        ["north_t", "float", "read"],
+        ["fcx", "float", "read"],
+        ["gcx", "float", "read"]
+      ],
+      "shapes": {
+        "field": [["nz", "ny", "nx"]],
+        "field_tend": [["nz", "ny", "nx"]],
+        "west": [["nz", "ny", "width"]],
+        "west_t": [["nz", "ny", "width"]],
+        "east": [["nz", "ny", "width"]],
+        "east_t": [["nz", "ny", "width"]],
+        "south": [["nz", "width", "nx"]],
+        "south_t": [["nz", "width", "nx"]],
+        "north": [["nz", "width", "nx"]],
+        "north_t": [["nz", "width", "nx"]],
+        "fcx": [["width"]],
+        "gcx": [["width"]]
+      },
+      "parameters": [
+        ["dtbc", "float32"],
+        ["width", "int32"],
+        ["spec_zone", "int32"],
+        ["relax_zone", "int32"],
+        ["apply_relax", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

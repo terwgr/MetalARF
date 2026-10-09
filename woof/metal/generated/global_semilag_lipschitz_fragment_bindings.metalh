@@ -1,0 +1,31 @@
+// Generated from kernel_signatures.json; layout 0d4fb06a0dbf20fe5717c020e9bd9137c859a0aafcbb7d41887c15dd102bae69.
+struct GlobalSemilagLipschitzFragmentResources {
+    device const ulong *vx [[id(0)]];
+    device const ulong *vy [[id(1)]];
+    device const ulong *vz [[id(2)]];
+    device const ulong *rate [[id(3)]];
+    device const ulong *lat_ext [[id(4)]];
+    device const ulong *inv_x [[id(5)]];
+    device const ulong *inv_y [[id(6)]];
+    device const ulong *dlam [[id(7)]];
+    device ulong *vx_dx [[id(8)]];
+    device ulong *vx_dy [[id(9)]];
+    device ulong *vx_dk [[id(10)]];
+    device ulong *vy_dx [[id(11)]];
+    device ulong *vy_dy [[id(12)]];
+    device ulong *vy_dk [[id(13)]];
+    device ulong *vz_dx [[id(14)]];
+    device ulong *vz_dy [[id(15)]];
+    device ulong *vz_dk [[id(16)]];
+    device ulong *rate_dx [[id(17)]];
+    device ulong *rate_dy [[id(18)]];
+    device ulong *rate_dk [[id(19)]];
+};
+struct GlobalSemilagLipschitzFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+    int chunk_levels;
+    int start_level;
+};
+static_assert(sizeof(GlobalSemilagLipschitzFragmentParams) == 20, "global_semilag_lipschitz_fragment parameter ABI size changed");

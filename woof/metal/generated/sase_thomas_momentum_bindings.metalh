@@ -1,0 +1,27 @@
+// Generated from kernel_signatures.json; layout 3f2d674e3ad35f69651b6097f51e72cd4fbd980ea297ecc622f6dabe3eca8b64.
+struct SaseThomasMomentumResources {
+    device float *u [[id(0)]];
+    device float *v [[id(1)]];
+    device float *w [[id(2)]];
+    device const float *du [[id(3)]];
+    device const float *dv [[id(4)]];
+    device const float *dw [[id(5)]];
+    device const float *kv [[id(6)]];
+    device const float *ust [[id(7)]];
+    device const float *wspd [[id(8)]];
+    device const float *t [[id(9)]];
+    device ulong *partials [[id(10)]];
+    device const ulong *constants [[id(11)]];
+};
+struct SaseThomasMomentumParams {
+    float dz;
+    int t_mode;
+    int has_drag;
+    int has_wspd;
+    float dt;
+    int nz;
+    int ny;
+    int nx;
+    int nblocks;
+};
+static_assert(sizeof(SaseThomasMomentumParams) == 36, "sase_thomas_momentum parameter ABI size changed");

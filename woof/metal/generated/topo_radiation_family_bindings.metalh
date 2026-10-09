@@ -1,0 +1,7 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "topo_slope_geometry_bindings.metalh"
+#include "topo_shadow_init_bindings.metalh"
+#include "topo_shadow_scan_bindings.metalh"
+#include "topo_diffuse_frac_bindings.metalh"
+#include "topo_rad_adjust_bindings.metalh"
+#include "topo_rad_restore_bindings.metalh"

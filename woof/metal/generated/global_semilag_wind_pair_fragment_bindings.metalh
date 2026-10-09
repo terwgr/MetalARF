@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout d269a5f889d105ae6b096950cd99f6368ac41793c5b7402db99d6e64836697e9.
+struct GlobalSemilagWindPairFragmentResources {
+    device const ulong *u [[id(0)]];
+    device const ulong *v [[id(1)]];
+    device ulong *pair [[id(2)]];
+};
+struct GlobalSemilagWindPairFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalSemilagWindPairFragmentParams) == 4, "global_semilag_wind_pair_fragment parameter ABI size changed");

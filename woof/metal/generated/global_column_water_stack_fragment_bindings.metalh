@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 5b823bb02e22eafeaa142bf68adb72824c377bfbbd2caa089776b67a82938bee.
+struct GlobalColumnWaterStackFragmentResources {
+    device const ulong *qv [[id(0)]];
+    device const ulong *qc [[id(1)]];
+    device const ulong *qr [[id(2)]];
+    device const ulong *qi [[id(3)]];
+    device const ulong *qs [[id(4)]];
+    device const ulong *qg [[id(5)]];
+    device ulong *stacked [[id(6)]];
+};
+struct GlobalColumnWaterStackFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalColumnWaterStackFragmentParams) == 4, "global_column_water_stack_fragment parameter ABI size changed");

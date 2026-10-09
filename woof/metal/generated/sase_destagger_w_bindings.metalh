@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 768c8e91fbe28a2131ae5001f19125b83eb20896feb0174eb141b6596cbcdcf3.
+struct SaseDestaggerWResources {
+    device const float *w [[id(0)]];
+    device float *out [[id(1)]];
+};
+struct SaseDestaggerWParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseDestaggerWParams) == 12, "sase_destagger_w parameter ABI size changed");

@@ -1,0 +1,4 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "hex_pv_cell_fragment_bindings.metalh"
+#include "hex_pv_edge_fragment_bindings.metalh"
+#include "hex_pv_vertex_fragment_bindings.metalh"

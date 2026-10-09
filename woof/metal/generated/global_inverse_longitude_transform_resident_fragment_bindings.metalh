@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 6b4b234946f3e4fc51f7fc4c7021ebb46fd482697bb1162af6aee51ea701638b.
+struct GlobalInverseLongitudeTransformResidentFragmentResources {
+    device const ulong *spectrum [[id(0)]];
+    device const ulong *twiddles [[id(1)]];
+    device ulong *grid [[id(2)]];
+};
+struct GlobalInverseLongitudeTransformResidentFragmentParams {
+    int nlat;
+    int nlon;
+    int nfreq;
+    int batch;
+    int full_nlat;
+    int start_row;
+};
+static_assert(sizeof(GlobalInverseLongitudeTransformResidentFragmentParams) == 24, "global_inverse_longitude_transform_resident_fragment parameter ABI size changed");

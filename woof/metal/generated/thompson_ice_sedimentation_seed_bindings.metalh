@@ -1,0 +1,24 @@
+// Generated from kernel_signatures.json; layout aa0192e6fb77208f92036ade2664ea9257476af8eda4a0864f0e1f55e7bc7ef0.
+struct ThompsonIceSedimentationSeedResources {
+    device const float *qi [[id(0)]];
+    device const float *ni [[id(1)]];
+    device const float *temperature [[id(2)]];
+    device const float *pressure [[id(3)]];
+    device const float *qv [[id(4)]];
+    device const float *reference_density [[id(5)]];
+    device float *density [[id(6)]];
+    device float *ice_mass [[id(7)]];
+    device float *ice_number [[id(8)]];
+    device float *mass_velocity [[id(9)]];
+    device float *number_velocity [[id(10)]];
+    device float *qi_tendency [[id(11)]];
+    device float *ni_tendency [[id(12)]];
+    device float *active_marker [[id(13)]];
+};
+struct ThompsonIceSedimentationSeedParams {
+    float dt;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonIceSedimentationSeedParams) == 16, "thompson_ice_sedimentation_seed parameter ABI size changed");

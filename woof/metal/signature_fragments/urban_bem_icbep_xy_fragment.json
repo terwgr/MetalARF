@@ -1,0 +1,47 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_icbep_xy_fragment",
+      "module": "urban_bem_icbep_xy_fragment",
+      "source": "woof/metal/shaders/urban_bem_icbep_xy_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_icbep_xy/bb_view_factors (module_sf_bep_bem.F:5500-5513, 4875-4984)",
+      "resources": [
+        ["active_cols", "int32", "read"],
+        ["utype", "int32", "read"],
+        ["class_int", "int32", "read"],
+        ["nzurban", "int32", "read"],
+        ["z_u", "float", "read"],
+        ["strd", "float", "read"],
+        ["ws", "float", "read"],
+        ["fww", "float", "read_write"],
+        ["fwg", "float", "read_write"],
+        ["fgw", "float", "read_write"],
+        ["fsw", "float", "read_write"],
+        ["fws", "float", "read_write"],
+        ["fsg", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]],
+        "utype": [["ncol"]],
+        "class_int": [[37]],
+        "nzurban": [["ncol"]],
+        "z_u": [[19]],
+        "strd": [["ncol", 2]],
+        "ws": [["ncol", 2]],
+        "fww": [["ncol", 2, 18, 18]],
+        "fwg": [["ncol", 2, 18]],
+        "fgw": [["ncol", 2, 18]],
+        "fsw": [["ncol", 2, 18]],
+        "fws": [["ncol", 2, 18]],
+        "fsg": [["ncol", 2]],
+        "error": [["ncol", 2]]
+      },
+      "parameters": [["ncol", "int32"], ["nurbm", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

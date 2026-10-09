@@ -1,0 +1,52 @@
+{
+  "kernels": [
+    {
+      "name": "hex_fct_apply_fragment",
+      "module": "hex_scalar_transport",
+      "source": "woof/metal/shaders/hex_fct_apply_fragment.metal",
+      "cuda_source": "woof/hex/transport.py",
+      "cuda_symbol": "advance_scalars_monotonic",
+      "resources": [
+        ["mass", "float", "read"],
+        ["target_density", "float", "read"],
+        ["horizontal_residual", "float", "read"],
+        ["vertical_residual", "float", "read"],
+        ["scale_in", "float", "read"],
+        ["scale_out", "float", "read"],
+        ["rdnw", "float", "read"],
+        ["edges_on_cell", "int32", "read"],
+        ["n_edges_on_cell", "int32", "read"],
+        ["edge_signs", "float", "read"],
+        ["area_cell", "float", "read"],
+        ["inv_area_cell", "float", "read"],
+        ["updated", "float", "read_write"]
+      ],
+      "shapes": {
+        "mass": [["any_1d"]],
+        "target_density": [["any_1d"]],
+        "horizontal_residual": [["any_1d"]],
+        "vertical_residual": [["any_1d"]],
+        "scale_in": [["any_1d"]],
+        "scale_out": [["any_1d"]],
+        "rdnw": [["any_1d"]],
+        "edges_on_cell": [["any_1d"]],
+        "n_edges_on_cell": [["any_1d"]],
+        "edge_signs": [["any_1d"]],
+        "area_cell": [["any_1d"]],
+        "inv_area_cell": [["any_1d"]],
+        "updated": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["storage_cells", "int32"],
+        ["nedges", "int32"],
+        ["max_edges", "int32"],
+        ["use_inverse_area", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

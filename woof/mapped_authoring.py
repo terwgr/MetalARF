@@ -1,0 +1,1774 @@
+"""Fail-closed authoring for declarative mapped-source contracts.
+
+The executable :mod:`woof.mapped_source` contract is deliberately richer
+than a classic WPS Vtable.  A Vtable carries GRIB identifiers, a WPS output
+name, and a source-unit label; it does *not* define canonical field meaning,
+axis order, missing-data policy, derivations, cadence, soil semantics, or the
+target WRF contract.  This module therefore imports Vtable rows only when an
+explicit ``rw-wps.descriptor.v1`` document supplies all of those semantics.
+
+It also authors the exact ``gpuwm-mapped-composition-inputs-v1`` manifest used
+by the runtime.  Outputs are create-only, canonical JSON and round-trip through
+the same validators used by execution.  No source-family name is consulted.
+"""
+
+from __future__ import annotations
+
+import copy
+from dataclasses import dataclass
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import stat
+import tempfile
+from typing import Mapping, Sequence
+import uuid
+
+from woof.filesystem_paths import publish_new, replace_file_with_retry
+from woof.mapped_composition import (
+    INPUT_MANIFEST_SCHEMA,
+    _decoder_inventory,
+    _verify_manifest,
+    load_composition,
+)
+from woof.mapped_engine_bridge import ENGINE_RUST as _ENGINE_RUST
+from woof.mapped_source import (
+    MAPPING_SCHEMA,
+    _grib_selectors_overlap,
+    _load_json_bytes,
+    _mapped_engine_choice,
+    _require_authority_snapshot,
+    _sha256,
+    _snapshot_authority,
+    load_mapping,
+)
+from woof.native_wrf_distribution import bridge_identity
+
+
+DESCRIPTOR_SCHEMA = "rw-wps.descriptor.v1"
+MAPPING_AUTHORING_SCHEMA = "rw-wps.mapping-authoring-receipt.v1"
+MANIFEST_AUTHORING_SCHEMA = "rw-wps.input-manifest-authoring-receipt.v1"
+_FORMATS = {"grib1", "grib2", "netcdf"}
+_MAPPING_TOP_LEVEL = {
+    "schema",
+    "name",
+    "format",
+    "coordinates",
+    "fields",
+    "derivations",
+    "target",
+    # Optional front-door policy consumed by ``woof adapt``.  It is bound
+    # by the descriptor digest in the emitted provenance, but is deliberately
+    # removed before the executable rw-wps.mapping.v1 document is validated.
+    "adapt",
+}
+_FIELD_KEYS = {
+    "selectors",
+    "derivation",
+    "units",
+    "source_axes",
+    "target_axes",
+    "location",
+    "staggering",
+    "missing",
+    "selector_stack_axis",
+}
+_VTABLE_REFERENCE_KEYS = {
+    "metgrid_name",
+    "grib1_level_type",
+    "grib2_level_type",
+    "level1",
+    "level2",
+    "selector",
+}
+_GRIB1_SELECTOR_OVERRIDES = {"table_version", "center", "level_value"}
+_GRIB2_SELECTOR_OVERRIDES = {
+    "center",
+    "subcenter",
+    "master_table_version",
+    "local_table_version",
+    "level_value",
+    "second_level_type",
+    "second_level_value",
+    "member",
+}
+_MAX_STABLE_SNAPSHOT_BYTES = 128 * 1024 * 1024
+
+
+def _object(
+    value: object,
+    label: str,
+    *,
+    allowed: set[str],
+    required: set[str] = frozenset(),
+) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise TypeError(f"{label} must be an object")
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ValueError(f"{label} has unknown key(s): {unknown}")
+    missing = sorted(required - set(value))
+    if missing:
+        raise ValueError(f"{label} is missing required key(s): {missing}")
+    return value
+
+
+def _string(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+    return value
+
+
+def _u8(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 255:
+        raise ValueError(f"{label} must be an integer in 0..255")
+    return value
+
+
+def _u16(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 65535:
+        raise ValueError(f"{label} must be an integer in 0..65535")
+    return value
+
+
+def _finite(value: object, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{label} must be a finite number")
+    try:
+        result = float(value)
+    except (OverflowError, TypeError, ValueError) as error:
+        raise ValueError(f"{label} must be a finite number") from error
+    if not math.isfinite(result):
+        raise ValueError(f"{label} must be a finite number")
+    return 0.0 if result == 0.0 else result
+
+
+def _canonical_json(value: object) -> bytes:
+    return (
+        json.dumps(
+            value,
+            indent=2,
+            sort_keys=True,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _reject_duplicate_object_pairs(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    """Build one JSON object while rejecting every duplicate key.
+
+    Python's default JSON decoder silently keeps the last occurrence.  That is
+    unsafe for a science/selector authority because a visually earlier value
+    can be replaced without any schema validator seeing the ambiguity.
+    """
+
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key {key!r}")
+        result[key] = value
+    return result
+
+
+def _strict_json(data: bytes, label: str) -> object:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{label} is not UTF-8 JSON: {error}") from error
+    try:
+        return json.loads(text, object_pairs_hook=_reject_duplicate_object_pairs)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"invalid {label} JSON: {error}") from error
+
+
+def _write_new(path: Path, contents: bytes) -> None:
+    """Publish bytes create-only from a same-directory temporary.
+
+    The temporary file is fully written and fsynced before publication.
+    ``publish_new`` is an atomic no-clobber operation (a hard link, or a
+    no-replace rename on a drive with no hard links), unlike a check
+    followed by ``os.replace``.
+    """
+
+    path = Path(path).resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(
+        f".{path.name}.tmp-{os.getpid()}-{uuid.uuid4().hex[:12]}"
+    )
+    try:
+        with temporary.open("xb") as stream:
+            stream.write(contents)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            publish_new(temporary, path)
+        except FileExistsError as error:
+            raise FileExistsError(f"refusing to overwrite {path}") from error
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+@dataclass(frozen=True)
+class _FileSnapshot:
+    """Exact bytes and filesystem observation used as one authority."""
+
+    path: Path
+    data: bytes
+    sha256: str
+    size: int
+    mtime_ns: int
+    device: int
+    inode: int
+    mode: int
+
+    @property
+    def fingerprint(self) -> tuple[str, int, int]:
+        return self.sha256, self.size, self.mtime_ns
+
+
+def _stable_file_snapshot(path: Path) -> _FileSnapshot:
+    """Read one small authority once and bind validation to those exact bytes."""
+
+    path = Path(path).resolve()
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) \
+        | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError(f"input authority is not a regular file: {path}")
+        if before.st_size > _MAX_STABLE_SNAPSHOT_BYTES:
+            raise ValueError(
+                f"retained authority exceeds {_MAX_STABLE_SNAPSHOT_BYTES} "
+                f"bytes: {path}"
+            )
+        data = stream.read()
+        after = os.fstat(stream.fileno())
+    # Windows' ``Path.stat`` may synthesize executable permission bits from
+    # the filename extension while ``fstat`` on the already-open handle does
+    # not (notably for ``*.exe`` decoder authorities).  File type remains an
+    # identity property on Windows; the synthetic permission bits do not.
+    # Keep the stricter complete-mode comparison on POSIX.
+    def stable_mode(value: int) -> int:
+        return stat.S_IFMT(value) if os.name == "nt" else value
+
+    identity_before = (
+        before.st_dev,
+        before.st_ino,
+        before.st_size,
+        before.st_mtime_ns,
+        stable_mode(before.st_mode),
+    )
+    identity_after = (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+        after.st_mtime_ns,
+        stable_mode(after.st_mode),
+    )
+    if identity_after != identity_before or len(data) != after.st_size:
+        raise ValueError(f"input authority changed while reading: {path}")
+    current = path.stat()
+    if (
+        current.st_dev,
+        current.st_ino,
+        current.st_size,
+        current.st_mtime_ns,
+        stable_mode(current.st_mode),
+    ) != identity_after:
+        raise ValueError(f"input authority path changed while reading: {path}")
+    return _FileSnapshot(
+        path=path,
+        data=data,
+        sha256=hashlib.sha256(data).hexdigest(),
+        size=int(after.st_size),
+        mtime_ns=int(after.st_mtime_ns),
+        device=int(after.st_dev),
+        inode=int(after.st_ino),
+        mode=int(stable_mode(after.st_mode)),
+    )
+
+
+def _require_snapshot(snapshot: _FileSnapshot) -> None:
+    """Reject any byte or identity drift from a validated snapshot."""
+
+    current = _stable_file_snapshot(snapshot.path)
+    if current != snapshot:
+        raise ValueError(
+            f"input authority changed after validation: {snapshot.path}"
+        )
+
+
+def _file_identity(path: Path) -> tuple[int, int]:
+    status = path.stat()
+    return int(status.st_dev), int(status.st_ino)
+
+
+def _require_unique_identities(paths: Sequence[Path], label: str) -> None:
+    identities = [_file_identity(path) for path in paths]
+    if len(set(identities)) != len(identities):
+        raise ValueError(f"{label} contains filesystem aliases of one file")
+
+
+@dataclass(frozen=True)
+class VtableRow:
+    """One losslessly parsed 11-column WPS Vtable data row."""
+
+    line_number: int
+    grib1_parameter: str
+    grib1_level_type: str
+    level1: str
+    level2: str
+    metgrid_name: str
+    units: str
+    description: str
+    grib2_discipline: str
+    grib2_category: str
+    grib2_parameter: str
+    grib2_level_type: str
+
+    def identity(self) -> dict[str, object]:
+        return {
+            "line": self.line_number,
+            "metgrid_name": self.metgrid_name,
+            "grib1_level_type": self.grib1_level_type,
+            "grib2_level_type": self.grib2_level_type,
+            "level1": self.level1,
+            "level2": self.level2,
+            "units": self.units,
+            "description": self.description,
+        }
+
+
+#: Unit spellings that mean "dimensionless", collapsed to one token.
+#: ECMWF writes a fraction as ``(0 - 1)``; CF writes ``1``.
+#:
+#: ``0/1 flag`` and ``m3 m-3`` are here because THIS PROJECT'S OWN SHIPPED
+#: AUTHORITIES use them and were refused without them: every mapping and
+#: descriptor in ``configs/`` and ``woof/authorities/`` declares
+#: ``land_fraction`` as ``"0/1 Flag" -> "1"`` (the WPS Vtable spelling of a
+#: land/sea mask, which is what ``Vtable.GFS.rw-wps`` and
+#: ``Vtable.ERA5_CDO`` carry) and ``volumetric_soil_moisture`` as
+#: ``"fraction" -> "m3 m-3"`` (cubic metres of water per cubic metre of
+#: soil -- a ratio of like quantities, so dimensionless, and numerically
+#: the same number as the fraction ECMWF delivers).  Both are RENAMES.
+#: Percent is deliberately NOT here: ``%`` really is a factor of 100 and
+#: must declare ``"scale": 0.01``.
+#:
+#: Matched after ``_canonical_unit`` has dropped ``**`` and collapsed
+#: whitespace, and compared lower-case, so ``m**3 m**-3`` and ``0/1 Flag``
+#: reach this set as ``m3 m-3`` and ``0/1 flag``.
+_DIMENSIONLESS = {
+    "1", "(0-1)", "(0 - 1)", "fraction", "-", "0/1 flag", "m3 m-3",
+}
+
+
+def _canonical_unit(text: str) -> str:
+    """One spelling for one unit, so a RENAME is not read as a CONVERSION.
+
+    ECMWF writes exponents as ``m s**-1`` and ``m**2 s**-2``; CF writes
+    ``m s-1`` and ``m2 s-2``.  Those pairs are the same unit spelled two
+    ways and legitimately convert with scale 1.0.  ``hPa`` and ``Pa`` are
+    not, and that is the distinction this makes.
+    """
+
+    collapsed = " ".join(str(text).replace("**", "").split()).strip()
+    return "1" if collapsed.lower() in _DIMENSIONLESS else collapsed
+
+
+def _require_declared_unit_scale(field_name: str, field: Mapping[str, object]) -> None:
+    """A real unit change must declare its factor, not inherit 1.0.
+
+    The failure this closes: a descriptor may say
+    ``units = {"source": "hPa", "target": "Pa"}`` and omit ``scale``.
+    ``_unit_transform`` defaults the factor to 1.0, so the values pass
+    through a hundred times too small, and every gate downstream agrees
+    -- the vertical-coverage check compares the wrong number against
+    ``model_top_pa`` and passes, and hPa reach ``initialize_real`` as Pa.
+    Measured on a real descriptor: pressure levels compiled to
+    ``[10.0, 8.5, 5.0, 2.5]`` hPa-as-Pa instead of
+    ``[1000, 850, 500, 250]``, with a PASS receipt.
+
+    Silence is only safe when source and target are the same unit, so
+    that is exactly what is allowed to stay silent.  A declared ``scale``
+    -- including a deliberate 1.0 -- always satisfies this: the author
+    who writes it has made the claim explicitly.
+    """
+
+    units = field.get("units")
+    if not isinstance(units, Mapping):
+        return
+    if "scale" in units or "offset" in units:
+        return
+    source = units.get("source")
+    target = units.get("target")
+    if not isinstance(source, str) or not isinstance(target, str):
+        return
+    if _canonical_unit(source) == _canonical_unit(target):
+        return
+    raise ValueError(
+        f"field {field_name!r} converts units from {source!r} to {target!r} "
+        f"but declares no scale, so the conversion would silently apply a "
+        f"factor of 1.0.  Add \"scale\" (and \"offset\" if the zero point "
+        f"moves) to that field's units -- for example hPa -> Pa is "
+        f"\"scale\": 100.0.  If the two spellings are the same unit, say so "
+        f"with an explicit \"scale\": 1.0."
+    )
+
+
+def _parse_wps_vtable_bytes(data: bytes, label: str) -> tuple[VtableRow, ...]:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"{label} is not UTF-8: {error}") from error
+    rows = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "!")):
+            continue
+        if stripped.startswith(("GRIB1", "Param", "-----")):
+            continue
+        columns = [column.strip() for column in line.split("|")]
+        if columns and columns[-1] == "":
+            columns.pop()
+        if len(columns) != 11:
+            raise ValueError(
+                f"Vtable line {line_number} has {len(columns)} columns; "
+                "expected exactly 11"
+            )
+        if not columns[4]:
+            raise ValueError(f"Vtable line {line_number} has an empty metgrid name")
+        rows.append(VtableRow(line_number, *columns))
+    if not rows:
+        raise ValueError("Vtable contains no 11-column data rows")
+    return tuple(rows)
+
+
+def parse_wps_vtable(path: str | Path) -> tuple[VtableRow, ...]:
+    """Parse Vtable data rows without guessing any canonical semantics."""
+
+    snapshot = _stable_file_snapshot(Path(path))
+    rows = _parse_wps_vtable_bytes(snapshot.data, str(snapshot.path))
+    _require_snapshot(snapshot)
+    return rows
+
+
+def _match_level(raw: str, expected: object, label: str) -> bool:
+    if expected is None:
+        return raw == ""
+    if expected == "*":
+        return raw == "*"
+    numeric = _finite(expected, label)
+    try:
+        observed = float(raw)
+    except ValueError:
+        return False
+    return observed == numeric
+
+
+def _match_vtable_row(
+    rows: Sequence[VtableRow],
+    reference: Mapping[str, object],
+    label: str,
+) -> VtableRow:
+    reference = _object(
+        dict(reference),
+        label,
+        allowed=_VTABLE_REFERENCE_KEYS,
+        required={"metgrid_name"},
+    )
+    name = _string(reference["metgrid_name"], f"{label}.metgrid_name")
+    candidates = [row for row in rows if row.metgrid_name == name]
+    if "grib1_level_type" in reference:
+        expected = _u8(reference["grib1_level_type"], f"{label}.grib1_level_type")
+        candidates = [
+            row for row in candidates if row.grib1_level_type == str(expected)
+        ]
+    if "grib2_level_type" in reference:
+        expected = _u8(reference["grib2_level_type"], f"{label}.grib2_level_type")
+        candidates = [
+            row for row in candidates if row.grib2_level_type == str(expected)
+        ]
+    for key in ("level1", "level2"):
+        if key in reference:
+            candidates = [
+                row
+                for row in candidates
+                if _match_level(getattr(row, key), reference[key], f"{label}.{key}")
+            ]
+    if len(candidates) != 1:
+        lines = [row.line_number for row in candidates]
+        raise ValueError(
+            f"{label} resolves {len(candidates)} Vtable rows at lines {lines}; "
+            "add exact level metadata until it resolves one row"
+        )
+    return candidates[0]
+
+
+def _parse_vtable_integer(raw: str, label: str) -> int:
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ValueError(f"{label} is not an integer: {raw!r}") from error
+    return _u8(value, label)
+
+
+def _row_level(raw: str, label: str) -> float | None:
+    if raw in {"", "*"}:
+        return None
+    try:
+        value = float(raw)
+    except ValueError as error:
+        raise ValueError(f"{label} is not numeric or '*': {raw!r}") from error
+    if not math.isfinite(value):
+        raise ValueError(f"{label} must be finite")
+    return value
+
+
+def _selector_from_row(
+    row: VtableRow,
+    source_format: str,
+    reference: Mapping[str, object],
+    label: str,
+) -> dict[str, object]:
+    raw_overrides = reference.get("selector", {})
+    allowed = (
+        _GRIB1_SELECTOR_OVERRIDES
+        if source_format == "grib1"
+        else _GRIB2_SELECTOR_OVERRIDES
+    )
+    overrides = _object(
+        raw_overrides,
+        f"{label}.selector",
+        allowed=allowed,
+    )
+    if source_format == "grib1":
+        missing_authorities = {"center", "table_version"} - set(overrides)
+        if missing_authorities:
+            raise ValueError(
+                f"{label}.selector must explicitly bind GRIB1 center and "
+                "table_version; a WPS Vtable does not carry both authorities"
+            )
+        if row.level2:
+            raise ValueError(
+                f"{label} selects Vtable line {row.line_number} with Level2; "
+                "GRIB1 layer selectors are not represented by mapping.v1"
+            )
+        selector: dict[str, object] = {
+            "format": "grib1",
+            "parameter": _parse_vtable_integer(
+                row.grib1_parameter, f"Vtable line {row.line_number} GRIB1 parameter"
+            ),
+            "level_type": _parse_vtable_integer(
+                row.grib1_level_type,
+                f"Vtable line {row.line_number} GRIB1 level type",
+            ),
+        }
+        level = _row_level(row.level1, f"Vtable line {row.line_number} Level1")
+        if level is not None:
+            selector["level_value"] = level
+            if "level_value" in overrides and _finite(
+                overrides["level_value"],
+                f"{label}.selector.level_value",
+            ) != level:
+                raise ValueError(
+                    f"{label}.selector.level_value differs from numeric "
+                    f"Vtable Level1 {level!r}"
+                )
+    else:
+        selector = {
+            "format": "grib2",
+            "discipline": _parse_vtable_integer(
+                row.grib2_discipline,
+                f"Vtable line {row.line_number} GRIB2 discipline",
+            ),
+            "category": _parse_vtable_integer(
+                row.grib2_category,
+                f"Vtable line {row.line_number} GRIB2 category",
+            ),
+            "parameter": _parse_vtable_integer(
+                row.grib2_parameter,
+                f"Vtable line {row.line_number} GRIB2 parameter",
+            ),
+            "level_type": _parse_vtable_integer(
+                row.grib2_level_type,
+                f"Vtable line {row.line_number} GRIB2 level type",
+            ),
+        }
+        vtable_level = _row_level(row.level1, f"Vtable line {row.line_number} Level1")
+        if vtable_level is not None and "level_value" not in overrides:
+            raise ValueError(
+                f"{label} must explicitly bind selector.level_value; WPS Level1 "
+                "units are not a general GRIB2 fixed-surface authority"
+            )
+        if row.level2 and not {
+            "second_level_type",
+            "second_level_value",
+        }.issubset(overrides):
+            raise ValueError(
+                f"{label} must explicitly bind the GRIB2 second fixed surface"
+            )
+    for key, value in overrides.items():
+        if source_format == "grib2" and key in {"center", "subcenter"}:
+            selector[key] = _u16(value, f"{label}.selector.{key}")
+        elif key in {
+            "table_version",
+            "center",
+            "master_table_version",
+            "local_table_version",
+            "second_level_type",
+            "member",
+        }:
+            selector[key] = _u8(value, f"{label}.selector.{key}")
+        else:
+            selector[key] = _finite(value, f"{label}.selector.{key}")
+    missing_identifiers = {
+        key
+        for key in (
+            ("parameter", "level_type", "center", "table_version")
+            if source_format == "grib1"
+            else ("discipline", "category", "parameter", "second_level_type")
+        )
+        if selector.get(key) == 255
+    }
+    if missing_identifiers:
+        raise ValueError(
+            f"{label} uses missing/undefined identifier code 255 for "
+            f"{sorted(missing_identifiers)}"
+        )
+    if source_format == "grib2":
+        if selector.get("level_type") == 255 and any(
+            key in selector
+            for key in ("level_value", "second_level_type", "second_level_value")
+        ):
+            raise ValueError(
+                f"{label} uses GRIB2 level_type=255 (no fixed surface) with "
+                "fixed-surface metadata"
+            )
+        local_identifiers = {
+            key: value
+            for key, value in selector.items()
+            if key
+            in {
+                "discipline",
+                "category",
+                "parameter",
+                "level_type",
+                "second_level_type",
+            }
+            and isinstance(value, int)
+            and 192 <= value <= 254
+        }
+        if local_identifiers:
+            rendered = ", ".join(
+                f"{key}={value}" for key, value in sorted(local_identifiers.items())
+            )
+            authority_keys = {
+                "center",
+                "subcenter",
+                "master_table_version",
+                "local_table_version",
+            }
+            missing_authority = sorted(authority_keys - set(selector))
+            if missing_authority:
+                raise ValueError(
+                    f"{label} uses GRIB2 local-use identifier(s) {rendered}; "
+                    "selector must explicitly bind center, subcenter, "
+                    "master_table_version, and local_table_version (missing "
+                    f"{missing_authority})"
+                )
+            if selector["local_table_version"] == 255:
+                raise ValueError(
+                    f"{label} uses GRIB2 local-use identifier(s) {rendered} "
+                    "with local_table_version=255 (no local table)"
+                )
+    second = {
+        key for key in ("second_level_type", "second_level_value") if key in selector
+    }
+    if second and second != {"second_level_type", "second_level_value"}:
+        raise ValueError(
+            f"{label}.selector second_level_type and second_level_value "
+            "are an atomic pair"
+        )
+    return selector
+
+
+def compile_mapping_descriptor(
+    descriptor_path: str | Path,
+    *,
+    vtable_path: str | Path | None = None,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Compile one explicit descriptor into a validated mapping document."""
+
+    descriptor_path = Path(descriptor_path).resolve()
+    descriptor_snapshot = _stable_file_snapshot(descriptor_path)
+    raw = _strict_json(descriptor_snapshot.data, f"descriptor {descriptor_path}")
+    descriptor = _object(
+        raw,
+        "descriptor",
+        allowed=_MAPPING_TOP_LEVEL,
+        required={"schema", "name", "format", "coordinates", "fields", "target"},
+    )
+    if descriptor["schema"] != DESCRIPTOR_SCHEMA:
+        raise ValueError(
+            f"unsupported descriptor schema {descriptor['schema']!r}; "
+            f"expected {DESCRIPTOR_SCHEMA!r}"
+        )
+    source_format = descriptor["format"]
+    if source_format not in _FORMATS:
+        raise ValueError(f"unsupported descriptor format {source_format!r}")
+    if source_format == "netcdf":
+        if vtable_path is not None:
+            raise ValueError("NetCDF descriptors cannot use a WPS Vtable")
+        rows: tuple[VtableRow, ...] = ()
+        resolved_vtable = None
+    else:
+        if vtable_path is None:
+            raise ValueError(f"{source_format} descriptors require a WPS Vtable")
+        resolved_vtable = Path(vtable_path).resolve()
+        vtable_snapshot = _stable_file_snapshot(resolved_vtable)
+        rows = _parse_wps_vtable_bytes(
+            vtable_snapshot.data,
+            str(vtable_snapshot.path),
+        )
+
+    candidate = copy.deepcopy(descriptor)
+    candidate.pop("adapt", None)
+    candidate["schema"] = MAPPING_SCHEMA
+    fields = candidate["fields"]
+    if not isinstance(fields, dict) or not fields:
+        raise ValueError("descriptor.fields must be a non-empty object")
+    selected_rows: list[dict[str, object]] = []
+    # line number -> the descriptor field that claimed it.  A set was
+    # enough to detect the clash and not enough to describe it: the
+    # message could name only the Vtable line, so it read as a fault in
+    # the Vtable when both claims live in the descriptor.
+    consumed_lines: dict[int, str] = {}
+    consumed_selectors: list[tuple[str, int, dict[str, object]]] = []
+    for field_name, raw_field in fields.items():
+        if not isinstance(field_name, str) or not field_name:
+            raise ValueError("descriptor field names must be non-empty strings")
+        field = _object(
+            raw_field,
+            f"descriptor.fields.{field_name}",
+            allowed=_FIELD_KEYS | {"vtable_selectors"},
+            required={"units", "source_axes", "target_axes", "location", "missing"},
+        )
+        _require_declared_unit_scale(field_name, field)
+        imported = field.pop("vtable_selectors", None)
+        derived = isinstance(field.get("derivation"), str) and bool(field["derivation"])
+        if source_format == "netcdf":
+            if imported is not None:
+                raise ValueError(
+                    f"NetCDF field {field_name!r} cannot import a WPS Vtable row"
+                )
+            continue
+        if derived:
+            if imported is not None:
+                raise ValueError(
+                    f"derived field {field_name!r} cannot import Vtable selectors"
+                )
+            continue
+        if "selectors" in field:
+            raise ValueError(
+                f"GRIB descriptor field {field_name!r} must use "
+                "vtable_selectors, not hand-authored selectors"
+            )
+        if not isinstance(imported, list) or not imported:
+            raise ValueError(
+                f"GRIB descriptor field {field_name!r} requires a non-empty "
+                "vtable_selectors list"
+            )
+        units = field.get("units")
+        if not isinstance(units, dict) or not isinstance(units.get("source"), str):
+            raise ValueError(f"field {field_name!r} must declare source units")
+        selectors = []
+        for index, raw_reference in enumerate(imported):
+            label = f"descriptor.fields.{field_name}.vtable_selectors[{index}]"
+            reference = _object(
+                raw_reference,
+                label,
+                allowed=_VTABLE_REFERENCE_KEYS,
+                required={"metgrid_name"},
+            )
+            row = _match_vtable_row(rows, reference, label)
+            if row.line_number in consumed_lines:
+                raise ValueError(
+                    f"descriptor fields "
+                    f"{consumed_lines[row.line_number]!r} and "
+                    f"{field_name!r} both claim Vtable line "
+                    f"{row.line_number} ({row.metgrid_name}); the Vtable is "
+                    "not at fault -- one record cannot serve two fields, so "
+                    "give each field its own row or derive the alias "
+                    "explicitly"
+                )
+            consumed_lines[row.line_number] = field_name
+            selector = _selector_from_row(
+                row,
+                str(source_format),
+                reference,
+                label,
+            )
+            for previous_field, previous_line, previous in consumed_selectors:
+                if _grib_selectors_overlap(
+                    previous,
+                    selector,
+                    str(source_format),
+                ):
+                    raise ValueError(
+                        f"Vtable line {row.line_number} selector overlaps line "
+                        f"{previous_line} assigned to field {previous_field!r}; "
+                        "one GRIB record cannot directly provide two mapped "
+                        "selector slots"
+                    )
+            consumed_selectors.append((field_name, row.line_number, selector))
+            selectors.append(selector)
+            selected_rows.append(
+                {
+                    "field": field_name,
+                    "vtable": row.identity(),
+                    "selector": selector,
+                }
+            )
+        field["selectors"] = selectors
+
+    # Reuse the executable engine's complete recursive validator before any
+    # bytes become publishable.
+    with tempfile.TemporaryDirectory(prefix="rw-wps-descriptor-") as directory:
+        candidate_path = Path(directory) / "mapping.json"
+        candidate_path.write_bytes(_canonical_json(candidate))
+        validated = load_mapping(candidate_path)
+    if validated != candidate:
+        raise RuntimeError("descriptor compilation drifted through mapping validation")
+    _require_snapshot(descriptor_snapshot)
+    if resolved_vtable is not None:
+        _require_snapshot(vtable_snapshot)
+    evidence = {
+        "schema": MAPPING_AUTHORING_SCHEMA,
+        "status": "VALIDATED_NOT_STOCK_WRF_CERTIFIED",
+        "descriptor": {
+            "path": str(descriptor_path),
+            "bytes": descriptor_snapshot.size,
+            "sha256": descriptor_snapshot.sha256,
+        },
+        "vtable": None
+        if resolved_vtable is None
+        else {
+            "path": str(resolved_vtable),
+            "bytes": vtable_snapshot.size,
+            "sha256": vtable_snapshot.sha256,
+        },
+        "format": source_format,
+        "selected_rows": selected_rows,
+    }
+    return candidate, evidence
+
+
+def _require_receipt_authorities(receipt: Mapping[str, object]) -> None:
+    """Recheck descriptor/Vtable bytes bound by a compilation receipt."""
+
+    for role in ("descriptor", "vtable"):
+        raw = receipt.get(role)
+        if raw is None:
+            continue
+        row = _object(
+            raw,
+            f"authoring receipt {role}",
+            allowed={"path", "bytes", "sha256"},
+            required={"path", "bytes", "sha256"},
+        )
+        snapshot = _stable_file_snapshot(Path(_string(row["path"], f"{role}.path")))
+        if snapshot.size != row["bytes"] or snapshot.sha256 != row["sha256"]:
+            raise ValueError(
+                f"{role} authority changed after mapping compilation: "
+                f"{snapshot.path}"
+            )
+
+
+def author_mapping(
+    descriptor_path: str | Path,
+    output_path: str | Path,
+    *,
+    vtable_path: str | Path | None = None,
+    receipt_path: str | Path | None = None,
+    expected_format: str | None = None,
+) -> dict[str, object]:
+    """Create one validated mapping and its provenance receipt."""
+
+    output_path = Path(output_path).resolve()
+    receipt_path = (
+        Path(receipt_path).resolve()
+        if receipt_path is not None
+        else output_path.with_name(f"{output_path.stem}.authoring.json")
+    )
+    if output_path == receipt_path:
+        raise ValueError("mapping and authoring receipt paths must differ")
+    for path in (output_path, receipt_path):
+        if path.exists():
+            raise FileExistsError(f"refusing to overwrite {path}")
+    mapping, receipt = compile_mapping_descriptor(
+        descriptor_path,
+        vtable_path=vtable_path,
+    )
+    if expected_format is not None and receipt["format"] != expected_format:
+        raise ValueError(
+            f"descriptor format {receipt['format']!r} differs from expected "
+            f"format {expected_format!r}"
+        )
+    mapping_bytes = _canonical_json(mapping)
+    mapping_digest = hashlib.sha256(mapping_bytes).hexdigest()
+    receipt["mapping"] = {
+        "path": str(output_path),
+        "bytes": len(mapping_bytes),
+        "sha256": mapping_digest,
+    }
+    _require_receipt_authorities(receipt)
+    _write_new(output_path, mapping_bytes)
+    try:
+        loaded = load_mapping(output_path)
+        if loaded != mapping or _sha256(output_path) != mapping_digest:
+            raise RuntimeError("published mapping failed its exact round trip")
+        _require_receipt_authorities(receipt)
+        _write_new(receipt_path, _canonical_json(receipt))
+    except BaseException:
+        if output_path.is_file() and _sha256(output_path) == mapping_digest:
+            output_path.unlink()
+        raise
+    return receipt
+
+
+def _path_row(
+    path: Path,
+    manifest_parent: Path,
+    fingerprint: tuple[str, int, int],
+) -> dict[str, object]:
+    try:
+        relative = Path(os.path.relpath(path, manifest_parent)).as_posix()
+        serialized = relative
+    except ValueError:
+        serialized = path.as_posix()
+    return {
+        "path": serialized,
+        "bytes": fingerprint[1],
+        "sha256": fingerprint[0],
+    }
+
+
+def _inventory_row(
+    paths: Sequence[Path],
+    manifest_parent: Path,
+    fingerprints: Mapping[Path, tuple[str, int, int]],
+) -> list[dict[str, object]]:
+    return [
+        _path_row(path, manifest_parent, fingerprints[path]) for path in paths
+    ]
+
+
+def _load_contract_snapshots(
+    mapping_path: Path,
+    composition_path: Path,
+) -> tuple[
+    _FileSnapshot,
+    _FileSnapshot,
+    dict[str, object],
+    dict[str, object],
+]:
+    """Validate mapping/composition using exactly the bytes later sealed."""
+
+    mapping_snapshot = _stable_file_snapshot(mapping_path)
+    composition_snapshot = _stable_file_snapshot(composition_path)
+    # Reject ambiguous duplicate keys before the executable validators see the
+    # last-wins result produced by Python's default JSON decoder.
+    _strict_json(mapping_snapshot.data, f"mapping {mapping_path}")
+    _strict_json(composition_snapshot.data, f"composition {composition_path}")
+    with tempfile.TemporaryDirectory(prefix="rw-wps-contract-snapshot-") as directory:
+        root = Path(directory)
+        frozen_mapping = root / "mapping.json"
+        frozen_composition = root / "composition.json"
+        frozen_mapping.write_bytes(mapping_snapshot.data)
+        frozen_composition.write_bytes(composition_snapshot.data)
+        mapping = load_mapping(frozen_mapping)
+        composition = load_composition(frozen_composition, frozen_mapping)
+    _require_snapshot(mapping_snapshot)
+    _require_snapshot(composition_snapshot)
+    return mapping_snapshot, composition_snapshot, mapping, composition
+
+
+def _verified_decoder_snapshot(path: Path, role: str) -> _FileSnapshot:
+    """Run decoder identity checks on an immutable copy of exact sealed bytes."""
+
+    snapshot = _stable_file_snapshot(path)
+    # bridge_identity itself executes a private copy of one stable snapshot.
+    identity = bridge_identity(snapshot.path, role)
+    if not isinstance(identity, dict):
+        raise RuntimeError(f"decoder identity probe returned no receipt for {role}")
+    if identity.get("bytes") != snapshot.size or identity.get("sha256") != snapshot.sha256:
+        raise RuntimeError(
+            f"decoder identity receipt differs from exact {role} bytes"
+        )
+    _require_snapshot(snapshot)
+    return snapshot
+
+
+def _normalization_facts(payload: dict, parent: Path):
+    """Read raw input and target facts only from sealed provenance bytes."""
+
+    from woof.source_normalization import NORMALIZATION_RECEIPT_KEY
+
+    provenance = payload.get("provenance")
+    if not isinstance(provenance, dict):
+        return None
+    found = []
+    for row in provenance.values():
+        if not isinstance(row, dict) or not isinstance(row.get("path"), str):
+            continue
+        try:
+            snapshot = _stable_file_snapshot(parent / row["path"])
+            if (type(row.get("bytes")) is not int or snapshot.size != row["bytes"]
+                    or snapshot.sha256 != row.get("sha256")):
+                continue
+            document = _strict_json(snapshot.data, "normalization provenance")
+        except (OSError, ValueError):
+            continue
+        if not isinstance(document, dict) or NORMALIZATION_RECEIPT_KEY not in document:
+            continue
+        receipt = document[NORMALIZATION_RECEIPT_KEY]
+        request = receipt.get("request") if isinstance(receipt, dict) else None
+        if not isinstance(request, dict):
+            raise ValueError("normalization receipt cannot identify its raw inputs")
+        inputs, target = request.get("inputs"), request.get("target")
+        if (not isinstance(inputs, list) or not inputs
+                or not isinstance(target, dict) or not target):
+            raise ValueError("normalization receipt cannot identify its raw inputs and target")
+        for item in inputs:
+            if (not isinstance(item, dict)
+                    or not isinstance(item.get("path"), str) or not item["path"]
+                    or type(item.get("bytes")) is not int or item["bytes"] <= 0
+                    or not isinstance(item.get("sha256"), str)
+                    or len(item["sha256"]) != 64
+                    or any(c not in "0123456789abcdef" for c in item["sha256"])):
+                raise ValueError("normalization receipt has an invalid raw input identity")
+        found.append(({"inputs": inputs, "target": target}, snapshot))
+    # Multiple normalization requests cannot identify one set of derived data.
+    if len(found) > 1:
+        raise ValueError("multiple normalization receipts cannot identify one set of inputs")
+    return found[0] if found else None
+
+
+def _is_sha256_hex(value) -> bool:
+    return (isinstance(value, str) and len(value) == 64
+            and all(char in "0123456789abcdef" for char in value))
+
+
+def _upgrade_sibling_path(output_path: Path, manifest_digest: str) -> Path:
+    return output_path.with_name(
+        f"{output_path.stem}.{manifest_digest}{output_path.suffix}"
+    )
+
+
+def _seals_same_fetched_facts(previous: dict, payload: dict, parent: Path, *,
+                              receipts: list[_FileSnapshot] | None = None
+                              ) -> bool:
+    """Whether ``payload`` differs from ``previous`` only in release-owned rows.
+
+    Release-owned authorities can change together, including the default
+    Rust decoder and packaged provenance paths. Data, schema, member bindings
+    and unknown keys must still match. Normalized files may move to a new cache
+    key when their sealed raw inputs and target match; the two normalization
+    receipts read for that are appended to ``receipts``.
+    """
+
+    if not _is_sha256_hex(previous.get("mapping_sha256")):
+        return False
+    release_owned = {"mapping_sha256", "composition_sha256", "decoders", "provenance"}
+    try:
+        previous_normalization = _normalization_facts(previous, parent)
+        current_normalization = _normalization_facts(payload, parent)
+    except ValueError:
+        return False
+    if previous_normalization is not None and current_normalization is not None:
+        if receipts is not None:
+            receipts.extend((previous_normalization[1], current_normalization[1]))
+        if (_canonical_json(previous_normalization[0])
+                != _canonical_json(current_normalization[0])):
+            return False
+        release_owned.update(("primary_files", "supplements"))
+    previous_facts = {key: value for key, value in previous.items()
+                      if key not in release_owned}
+    current_facts = {key: value for key, value in payload.items()
+                     if key not in release_owned}
+    return _canonical_json(previous_facts) == _canonical_json(current_facts)
+
+
+def _manifest_destination(output_path: Path, payload: dict,
+                          manifest_digest: str, *,
+                          normalization_snapshots: list[_FileSnapshot] | None = None
+                          ) -> Path:
+    """Preserve an older release's binding when the fetched facts match.
+
+    Re-preparing a folder prepared by an older release refused at inputs.json
+    because the release rebuilt its mapping, decoder or normalization cache key.
+    When :func:`_seals_same_fetched_facts` holds, reseal the release-owned rows
+    beside the original manifest without moving any existing binding. The
+    content-derived name makes repeated preparation a no-op.
+    """
+
+    if not output_path.is_file():
+        return output_path
+    try:
+        previous_snapshot = _stable_file_snapshot(output_path)
+        previous = _strict_json(previous_snapshot.data, "existing manifest")
+    except (OSError, ValueError):
+        # The existing-file resolver below reports unreadable or invalid files.
+        return output_path
+    if not isinstance(previous, dict):
+        return output_path
+    if not _is_sha256_hex(previous.get("mapping_sha256")):
+        return output_path
+    if _canonical_json(previous) == _canonical_json(payload):
+        return output_path
+    receipts: list[_FileSnapshot] = []
+    upgrade = _seals_same_fetched_facts(previous, payload, output_path.parent,
+                                        receipts=receipts)
+    if receipts and normalization_snapshots is not None:
+        normalization_snapshots.extend((previous_snapshot, *receipts))
+    if not upgrade:
+        return output_path
+    return _upgrade_sibling_path(output_path, manifest_digest)
+
+
+def _upgrades_of_replaced_manifest(output_path: Path) -> list[_FileSnapshot]:
+    """The siblings a release upgrade wrote for the manifest at ``output_path``.
+
+    Named breakage: after a version-only rerun wrote ``inputs.<digest>.json``,
+    a managed rerun with changed fetched bytes replaced ``inputs.json`` and
+    left that sibling in the folder, describing data the folder no longer
+    held. A file counts only when its name is ``<stem>.<sha256>`` of its own
+    bytes and it seals the same fetched facts as the manifest being replaced,
+    which is exactly when :func:`_manifest_destination` would have chosen it.
+    """
+
+    try:
+        previous = _strict_json(_stable_file_snapshot(output_path).data,
+                                "existing manifest")
+    except (OSError, ValueError):
+        return []
+    if not isinstance(previous, dict):
+        return []
+    prefix, suffix = f"{output_path.stem}.", output_path.suffix
+    upgrades = []
+    for candidate in sorted(output_path.parent.iterdir()):
+        name = candidate.name
+        if not name.startswith(prefix) or not name.endswith(suffix):
+            continue
+        digest = name[len(prefix):len(name) - len(suffix)]
+        if (not _is_sha256_hex(digest) or candidate == output_path
+                or candidate.is_symlink()):
+            continue
+        try:
+            snapshot = _stable_file_snapshot(candidate)
+            sibling = _strict_json(snapshot.data, "upgraded manifest")
+        except (OSError, ValueError):
+            continue
+        if (snapshot.sha256 == digest and isinstance(sibling, dict)
+                and _seals_same_fetched_facts(previous, sibling,
+                                              output_path.parent)):
+            upgrades.append(snapshot)
+    return upgrades
+
+
+def _remove_upgrades(upgrades: list[_FileSnapshot]) -> dict[str, list]:
+    """Remove each upgrade still holding the bytes it was selected on.
+
+    Runs only after the replacement is published, so a failed replacement
+    keeps the upgrade that still describes the folder. A file that cannot
+    be removed does not fail the preparation that already bound the new
+    manifest; it is reported instead, so the replacement line can name it.
+    """
+
+    removed, unremoved = [], []
+    for snapshot in upgrades:
+        row = {"path": str(snapshot.path), "sha256": snapshot.sha256}
+        try:
+            if _sha256(snapshot.path) != snapshot.sha256:
+                continue
+            snapshot.path.unlink()
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            unremoved.append({**row, "error": str(error)})
+            continue
+        removed.append(row)
+    return {key: rows for key, rows in (("removed_manifests", removed),
+                                        ("unremoved_manifests", unremoved))
+            if rows}
+
+
+def _resolve_existing_manifest(output_path: Path, manifest_digest: str,
+                               *, replace_different: bool = False) -> bool:
+    """Write, skip, or refuse -- decided on the bytes, not on existence.
+
+    Returns ``True`` when nothing is at ``output_path`` and this call
+    should publish, ``False`` when the file already holds exactly the
+    manifest this call composed (so there is nothing to write and
+    nothing to complain about), and raises when it holds something
+    else -- unless ``replace_different``, where a different regular file
+    is replaced (``True``).  That is only for a path the caller chose
+    itself rather than one a user named: see :func:`author_input_manifest`.
+
+    The refusal keeps every property it had -- a manifest already on
+    disk binds a run to bytes THIS authoring did not seal, and silently
+    replacing it would move that binding under a reader who never asked
+    -- and it now names the two commands that resolve it, because the
+    walked failure was a documented "runnable as written" command that
+    exited 78 with no next step (UX finding N13).
+    """
+
+    try:
+        if not output_path.exists():
+            return True
+        if output_path.is_file() and _sha256(output_path) == manifest_digest:
+            return False
+        if replace_different and output_path.is_file():
+            return True
+    except OSError as error:                          # pragma: no cover
+        raise FileExistsError(
+            f"cannot read the manifest already at {output_path}: {error}\n"
+            f"  remedy: delete {output_path.name} and re-run, or pass "
+            "--author-input-manifest a path this process can read"
+        ) from error
+    on_disk = (_sha256(output_path) if output_path.is_file()
+               else "not a regular file")
+    raise FileExistsError(
+        f"refusing to overwrite {output_path}: it already holds a "
+        f"different input manifest (on disk {on_disk}, this authoring "
+        f"{manifest_digest}), and a run bound to the file on disk would "
+        "be bound to bytes this authoring did not seal.\n"
+        f"  remedy: delete {output_path.name} and re-run the command, or "
+        "point --author-input-manifest at a path that does not exist yet")
+
+
+def _authoring_receipt(output_path: Path, mapping, manifest_bytes: bytes,
+                       manifest_digest: str, primary, supplements,
+                       provenance, decoders, *, reauthored: bool
+                       ) -> dict[str, object]:
+    """The one receipt shape, whether bytes were written or matched.
+
+    ``reauthored`` is the only difference: ``False`` means the file was
+    already exactly this manifest, which is what a second paste of a
+    printed prep command produces.  Callers print a different line for
+    it; nothing downstream branches on it, because the manifest a run
+    binds is byte-identical either way.
+    """
+
+    return {
+        "schema": MANIFEST_AUTHORING_SCHEMA,
+        "status": "PASS_IDENTITY_BOUND_NOT_STOCK_WRF_CERTIFIED",
+        "reauthored": reauthored,
+        "manifest": {
+            "path": str(output_path),
+            "bytes": len(manifest_bytes),
+            "sha256": manifest_digest,
+        },
+        "source_format": mapping["format"],
+        "primary_file_count": len(primary),
+        "supplement_file_count": sum(len(paths)
+                                     for paths in supplements.values()),
+        "provenance_file_count": len(provenance),
+        "decoder_file_count": len(decoders),
+    }
+
+
+def author_input_manifest(
+    output_path: str | Path,
+    *,
+    mapping_path: str | Path,
+    composition_path: str | Path,
+    primary_files: Sequence[str | Path],
+    supplement_files: Mapping[str, str | Path | Sequence[str | Path]],
+    provenance_files: Mapping[str, str | Path],
+    grib1_bridge: str | Path | None = None,
+    grib2_inventory: str | Path | None = None,
+    grib2_dump: str | Path | None = None,
+    contributing_mappings: Mapping[str, str | Path] | None = None,
+    expected_format: str | None = None,
+    member: str | None = None,
+    member_identity: str | None = None,
+    replace_different: bool = False,
+) -> dict[str, object]:
+    """Create and round-trip an exact composition input manifest.
+
+    ``replace_different`` replaces a different manifest already at
+    ``output_path`` instead of refusing.  It is for a path the CALLER
+    chose, never one a user named: ``woof prep --source-root DIR`` writes
+    its own ``DIR/inputs.json``, and a preparation made from an earlier
+    one keeps its own copy (``source-evidence/input-manifest.json``) and
+    checks that copy, never this path.  Without it the documented line
+    exited 78 after any change to the folder's files or to the installed
+    decoders the manifest seals. Release-only changes still preserve the
+    original and select a create-only sibling before this replacement policy.
+    A replacement then removes each sibling an upgrade wrote for the
+    manifest it replaced, and the receipt lists them under
+    ``removed_manifests`` (``unremoved_manifests`` for any that could not be
+    removed); both keys are absent when there were none.
+
+    ``member``/``member_identity`` declare an EXPLICIT ensemble member
+    binding for archives whose product octets carry none: the caller's
+    own verified authority (a filename-bound member manifest, for one)
+    names the member, and this manifest seals it so the composition
+    stamps it onto every canonical frame.  The pair is atomic -- a
+    member with no identity policy is a number with no provenance, and
+    an identity policy with no member binds nothing.
+
+    ``contributing_mappings`` supplies each cross-source binding's own
+    mapping document under its declared ``mapping_role``, exactly as
+    ``decode_composed_source`` takes them.  On the subprocess-tool
+    route they are REQUIRED for a composition whose contributing
+    sources span another format: the manifest seals WHICH BINARY read
+    the bytes, ``decode_composed_source`` verifies against the union
+    of every decoded format's roles, and a manifest sealed from the
+    primary's format alone (a GRIB2 atmosphere borrowing from a GRIB1
+    archive) named an inventory the composition then rightly refused.
+    The engine route is unaffected: one in-process role either way.
+    """
+
+    if (member is None) != (member_identity is None):
+        raise ValueError(
+            "member and member_identity are an atomic pair: the manifest "
+            "seals WHICH member and WHAT authority named it together"
+        )
+    if member is not None and (
+        not isinstance(member, str) or not member.strip()
+        or not isinstance(member_identity, str) or not member_identity.strip()
+    ):
+        raise ValueError(
+            "member and member_identity must be non-empty strings"
+        )
+    output_path = Path(output_path).resolve()
+    # NOT a bare existence check.  ``data/<source>/prep-command.txt`` is
+    # documented "runnable as written" and every route prints it as the
+    # next command; pasting it a second time -- which is what a reader
+    # does after fixing an unrelated flag -- met exit 78 and no remedy
+    # (UX finding N13).  Re-authoring is decided on CONTENT, below,
+    # once the manifest this call would write is known: identical bytes
+    # are a no-op and release upgrades use a sibling. Fetched-data changes
+    # refuse unless the caller owns the path and requests replacement.
+    mapping_path = Path(mapping_path).resolve()
+    composition_path = Path(composition_path).resolve()
+    (
+        mapping_snapshot,
+        composition_snapshot,
+        mapping,
+        composition,
+    ) = _load_contract_snapshots(mapping_path, composition_path)
+    if expected_format is not None and mapping["format"] != expected_format:
+        raise ValueError(
+            f"mapping format {mapping['format']!r} differs from expected "
+            f"format {expected_format!r}"
+        )
+    primary = tuple(Path(path).resolve() for path in primary_files)
+    if not primary or len(set(primary)) != len(primary):
+        raise ValueError("primary file inventory must be non-empty and unique")
+    supplements: dict[str, tuple[Path, ...]] = {}
+    for role, raw in supplement_files.items():
+        values = (raw,) if isinstance(raw, (str, Path)) else tuple(raw)
+        paths = tuple(Path(path).resolve() for path in values)
+        if not paths or len(set(paths)) != len(paths):
+            raise ValueError(
+                f"supplement role {role!r} must have a non-empty unique inventory"
+            )
+        supplements[str(role)] = paths
+    provenance = {
+        str(role): Path(path).resolve() for role, path in provenance_files.items()
+    }
+    # The manifest seals WHICH BINARY read the bytes, so the decoder
+    # inventory has to be the one the run will actually use.  On the
+    # Rust engine that is one in-process engine rather than the
+    # subprocess pair, and a manifest sealed against the pair would then
+    # be replayed under a decoder that never ran -- evidence naming the
+    # wrong binary is worse than no evidence, so the two routes seal
+    # different rows and `decode_composed_source` refuses a mismatch.
+    decoders = _manifest_decoders(
+        mapping, composition, contributing_mappings,
+        grib1_bridge=grib1_bridge, grib2_inventory=grib2_inventory,
+        grib2_dump=grib2_dump)
+    # A cross-source composition may have no terrain supplement (terrain
+    # bound to a contributing source) and adds one data/provenance role per
+    # field_sources binding; the manifest's role inventory is exactly the
+    # union the composition declares, either way.
+    _require_role_inventory(composition, supplements, provenance)
+    return _author_manifest_payload(
+        output_path, mapping_path=mapping_path,
+        composition_path=composition_path, mapping=mapping,
+        mapping_snapshot=mapping_snapshot,
+        composition_snapshot=composition_snapshot, primary=primary,
+        supplements=supplements, provenance=provenance, decoders=decoders,
+        member=member, member_identity=member_identity,
+        replace_different=replace_different)
+
+
+def planned_input_manifest(
+    output_path: str | Path,
+    *,
+    mapping_path: str | Path,
+    composition_path: str | Path,
+    primary_files: Sequence[str | Path],
+    supplement_files: Mapping[str, str | Path | Sequence[str | Path]],
+    provenance_files: Mapping[str, str | Path],
+    planned: Sequence[str | Path],
+    grib1_bridge: str | Path | None = None,
+    grib2_inventory: str | Path | None = None,
+    grib2_dump: str | Path | None = None,
+    contributing_mappings: Mapping[str, str | Path] | None = None,
+) -> dict[str, object]:
+    """The manifest :func:`author_input_manifest` writes once the planned files exist.
+
+    An as-posted preparation's head is written from its first leads, so the
+    later leads' objects are not there yet.  This is the same document with
+    the byte count and digest of every file in ``planned`` (the lead
+    objects the fetch has yet to post) left ``None``; every other row is
+    what the author would write now.  The seal authors the real manifest
+    with :func:`author_input_manifest`, and the head's input plan holds
+    it to this one row for row.
+    """
+
+    output_path = Path(output_path).resolve()
+    mapping_path = Path(mapping_path).resolve()
+    composition_path = Path(composition_path).resolve()
+    (
+        mapping_snapshot,
+        composition_snapshot,
+        mapping,
+        composition,
+    ) = _load_contract_snapshots(mapping_path, composition_path)
+    primary = tuple(Path(path).resolve() for path in primary_files)
+    if not primary or len(set(primary)) != len(primary):
+        raise ValueError("primary file inventory must be non-empty and unique")
+    supplements: dict[str, tuple[Path, ...]] = {}
+    for role, raw in supplement_files.items():
+        values = (raw,) if isinstance(raw, (str, Path)) else tuple(raw)
+        supplements[str(role)] = tuple(Path(path).resolve() for path in values)
+    provenance = {
+        str(role): Path(path).resolve() for role, path in provenance_files.items()
+    }
+    decoders = _manifest_decoders(
+        mapping, composition, contributing_mappings,
+        grib1_bridge=grib1_bridge, grib2_inventory=grib2_inventory,
+        grib2_dump=grib2_dump)
+    _require_role_inventory(composition, supplements, provenance)
+    later = {Path(path).resolve() for path in planned}
+    fingerprints: dict[Path, tuple] = {
+        mapping_path: (mapping_snapshot.sha256, mapping_snapshot.size, 0),
+        composition_path: (composition_snapshot.sha256,
+                           composition_snapshot.size, 0),
+    }
+    for role, path in decoders.items():
+        snapshot = _verified_decoder_snapshot(path, role)
+        fingerprints[path] = (snapshot.sha256, snapshot.size, 0)
+    for path in (*primary, *(item for paths in supplements.values()
+                             for item in paths), *provenance.values()):
+        if path in later:
+            fingerprints[path] = (None, None, 0)
+        elif path not in fingerprints:
+            snapshot = _snapshot_authority(path)
+            fingerprints[path] = (snapshot.sha256, snapshot.size, 0)
+    parent = output_path.parent
+    return {
+        "schema": INPUT_MANIFEST_SCHEMA,
+        "mapping_sha256": fingerprints[mapping_path][0],
+        "composition_sha256": fingerprints[composition_path][0],
+        "primary_files": [
+            _path_row(path, parent, fingerprints[path]) for path in primary
+        ],
+        "supplements": {
+            role: _inventory_row(paths, parent, fingerprints)
+            for role, paths in supplements.items()
+        },
+        "provenance": {
+            role: _path_row(path, parent, fingerprints[path])
+            for role, path in provenance.items()
+        },
+        "decoders": {
+            role: _path_row(path, parent, fingerprints[path])
+            for role, path in decoders.items()
+        },
+    }
+
+
+def manifest_row_path(path: str | Path, manifest_path: str | Path) -> str:
+    """How a composition-inputs manifest at ``manifest_path`` spells ``path``."""
+
+    return _path_row(Path(path).resolve(),
+                     Path(manifest_path).resolve().parent, ("", 0, 0))["path"]
+
+
+def _manifest_decoders(mapping, composition, contributing_mappings, *,
+                       grib1_bridge, grib2_inventory, grib2_dump
+                       ) -> dict[str, Path]:
+    """The decoder rows a composition-inputs manifest seals."""
+
+    engine_binary = None
+    if _mapped_engine_choice(
+        grib1_bridge=grib1_bridge,
+        grib2_inventory=grib2_inventory,
+        grib2_dump=grib2_dump,
+        subcommand="decode",
+        source_format=str(mapping["format"]),
+    ) == _ENGINE_RUST:
+        from woof.mapped_engine_bridge import require_engine
+
+        engine_binary = require_engine()
+    # The union of every format this composition decodes, exactly the
+    # set `decode_composed_source` verifies the manifest against.  Each
+    # supplied contributing mapping is held to the composition's own
+    # sha256 pin before its format is believed.
+    formats: set[str] = {str(mapping["format"])}
+    bindings = composition.get("field_sources") or {}
+    supplied_contributing = {
+        str(role): Path(path).resolve()
+        for role, path in (contributing_mappings or {}).items()
+    }
+    expected_mapping_roles = {
+        str(binding["mapping_role"]) for binding in bindings.values()
+    }
+    unknown_roles = set(supplied_contributing) - expected_mapping_roles
+    if unknown_roles:
+        raise ValueError(
+            "contributing mapping role(s) "
+            f"{sorted(unknown_roles)} are not declared by the composition"
+        )
+    for binding_name in sorted(bindings):
+        binding = bindings[binding_name]
+        donor_path = supplied_contributing.get(str(binding["mapping_role"]))
+        if donor_path is None:
+            continue
+        donor_snapshot = _snapshot_authority(donor_path, retain_bytes=True)
+        pinned = str(binding["mapping_sha256"])
+        if donor_snapshot.sha256 != pinned:
+            raise ValueError(
+                f"contributing source binding {binding_name!r} authority "
+                f"hash mismatch: the composition pins {pinned}, the "
+                f"supplied mapping bytes hash to {donor_snapshot.sha256}"
+            )
+        donor_mapping = load_mapping(
+            donor_path,
+            _raw=_load_json_bytes(
+                donor_snapshot.data, "contributing mapping", donor_path,
+            ),
+        )
+        formats.add(str(donor_mapping["format"]))
+    return _decoder_inventory(
+        # The historical single-format call shape survives; the union
+        # tuple appears only when a contributing source really spans
+        # another format.
+        str(mapping["format"]) if len(formats) == 1
+        else tuple(sorted(formats)),
+        grib1_bridge=grib1_bridge,
+        grib2_inventory=grib2_inventory,
+        grib2_dump=grib2_dump,
+        engine=engine_binary,
+    )
+
+
+def _require_role_inventory(composition, supplements, provenance) -> None:
+    terrain = composition["supplements"].get("terrain_height")
+    expected_supplements: set[str] = set()
+    expected_provenance: set[str] = set()
+    if terrain is not None:
+        expected_supplements.add(str(terrain["data_role"]))
+        expected_provenance.add(str(terrain["provenance_role"]))
+    for binding in (composition.get("field_sources") or {}).values():
+        expected_supplements.add(str(binding["data_role"]))
+        expected_provenance.add(str(binding["provenance_role"]))
+    if set(supplements) != expected_supplements:
+        raise ValueError(
+            "supplement role inventory differs from the composition contract"
+        )
+    if set(provenance) != expected_provenance:
+        raise ValueError(
+            "provenance role inventory differs from the composition contract"
+        )
+
+
+def _author_manifest_payload(output_path: Path, *, mapping_path, composition_path,
+                             mapping, mapping_snapshot, composition_snapshot,
+                             primary, supplements, provenance, decoders,
+                             member, member_identity, replace_different):
+    authorities = (
+        mapping_path,
+        composition_path,
+        *primary,
+        *(path for paths in supplements.values() for path in paths),
+        *provenance.values(),
+        *decoders.values(),
+    )
+    for path in authorities:
+        if not path.is_file():
+            raise FileNotFoundError(path)
+    _require_unique_identities(primary, "primary file inventory")
+    for role, paths in supplements.items():
+        _require_unique_identities(paths, f"supplement role {role!r}")
+    non_data = (
+        mapping_path,
+        composition_path,
+        *provenance.values(),
+        *decoders.values(),
+    )
+    _require_unique_identities(
+        non_data, "mapping/composition/provenance/decoder inventory"
+    )
+    data_identities = {
+        _file_identity(path)
+        for path in (
+            *primary,
+            *(path for paths in supplements.values() for path in paths),
+        )
+    }
+    if any(_file_identity(path) in data_identities for path in non_data):
+        raise ValueError(
+            "mapping/composition/provenance/decoder authority aliases source data"
+        )
+    decoder_snapshots = {
+        role: _verified_decoder_snapshot(path, role)
+        for role, path in decoders.items()
+    }
+    authority_snapshots = {
+        mapping_path: mapping_snapshot,
+        composition_path: composition_snapshot,
+        **{
+            decoders[role]: snapshot
+            for role, snapshot in decoder_snapshots.items()
+        },
+    }
+    for path in set(authorities) - set(authority_snapshots):
+        authority_snapshots[path] = _snapshot_authority(path)
+    fingerprints = {
+        path: (snapshot.sha256, snapshot.size, snapshot.mtime_ns)
+        for path, snapshot in authority_snapshots.items()
+    }
+    parent = output_path.parent
+    payload = {
+        "schema": INPUT_MANIFEST_SCHEMA,
+        "mapping_sha256": fingerprints[mapping_path][0],
+        "composition_sha256": fingerprints[composition_path][0],
+        # Written only when declared, so every manifest authored before
+        # the member binding existed is byte-identical to what the same
+        # authoring produces today.
+        **(
+            {"member": member, "member_identity": member_identity}
+            if member is not None else {}
+        ),
+        "primary_files": [
+            _path_row(path, parent, fingerprints[path]) for path in primary
+        ],
+        "supplements": {
+            role: _inventory_row(paths, parent, fingerprints)
+            for role, paths in supplements.items()
+        },
+        "provenance": {
+            role: _path_row(path, parent, fingerprints[path])
+            for role, path in provenance.items()
+        },
+        "decoders": {
+            role: _path_row(path, parent, fingerprints[path])
+            for role, path in decoders.items()
+        },
+    }
+    manifest_bytes = _canonical_json(payload)
+    manifest_digest = hashlib.sha256(manifest_bytes).hexdigest()
+    requested_path = output_path
+    normalization_snapshots: list[_FileSnapshot] = []
+    output_path = _manifest_destination(
+        output_path, payload, manifest_digest,
+        normalization_snapshots=normalization_snapshots,
+    )
+    # Replacement is only for the caller-managed path, never a conflicting
+    # file already occupying the sibling chosen for an unchanged input set.
+    replace_different = replace_different and output_path == requested_path
+    replacing = (replace_different and output_path.is_file()
+                 and _sha256(output_path) != manifest_digest)
+    # Chosen from the manifest being replaced, before it is gone.
+    replaced_upgrades = (_upgrades_of_replaced_manifest(output_path)
+                         if replacing else [])
+    reauthored = _resolve_existing_manifest(
+        output_path, manifest_digest, replace_different=replace_different)
+    if not reauthored:
+        for snapshot in normalization_snapshots:
+            _require_snapshot(snapshot)
+        return _authoring_receipt(output_path, mapping, manifest_bytes,
+                                  manifest_digest, primary, supplements,
+                                  provenance, decoders, reauthored=False)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    candidate = output_path.with_name(
+        f".{output_path.name}.candidate-{os.getpid()}-{uuid.uuid4().hex[:12]}"
+    )
+    published = False
+    try:
+        with candidate.open("xb") as stream:
+            stream.write(manifest_bytes)
+            stream.flush()
+            os.fsync(stream.fileno())
+        _verify_manifest(
+            candidate,
+            manifest_digest,
+            mapping_path=mapping_path,
+            composition_path=composition_path,
+            primary_files=primary,
+            supplement_files=supplements,
+            provenance_files=provenance,
+            decoder_files=decoders,
+            _snapshots=authority_snapshots,
+            _recheck_snapshots=False,
+        )
+        for snapshot in authority_snapshots.values():
+            if isinstance(snapshot, _FileSnapshot):
+                _require_snapshot(snapshot)
+            else:
+                _require_authority_snapshot(snapshot)
+        for snapshot in normalization_snapshots:
+            _require_snapshot(snapshot)
+        if replacing:
+            replace_file_with_retry(candidate, output_path)
+        else:
+            try:
+                publish_new(candidate, output_path)
+            except FileExistsError as error:
+                raise FileExistsError(
+                    f"refusing to overwrite {output_path}") from error
+        published = True
+        if _sha256(output_path) != manifest_digest:
+            raise RuntimeError("published manifest bytes differ from candidate")
+    except BaseException:
+        if (
+            published
+            and output_path.is_file()
+            and _sha256(output_path) == manifest_digest
+        ):
+            output_path.unlink()
+        raise
+    finally:
+        candidate.unlink(missing_ok=True)
+    return {
+        **_authoring_receipt(output_path, mapping, manifest_bytes,
+                             manifest_digest, primary, supplements,
+                             provenance, decoders, reauthored=True),
+        **_remove_upgrades(replaced_upgrades),
+    }
+
+
+__all__ = [
+    "manifest_row_path", "planned_input_manifest",
+    "DESCRIPTOR_SCHEMA",
+    "MANIFEST_AUTHORING_SCHEMA",
+    "MAPPING_AUTHORING_SCHEMA",
+    "VtableRow",
+    "author_input_manifest",
+    "author_mapping",
+    "compile_mapping_descriptor",
+    "parse_wps_vtable",
+]

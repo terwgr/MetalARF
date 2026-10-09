@@ -1,0 +1,27 @@
+// Generated from kernel_signatures.json; layout 1d92104901c99a021334a0186da7486f251aa93b171d2adf45de3683c73a7de0.
+struct Milbrandt2DiagnosticsResources {
+    device const float *T [[id(0)]];
+    device float *Q [[id(1)]];
+    device const float *QC [[id(2)]];
+    device const float *QR [[id(3)]];
+    device const float *QI [[id(4)]];
+    device const float *QN [[id(5)]];
+    device const float *QG [[id(6)]];
+    device const float *QH [[id(7)]];
+    device float *NC [[id(8)]];
+    device float *NR [[id(9)]];
+    device float *NY [[id(10)]];
+    device float *NN [[id(11)]];
+    device float *NG [[id(12)]];
+    device float *NH [[id(13)]];
+    device const float *pres [[id(14)]];
+    device float *ZET [[id(15)]];
+    device const float *ck [[id(16)]];
+};
+struct Milbrandt2DiagnosticsParams {
+    int nz;
+    int ny;
+    int nx;
+    int nck;
+};
+static_assert(sizeof(Milbrandt2DiagnosticsParams) == 16, "milbrandt2_diagnostics parameter ABI size changed");

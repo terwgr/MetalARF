@@ -1,0 +1,28 @@
+// Generated from kernel_signatures.json; layout a97a3aa9d68995953faa657d7ac13c580f16413cf53e38ccfcca274086413252.
+struct GlobalSurfaceFluxPrepFragmentResources {
+    device const ulong *theta [[id(0)]];
+    device const ulong *exner_bottom [[id(1)]];
+    device const ulong *qv [[id(2)]];
+    device const ulong *p_full_bottom [[id(3)]];
+    device const ulong *p_surface [[id(4)]];
+    device const ulong *u [[id(5)]];
+    device const ulong *v [[id(6)]];
+    device const ulong *surface_temperature [[id(7)]];
+    device const ulong *roughness [[id(8)]];
+    device const ulong *soil_water_fraction [[id(9)]];
+    device const ulong *land_fraction [[id(10)]];
+    device const ulong *dry_air_gas_constant [[id(11)]];
+    device const ulong *epsilon [[id(12)]];
+    device const ulong *bulk_exchange_coefficient [[id(13)]];
+    device const ulong *soil_wetness_capacity [[id(14)]];
+    device ulong *air_temperature [[id(15)]];
+    device ulong *rho_bottom [[id(16)]];
+    device ulong *wind [[id(17)]];
+    device ulong *cd [[id(18)]];
+    device ulong *saturation_mixing_ratio [[id(19)]];
+    device ulong *beta [[id(20)]];
+};
+struct GlobalSurfaceFluxPrepFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalSurfaceFluxPrepFragmentParams) == 4, "global_surface_flux_prep_fragment parameter ABI size changed");

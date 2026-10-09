@@ -1,0 +1,96 @@
+#ifndef WOOF_SOFT_GFK_ATAN_METALH
+#define WOOF_SOFT_GFK_ATAN_METALH
+
+// Dependency-blocked source proposal for the pinned regional Noah-MP
+// glibc_atanf in woof/core/kernels/noahmp_bareflux.cu. FP32 values are uint
+// encodings; arithmetic delegates to soft_binary32.metalh. Do not consume
+// until the primitive base and this translation have passed central review.
+//
+// This is the glibc 2.39 s_atanf.c fdlibm kernel. Preserve its notice:
+/*
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunPro, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
+ */
+#include "soft_binary32.metalh"
+
+constant uint SOFT_GFK_ATAN_C[19] = {
+    0x3eed6338u, 0x3f490fdau, 0x3f7b985eu, 0x3fc90fdau,
+    0x31ac3769u, 0x33222168u, 0x33140fb4u, 0x33a22168u,
+    0x3eaaaaabu, 0xbe4ccccdu, 0x3e124925u, 0xbde38e38u,
+    0x3dba2e6eu, 0xbd9d8795u, 0x3d886b35u, 0xbd6ef16bu,
+    0x3d4bda59u, 0xbd15a221u, 0x3c8569d7u
+};
+
+// Return the exact FP32 result bits of the source's glibc_atanf operation
+// graph. All arithmetic calls are integer-bit, RN-even soft32 primitives.
+static inline uint soft_gfk_atanf(uint xbits)
+{
+    const uint hx = xbits;
+    const uint ix = hx & 0x7fffffffu;
+    const int signed_hx = as_type<int>(hx);
+    int id;
+    uint x = xbits;
+
+    if (ix >= 0x4c000000u) { // |x| >= 2^25
+        if (ix > 0x7f800000u) return soft32_add(x, x); // NaN
+        if (signed_hx > 0)
+            return soft32_add(SOFT_GFK_ATAN_C[3], SOFT_GFK_ATAN_C[7]);
+        return soft32_sub(soft32_sub(0x00000000u, SOFT_GFK_ATAN_C[3]),
+                          SOFT_GFK_ATAN_C[7]);
+    }
+
+    if (ix < 0x3ee00000u) { // |x| < 0.4375
+        if (ix < 0x31000000u) return x; // |x| < 2^-29, preserve input bits
+        id = -1;
+    } else {
+        x = ix; // fabsf(x), as in the pinned unsigned-bit source
+        if (ix < 0x3f980000u) { // |x| < 1.1875
+            if (ix < 0x3f300000u) { // 7/16 <= |x| < 11/16
+                id = 0;
+                x = soft32_div(
+                    soft32_sub(soft32_mul(0x40000000u, x), 0x3f800000u),
+                    soft32_add(0x40000000u, x));
+            } else { // 11/16 <= |x| < 19/16
+                id = 1;
+                x = soft32_div(soft32_sub(x, 0x3f800000u),
+                               soft32_add(x, 0x3f800000u));
+            }
+        } else if (ix < 0x401c0000u) { // |x| < 2.4375
+            id = 2;
+            x = soft32_div(soft32_sub(x, 0x3fc00000u),
+                soft32_add(0x3f800000u, soft32_mul(0x3fc00000u, x)));
+        } else { // 2.4375 <= |x| < 2^25
+            id = 3;
+            x = soft32_div(0xbf800000u, x);
+        }
+    }
+
+    const uint z = soft32_mul(x, x);
+    const uint w = soft32_mul(z, z);
+    uint s1 = soft32_mul(w, SOFT_GFK_ATAN_C[18]);
+    s1 = soft32_mul(w, soft32_add(SOFT_GFK_ATAN_C[16], s1));
+    s1 = soft32_mul(w, soft32_add(SOFT_GFK_ATAN_C[14], s1));
+    s1 = soft32_mul(w, soft32_add(SOFT_GFK_ATAN_C[12], s1));
+    s1 = soft32_mul(w, soft32_add(SOFT_GFK_ATAN_C[10], s1));
+    s1 = soft32_mul(z, soft32_add(SOFT_GFK_ATAN_C[8], s1));
+    uint s2 = soft32_mul(w, SOFT_GFK_ATAN_C[17]);
+    s2 = soft32_mul(w, soft32_add(SOFT_GFK_ATAN_C[15], s2));
+    s2 = soft32_mul(w, soft32_add(SOFT_GFK_ATAN_C[13], s2));
+    s2 = soft32_mul(w, soft32_add(SOFT_GFK_ATAN_C[11], s2));
+    s2 = soft32_mul(w, soft32_add(SOFT_GFK_ATAN_C[9], s2));
+    const uint s = soft32_add(s1, s2);
+
+    if (id < 0) return soft32_sub(x, soft32_mul(x, s));
+    const uint r = soft32_sub(SOFT_GFK_ATAN_C[uint(id)],
+        soft32_sub(soft32_sub(soft32_mul(x, s),
+                              SOFT_GFK_ATAN_C[4u + uint(id)]), x));
+    return signed_hx < 0 ? soft32_sub(0x00000000u, r) : r;
+}
+
+#endif

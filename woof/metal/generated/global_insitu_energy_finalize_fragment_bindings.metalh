@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 306be836050f26512cc01e9bcc1a154196954b15de66eacd1ac9e75a60950224.
+struct GlobalInsituEnergyFinalizeFragmentResources {
+    device const ulong *partial [[id(0)]];
+    device ulong *row [[id(1)]];
+};
+struct GlobalInsituEnergyFinalizeFragmentParams {
+    int nterm;
+    int nchunk;
+    int row_offset;
+};
+static_assert(sizeof(GlobalInsituEnergyFinalizeFragmentParams) == 12, "global_insitu_energy_finalize_fragment parameter ABI size changed");

@@ -1,0 +1,518 @@
+{
+  "kernels": [
+    {
+      "name": "ucm_overrides_noah",
+      "module": "urban_ucm",
+      "source": "woof/metal/shaders/urban_ucm_family.metal",
+      "cuda_source": "woof/core/kernels/urban_ucm.cu",
+      "cuda_symbol": "ucm_overrides",
+      "resources": [
+        [
+          "urban",
+          "int32",
+          "read"
+        ],
+        [
+          "state_u10",
+          "float",
+          "read"
+        ],
+        [
+          "state_v10",
+          "float",
+          "read"
+        ],
+        [
+          "state_psim",
+          "float",
+          "read"
+        ],
+        [
+          "state_psih",
+          "float",
+          "read"
+        ],
+        [
+          "state_gz1oz0",
+          "float",
+          "read"
+        ],
+        [
+          "state_akms",
+          "float",
+          "read"
+        ],
+        [
+          "field_u10",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_v10",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_psim",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_psih",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_gz1oz0",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_akhs",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_akms",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_chs",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "urban": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_u10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_v10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_psim": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_psih": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_gz1oz0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_akms": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_u10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_v10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_psim": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_psih": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_gz1oz0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_akhs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_akms": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_chs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ucm_overrides_noahmp",
+      "module": "urban_ucm",
+      "source": "woof/metal/shaders/urban_ucm_family.metal",
+      "cuda_source": "woof/core/kernels/urban_ucm.cu",
+      "cuda_symbol": "ucm_overrides",
+      "resources": [
+        [
+          "urban",
+          "int32",
+          "read"
+        ],
+        [
+          "frc",
+          "float",
+          "read"
+        ],
+        [
+          "fvegxy",
+          "float",
+          "read"
+        ],
+        [
+          "t2mvxy",
+          "float",
+          "read"
+        ],
+        [
+          "t2mbxy",
+          "float",
+          "read"
+        ],
+        [
+          "q2mvxy",
+          "float",
+          "read"
+        ],
+        [
+          "q2mbxy",
+          "float",
+          "read"
+        ],
+        [
+          "field_psfc",
+          "float",
+          "read"
+        ],
+        [
+          "field_chs",
+          "float",
+          "read"
+        ],
+        [
+          "state_u10",
+          "float",
+          "read"
+        ],
+        [
+          "state_v10",
+          "float",
+          "read"
+        ],
+        [
+          "state_psim",
+          "float",
+          "read"
+        ],
+        [
+          "state_psih",
+          "float",
+          "read"
+        ],
+        [
+          "state_gz1oz0",
+          "float",
+          "read"
+        ],
+        [
+          "state_akms",
+          "float",
+          "read"
+        ],
+        [
+          "state_th2",
+          "float",
+          "read"
+        ],
+        [
+          "state_q2",
+          "float",
+          "read"
+        ],
+        [
+          "field_u10",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_v10",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_psim",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_psih",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_gz1oz0",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_akhs",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_akms",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_t2",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_th2",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_q2",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "urban": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "frc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "fvegxy": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "t2mvxy": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "t2mbxy": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "q2mvxy": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "q2mbxy": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_psfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_chs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_u10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_v10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_psim": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_psih": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_gz1oz0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_akms": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_th2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_q2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_u10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_v10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_psim": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_psih": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_gz1oz0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_akhs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_akms": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_t2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_th2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_q2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout d47d9dd3703750cb3fe8f8c8eebc3231bd944673138ebfecd973ecf67b51e503.
+struct NtiedtkeKeDissipationResources {
+    device const int *ldcum [[id(0)]];
+    device const int *kctop [[id(1)]];
+    device const float *paph [[id(2)]];
+    device const float *puen [[id(3)]];
+    device const float *pven [[id(4)]];
+    device const float *ztenu [[id(5)]];
+    device const float *ztenv [[id(6)]];
+    device const float *pvom [[id(7)]];
+    device const float *pvol [[id(8)]];
+    device float *ptte [[id(9)]];
+    device float *zuv2 [[id(10)]];
+};
+struct NtiedtkeKeDissipationParams {
+    int ncol;
+    int klev;
+    float cp;
+    float rd;
+    float rv;
+    float xlv;
+    float xlf;
+    float grav;
+};
+static_assert(sizeof(NtiedtkeKeDissipationParams) == 32, "ntiedtke_ke_dissipation parameter ABI size changed");

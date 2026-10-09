@@ -1,0 +1,34 @@
+{
+  "kernels": [
+    {
+      "name": "p3_sed_cloud",
+      "module": "p3_sed_cloud",
+      "source": "woof/metal/shaders/p3_sed_cloud.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_sed_cloud",
+      "resources": [
+        ["qc", "float", "read_write"], ["nc", "float", "read_write"],
+        ["dz", "float", "read"], ["rho", "float", "read"],
+        ["inv_rho", "float", "read"], ["acn", "float", "read"],
+        ["vq", "float", "read_write"], ["vn", "float", "read_write"],
+        ["fq", "float", "read_write"], ["fn", "float", "read_write"],
+        ["prt_liq", "float", "read_write"], ["flags", "float", "read"]
+      ],
+      "shapes": {
+        "qc": [["nz", "ny", "nx"]], "nc": [["nz", "ny", "nx"]],
+        "dz": [["nz", "ny", "nx"]], "rho": [["nz", "ny", "nx"]],
+        "inv_rho": [["nz", "ny", "nx"]], "acn": [["nz", "ny", "nx"]],
+        "vq": [["nz", "ny", "nx"]], "vn": [["nz", "ny", "nx"]],
+        "fq": [["nz", "ny", "nx"]], "fn": [["nz", "ny", "nx"]],
+        "prt_liq": [["ny", "nx"]], "flags": [[2, "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["dt", "float32"], ["log_predict_nc", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

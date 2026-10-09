@@ -1,0 +1,17 @@
+{
+  "kernels": [
+    {
+      "name": "noahmp_soilwater_sstep",
+      "module": "noahmp_soilwater_family",
+      "source": "woof/metal/shaders/noahmp_soilwater_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_soilwater.cu",
+      "cuda_symbol": "k_sstep",
+      "resources": [["par", "float", "read"], ["fin", "float", "read"], ["fout", "float", "read_write"]],
+      "shapes": {"par": [["n", 24]], "fin": [["n", 40]], "fout": [["n", 32]]},
+      "parameters": [["n", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

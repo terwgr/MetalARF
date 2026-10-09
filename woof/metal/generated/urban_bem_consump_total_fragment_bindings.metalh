@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 4d195bcf48be62447e4e7858d79c201145ae4b1e8b5575b7221221cd4988e759.
+struct UrbanBemConsumpTotalFragmentResources {
+    device const float *hsout [[id(0)]];
+    device const float *consump [[id(1)]];
+    device const int *nlev [[id(2)]];
+    device float *hsoutbuild [[id(3)]];
+    device float *consumpbuild [[id(4)]];
+    device int *error [[id(5)]];
+};
+struct UrbanBemConsumpTotalFragmentParams {
+    int nitem;
+    int nzcanm;
+};
+static_assert(sizeof(UrbanBemConsumpTotalFragmentParams) == 8, "urban_bem_consump_total_fragment parameter ABI size changed");

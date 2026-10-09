@@ -1,0 +1,66 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "microphysics_zero_out",
+      "layout_version": 1,
+      "module": "mp_zero_out_fragment",
+      "name": "mp_zero_out",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "spec_zone",
+          "int32"
+        ],
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "first_species",
+          "int32"
+        ],
+        [
+          "threshold",
+          "float32"
+        ]
+      ],
+      "resources": [
+        [
+          "field",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "field": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/mp_zero_out_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

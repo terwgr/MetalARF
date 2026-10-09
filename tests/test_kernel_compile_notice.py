@@ -1,0 +1,662 @@
+"""The first-run kernel-compile notice fires cold and stays quiet warm.
+
+The first GPU forecast on a machine pays ~100 s of NVRTC compilation
+(measured on the first cross-architecture field run of the published
+wheel) under a progress status that never mentioned it.  The notice
+module answers "is that about to happen?" from CuPy's on-disk kernel
+cache alone -- no CUDA import -- so these tests run everywhere.
+
+The architecture half of this file pins the defect the 2026-08-16
+pre-sim profiling audit measured: this box's cache held 7,164 sm_120
+entries when its 5090 was swapped for a 3080, so the cache was not
+empty, the notice never fired, and 51 s of sm_86 recompilation ran
+silently inside step 1's wall clock.
+"""
+
+import json
+import struct
+import time
+from pathlib import Path
+
+import pytest
+
+from woof.kernel_compile_notice import (
+    ARCHITECTURE_MISSING,
+    COLD_CACHE,
+    COMPILING_STATUS,
+    CUPY_CACHE_ENV,
+    cupy_kernel_cache_dir,
+    kernel_cache_is_cold,
+    kernel_cache_state,
+    kernel_compile_notice,
+    scan_kernel_cache,
+)
+
+
+def _cubin(architecture: int, *, abi: int = 8) -> bytes:
+    """One cache entry shaped exactly the way CuPy writes them.
+
+    CuPy prefixes the compiled blob with the 40-character SHA1 of the
+    blob (``cupy/cuda/compiler.py``), so the ELF starts at byte 40.
+    Where the architecture sits in the CUDA ELF's ``e_flags`` depends on
+    the layout the header names, and both layouts are in real caches
+    (:data:`_REAL_HEADS` carries one of each, byte for byte):
+
+    * ``abi=8`` -- ``EI_OSABI`` 0x41, ``EI_ABIVERSION`` 8, the SM in the
+      second byte, the rest of ``e_flags`` as a real sm_120 entry has it
+      (0x06007802).
+    * ``abi=7`` -- ``EI_OSABI`` 0x33, ``EI_ABIVERSION`` 7, the SM in the
+      low byte and repeated in the third, as a real sm_86 entry has it
+      (0x00560556).
+    """
+
+    header = bytearray(64)
+    header[0:4] = b"\x7fELF"
+    header[4] = 2               # ELFCLASS64
+    header[5] = 1               # ELFDATA2LSB
+    header[6] = 1               # EV_CURRENT
+    if abi == 8:
+        header[7], header[8] = 0x41, 8
+        flags = 0x06000002 | (architecture << 8)
+    else:
+        header[7], header[8] = 0x33, 7
+        flags = 0x00000500 | architecture | (architecture << 16)
+    struct.pack_into("<H", header, 16, 2)        # e_type
+    struct.pack_into("<H", header, 18, 190)      # EM_CUDA
+    struct.pack_into("<I", header, 48, flags)
+    return b"0" * 40 + bytes(header)
+
+
+#: The first 104 bytes of three real CuPy kernel cache entries: the SHA1
+#: prefix CuPy writes, then the 64-byte CUDA ELF header, copied from the
+#: files and never rebuilt, so a decoder that only agrees with
+#: :func:`_cubin` cannot pass.
+_REAL_HEADS = {
+    # sm_86, EI_OSABI 0x33 / EI_ABIVERSION 7, e_flags 0x00560556: the
+    # value all 159 entries carried in the cache behind the false
+    # "none of them for this card ... the cache carries sm_5" notice.
+    "sm_86 abi 7": (
+        b"4085d0f6d4cdba3619edb8c00d1e96dd497da0e8",
+        "7f454c460201013307000000000000000200be00810000000000000000000000"
+        "4010000000000000800c0000000000005605560040003800040040000f000100"),
+    # sm_86, EI_OSABI 0x41 / EI_ABIVERSION 8, e_flags 0x06005604: the
+    # same card's kernels in the other layout, from the same cache.
+    "sm_86 abi 8": (
+        b"0374584e83e0b071171d43acb59cc19f450dada9",
+        "7f454c460201014108000000000000000200be00010000000000000000000000"
+        "c04b000000000000804500000000000004560006400038000400400019000100"),
+    # sm_120, EI_OSABI 0x41 / EI_ABIVERSION 8, e_flags 0x06007802: one of
+    # the 1,468 entries in the RTX 5070 Ti node's cache.
+    "sm_120 abi 8": (
+        b"eccdad6ea4150549b05835fdbd227e9b0ff2d142",
+        "7f454c460201014108000000000000000200be00010000000000000000000000"
+        "f820000000000000f8190000000000000278000640003800060040001c000100"),
+}
+
+
+def _real_head(name: str) -> bytes:
+    prefix, header = _REAL_HEADS[name]
+    return prefix + bytes.fromhex(header)
+
+
+def test_missing_cache_directory_is_cold_and_speaks(tmp_path):
+    absent = tmp_path / "never-created"
+    assert kernel_cache_is_cold(absent)
+    notice = kernel_compile_notice(absent)
+    assert notice is not None
+    # The line must say what is happening and what to expect: this is
+    # the sentence that stops "it hung" at minute two of a first run.
+    assert "compiling GPU kernels" in notice
+    assert "minute" in notice
+    assert "cached" in notice
+
+
+def test_empty_cache_directory_is_still_cold(tmp_path):
+    empty = tmp_path / "kernel_cache"
+    empty.mkdir()
+    assert kernel_cache_is_cold(empty)
+    assert kernel_compile_notice(empty) is not None
+
+
+def test_directory_with_only_subdirectories_is_cold(tmp_path):
+    nested = tmp_path / "kernel_cache"
+    (nested / "not-a-cubin").mkdir(parents=True)
+    assert kernel_cache_is_cold(nested)
+
+
+def test_any_cached_entry_means_warm_and_silent(tmp_path):
+    warm = tmp_path / "kernel_cache"
+    warm.mkdir()
+    # Content-hashed blob names are CuPy's business, not this check's:
+    # any regular file counts.
+    (warm / "0a1b2c3d4e5f.cubin").write_bytes(b"\x00")
+    assert not kernel_cache_is_cold(warm)
+    assert kernel_compile_notice(warm) is None
+
+
+def test_cache_dir_resolution_honours_cupy_env(monkeypatch, tmp_path):
+    override = tmp_path / "elsewhere"
+    monkeypatch.setenv(CUPY_CACHE_ENV, str(override))
+    assert cupy_kernel_cache_dir() == override
+    # multi_run points every arm at its own cache; the default answer
+    # must be CuPy's documented one when the variable is absent.
+    monkeypatch.delenv(CUPY_CACHE_ENV, raising=False)
+    resolved = cupy_kernel_cache_dir()
+    assert resolved.name == "kernel_cache"
+    assert resolved.parent.name == ".cupy"
+
+
+def test_default_resolution_feeds_the_no_argument_call(monkeypatch,
+                                                       tmp_path):
+    cache = tmp_path / "cupy-cache"
+    monkeypatch.setenv(CUPY_CACHE_ENV, str(cache))
+    assert kernel_compile_notice() is not None
+    cache.mkdir()
+    (cache / "kernel.cubin").write_bytes(b"\x00")
+    assert kernel_compile_notice() is None
+
+
+def test_the_status_token_is_a_single_progress_word():
+    # woof go prints the token verbatim in heartbeat lines between
+    # RESTORING_PREPARED_CACHE and RUNNING; it must look like its
+    # neighbours (one SHOUTING_SNAKE word, no spaces to wrap).
+    assert COMPILING_STATUS == "COMPILING_GPU_KERNELS"
+
+
+# ---------------------------------------------------------------------------
+# The measured defect: a warm cache for the WRONG card
+# ---------------------------------------------------------------------------
+
+
+def test_a_cache_full_of_another_cards_kernels_still_announces(tmp_path):
+    """THE AUDIT'S CASE.  7,164 sm_120 entries, an sm_86 card, 51 s of
+    silence inside step 1.
+
+    The cache is keyed by architecture, so not one of those entries can
+    be loaded by the new card and every kernel is compiled again.  The
+    old predicate saw files and said "warm"."""
+
+    cache = tmp_path / "kernel_cache"
+    cache.mkdir()
+    for index in range(4):
+        (cache / f"{index:040x}.cubin").write_bytes(_cubin(120))
+
+    state = kernel_cache_state(cache, compute_capability="86")
+    assert state.reason == ARCHITECTURE_MISSING
+    assert state.entries == 4
+    assert state.entries_for_capability == 0
+    notice = kernel_compile_notice(cache, compute_capability="86")
+    assert notice is not None
+    # It must name WHY, or a reader who has seen the notice before on a
+    # first run reads a second one as a bug.
+    assert "sm_86" in notice
+    assert "compiling GPU kernels" in notice
+
+
+def test_an_entry_for_this_card_is_warmth(tmp_path):
+    cache = tmp_path / "kernel_cache"
+    cache.mkdir()
+    (cache / ("a" * 40 + ".cubin")).write_bytes(_cubin(120))
+    (cache / ("b" * 40 + ".cubin")).write_bytes(_cubin(86))
+
+    state = kernel_cache_state(cache, compute_capability="86")
+    assert state.reason is None
+    assert state.entries_for_capability == 1
+    assert kernel_compile_notice(cache, compute_capability="86") is None
+
+
+def test_an_entry_that_cannot_be_decoded_is_never_used_to_announce(tmp_path):
+    """Unknown is not absent.
+
+    A PTX entry, a truncated blob, a future CuPy layout: none of those
+    is evidence that this card's kernels are missing, and announcing a
+    two-minute compile on the strength of a file we could not read is
+    the false positive that would teach a reader to ignore the line."""
+
+    cache = tmp_path / "kernel_cache"
+    cache.mkdir()
+    (cache / ("c" * 40 + ".cubin")).write_bytes(_cubin(120))
+    (cache / ("d" * 40 + ".cubin")).write_bytes(b"\x00" * 8)
+
+    state = kernel_cache_state(cache, compute_capability="86")
+    assert state.reason is None
+    assert state.undecodable == 1
+    assert kernel_compile_notice(cache, compute_capability="86") is None
+
+
+def test_an_unknown_capability_falls_back_to_the_cold_test(tmp_path):
+    cache = tmp_path / "kernel_cache"
+    cache.mkdir()
+    (cache / ("e" * 40 + ".cubin")).write_bytes(_cubin(120))
+    # No card to ask: the accurate answer is the one this module could
+    # always give, and it must not become a guess.
+    assert kernel_cache_state(cache, compute_capability=None).reason is None
+    assert kernel_compile_notice(cache) is None
+
+
+def test_an_empty_cache_is_cold_whatever_the_card_is(tmp_path):
+    empty = tmp_path / "kernel_cache"
+    empty.mkdir()
+    state = kernel_cache_state(empty, compute_capability="86")
+    assert state.reason == COLD_CACHE
+    assert kernel_cache_is_cold(empty)
+
+
+def test_the_reading_is_taken_before_the_run_fills_the_cache(tmp_path):
+    """THE SECOND HALF OF THE SAME DEFECT, and it was measured too.
+
+    With the architecture test in place but asked at the announcement,
+    the reference box STILL said nothing on a staged card swap: 200
+    sm_120 entries against an sm_86 card, and by the time the runner
+    asked, 160 fresh sm_86 entries of its own were already in the
+    directory.  The question is "was this cache usable when the run
+    started", so the census has to come from when the run started.
+    """
+
+    cache = tmp_path / "kernel_cache"
+    cache.mkdir()
+    for index in range(4):
+        (cache / f"{index:040x}.cubin").write_bytes(_cubin(120))
+
+    # Taken at launch: unusable, and it says so.
+    census = scan_kernel_cache(cache)
+    assert kernel_cache_state(
+        cache, compute_capability="86", census=census).reason == \
+        ARCHITECTURE_MISSING
+
+    # The run then compiles its own kernels into the same directory.
+    for index in range(4, 12):
+        (cache / f"{index:040x}.cubin").write_bytes(_cubin(86))
+
+    # Asked NOW, the directory is warm -- which is true and is the
+    # wrong question.  Asked against the launch census, the answer is
+    # still the one the reader needed.
+    assert kernel_cache_state(cache, compute_capability="86").reason is None
+    assert kernel_cache_state(
+        cache, compute_capability="86", census=census).reason == \
+        ARCHITECTURE_MISSING
+
+
+def test_a_stalled_first_step_announces_itself_and_a_fast_one_does_not(
+        tmp_path, capsys):
+    """THE THIRD AND LAST HALF.  Prediction is not enough, so the run
+    also MEASURES.
+
+    Predicting from the cache fails in the real chain for a reason that
+    is nobody's mistake: `woof go`'s preprocessing stage uses the GPU
+    too, so by the time the forecast runner starts, the cache already
+    holds entries for this card and reads as warm -- while every kernel
+    the FORECAST needs is still missing.  Reproduced end to end on the
+    reference box: 200 sm_120 entries staged against an sm_86 card, the
+    census clean, and 52 s of compilation inside model step 1.
+
+    So the last line of defence is the stall itself, which cannot be
+    wrong about whether a reader is waiting.
+    """
+
+    import types
+
+    from woof.prepared_single_domain_forecast import _FirstStepStallWatch
+
+    class _Log:
+        def __init__(self):
+            self.announced = None
+
+        def announce_kernel_compile(self, **fields):
+            self.announced = fields
+
+    # The card and the cache are named, not borrowed from the host: left
+    # to ask, the watch read the host's real card and real kernel cache,
+    # so this passed on an sm_86 card and failed on the sm_120 node, where
+    # 200 sm_120 entries are that card's own and rightly read as warm.
+    def _watch(log, census):
+        return _FirstStepStallWatch(
+            progress_path=tmp_path / "progress.json",
+            inputs=types.SimpleNamespace(source="gfs"),
+            exp=types.SimpleNamespace(run_seconds=21600.0),
+            step_log=log, census=census, capability="86",
+            cache_census_now=lambda: census, delay=0.05)
+
+    # A stall: it says so, names what the cache looked like at launch,
+    # and publishes the status `woof go`'s heartbeat relays verbatim.
+    log = _Log()
+    watch = _watch(log, (200, 0, {"120": 200}))
+    watch.arm()
+    time.sleep(0.4)
+    printed = capsys.readouterr().out
+    assert "model step 1 has been running" in printed
+    assert "compile" in printed
+    assert log.announced is not None
+    assert log.announced["cached_entries"] == 200
+    published = json.loads(
+        (tmp_path / "progress.json").read_text(encoding="utf-8"))
+    assert published["status"] == COMPILING_STATUS
+
+    # A fast first step: the observer disarms it and nothing is said.
+    quiet = _Log()
+    fast = _watch(quiet, (200, 0, {"120": 200}))
+    fast.arm()
+    fast.observe(grid_id=1, step_count=1, model_seconds=6.0,
+                 step_wall_seconds=1.2)
+    time.sleep(0.3)
+    assert quiet.announced is None
+    assert "model step 1 has been running" not in capsys.readouterr().out
+
+
+def test_a_stalled_step_on_a_warm_cache_names_the_road_not_a_compile(
+        tmp_path, capsys):
+    """LEDGER #324.  The timer alone is not evidence of a compile.
+
+    Captured from a live run: the stall notice claimed "the one-time
+    NVRTC compile of this run's GPU kernels" in the same breath as its
+    own census said the cache held 388 entries at launch, 388 of them
+    for this card -- and not one cubin was written while it stalled.
+    The run was transfer-bound on the streamed road.  A stall says a
+    reader is waiting; it does not say what for.
+    """
+
+    import types
+
+    from woof.prepared_single_domain_forecast import _FirstStepStallWatch
+
+    class _Log:
+        def __init__(self):
+            self.announced = None
+
+        def announce_kernel_compile(self, **fields):
+            self.announced = fields
+
+    log = _Log()
+    watch = _FirstStepStallWatch(
+        progress_path=tmp_path / "progress.json",
+        inputs=types.SimpleNamespace(source="gfs"),
+        exp=types.SimpleNamespace(run_seconds=21600.0),
+        step_log=log, census=(388, 0, {"86": 388}), capability="86",
+        road="store", cache_census_now=lambda: (388, 0, {"86": 388}),
+        delay=0.05)
+    watch.arm()
+    time.sleep(0.4)
+    printed = capsys.readouterr().out
+
+    assert "first model step still running" in printed
+    assert "streamed transfers feed each step" in printed
+    assert "no model step has completed" in printed
+    # The claim that was wrong, in every spelling it had.
+    assert "NVRTC" not in printed
+    assert "compile" not in printed
+    # And the receipt does not claim one either.
+    assert log.announced is None
+    published = json.loads(
+        (tmp_path / "progress.json").read_text(encoding="utf-8"))
+    assert published["status"] != COMPILING_STATUS
+    assert published["status"] == "RUNNING"
+
+
+def test_a_stalled_step_on_a_warm_cache_off_the_store_road_claims_nothing(
+        tmp_path, capsys):
+    """No road to name is not licence to invent a cause."""
+
+    import types
+
+    from woof.prepared_single_domain_forecast import _FirstStepStallWatch
+
+    watch = _FirstStepStallWatch(
+        progress_path=tmp_path / "progress.json",
+        inputs=types.SimpleNamespace(source="gfs"),
+        exp=types.SimpleNamespace(run_seconds=21600.0),
+        step_log=None, census=(388, 0, {"86": 388}), capability="86",
+        road="resident", cache_census_now=lambda: (388, 0, {"86": 388}),
+        delay=0.05)
+    watch.arm()
+    time.sleep(0.4)
+    printed = capsys.readouterr().out
+
+    assert "first model step still running" in printed
+    assert "no model step has completed" in printed
+    assert "compile" not in printed
+    assert "streamed transfers" not in printed
+
+
+def test_a_cold_census_still_says_the_compile_is_what_is_happening(
+        tmp_path, capsys):
+    """The notice this class exists for is not weakened, only evidenced."""
+
+    import types
+
+    from woof.prepared_single_domain_forecast import _FirstStepStallWatch
+
+    class _Log:
+        def __init__(self):
+            self.announced = None
+
+        def announce_kernel_compile(self, **fields):
+            self.announced = fields
+
+    log = _Log()
+    watch = _FirstStepStallWatch(
+        progress_path=tmp_path / "progress.json",
+        inputs=types.SimpleNamespace(source="gfs"),
+        exp=types.SimpleNamespace(run_seconds=21600.0),
+        step_log=log, census=(0, 0, {}), capability="86",
+        road="store", cache_census_now=lambda: (0, 0, {}), delay=0.05)
+    watch.arm()
+    time.sleep(0.4)
+    printed = capsys.readouterr().out
+
+    assert "one-time NVRTC compile" in printed
+    assert log.announced is not None
+    assert log.announced["reason"] == COLD_CACHE
+    published = json.loads(
+        (tmp_path / "progress.json").read_text(encoding="utf-8"))
+    assert published["status"] == COMPILING_STATUS
+
+
+def test_a_cache_that_grew_during_the_stall_is_a_compile_on_any_census(
+        tmp_path, capsys):
+    """THE HOLE THE LAUNCH CENSUS ALONE LEAVES, kept closed.
+
+    A warm launch census is exactly the reading that used to be wrong in
+    the other direction: `woof go`'s preprocessing stage warms the cache
+    before the forecast runner asks, so a cache full of this card's
+    entries can still be missing every kernel the FORECAST needs.  The
+    launch census cannot see that -- but cubins appearing WHILE the step
+    stalls can, and that is positive evidence rather than a timer.
+    """
+
+    import types
+
+    from woof.prepared_single_domain_forecast import _FirstStepStallWatch
+
+    class _Log:
+        def __init__(self):
+            self.announced = None
+
+        def announce_kernel_compile(self, **fields):
+            self.announced = fields
+
+    log = _Log()
+    watch = _FirstStepStallWatch(
+        progress_path=tmp_path / "progress.json",
+        inputs=types.SimpleNamespace(source="gfs"),
+        exp=types.SimpleNamespace(run_seconds=21600.0),
+        step_log=log, census=(200, 0, {"86": 200}), capability="86",
+        road="store",
+        # 37 cubins that did not exist when the run started.
+        cache_census_now=lambda: (237, 0, {"86": 237}), delay=0.05)
+    watch.arm()
+    time.sleep(0.4)
+    printed = capsys.readouterr().out
+
+    assert "one-time NVRTC compile" in printed
+    assert "37" in printed          # the entries that appeared, named
+    assert log.announced is not None
+    published = json.loads(
+        (tmp_path / "progress.json").read_text(encoding="utf-8"))
+    assert published["status"] == COMPILING_STATUS
+
+
+def test_the_stall_watch_still_calls_the_observer_it_wraps():
+    """It chains in front of the step log; it must not replace it."""
+
+    import types
+
+    from woof.prepared_single_domain_forecast import _FirstStepStallWatch
+
+    seen = []
+    watch = _FirstStepStallWatch(
+        progress_path=Path("unused"),
+        inputs=types.SimpleNamespace(source="gfs"),
+        exp=types.SimpleNamespace(run_seconds=1.0),
+        step_log=None, census=(0, 0, {}), delay=999.0)
+    wrapped = watch.wrap(lambda **event: seen.append(event))
+    wrapped(grid_id=1, step_count=1, model_seconds=6.0, step_wall_seconds=0.1)
+    assert seen == [{"grid_id": 1, "step_count": 1, "model_seconds": 6.0,
+                     "step_wall_seconds": 0.1}]
+    # ... and a run with the log switched off still gets a disarm.
+    assert watch.wrap(None) == watch.observe
+
+
+def test_the_state_names_the_capability_it_judged_against(tmp_path):
+    cache = tmp_path / "kernel_cache"
+    cache.mkdir()
+    (cache / ("f" * 40 + ".cubin")).write_bytes(_cubin(120))
+    state = kernel_cache_state(cache, compute_capability="86")
+    # The receipt has to carry it: "the compile was announced" is not a
+    # fact a later reader can check without knowing which card asked.
+    assert state.compute_capability == "86"
+    assert state.architectures == {"120": 1}
+
+
+# ---------------------------------------------------------------------------
+# The layout decides the byte: a warm cache read from the wrong one
+# ---------------------------------------------------------------------------
+
+
+def _cache_of(directory: Path, head: bytes, count: int) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    for index in range(count):
+        (directory / f"{index:040x}.cubin").write_bytes(head)
+    return directory
+
+
+@pytest.mark.parametrize("name, expected", [
+    ("sm_86 abi 7", "86"),
+    ("sm_86 abi 8", "86"),
+    ("sm_120 abi 8", "120"),
+])
+def test_each_real_cubin_head_decodes_to_the_card_that_compiled_it(
+        tmp_path, name, expected):
+    """Three real headers, both layouts, two cards.
+
+    The ABI 7 head is what the false notice was made of: read from the
+    second byte of ``e_flags`` it decoded as sm_5."""
+
+    cache = _cache_of(tmp_path / "kernel_cache", _real_head(name), 1)
+    assert scan_kernel_cache(cache) == (1, 0, {expected: 1})
+
+
+def test_a_warm_abi7_cache_for_this_card_says_nothing(tmp_path):
+    """THE SWEEP'S CASE.  158 sm_86 entries in the ABI 7 layout, and the
+    sm_86 card that compiled them.
+
+    Every warm run printed "the kernel cache holds 158 entry(s), none of
+    them for this card -- compiling GPU kernels for sm_86 (the cache
+    carries sm_5 ...)" while it was already stepping.  Every one of
+    those entries was this card's, and nothing was compiling."""
+
+    cache = _cache_of(tmp_path / "kernel_cache",
+                      _real_head("sm_86 abi 7"), 158)
+    state = kernel_cache_state(cache, compute_capability="86")
+    assert state.reason is None
+    assert state.architectures == {"86": 158}
+    assert state.entries_for_capability == 158
+    assert state.notice is None
+    assert kernel_compile_notice(cache, compute_capability="86") is None
+
+
+@pytest.mark.parametrize("abi", [7, 8])
+def test_another_cards_cache_still_announces_in_either_layout(tmp_path, abi):
+    """Reading the right byte must not turn a real card swap silent."""
+
+    cache = tmp_path / "kernel_cache"
+    cache.mkdir()
+    for index in range(4):
+        (cache / f"{index:040x}.cubin").write_bytes(_cubin(86, abi=abi))
+
+    state = kernel_cache_state(cache, compute_capability="120")
+    assert state.reason == ARCHITECTURE_MISSING
+    assert state.architectures == {"86": 4}
+    assert "sm_120" in state.notice
+    assert "the cache carries sm_86" in state.notice
+
+
+def test_the_real_5070ti_entries_are_another_cards_to_an_sm_86_card(tmp_path):
+    cache = _cache_of(tmp_path / "kernel_cache",
+                      _real_head("sm_120 abi 8"), 3)
+    state = kernel_cache_state(cache, compute_capability="86")
+    assert state.reason == ARCHITECTURE_MISSING
+    assert state.architectures == {"120": 3}
+
+
+def test_a_layout_that_was_never_measured_is_unknown_never_a_mismatch(
+        tmp_path):
+    """A header naming a layout outside the measured table is not read.
+
+    Guessing which byte of ``e_flags`` holds the SM is exactly how an
+    sm_86 cache was announced as sm_5, so an unlisted
+    ``EI_OSABI``/``EI_ABIVERSION`` pair, or an ELF that is not for
+    ``EM_CUDA`` at all, counts as unknown -- and unknown is "possibly
+    this card's", which keeps the notice quiet."""
+
+    cache = tmp_path / "kernel_cache"
+    cache.mkdir()
+    later = bytearray(_real_head("sm_86 abi 7"))
+    later[40 + 8] = 9                    # an EI_ABIVERSION nobody wrote yet
+    (cache / ("a" * 40 + ".cubin")).write_bytes(bytes(later))
+    unnamed = bytearray(_cubin(86))
+    unnamed[40 + 7] = unnamed[40 + 8] = 0     # no CUDA layout named
+    (cache / ("b" * 40 + ".cubin")).write_bytes(bytes(unnamed))
+    host = bytearray(_cubin(86))
+    struct.pack_into("<H", host, 40 + 18, 62)  # EM_X86_64, not a cubin
+    (cache / ("c" * 40 + ".cubin")).write_bytes(bytes(host))
+    (cache / ("d" * 40 + ".cubin")).write_bytes(_cubin(120))
+
+    state = kernel_cache_state(cache, compute_capability="86")
+    assert state.undecodable == 3
+    assert state.architectures == {"120": 1}
+    assert state.reason is None
+    assert state.notice is None
+
+
+def test_a_warm_abi7_census_publishes_no_compiling_status(
+        tmp_path, capsys, monkeypatch):
+    """The status half of the sweep's case.
+
+    The runner's upfront announcement is where the false line printed
+    and where the published status flipped to compiling while the run
+    stepped.  On this card's own cache it now does neither; on another
+    card's cache it still does both."""
+
+    import types
+
+    from woof import prepared_single_domain_forecast as runner
+
+    census = scan_kernel_cache(_cache_of(
+        tmp_path / "kernel_cache", _real_head("sm_86 abi 7"), 158))
+    inputs = types.SimpleNamespace(source="gfs")
+    exp = types.SimpleNamespace(run_seconds=21600.0)
+
+    monkeypatch.setattr(runner, "current_compute_capability", lambda: "86")
+    warm = tmp_path / "warm-progress.json"
+    runner._announce_kernel_compile(warm, inputs, exp, census=census)
+    assert "compiling GPU kernels" not in capsys.readouterr().out
+    assert not warm.exists()
+
+    monkeypatch.setattr(runner, "current_compute_capability", lambda: "120")
+    swapped = tmp_path / "swapped-progress.json"
+    runner._announce_kernel_compile(swapped, inputs, exp, census=census)
+    printed = capsys.readouterr().out
+    assert "compiling GPU kernels for sm_120" in printed
+    assert "the cache carries sm_86" in printed
+    published = json.loads(swapped.read_text(encoding="utf-8"))
+    assert published["status"] == COMPILING_STATUS

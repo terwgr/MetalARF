@@ -1,0 +1,106 @@
+{
+  "kernels": [
+    {
+      "name": "couple_mass_rates",
+      "module": "tendency_coupling",
+      "source": "woof/metal/shaders/tendency_coupling.metal",
+      "cuda_source": "woof/core/tendency_coupling.py",
+      "cuda_symbol": "couple_mass_rates",
+      "resources": [
+        ["c1h", "float", "read"],
+        ["c2h", "float", "read"],
+        ["mut", "float", "read"],
+        ["msft", "float", "read"],
+        ["in0", "float", "read"],
+        ["in1", "float", "read"],
+        ["in2", "float", "read"],
+        ["in3", "float", "read"],
+        ["in4", "float", "read"],
+        ["in5", "float", "read"],
+        ["out0", "float", "read_write"],
+        ["out1", "float", "read_write"],
+        ["out2", "float", "read_write"],
+        ["out3", "float", "read_write"],
+        ["out4", "float", "read_write"],
+        ["out5", "float", "read_write"],
+        ["du", "float", "read"],
+        ["dv", "float", "read"],
+        ["mass_u", "float", "read_write"],
+        ["mass_v", "float", "read_write"]
+      ],
+      "shapes": {
+        "c1h": [["nz"]],
+        "c2h": [["nz"]],
+        "mut": [["ny", "nx"]],
+        "msft": [["ny", "nx"]],
+        "in0": [["nz", "ny", "nx"]],
+        "in1": [["nz", "ny", "nx"]],
+        "in2": [["nz", "ny", "nx"]],
+        "in3": [["nz", "ny", "nx"]],
+        "in4": [["nz", "ny", "nx"]],
+        "in5": [["nz", "ny", "nx"]],
+        "out0": [["nz", "ny", "nx"]],
+        "out1": [["nz", "ny", "nx"]],
+        "out2": [["nz", "ny", "nx"]],
+        "out3": [["nz", "ny", "nx"]],
+        "out4": [["nz", "ny", "nx"]],
+        "out5": [["nz", "ny", "nx"]],
+        "du": [["nz", "ny", "nx"]],
+        "dv": [["nz", "ny", "nx"]],
+        "mass_u": [["nz", "ny", "nx"]],
+        "mass_v": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["present", "int32"],
+        ["wanted", "int32"],
+        ["nslot", "int32"],
+        ["theta_slot", "int32"],
+        ["momentum", "int32"],
+        ["mask_ring", "int32"],
+        ["has_msf", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "couple_faces",
+      "module": "tendency_coupling",
+      "source": "woof/metal/shaders/tendency_coupling.metal",
+      "cuda_source": "woof/core/tendency_coupling.py",
+      "cuda_symbol": "couple_faces",
+      "resources": [
+        ["mass_u", "float", "read"],
+        ["mass_v", "float", "read"],
+        ["msfu", "float", "read"],
+        ["msfv", "float", "read"],
+        ["ru", "float", "read_write"],
+        ["rv", "float", "read_write"]
+      ],
+      "shapes": {
+        "mass_u": [["nz", "ny", "nx"]],
+        "mass_v": [["nz", "ny", "nx"]],
+        "msfu": [["ny", "nx+1"]],
+        "msfv": [["ny+1", "nx"]],
+        "ru": [["nz", "ny", "nx+1"]],
+        "rv": [["nz", "ny+1", "nx"]]
+      },
+      "parameters": [
+        ["mask_ring", "int32"],
+        ["open_x", "int32"],
+        ["open_y", "int32"],
+        ["has_msf", "int32"],
+        ["wrf_exact", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    }
+  ]
+}

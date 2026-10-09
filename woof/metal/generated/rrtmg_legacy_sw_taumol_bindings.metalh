@@ -1,0 +1,33 @@
+// Generated from kernel_signatures.json; layout 14caf7c0933f89ad5d13ba4d6d1b10260be184aec577785bd1b19caa89e37aa8.
+struct RrtmgLegacySwTaumolResources {
+    device const int *laytrop [[id(0)]];
+    device const float *tab [[id(1)]];
+    device const int *ngb [[id(2)]];
+    device const int *jp [[id(3)]];
+    device const int *jt [[id(4)]];
+    device const int *jt1 [[id(5)]];
+    device const float *colh2o [[id(6)]];
+    device const float *colco2 [[id(7)]];
+    device const float *colch4 [[id(8)]];
+    device const float *colo2 [[id(9)]];
+    device const float *colo3 [[id(10)]];
+    device const float *colmol [[id(11)]];
+    device const float *fac00 [[id(12)]];
+    device const float *fac01 [[id(13)]];
+    device const float *fac10 [[id(14)]];
+    device const float *fac11 [[id(15)]];
+    device const float *selffac [[id(16)]];
+    device const float *selffrac [[id(17)]];
+    device const int *indself [[id(18)]];
+    device const float *forfac [[id(19)]];
+    device const float *forfrac [[id(20)]];
+    device const int *indfor [[id(21)]];
+    device float *taug [[id(22)]];
+    device float *taur [[id(23)]];
+};
+struct RrtmgLegacySwTaumolParams {
+    int ncol;
+    int nl;
+    int ntab;
+};
+static_assert(sizeof(RrtmgLegacySwTaumolParams) == 12, "rrtmg_legacy_sw_taumol parameter ABI size changed");

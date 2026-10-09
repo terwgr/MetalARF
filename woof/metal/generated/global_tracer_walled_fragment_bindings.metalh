@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout e5ef68d9a9650ad62640ce739f397edb225609ce771c1767b0be663e61f4edfb.
+struct GlobalTracerWalledFragmentResources {
+    device const ulong *mass [[id(0)]];
+    device const ulong *density [[id(1)]];
+    device const ulong *psi [[id(2)]];
+    device const ulong *centre [[id(3)]];
+    device const ulong *face [[id(4)]];
+    device const ulong *inv_width [[id(5)]];
+    device ulong *new_mass [[id(6)]];
+    device ulong *new_density [[id(7)]];
+    device const ulong *sub [[id(8)]];
+};
+struct GlobalTracerWalledFragmentParams {
+    int ntracer;
+    int nouter;
+    int axis_length;
+    int stride;
+};
+static_assert(sizeof(GlobalTracerWalledFragmentParams) == 16, "global_tracer_walled_fragment parameter ABI size changed");

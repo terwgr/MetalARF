@@ -1,0 +1,48 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/spectral/vector.py",
+      "cuda_symbol": "resident Global vector harmonic weights",
+      "layout_version": 1,
+      "module": "global_semilag_vector_analysis_fragment",
+      "name": "global_semilag_vector_weights_fragment",
+      "parameters": [["count", "int32"], ["nlat", "int32"], ["nfreq", "int32"]],
+      "resources": [
+        ["values", "float64_bits", "read"],
+        ["rotation_weight", "float64_bits", "read"],
+        ["shear_weight", "float64_bits", "read"],
+        ["rotated", "float64_bits", "read_write"],
+        ["sheared", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "values": [["any_1d"]], "rotation_weight": [["any_1d"]],
+        "shear_weight": [["any_1d"]], "rotated": [["any_1d"]],
+        "sheared": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_vector_analysis_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/spectral/vector.py",
+      "cuda_symbol": "resident Global vorticity and divergence assembly",
+      "layout_version": 1,
+      "module": "global_semilag_vector_analysis_fragment",
+      "name": "global_semilag_vordiv_combine_fragment",
+      "parameters": [["nlevel", "int32"], ["ndegree", "int32"], ["mcount", "int32"]],
+      "resources": [
+        ["rotated", "float64_bits", "read"],
+        ["sheared", "float64_bits", "read"],
+        ["divergence", "float64_bits", "read_write"],
+        ["vorticity", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "rotated": [["any_1d"]], "sheared": [["any_1d"]],
+        "divergence": [["any_1d"]], "vorticity": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_vector_analysis_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

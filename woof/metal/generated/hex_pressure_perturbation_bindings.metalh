@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 8c0d835fdf7a03adbe3567166805f0b5c1b2b0b24f7b11bf1667b986b9650573.
+struct HexPressurePerturbationResources {
+    device float *pressure_perturbation [[id(0)]];
+    device const float *exner [[id(1)]];
+    device const float *rho_theta_perturbation [[id(2)]];
+    device const float *rho_theta_base [[id(3)]];
+    device const float *exner_base [[id(4)]];
+    device const float *zz [[id(5)]];
+};
+struct HexPressurePerturbationParams {
+    int nlev;
+    int ncells;
+    float rgas;
+};
+static_assert(sizeof(HexPressurePerturbationParams) == 12, "hex_pressure_perturbation parameter ABI size changed");

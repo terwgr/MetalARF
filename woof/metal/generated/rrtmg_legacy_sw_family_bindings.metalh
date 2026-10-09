@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "rrtmg_legacy_sw_inatm_bindings.metalh"
+#include "rrtmg_legacy_sw_cldprmc_bindings.metalh"
+#include "rrtmg_legacy_sw_setcoef_bindings.metalh"
+#include "rrtmg_legacy_sw_laysolfr_bindings.metalh"
+#include "rrtmg_legacy_sw_taumol_bindings.metalh"
+#include "rrtmg_legacy_sw_sfluxzen_bindings.metalh"
+#include "rrtmg_legacy_sw_spcvmc_bindings.metalh"
+#include "rrtmg_legacy_sw_accum_bindings.metalh"
+#include "rrtmg_legacy_sw_post_bindings.metalh"

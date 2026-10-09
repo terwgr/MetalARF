@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 20dd31c218776777eec6924325f2acb3e089104941b9b30104b00e2536e18c69.
+struct SaseCoupleWTendencyResources {
+    device const float *dw [[id(0)]];
+    device const float *c1f [[id(1)]];
+    device const float *c2f [[id(2)]];
+    device const float *mut [[id(3)]];
+    device const float *msft [[id(4)]];
+    device float *rw [[id(5)]];
+};
+struct SaseCoupleWTendencyParams {
+    int has_msf;
+    int mask_ring;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseCoupleWTendencyParams) == 20, "sase_couple_w_tendency parameter ABI size changed");

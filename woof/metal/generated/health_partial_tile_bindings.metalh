@@ -1,0 +1,37 @@
+// Generated from kernel_signatures.json; layout 38f1e7fca1009438a63347dac76e6630ea48a81d10fcbf47dd4045b4b0f44c70.
+struct HealthPartialTileResources {
+    device const float *u [[id(0)]];
+    device const float *w [[id(1)]];
+    device const float *thp [[id(2)]];
+    device const float *ph [[id(3)]];
+    device const float *phb [[id(4)]];
+    device float *partial [[id(5)]];
+};
+struct HealthPartialTileParams {
+    int block_offset;
+    int bny;
+    int bnx;
+    int jb;
+    int ib;
+    int iny;
+    int inx;
+    int jd;
+    int id;
+    int dny;
+    int dnx;
+    int nz;
+    int u_extra;
+    int phb_full;
+    int have_geopotential;
+    int width;
+    int nblocks;
+    int npartial;
+    int nu;
+    int nw;
+    int nth;
+    int nph;
+    int nphb;
+    int npartial_words;
+    float gravity;
+};
+static_assert(sizeof(HealthPartialTileParams) == 100, "health_partial_tile parameter ABI size changed");

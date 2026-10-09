@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout e4ccdafd559231fb79d45f1a093d601b41cf0ba637c29f78f7973a3084514fe9.
+struct HexVerticalScalarFlux3Resources {
+    device float *flux [[id(0)]];
+    device const float *q_im2 [[id(1)]];
+    device const float *q_im1 [[id(2)]];
+    device const float *q_i [[id(3)]];
+    device const float *q_ip1 [[id(4)]];
+    device const float *vertical_velocity [[id(5)]];
+};
+struct HexVerticalScalarFlux3Params {
+    int nitems;
+    float third_order_coefficient;
+};
+static_assert(sizeof(HexVerticalScalarFlux3Params) == 8, "hex_vertical_scalar_flux3 parameter ABI size changed");

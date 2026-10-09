@@ -1,0 +1,31 @@
+// Generated from kernel_signatures.json; layout d7980bd2dd8be95f77d1de6589f16d814773a09d5218759893b7d467103d48d4.
+struct KfDriverMergeResources {
+    device const float *new_rthcuten [[id(0)]];
+    device const float *new_rqvcuten [[id(1)]];
+    device const float *new_rqccuten [[id(2)]];
+    device const float *new_rqicuten [[id(3)]];
+    device const float *new_rqrcuten [[id(4)]];
+    device const float *new_rqscuten [[id(5)]];
+    device float *cu_rthcuten [[id(6)]];
+    device float *cu_rqvcuten [[id(7)]];
+    device float *cu_rqccuten [[id(8)]];
+    device float *cu_rqicuten [[id(9)]];
+    device float *cu_rqrcuten [[id(10)]];
+    device float *cu_rqscuten [[id(11)]];
+    device const float *nca_seconds [[id(12)]];
+    device const float *pratec [[id(13)]];
+    device float *cu_nca [[id(14)]];
+    device float *cu_pratec [[id(15)]];
+    device float *cu_raincv [[id(16)]];
+};
+struct KfDriverMergeParams {
+    int nz;
+    int ny;
+    int nx;
+    float clock_dt;
+    int optional_mask;
+    int specified;
+    int spec_zone;
+    int surface_only;
+};
+static_assert(sizeof(KfDriverMergeParams) == 32, "kf_driver_merge parameter ABI size changed");

@@ -1,0 +1,44 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_cold_start_w",
+      "module": "cold_start_w",
+      "source": "woof/metal/shaders/cold_start_w_family.metal",
+      "cuda_source": "woof/core/kernels/wrf_cold_start_w.cu",
+      "cuda_symbol": "wrf_cold_start_w",
+      "resources": [
+        ["u", "float", "read"],
+        ["v", "float", "read"],
+        ["ht", "float", "read"],
+        ["msftx", "float", "read"],
+        ["msfty", "float", "read"],
+        ["znw", "float", "read"],
+        ["w", "float", "read_write"]
+      ],
+      "shapes": {
+        "u": [["nz", "ny", "nx+1"]],
+        "v": [["nz", "ny+1", "nx"]],
+        "ht": [["ny", "nx"]],
+        "msftx": [["ny", "nx"]],
+        "msfty": [["ny", "nx"]],
+        "znw": [["nz+1"]],
+        "w": [["nz+1", "ny", "nx"]]
+      },
+      "parameters": [
+        ["cf1", "float32"],
+        ["cf2", "float32"],
+        ["cf3", "float32"],
+        ["rdx", "float32"],
+        ["rdy", "float32"],
+        ["periodic_x", "int32"],
+        ["periodic_y", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

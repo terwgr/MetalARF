@@ -1,0 +1,111 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/core/kernels/terrain_drag.cu",
+      "cuda_symbol": "topo_wind_static",
+      "layout_version": 1,
+      "module": "terrain_drag_family",
+      "name": "topo_wind_static",
+      "parameters": [["nx", "int32"], ["ny", "int32"], ["topo_wind", "int32"]],
+      "resources": [["ht", "float", "read"], ["var_sso", "float", "read"], ["var2d", "float", "read"], ["xland", "float", "read"], ["lap_hgt", "float", "read_write"], ["ctopo", "float", "read_write"], ["ctopo2", "float", "read_write"]],
+      "shapes": {
+        "ht": [["ny", "nx"]],
+        "var_sso": [["ny", "nx"]],
+        "var2d": [["ny", "nx"]],
+        "xland": [["ny", "nx"]],
+        "lap_hgt": [["ny", "nx"]],
+        "ctopo": [["ny", "nx"]],
+        "ctopo2": [["ny", "nx"]]
+      },
+      "source": "woof/metal/shaders/terrain_drag_family.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/core/kernels/terrain_drag.cu",
+      "cuda_symbol": "terrain_pbl_top",
+      "layout_version": 1,
+      "module": "terrain_drag_family",
+      "name": "terrain_pbl_top",
+      "parameters": [["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "resources": [["dz", "float", "read"], ["pblh", "float", "read"], ["kpbl", "int32", "read_write"]],
+      "shapes": {
+        "dz": [["nz", "ny", "nx"]],
+        "pblh": [["ny", "nx"]],
+        "kpbl": [["ny", "nx"]]
+      },
+      "source": "woof/metal/shaders/terrain_drag_family.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/core/kernels/terrain_drag.cu",
+      "cuda_symbol": "gwdo_column",
+      "layout_version": 1,
+      "module": "terrain_drag_family",
+      "name": "gwdo_column",
+      "parameters": [["dxmeter", "float32"], ["deltim", "float32"], ["g_", "float32"], ["cp_", "float32"], ["rd_", "float32"], ["fv_", "float32"], ["pi_", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["nstat", "int32"]],
+      "resources": [["u", "float", "read"], ["v", "float", "read"], ["t", "float", "read"], ["qv", "float", "read"], ["p", "float", "read"], ["p_interface", "float", "read"], ["pi", "float", "read"], ["zi", "float", "read"], ["var", "float", "read"], ["oc1", "float", "read"], ["oa4", "float", "read"], ["ol4", "float", "read"], ["sina", "float", "read"], ["cosa", "float", "read"], ["du", "float", "read_write"], ["dv", "float", "read_write"]],
+      "shapes": {
+        "u": [["nz", "ny", "nx"]],
+        "v": [["nz", "ny", "nx"]],
+        "t": [["nz", "ny", "nx"]],
+        "qv": [["nz", "ny", "nx"]],
+        "p": [["nz", "ny", "nx"]],
+        "p_interface": [["nz+1", "ny", "nx"]],
+        "pi": [["nz", "ny", "nx"]],
+        "zi": [["nz+1", "ny", "nx"]],
+        "var": [["ny", "nx"]],
+        "oc1": [["ny", "nx"]],
+        "oa4": [["nstat", "ny", "nx"]],
+        "ol4": [["nstat", "ny", "nx"]],
+        "sina": [["ny", "nx"]],
+        "cosa": [["ny", "nx"]],
+        "du": [["nz", "ny", "nx"]],
+        "dv": [["nz", "ny", "nx"]]
+      },
+      "source": "woof/metal/shaders/terrain_drag_family.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/core/kernels/terrain_drag.cu",
+      "cuda_symbol": "gwdo_gsl_column",
+      "layout_version": 1,
+      "module": "terrain_drag_family",
+      "name": "gwdo_gsl_column",
+      "parameters": [["dxmeter", "float32"], ["deltim", "float32"], ["g", "float32"], ["cp", "float32"], ["rd", "float32"], ["fv", "float32"], ["pi_c", "float32"], ["kpblmax", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["nstat", "int32"]],
+      "resources": [["u", "float", "read"], ["v", "float", "read"], ["t", "float", "read"], ["qv", "float", "read"], ["p", "float", "read"], ["p_interface", "float", "read"], ["pi", "float", "read"], ["zi", "float", "read"], ["dz", "float", "read"], ["var", "float", "read"], ["oc1", "float", "read"], ["oa4", "float", "read"], ["ol4", "float", "read"], ["varss", "float", "read"], ["oc1ss", "float", "read"], ["oa4ss", "float", "read"], ["ol4ss", "float", "read"], ["sina", "float", "read"], ["cosa", "float", "read"], ["xland", "float", "read"], ["br", "float", "read"], ["hpbl", "float", "read"], ["kpbl", "int32", "read"], ["du", "float", "read_write"], ["dv", "float", "read_write"]],
+      "shapes": {
+        "u": [["nz", "ny", "nx"]],
+        "v": [["nz", "ny", "nx"]],
+        "t": [["nz", "ny", "nx"]],
+        "qv": [["nz", "ny", "nx"]],
+        "p": [["nz", "ny", "nx"]],
+        "p_interface": [["nz+1", "ny", "nx"]],
+        "pi": [["nz", "ny", "nx"]],
+        "zi": [["nz+1", "ny", "nx"]],
+        "dz": [["nz", "ny", "nx"]],
+        "var": [["ny", "nx"]],
+        "oc1": [["ny", "nx"]],
+        "oa4": [["nstat", "ny", "nx"]],
+        "ol4": [["nstat", "ny", "nx"]],
+        "varss": [["ny", "nx"]],
+        "oc1ss": [["ny", "nx"]],
+        "oa4ss": [["nstat", "ny", "nx"]],
+        "ol4ss": [["nstat", "ny", "nx"]],
+        "sina": [["ny", "nx"]],
+        "cosa": [["ny", "nx"]],
+        "xland": [["ny", "nx"]],
+        "br": [["ny", "nx"]],
+        "hpbl": [["ny", "nx"]],
+        "du": [["nz", "ny", "nx"]],
+        "dv": [["nz", "ny", "nx"]],
+        "kpbl": [["ny", "nx"]]
+      },
+      "source": "woof/metal/shaders/terrain_drag_family.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

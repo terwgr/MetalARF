@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 30bf4e14dcec24720d509d8b03069434fdd804b60be64fe70ab232467d2d6dbf.
+struct UrbanBepBemAlbedoFragmentResources {
+    device const int *p_num [[id(0)]];
+    device const int *q_num [[id(1)]];
+    device float *albwin [[id(2)]];
+    device int *error [[id(3)]];
+};
+struct UrbanBepBemAlbedoFragmentParams {
+    int ncase;
+};
+static_assert(sizeof(UrbanBepBemAlbedoFragmentParams) == 4, "urban_bep_bem_albedo_fragment parameter ABI size changed");

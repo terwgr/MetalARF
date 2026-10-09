@@ -1,0 +1,36 @@
+// Generated from kernel_signatures.json; layout 92c2c9ee4f9378bf5ac0395148f411d3d51369fc48a302be6f0612ce35899eca.
+struct NtiedtkeCudlfsnResources {
+    device const int *ldcum [[id(0)]];
+    device const int *kcbot [[id(1)]];
+    device const int *kctop [[id(2)]];
+    device const float *ptenh [[id(3)]];
+    device const float *pqenh [[id(4)]];
+    device const float *pten [[id(5)]];
+    device const float *pqsen [[id(6)]];
+    device const float *pgeo [[id(7)]];
+    device const float *pgeoh [[id(8)]];
+    device const float *paph [[id(9)]];
+    device const float *ptu [[id(10)]];
+    device const float *pqu [[id(11)]];
+    device const float *pmfub [[id(12)]];
+    device float *ptd [[id(13)]];
+    device float *pqd [[id(14)]];
+    device float *pmfd [[id(15)]];
+    device float *pmfds [[id(16)]];
+    device float *pmfdq [[id(17)]];
+    device float *pdmfdp [[id(18)]];
+    device float *prfl [[id(19)]];
+    device int *kdtop [[id(20)]];
+    device int *lddraf [[id(21)]];
+};
+struct NtiedtkeCudlfsnParams {
+    int ncol;
+    int klev;
+    float cp;
+    float rd;
+    float rv;
+    float xlv;
+    float xlf;
+    float grav;
+};
+static_assert(sizeof(NtiedtkeCudlfsnParams) == 32, "ntiedtke_cudlfsn parameter ABI size changed");

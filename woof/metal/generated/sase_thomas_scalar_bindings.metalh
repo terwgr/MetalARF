@@ -1,0 +1,22 @@
+// Generated from kernel_signatures.json; layout 173c0a8c8e26713c92527ed729fad01408d008aa87298138c73db97f39475222.
+struct SaseThomasScalarResources {
+    device float *phi [[id(0)]];
+    device const float *kv [[id(1)]];
+    device const float *sfc_flux [[id(2)]];
+    device const float *sfc_rho1 [[id(3)]];
+    device const float *t [[id(4)]];
+    device const ulong *constants [[id(5)]];
+};
+struct SaseThomasScalarParams {
+    float dz;
+    int t_mode;
+    float dt;
+    float kfac;
+    float floor_val;
+    int has_floor;
+    int has_sfc;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseThomasScalarParams) == 40, "sase_thomas_scalar parameter ABI size changed");

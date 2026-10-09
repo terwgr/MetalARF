@@ -1,0 +1,86 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/spectral/transform.py",
+      "cuda_symbol": "resident Global longitude Fourier waist",
+      "layout_version": 1,
+      "module": "global_longitude_transform_resident_fragment",
+      "name": "global_longitude_transform_resident_fragment",
+      "parameters": [
+        [
+          "nlat",
+          "int32"
+        ],
+        [
+          "nlon",
+          "int32"
+        ],
+        [
+          "nfreq",
+          "int32"
+        ],
+        [
+          "batch",
+          "int32"
+        ],
+        [
+          "full_nlat",
+          "int32"
+        ],
+        [
+          "start_row",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "grid",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "twiddles",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "spectrum",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "scale",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "grid": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale": [
+          [
+            1
+          ]
+        ],
+        "spectrum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "twiddles": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_longitude_transform_resident_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

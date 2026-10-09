@@ -1,0 +1,22 @@
+// Generated from kernel_signatures.json; layout 38b08d89fe8d248b88be98d4b1d23d36fd4e7c653bb631383890344731fb175a.
+struct UrbanBepBemWallFragmentResources {
+    device const float *dz [[id(0)]];
+    device const float *k [[id(1)]];
+    device const float *cs [[id(2)]];
+    device const float *flux [[id(3)]];
+    device float *temp [[id(4)]];
+    device float *k1 [[id(5)]];
+    device float *k2 [[id(6)]];
+    device float *kc [[id(7)]];
+    device int *swwall [[id(8)]];
+    device const int *green_roof [[id(9)]];
+    device const float *green_fraction [[id(10)]];
+    device const float *hfgr [[id(11)]];
+    device int *error [[id(12)]];
+};
+struct UrbanBepBemWallFragmentParams {
+    int nitem;
+    int nz;
+    float dt;
+};
+static_assert(sizeof(UrbanBepBemWallFragmentParams) == 12, "urban_bep_bem_wall_fragment parameter ABI size changed");

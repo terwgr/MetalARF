@@ -1,0 +1,692 @@
+{
+  "kernels": [
+    {
+      "name": "open_u_radiative",
+      "module": "openbc",
+      "source": "woof/metal/shaders/openbc_radiative.metal",
+      "cuda_source": "woof/core/kernels/openbc.cu",
+      "cuda_symbol": "open_u_radiative",
+      "resources": [
+        [
+          "ru_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ru_t": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "cb",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "open_v_radiative",
+      "module": "openbc",
+      "source": "woof/metal/shaders/openbc_radiative.metal",
+      "cuda_source": "woof/core/kernels/openbc.cu",
+      "cuda_symbol": "open_v_radiative",
+      "resources": [
+        [
+          "rv_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "rv_t": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "cb",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "open_zero_gradient_x",
+      "module": "openbc",
+      "source": "woof/metal/shaders/openbc_radiative.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "apply_open_zero_gradient",
+      "resources": [
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read_write"
+        ],
+        [
+          "w",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "open_zero_gradient_y",
+      "module": "openbc",
+      "source": "woof/metal/shaders/openbc_radiative.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "apply_open_zero_gradient",
+      "resources": [
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "u",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "w_damp",
+      "module": "openbc",
+      "source": "woof/metal/shaders/openbc_radiative.metal",
+      "cuda_source": "woof/core/kernels/openbc.cu",
+      "cuda_symbol": "w_damp",
+      "resources": [
+        [
+          "rw_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "ww",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "rw_t": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ww": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "w_damp_on",
+          "float32"
+        ],
+        [
+          "w_crit_cfl",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "open_zero_gradient_scalar_x",
+      "module": "openbc",
+      "source": "woof/metal/shaders/openbc_radiative.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "apply_open_zero_gradient",
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "open_zero_gradient_scalar_y",
+      "module": "openbc",
+      "source": "woof/metal/shaders/openbc_radiative.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "apply_open_zero_gradient",
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

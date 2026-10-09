@@ -1,0 +1,1087 @@
+"""The provenance resolver: which tree runs, and does it agree with itself.
+
+Every install shape here is built out of REAL files -- a real package
+directory, a real ``.dist-info`` read by a real ``PathDistribution``, a
+real ``git init`` with a real dirty file -- rather than mocks.  The
+shapes that have actually broken this project were ones no mock would
+have invented: a distribution whose ``locate_file`` names a path that
+does not exist, and a ``__version__`` that is correct-looking and
+belongs to a different tree.
+
+The last section is the important one.  A resolver that returns a
+constant "everything is fine" would pass any test that only checks the
+shape of its output, and that is precisely the failure mode this module
+exists to prevent -- so every scenario below is replayed against two
+constant resolvers, one that always reports a healthy install and one
+that always reports a broken one, and each scenario must FAIL against
+both.  A test that cannot fail is worse than no test.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from dataclasses import dataclass
+from importlib.metadata import PathDistribution
+from pathlib import Path
+from typing import Callable
+
+import pytest
+
+from woof import provenance
+from woof.provenance import Provenance, describe_provenance
+
+WORKTREE = Path(__file__).resolve().parents[1]
+
+
+# ---------------------------------------------------------------------------
+# real files on disk
+# ---------------------------------------------------------------------------
+
+def _package(root: Path) -> Path:
+    package = root / "woof"
+    package.mkdir(parents=True, exist_ok=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    return package
+
+
+def _dist_info(site: Path, *, name="woof", version="1.8.7",
+               editable_at: Path | None = None) -> PathDistribution:
+    """A real .dist-info on disk, read by a real PathDistribution."""
+
+    site.mkdir(parents=True, exist_ok=True)
+    info = site / f"{name}-{version}.dist-info"
+    info.mkdir(parents=True, exist_ok=True)
+    (info / "METADATA").write_text(
+        f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n",
+        encoding="utf-8")
+    if editable_at is not None:
+        (info / "direct_url.json").write_text(json.dumps({
+            "url": editable_at.resolve().as_uri(),
+            "dir_info": {"editable": True},
+        }), encoding="utf-8")
+    return PathDistribution(info)
+
+
+def _pyproject(root: Path, *, name="woof", version="1.8.7") -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / "pyproject.toml"
+    path.write_text(
+        f'[project]\nname = "{name}"\nversion = "{version}"\n',
+        encoding="utf-8")
+    return path
+
+
+def _git_init(root: Path) -> None:
+    """A real repository with one real commit, or skip."""
+
+    init = subprocess.run(["git", "init", "-q", str(root)],
+                          capture_output=True, text=True)
+    if init.returncode != 0:
+        pytest.skip("no usable git on this machine")
+    (root / "tracked.txt").write_text("original\n", encoding="utf-8")
+    for arguments in (["add", "-A"],
+                      ["-c", "user.email=t@t", "-c", "user.name=t",
+                       "commit", "-q", "-m", "fixture"]):
+        subprocess.run(["git", "-C", str(root), *arguments],
+                       capture_output=True, check=False)
+
+
+# ---------------------------------------------------------------------------
+# the scenarios, each an install shape with the claims that define it
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Scenario:
+    name: str
+    build: Callable[[Path], Provenance]
+    check: Callable[[Provenance], None]
+
+
+# -- a wheel -----------------------------------------------------------
+
+def _build_wheel(tmp: Path) -> Provenance:
+    site = tmp / "site-packages"
+    package = _package(site)
+    return describe_provenance(
+        package, _dist_info(site, version="1.8.0"),
+        reported_version="1.8.0")
+
+
+def _check_wheel(p: Provenance) -> None:
+    assert p.install_kind == "wheel"
+    assert p.distribution_name == "woof"
+    assert p.metadata_version == "1.8.0"
+    assert p.package_path.endswith(os.sep.join(("site-packages", "woof")))
+    # A wheel ships no pyproject.toml; pip wrote its code and metadata
+    # together, so the metadata IS the code's declaration -- and the
+    # resolver has to SAY that rather than leave it a silent tautology.
+    assert p.code_version == "1.8.0"
+    assert p.code_version_source == "wheel-metadata"
+    assert p.versions_agree is True
+    assert p.git is None
+    assert p.is_consistent
+
+
+# -- an editable install of a clean checkout ---------------------------
+
+def _build_editable(tmp: Path) -> Provenance:
+    source = tmp / "home" / "user" / "woof"
+    package = _package(source)
+    _pyproject(source, version="1.8.7")
+    _git_init(source)
+    return describe_provenance(
+        package, _dist_info(tmp / "site-packages", version="1.8.7",
+                            editable_at=source),
+        reported_version="1.8.7")
+
+
+def _check_editable(p: Provenance) -> None:
+    assert p.install_kind == "editable"
+    assert p.metadata_version == "1.8.7"
+    assert p.code_version == "1.8.7"
+    assert p.code_version_source.endswith("pyproject.toml")
+    assert p.versions_agree is True
+    assert p.source_root.endswith("woof")
+    assert p.git and p.git["branch"]
+    assert len(p.git["commit"]) == 12
+    assert p.git["dirty"] is False
+    assert p.is_consistent
+
+
+# -- a plain source tree, nothing installed ----------------------------
+
+def _build_source_tree(tmp: Path) -> Provenance:
+    _pyproject(tmp, version="1.8.7")
+    return describe_provenance(
+        _package(tmp), None,
+        reported_version=provenance.UNKNOWN_VERSION)
+
+
+def _check_source_tree(p: Provenance) -> None:
+    assert p.install_kind == "source-tree"
+    assert p.distribution_name is None
+    assert p.metadata_version is None
+    assert p.code_version == "1.8.7"
+    # Nothing to compare is not a defect, and must not be reported as
+    # one: a gate that refused this would refuse every fresh clone.
+    assert p.versions_agree is None
+    assert p.metadata_is_borrowed is False
+    assert p.disagreement is None
+    assert p.is_consistent
+    assert any("no metadata version to compare" in note for note in p.notes)
+
+
+# -- a dirty working tree ----------------------------------------------
+
+def _build_dirty(tmp: Path) -> Provenance:
+    source = tmp / "checkout"
+    package = _package(source)
+    _pyproject(source, version="1.8.7")
+    _git_init(source)
+    (source / "tracked.txt").write_text("EDITED\n", encoding="utf-8")
+    (source / "scratch.log").write_text("untracked\n", encoding="utf-8")
+    return describe_provenance(package, None, reported_version=None)
+
+
+def _check_dirty(p: Provenance) -> None:
+    assert p.git is not None
+    assert p.git["dirty"] is True
+    assert p.git["dirty_files"] == 1
+    # The untracked file must NOT be what makes it dirty.  Folding
+    # untracked scratch into the flag would light it permanently on
+    # every real checkout and train readers to ignore it.
+    assert p.git["untracked_files"] == 1
+    assert "(dirty)" in p.banner()
+
+
+# -- THE disagreement: a stale install over newer code ------------------
+
+def _build_stale_editable(tmp: Path) -> Provenance:
+    """The reported field case: plots labelled 1.6.2 on a 1.8.7 tree."""
+
+    source = tmp / "home" / "user" / "woof"
+    package = _package(source)
+    _pyproject(source, version="1.8.7")
+    return describe_provenance(
+        package, _dist_info(tmp / "site-packages", version="1.6.2",
+                            editable_at=source),
+        reported_version="1.6.2")
+
+
+def _check_stale_editable(p: Provenance) -> None:
+    assert p.metadata_version == "1.6.2"
+    assert p.code_version == "1.8.7"
+    assert p.versions_agree is False
+    assert not p.is_consistent
+    assert "VERSION DISAGREEMENT" in p.disagreement
+    assert "1.6.2" in p.disagreement and "1.8.7" in p.disagreement
+    # The banner is where a user actually meets this.
+    assert "VERSION DISAGREEMENT" in p.banner()
+
+
+# -- THE other disagreement: a borrowed version -------------------------
+
+def _build_borrowed(tmp: Path) -> Provenance:
+    """Measured live on this box.
+
+    No distribution provides the running code, yet ``woof.__version__``
+    still returns a number, because with no owner it falls back to
+    asking metadata BY NAME and some other ``.dist-info`` answered.  The number describes a different
+    tree.  It is at its most dangerous when it happens to match, which
+    is why the resolver judges provenance and not just digits.
+    """
+
+    _pyproject(tmp, version="1.8.7")
+    return describe_provenance(
+        _package(tmp), None, reported_version="1.8.7")
+
+
+def _check_borrowed(p: Provenance) -> None:
+    assert p.distribution_name is None
+    assert p.reported_version == "1.8.7"
+    assert p.code_version == "1.8.7"
+    # Numerically identical, and still a disagreement: the reported
+    # number is not backed by the code that is running.
+    assert p.metadata_is_borrowed is True
+    assert p.versions_agree is False
+    assert not p.is_consistent
+    assert "BORROWED" in p.disagreement
+
+
+SCENARIOS = [
+    Scenario("wheel", _build_wheel, _check_wheel),
+    Scenario("editable", _build_editable, _check_editable),
+    Scenario("source-tree", _build_source_tree, _check_source_tree),
+    Scenario("dirty-tree", _build_dirty, _check_dirty),
+    Scenario("disagreement-stale-install", _build_stale_editable,
+             _check_stale_editable),
+    Scenario("disagreement-borrowed-version", _build_borrowed,
+             _check_borrowed),
+]
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda s: s.name)
+def test_the_resolver_names_each_install_shape(scenario, tmp_path):
+    scenario.check(scenario.build(tmp_path))
+
+
+# ---------------------------------------------------------------------------
+# the tests must be able to fail
+# ---------------------------------------------------------------------------
+
+#: The most dangerous constant a broken resolver could return: a
+#: confident, self-consistent, healthy install.
+_ALWAYS_FINE = Provenance(
+    package_path="/constant/gpuwm", source_root="/constant",
+    install_kind="wheel", distribution_name="woof",
+    metadata_version="1.8.7", reported_version="1.8.7",
+    code_version="1.8.7", code_version_source="wheel-metadata",
+    versions_agree=True)
+
+#: The opposite constant, so that the scenarios asserting a HEALTHY
+#: install are proven to be testing agreement too, not merely accepting
+#: whatever they are handed.
+_ALWAYS_BROKEN = Provenance(
+    package_path="/constant/gpuwm", source_root="/constant",
+    install_kind="source-tree", reported_version="9.9.9",
+    metadata_is_borrowed=True, versions_agree=False,
+    disagreement="VERSION IS BORROWED: constant")
+
+
+@pytest.mark.parametrize("constant", [_ALWAYS_FINE, _ALWAYS_BROKEN],
+                         ids=["always-fine", "always-broken"])
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda s: s.name)
+def test_every_scenario_fails_against_a_constant_resolver(
+        scenario, constant, tmp_path):
+    """Proof that each scenario above can fail.
+
+    Built first, so that a scenario which skips for want of git skips
+    here too rather than passing vacuously.
+    """
+
+    scenario.build(tmp_path)
+    with pytest.raises(AssertionError):
+        scenario.check(constant)
+
+
+def test_agreement_responds_to_the_version_alone(tmp_path):
+    """Discrimination with the paths held fixed.
+
+    The scenario checks above would also fail a constant on its path,
+    which is a real defect but not the one that matters.  This holds
+    EVERYTHING constant except the installed metadata version and
+    requires the verdict to flip -- so `versions_agree` is proven to be
+    a measurement of the versions, not a decoration.
+    """
+
+    source = tmp_path / "gpuwm-checkout"
+    package = _package(source)
+    _pyproject(source, version="1.8.7")
+
+    def verdict(installed: str) -> Provenance:
+        return describe_provenance(
+            package, _dist_info(tmp_path / f"site-{installed}",
+                                version=installed, editable_at=source),
+            reported_version=installed)
+
+    matched, stale = verdict("1.8.7"), verdict("1.6.2")
+    assert matched.package_path == stale.package_path
+    assert matched.install_kind == stale.install_kind == "editable"
+    assert matched.versions_agree is True and matched.disagreement is None
+    assert stale.versions_agree is False and stale.disagreement
+
+
+def test_dirty_responds_to_the_working_tree_alone(tmp_path):
+    """Same discrimination for the dirty flag: one edit flips it."""
+
+    source = tmp_path / "checkout"
+    package = _package(source)
+    _git_init(source)
+    clean = describe_provenance(package, None)
+    (source / "tracked.txt").write_text("EDITED\n", encoding="utf-8")
+    dirty = describe_provenance(package, None)
+    assert clean.git["commit"] == dirty.git["commit"]
+    assert clean.git["dirty"] is False and dirty.git["dirty"] is True
+
+
+# ---------------------------------------------------------------------------
+# the serialisable form and the human form
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda s: s.name)
+def test_the_serialised_form_is_json_and_stable(scenario, tmp_path):
+    """A receipt embeds this; a Path object would break json.dumps."""
+
+    payload = scenario.build(tmp_path).as_dict()
+    text = json.dumps(payload, sort_keys=True)
+    assert json.loads(text) == payload
+    assert payload["schema"] == provenance.PROVENANCE_SCHEMA
+    assert set(payload) == {
+        "schema", "package_path", "source_root", "install_kind",
+        "distribution_name", "metadata_version", "reported_version",
+        "metadata_is_borrowed", "code_version", "code_version_source",
+        "versions_agree", "disagreement", "git", "notes"}
+
+
+@pytest.mark.parametrize("scenario", SCENARIOS, ids=lambda s: s.name)
+def test_the_banner_is_one_line_and_names_the_tree(scenario, tmp_path):
+    resolved = scenario.build(tmp_path)
+    line = resolved.banner()
+    assert "\n" not in line
+    assert line.startswith("woof")
+    assert resolved.source_root in line or resolved.package_path in line
+    # An inconsistent install never gets a banner that looks clean.
+    assert (resolved.disagreement is None) == resolved.is_consistent
+
+
+# ---------------------------------------------------------------------------
+# it must never raise, and never be expensive
+# ---------------------------------------------------------------------------
+
+def test_a_directory_that_is_not_a_repository_reports_no_git(tmp_path):
+    assert provenance.git_identity(tmp_path) is None
+
+
+def test_an_absent_git_binary_is_not_an_error(tmp_path, monkeypatch):
+    def no_git(*args, **kwargs):
+        raise OSError("git: not found")
+
+    monkeypatch.setattr(subprocess, "run", no_git)
+    assert provenance.git_identity(tmp_path) is None
+
+
+def test_a_repository_with_no_commits_reports_no_identity(tmp_path):
+    """A checkout, but nothing to bind: an absence, not an invention."""
+
+    if subprocess.run(["git", "init", "-q", str(tmp_path)],
+                      capture_output=True).returncode != 0:
+        pytest.skip("no usable git on this machine")
+    assert provenance.git_identity(tmp_path) is None
+
+
+def test_a_foreign_pyproject_is_not_this_codes_version(tmp_path):
+    """A woof package inside somebody else's repository.
+
+    Binding a stranger's version is the same class of error as binding a
+    stranger's commit, which `git_checkout_root` already refuses.
+    """
+
+    _pyproject(tmp_path, name="somebody-elses-project", version="0.4.2")
+    version, note = provenance.pyproject_version(tmp_path)
+    assert version is None
+    assert "does not publish this package" in note
+    assert describe_provenance(_package(tmp_path), None).code_version is None
+
+
+def test_an_unreadable_pyproject_is_a_note_not_a_crash(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("[project\nname =",
+                                             encoding="utf-8")
+    version, note = provenance.pyproject_version(tmp_path)
+    assert version is None and "unreadable" in note
+
+
+def test_a_dynamic_version_is_a_legitimate_absence(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "woof"\ndynamic = ["version"]\n', encoding="utf-8")
+    version, note = provenance.pyproject_version(tmp_path)
+    assert version is None and "no static" in note
+
+
+def test_the_resolver_never_raises_even_when_everything_is_broken(
+        monkeypatch):
+    def explode(*args, **kwargs):
+        raise RuntimeError("the estate is on fire")
+
+    monkeypatch.setattr(provenance, "providing_distribution", explode)
+    resolved = provenance.resolve(refresh=True)
+    assert isinstance(resolved, Provenance)
+    assert "\n" not in resolved.banner()
+    assert json.dumps(resolved.as_dict())
+    assert any("could not be resolved" in note for note in resolved.notes)
+
+
+def test_the_answer_is_cached_so_it_can_be_called_at_every_start(monkeypatch):
+    provenance.resolve(refresh=True)
+    calls = []
+    monkeypatch.setattr(provenance, "providing_distribution",
+                        lambda path: calls.append(path))
+    provenance.resolve()
+    provenance.resolve()
+    assert calls == [], "a cached resolve re-measured the machine"
+    provenance.resolve(refresh=True)
+    assert len(calls) == 1, "refresh=True did not re-measure"
+
+
+def test_the_git_identity_is_the_executing_trees_not_the_installs(tmp_path):
+    """Worktree code must stamp the WORKTREE's commit, not the install's.
+
+    An editable install's PEP 610 direct_url names the MAIN checkout.
+    When a parallel worktree's code is what actually imports (its cwd
+    precedes site-packages on sys.path), the receipt banner used to
+    stamp the MAIN checkout's git identity into receipts written by
+    WORKTREE code -- found independently by two gauntlet lanes.  The
+    identity belongs to the tree that owns the executing package.
+    """
+
+    install = tmp_path / "main-checkout"
+    _package(install)
+    _pyproject(install, version="1.8.7")
+    _git_init(install)
+    worktree = tmp_path / "worktree"
+    package = _package(worktree)
+    _pyproject(worktree, version="1.8.7")
+    _git_init(worktree)
+    (worktree / "tracked.txt").write_text("worktree line\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(worktree), "add", "-A"],
+                   capture_output=True, check=False)
+    subprocess.run(["git", "-C", str(worktree), "-c", "user.email=t@t",
+                    "-c", "user.name=t", "commit", "-q", "-m", "worktree"],
+                   capture_output=True, check=False)
+
+    resolved = describe_provenance(
+        package, _dist_info(tmp_path / "site-packages", version="1.8.7",
+                            editable_at=install),
+        reported_version="1.8.7")
+
+    def _head(root: Path) -> str:
+        return subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=False).stdout.strip()
+
+    assert resolved.git is not None
+    assert resolved.git["commit_full"] == _head(worktree)
+    assert resolved.git["commit_full"] != _head(install)
+
+
+def test_a_src_layout_still_falls_back_to_the_editable_root(tmp_path):
+    """The executing tree wins only when it IS a checkout top.
+
+    In a src/ layout the package's parent is not the repository root, so
+    probing it yields nothing; the distribution's editable root is then
+    the only accurate identity left and must still be reported.
+    """
+
+    project = tmp_path / "project"
+    package = _package(project / "src")
+    _pyproject(project, version="1.8.7")
+    _git_init(project)
+
+    resolved = describe_provenance(
+        package, _dist_info(tmp_path / "site-packages", version="1.8.7",
+                            editable_at=project),
+        reported_version="1.8.7")
+
+    assert resolved.git is not None
+    head = subprocess.run(
+        ["git", "-C", str(project), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=False).stdout.strip()
+    assert resolved.git["commit_full"] == head
+
+
+# ---------------------------------------------------------------------------
+# against the artifact: this very process, and a clean child process
+# ---------------------------------------------------------------------------
+
+def test_it_resolves_this_running_worktree():
+    """The resolver must name the tree the suite is actually running from."""
+
+    resolved = provenance.resolve(refresh=True)
+    assert Path(resolved.package_path) == WORKTREE / "woof"
+    assert Path(provenance.__file__).resolve().parent \
+        == Path(resolved.package_path)
+    if resolved.git:
+        assert len(resolved.git["commit"]) == 12
+        # A frozen audit worktree can legitimately have a detached HEAD.
+        # Bind the actual commit and ref, including an absent branch, instead
+        # of requiring a branch name that this checkout does not have.
+        expected = provenance.git_dir_identity(WORKTREE)
+        assert expected is not None
+        assert resolved.git["commit_full"] == expected["commit_full"]
+        assert resolved.git["branch"] == expected["branch"]
+
+
+def test_it_imports_without_numpy_or_cupy_in_a_pinned_child():
+    """A startup banner runs before anything heavy, so prove it can.
+
+    Run in a child with PYTHONSAFEPATH=1 and PYTHONPATH pinned to this
+    worktree, and the child asserts its own woof path -- an editable
+    install elsewhere on this machine maps `woof` to a different tree,
+    and a subprocess that silently imported THAT would make this
+    measurement void.
+    """
+
+    import sys
+
+    program = (
+        "import sys, json;"
+        "import woof.provenance as p;"
+        "print(json.dumps({"
+        "'file': p.__file__,"
+        "'heavy': sorted(m for m in sys.modules"
+        " if m.split('.')[0] in {'numpy','cupy','netCDF4','xarray','scipy'}),"
+        "'banner': p.banner()}))"
+    )
+    environment = dict(os.environ)
+    environment["PYTHONSAFEPATH"] = "1"
+    environment["PYTHONPATH"] = str(WORKTREE)
+    completed = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, text=True,
+        cwd=str(WORKTREE.parent), env=environment, timeout=120)
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert Path(payload["file"]).resolve() == WORKTREE / "woof" \
+        / "provenance.py", "the child imported a different tree; void"
+    assert payload["heavy"] == []
+    assert payload["banner"].startswith("woof")
+
+
+# ---------------------------------------------------------------------------
+# git that cannot be LAUNCHED, which is not the same as no repository
+# ---------------------------------------------------------------------------
+# The live failure: `tools/prepare_hrrr_wrf.py` composes an environment
+# for the stage it launches, the stage resolves
+# `runtime_manifest.provenance` before it reads a byte of the user's
+# data, and on a source checkout that resolution is a `git` subprocess.
+# The child could not start git, so EVERY rung of the ladder that asks
+# git a question returned None at once and the run died with
+# `IdentityError` on a tree the parent had just identified perfectly.
+# The tree was never the problem; reaching git was.
+
+@pytest.fixture
+def no_git_binary(monkeypatch):
+    """git is installed nowhere this process can reach."""
+
+    monkeypatch.setattr(provenance, "_GIT_EXE_CACHE", None)
+    monkeypatch.setattr(provenance, "git_executable", lambda **_: None)
+    return monkeypatch
+
+
+def test_git_is_found_at_its_install_location_when_path_hides_it(monkeypatch):
+    """A curated PATH must not be able to hide an installed git."""
+
+    import shutil
+
+    monkeypatch.setattr(provenance, "_GIT_EXE_CACHE", None)
+    monkeypatch.delenv(provenance.GIT_EXE_ENV, raising=False)
+    monkeypatch.setattr(shutil, "which", lambda *a, **k: None)
+    resolved = provenance.git_executable(refresh=True)
+    if resolved is None:
+        pytest.skip("git is not at a default install location on this box")
+    assert Path(resolved).is_file()
+
+
+def test_a_parent_can_hand_its_resolved_git_to_a_child(monkeypatch):
+    """WOOF_GIT_EXE outranks the search, so a child pays for nothing."""
+
+    import shutil
+
+    real = provenance.git_executable(refresh=True)
+    if real is None:
+        pytest.skip("no usable git on this machine")
+    monkeypatch.setenv(provenance.GIT_EXE_ENV, real)
+    monkeypatch.setattr(shutil, "which", lambda *a, **k: None)
+    monkeypatch.setattr(provenance, "_WINDOWS_GIT_LOCATIONS", ())
+    monkeypatch.setattr(provenance, "_POSIX_GIT_LOCATIONS", ())
+    assert provenance.git_executable(refresh=True) == real
+
+
+def test_a_checkout_binds_by_direct_read_when_git_cannot_run(
+        tmp_path, no_git_binary):
+    """The commit is in .git whether or not git is installed."""
+
+    _git_init(tmp_path)
+    expected = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        capture_output=True, text=True).stdout.strip()
+    identity = provenance.git_identity(tmp_path)
+    assert identity is not None, "a readable .git must still bind a commit"
+    assert identity["commit_full"] == expected
+    assert identity["branch"] in ("main", "master")
+    # Never `False`: nobody looked at the working tree.
+    assert identity["dirty"] is None
+    assert identity["dirty_unknown_reason"]
+    assert not provenance.worktree_is_clean(identity)
+
+
+def test_a_linked_worktree_binds_by_direct_read_too(tmp_path, no_git_binary):
+    """`.git` is a FILE in a linked worktree, and its refs live elsewhere."""
+
+    main = tmp_path / "main"
+    main.mkdir()
+    _git_init(main)
+    linked = tmp_path / "linked"
+    added = subprocess.run(
+        ["git", "-C", str(main), "worktree", "add", "-q", str(linked),
+         "-b", "side"], capture_output=True, text=True)
+    if added.returncode != 0:
+        pytest.skip(f"git worktree add unavailable: {added.stderr}")
+    assert (linked / ".git").is_file(), "fixture is not a linked worktree"
+    identity = provenance.git_identity(linked)
+    assert identity is not None
+    assert identity["branch"] == "side"
+    assert identity["dirty"] is None
+
+
+def test_a_detached_head_binds_by_direct_read(tmp_path, no_git_binary):
+    _git_init(tmp_path)
+    head = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        capture_output=True, text=True).stdout.strip()
+    (tmp_path / ".git" / "HEAD").write_text(head + "\n", encoding="utf-8")
+    identity = provenance.git_identity(tmp_path)
+    assert identity is not None
+    assert identity["commit_full"] == head
+    assert identity["branch"] is None
+
+
+def test_git_present_still_reports_the_verified_working_tree(tmp_path):
+    """The regression guard: nothing about the normal path moved."""
+
+    if provenance.git_executable() is None:
+        pytest.skip("no usable git on this machine")
+    _git_init(tmp_path)
+    clean = provenance.git_identity(tmp_path)
+    assert clean is not None
+    expected_branch = subprocess.run(
+        ["git", "-C", str(tmp_path), "symbolic-ref", "--short", "HEAD"],
+        capture_output=True, text=True, check=True).stdout.strip()
+    assert clean["branch"] == expected_branch
+    assert clean["dirty"] is False
+    assert "dirty_unknown_reason" not in clean
+    assert provenance.worktree_is_clean(clean)
+    (tmp_path / "tracked.txt").write_text("changed\n", encoding="utf-8")
+    dirty = provenance.git_identity(tmp_path)
+    assert dirty is not None and dirty["dirty"] is True
+    assert not provenance.worktree_is_clean(dirty)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "checkout", "--detach", "--quiet"],
+        capture_output=True, text=True, check=True)
+    detached = provenance.git_identity(tmp_path)
+    assert detached is not None
+    assert detached["commit_full"] == clean["commit_full"]
+    assert detached["branch"] is None
+    assert detached["dirty"] is True
+    assert not provenance.worktree_is_clean(detached)
+    (tmp_path / "tracked.txt").write_text("original\n", encoding="utf-8")
+    detached_clean = provenance.git_identity(tmp_path)
+    assert detached_clean is not None
+    assert detached_clean["commit_full"] == clean["commit_full"]
+    assert detached_clean["branch"] is None
+    assert detached_clean["dirty"] is False
+    assert provenance.worktree_is_clean(detached_clean)
+
+
+@pytest.mark.parametrize("failure", ["timeout", "oserror"])
+def test_an_interrupted_status_scan_keeps_the_commit_unverified(
+        tmp_path, monkeypatch, failure):
+    """A verified checkout can be readable while its status scan cannot run."""
+    _git_init(tmp_path)
+    expected = provenance.git_identity(tmp_path)
+    assert expected is not None and expected["dirty"] is False
+    (tmp_path / "tracked.txt").write_text("changed\n", encoding="utf-8")
+    real_run = subprocess.run
+    commands = []
+
+    def interrupted_status(command, **kwargs):
+        commands.append(command)
+        if "status" in command:
+            if failure == "timeout":
+                raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+            raise PermissionError("status process was denied")
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", interrupted_status)
+    identity = provenance.git_identity(tmp_path)
+    assert identity is not None
+    assert identity["commit_full"] == expected["commit_full"]
+    assert identity["branch"] == expected["branch"]
+    assert identity["dirty"] is None and identity["dirty_files"] is None
+    assert identity["untracked_files"] is None
+    assert not provenance.worktree_is_clean(identity)
+    reason = identity["dirty_unknown_reason"]
+    assert ("timed out after 5 seconds" if failure == "timeout"
+            else "PermissionError: status process was denied") in reason
+    assert [command[3] for command in commands] == ["rev-parse", "status"]
+
+
+@pytest.mark.parametrize("refusal", ["status", "root", "unborn"])
+def test_direct_commit_fallback_does_not_override_a_git_refusal(
+        tmp_path, monkeypatch, refusal):
+    from woof import runtime_manifest
+
+    _git_init(tmp_path)
+    real_run = subprocess.run
+
+    def refused_status(command, **kwargs):
+        if "status" in command:
+            if refusal == "unborn":
+                return subprocess.CompletedProcess(command, 0,
+                    stdout="# branch.oid (initial)\n# branch.head main\n")
+            return subprocess.CompletedProcess(command, 128,
+                stdout="", stderr="fatal: repository access refused")
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", refused_status)
+    if refusal == "root":
+        monkeypatch.setattr(runtime_manifest, "git_checkout_root", lambda _: None)
+    # Even a readable existing HEAD cannot overrule the command's refusal
+    # or an unborn-branch answer from the authoritative normal path.
+    assert provenance.git_dir_identity(tmp_path) is not None
+    assert provenance.git_identity(tmp_path) is None
+
+
+def test_the_run_manifest_preserves_a_status_timeout_reason(monkeypatch):
+    """Replay the slow-checkout preparation failure through both identity rungs."""
+    from woof import runtime_manifest
+
+    expected = provenance.git_dir_identity(WORKTREE)
+    if expected is None:
+        pytest.skip("this suite is not running from a readable checkout")
+    real_run = subprocess.run
+    timed_out = []
+
+    def slow_status(command, **kwargs):
+        if "status" in command:
+            timed_out.append(tuple(command[3:]))
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", slow_status)
+    identity = runtime_manifest.provenance(WORKTREE)
+    assert identity["git_commit"] == expected["commit_full"]
+    assert identity["git_status_short"] is None
+    assert "timed out after 5 seconds" in identity["git_status_unknown_reason"]
+    assert not provenance.worktree_is_clean(identity["installed_editable"]["git"])
+    assert ("status", "--short") in timed_out
+    assert ("status", "--porcelain=v2", "--branch") in timed_out
+
+
+def test_no_git_and_no_dot_git_is_still_an_accurate_absence(
+        tmp_path, no_git_binary):
+    """The genuinely unbindable case keeps refusing."""
+
+    assert provenance.git_dir_identity(tmp_path) is None
+    assert provenance.git_identity(tmp_path) is None
+
+
+def test_a_nested_directory_binds_no_strangers_commit(
+        tmp_path, no_git_binary):
+    """A venv inside somebody else's repository is not that repository."""
+
+    _git_init(tmp_path)
+    nested = tmp_path / "venv" / "Lib" / "site-packages"
+    nested.mkdir(parents=True)
+    assert provenance.git_dir_identity(nested) is None
+
+
+def test_an_unverified_tree_never_reads_as_clean_in_the_banner(
+        tmp_path, no_git_binary):
+    _git_init(tmp_path)
+    identity = provenance.git_identity(tmp_path)
+    line = Provenance(
+        package_path=str(tmp_path / "woof"), source_root=str(tmp_path),
+        install_kind="editable", git=identity).banner()
+    assert "clean" not in line, line
+    assert "unverified" in line, line
+
+
+def test_the_run_manifest_binds_this_tree_without_git(no_git_binary):
+    """End to end, on the REAL tree this suite is running from.
+
+    This is the captured failure, replayed: with git unreachable the
+    ladder used to fall all the way through to
+    ``wheel_record_identity`` and raise, killing a prepare stage before
+    a byte of the user's data was read.  It must now bind the commit
+    and say plainly that the working tree was not inspected.
+    """
+
+    from woof import runtime_manifest
+
+    if not (WORKTREE / ".git").exists():
+        pytest.skip("this suite is not running from a checkout")
+    identity = runtime_manifest.provenance(WORKTREE)
+    assert identity["git_commit"], identity
+    assert len(str(identity["git_commit"])) in (40, 64)
+    assert identity["git_status_short"] is None
+    assert identity["git_status_unknown_reason"], (
+        "an unverified working tree must SAY so, not leave an absence")
+
+
+def test_the_refusal_names_every_way_the_tree_was_tried(monkeypatch):
+    """A refusal stands only if it names what was actually attempted."""
+
+    from woof import runtime_manifest
+
+    monkeypatch.setattr(runtime_manifest, "installed_distribution",
+                        lambda *a, **k: None)
+    with pytest.raises(runtime_manifest.IdentityError) as raised:
+        runtime_manifest.wheel_record_identity()
+    message = str(raised.value)
+    assert "git on PATH" in message
+    assert "default install location" in message
+    assert ".git" in message
+
+
+def test_the_prepare_stage_hands_git_to_the_child():
+    """The curated environment carries the handle, or the child dies."""
+
+    from woof.go_cli import _stage_env
+
+    if provenance.git_executable() is None:
+        pytest.skip("no usable git on this machine")
+    environment = _stage_env()
+    assert provenance.GIT_EXE_ENV in environment, (
+        "a stage subprocess must be able to resolve identity")
+    assert Path(environment[provenance.GIT_EXE_ENV]).is_file()
+
+
+def test_a_child_with_only_the_curated_environment_resolves_identity():
+    """Run the real interpreter with git stripped from PATH."""
+
+    resolved = provenance.git_executable()
+    if resolved is None:
+        pytest.skip("no usable git on this machine")
+    if not (WORKTREE / ".git").exists():
+        pytest.skip("this suite is not running from a checkout")
+    program = (
+        "import json, shutil;"
+        "from woof import runtime_manifest as rm;"
+        "i = rm.provenance(r'" + str(WORKTREE) + "');"
+        "print(json.dumps({'which': shutil.which('git'),"
+        " 'commit': i['git_commit']}))"
+    )
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(WORKTREE)
+    # The shape that broke: a composed environment whose PATH carries no
+    # git.  The handle the parent resolved is what rescues it.
+    environment["PATH"] = str(Path(sys.executable).parent)
+    environment[provenance.GIT_EXE_ENV] = resolved
+    completed = subprocess.run(
+        [sys.executable, "-c", program], capture_output=True, text=True,
+        cwd=str(WORKTREE), env=environment, timeout=120)
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert payload["commit"], payload
+
+
+# ---------------------------------------------------------------------------
+# which install woof.__version__ is read from
+# ---------------------------------------------------------------------------
+# ``__version__`` read the first distribution NAMED woof on the path.  A
+# staged rw-wps package, or a woof run beside a second woof install (a
+# venv's and a --user one), then reported the other install's number, and
+# the rw-wps runtime check refused it ("rw-wps version mismatch").  The
+# version now comes from the distribution whose own files install the
+# running woof/__init__.py, and from the first by name only when none does.
+
+def _record_row(site: Path, path: Path) -> str:
+    import base64
+    import hashlib
+
+    digest = base64.urlsafe_b64encode(
+        hashlib.sha256(path.read_bytes()).digest()).decode().rstrip("=")
+    return (f"{path.relative_to(site).as_posix()},sha256={digest},"
+            f"{path.stat().st_size}")
+
+
+def _pip_install(site: Path, *, name: str = "woof", version: str,
+                 files: dict[str, bytes] | None = None,
+                 records_package: bool = True) -> PathDistribution:
+    """What pip leaves in ``site``: the package files and a .dist-info.
+
+    ``files`` maps package-relative names to bytes (default: an empty
+    ``__init__.py``; ``{}`` writes none, the metadata left behind by an
+    install whose package is gone).  RECORD lists every package file
+    written, or ``woof/__init__.py`` unhashed when none was, unless
+    ``records_package`` is False: a .dist-info that installed no package
+    file, like an editable install's redirect.
+    """
+
+    site.mkdir(parents=True, exist_ok=True)
+    info = site / f"{name.replace('-', '_')}-{version}.dist-info"
+    info.mkdir()
+    (info / "METADATA").write_text(
+        f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n",
+        encoding="utf-8")
+    written = []
+    for relative, payload in ({"__init__.py": b""} if files is None
+                              else files).items():
+        path = site / "woof" / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        written.append(path)
+    rows: list[str] = []
+    if records_package:
+        rows = ([_record_row(site, path) for path in written]
+                or ["woof/__init__.py,,"])
+    rows += [f"{info.name}/METADATA,,", f"{info.name}/RECORD,,"]
+    (info / "RECORD").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return PathDistribution(info)
+
+
+def _version_of(distribution) -> str | None:
+    return None if distribution is None else distribution.version
+
+
+def test_the_version_is_the_install_that_owns_the_package_not_the_first_named(
+        tmp_path):
+    """A staged rw-wps package beside an installed woof, and two woof
+    installs on one path: each package reads the install whose RECORD
+    put its own ``__init__.py`` there, in either candidate order."""
+
+    import woof
+
+    user = _pip_install(tmp_path / "user-site", version="1.2.3")
+    venv = _pip_install(tmp_path / "venv-site", version="9.8.7")
+    staged = _pip_install(tmp_path / "staged", name="rw-wps", version="2.8.1")
+    for order in ([user, venv, staged], [staged, venv, user]):
+        for site, version in (("venv-site", "9.8.7"), ("user-site", "1.2.3"),
+                              ("staged", "2.8.1")):
+            owner = woof.owning_distribution(tmp_path / site / "woof",
+                                              candidates=order)
+            assert _version_of(owner) == version, (site, order)
+
+
+def test_metadata_that_installed_no_package_file_owns_nothing(tmp_path):
+    """Located beside the package is not installing it.
+
+    A woof .dist-info in the staged directory whose RECORD names no
+    woof/__init__.py locates the staged file exactly as the rw-wps one
+    does; only RECORD tells them apart.  Metadata with no RECORD at all
+    (an .egg-info beside its source) still owns the package it sits
+    beside.
+    """
+
+    import woof
+
+    stray = _pip_install(tmp_path / "staged", version="1.2.3", files={},
+                         records_package=False)
+    staged = _pip_install(tmp_path / "staged", name="rw-wps",
+                          version="2.8.1")
+    package = tmp_path / "staged" / "woof"
+    init = (package / "__init__.py").resolve()
+    assert Path(stray.locate_file("woof/__init__.py")).resolve() == init
+    assert not woof.installs_package(stray, init)
+    assert woof.installs_package(staged, init)
+    assert woof.owning_distribution(
+        package, candidates=[stray, staged]) is staged
+
+    source = tmp_path / "source"
+    _package(source)
+    egg = source / "gpuwm.egg-info"
+    egg.mkdir()
+    (egg / "PKG-INFO").write_text(
+        "Metadata-Version: 2.1\nName: woof\nVersion: 1.8.7\n",
+        encoding="utf-8")
+    owner = woof.owning_distribution(
+        source / "woof", candidates=[stray, PathDistribution(egg)])
+    assert _version_of(owner) == "1.8.7"
+
+
+def test_an_editable_install_owns_its_tree_after_every_recorded_install(
+        tmp_path):
+    """An editable RECORD lists only its redirect, so its source root is
+    its claim; it is asked only after every RECORD, because a venv made
+    inside the checkout puts a wheel's package inside that root too."""
+
+    import woof
+
+    checkout = tmp_path / "checkout"
+    _package(checkout)
+    wheel = _pip_install(tmp_path / "user-site", version="1.2.3")
+    editable = _dist_info(tmp_path / "site-packages", version="9.8.7",
+                          editable_at=checkout)
+    assert woof.owning_distribution(
+        checkout / "woof", candidates=[wheel, editable]) is editable
+
+    nested = _pip_install(checkout / ".venv" / "site", version="2.8.1")
+    assert woof.owning_distribution(
+        checkout / ".venv" / "site" / "woof",
+        candidates=[editable, nested]) is nested
+
+
+def test_a_tree_no_install_provides_has_no_owner(tmp_path):
+    import woof
+
+    tree = tmp_path / "tree"
+    _package(tree)
+    others = [_pip_install(tmp_path / "user-site", version="1.2.3"),
+              _pip_install(tmp_path / "staged", name="rw-wps",
+                           version="2.8.1")]
+    assert woof.owning_distribution(tree / "woof",
+                                     candidates=others) is None
+
+
+@pytest.mark.parametrize("stranger", ["first", "last"])
+def test_a_second_gpuwm_on_the_path_does_not_lend_its_version(
+        tmp_path, stranger):
+    """The artifact: a real interpreter imports an installed woof while
+    another woof .dist-info (its package gone) stands on the path, first
+    or last.  ``-S`` keeps this machine's own installs out of the child.
+    """
+
+    site = tmp_path / "venv-site"
+    _pip_install(site, version="9.8.7", files={
+        name: (WORKTREE / "woof" / name).read_bytes()
+        for name in ("__init__.py", "cupy_windows_warning.py")})
+    _pip_install(tmp_path / "user-site", version="1.2.3", files={})
+    sites = [str(site), str(tmp_path / "user-site")]
+    if stranger == "first":
+        sites.reverse()
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = os.pathsep.join(sites)
+    program = ("import json, woof;"
+               "d = gpuwm.version_distribution();"
+               "print(json.dumps({'version': woof.__version__,"
+               " 'file': woof.__file__, 'from': str(d.locate_file(''))}))")
+    completed = subprocess.run(
+        [sys.executable, "-S", "-P", "-c", program], capture_output=True,
+        text=True, cwd=str(tmp_path), env=environment, timeout=120)
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout)
+    assert Path(payload["file"]).resolve().is_relative_to(site.resolve())
+    assert payload["version"] == "9.8.7"
+    assert Path(payload["from"]).resolve() == site.resolve()

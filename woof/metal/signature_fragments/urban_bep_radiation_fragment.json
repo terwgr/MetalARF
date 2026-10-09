@@ -1,0 +1,141 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_radiation_fragment",
+      "module": "urban_bep_radiation_fragment",
+      "source": "woof/metal/shaders/urban_bep_radiation_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "bep_shadow_mas",
+      "resources": [
+        [
+          "column_x",
+          "float",
+          "read"
+        ],
+        [
+          "column_param",
+          "float",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "swdown",
+          "float",
+          "read"
+        ],
+        [
+          "cosz",
+          "float",
+          "read"
+        ],
+        [
+          "hour_angle",
+          "float",
+          "read"
+        ],
+        [
+          "rsg",
+          "float",
+          "read_write"
+        ],
+        [
+          "rsw",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "column_x": [
+          [
+            "ncol",
+            15,
+            "nz+1"
+          ]
+        ],
+        "column_param": [
+          [
+            "ncol",
+            140
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "swdown": [
+          [
+            "ncol"
+          ]
+        ],
+        "cosz": [
+          [
+            "ncol"
+          ]
+        ],
+        "hour_angle": [
+          [
+            "ncol"
+          ]
+        ],
+        "rsg": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "rsw": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "error": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "declin",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

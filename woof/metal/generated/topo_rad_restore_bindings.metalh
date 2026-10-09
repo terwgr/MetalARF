@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout bfc14451fc1e5fc94619aca9ab6c8a581558aed4c7b1b11e4106b107cd46b68d.
+struct TopoRadRestoreResources {
+    device float *swdown [[id(0)]];
+    device float *gsw [[id(1)]];
+    device float *swnorm [[id(2)]];
+    device const float *gswsave [[id(3)]];
+};
+struct TopoRadRestoreParams {
+    int n;
+    int nx;
+    int ny;
+};
+static_assert(sizeof(TopoRadRestoreParams) == 12, "topo_rad_restore parameter ABI size changed");

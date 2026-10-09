@@ -1,0 +1,33 @@
+// Generated from kernel_signatures.json; layout bd53e8a0127283b68b25c10758c5bbba73a3d3baa3b484cd652935c07de03782.
+struct NtiedtkeMfubResources {
+    device const float *ptte [[id(0)]];
+    device const float *pqte [[id(1)]];
+    device const float *paph [[id(2)]];
+    device const float *puen [[id(3)]];
+    device const float *pven [[id(4)]];
+    device const float *ptu [[id(5)]];
+    device const float *pqu [[id(6)]];
+    device const float *plu [[id(7)]];
+    device const float *ztenh [[id(8)]];
+    device const float *zqenh [[id(9)]];
+    device const int *ktype [[id(10)]];
+    device const int *kcbot [[id(11)]];
+    device const int *lndj [[id(12)]];
+    device int *ldcum [[id(13)]];
+    device float *zdhpbl [[id(14)]];
+    device float *upbl [[id(15)]];
+    device float *zmfub [[id(16)]];
+};
+struct NtiedtkeMfubParams {
+    int tiedtke_closure;
+    int ncol;
+    int nz;
+    float dt;
+    float cp;
+    float rd;
+    float rv;
+    float xlv;
+    float xlf;
+    float grav;
+};
+static_assert(sizeof(NtiedtkeMfubParams) == 40, "ntiedtke_mfub parameter ABI size changed");

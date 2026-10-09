@@ -1,0 +1,325 @@
+{
+ "operator_entry_ships": true,
+ "name": "atms-clear-ocean:noaa-20:2026-09-01",
+ "satellite": "noaa-20",
+ "day": "2026-09-01",
+ "admitted_channels": [
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14
+ ],
+ "channels": [
+  {
+   "channel": 4,
+   "centre_ghz": 51.76,
+   "nedt_k": 0.5,
+   "error_k": 0.9061120937857008,
+   "bias_coefficients": {
+    "a": 1.620652362056573,
+    "b": 0.022328139801300217,
+    "c": 1.5079364981456842,
+    "mean_background_k": 243.66762934625376
+   },
+   "peak_pressure_pa": 55596.19663191968,
+   "vertical_cutoff_lnp": 1.2021838147443944,
+   "rmse_after_k": 0.9061120937857008,
+   "noise_floor_k": 0.15224784102074346,
+   "score_cells": 6311
+  },
+  {
+   "channel": 5,
+   "centre_ghz": 52.8,
+   "nedt_k": 0.5,
+   "error_k": 0.44119963231569376,
+   "bias_coefficients": {
+    "a": 0.6552286378482696,
+    "b": 0.025433529190937998,
+    "c": -0.7162167565719167,
+    "mean_background_k": 260.1492374663689
+   },
+   "peak_pressure_pa": 49988.60457816106,
+   "vertical_cutoff_lnp": 1.2544280084276025,
+   "rmse_after_k": 0.4411996323156938,
+   "noise_floor_k": 0.1039715138476603,
+   "score_cells": 6312
+  },
+  {
+   "channel": 6,
+   "centre_ghz": 53.596,
+   "nedt_k": 0.5,
+   "error_k": 0.19493185842951158,
+   "bias_coefficients": {
+    "a": 0.2771831286523325,
+    "b": 0.01360134701925534,
+    "c": 0.06482046549385424,
+    "mean_background_k": 257.5013064413873
+   },
+   "peak_pressure_pa": 39503.51760101372,
+   "vertical_cutoff_lnp": 1.4183889961305916,
+   "rmse_after_k": 0.19493185842951158,
+   "noise_floor_k": 0.10691869387642834,
+   "score_cells": 6312
+  },
+  {
+   "channel": 7,
+   "centre_ghz": 54.4,
+   "nedt_k": 0.5,
+   "error_k": 0.1516496899315362,
+   "bias_coefficients": {
+    "a": -0.3002543624714656,
+    "b": 0.010373117424312434,
+    "c": 0.18103202170019797,
+    "mean_background_k": 241.70405928201592
+   },
+   "peak_pressure_pa": 27548.186026365398,
+   "vertical_cutoff_lnp": 1.4120855709903761,
+   "rmse_after_k": 0.1516496899315362,
+   "noise_floor_k": 0.10273284164562636,
+   "score_cells": 6312
+  },
+  {
+   "channel": 8,
+   "centre_ghz": 54.94,
+   "nedt_k": 0.5,
+   "error_k": 0.1677069661469582,
+   "bias_coefficients": {
+    "a": -0.6998807140817945,
+    "b": -0.03230355957966069,
+    "c": -0.9583872889620847,
+    "mean_background_k": 229.14195227130273
+   },
+   "peak_pressure_pa": 19353.156320357022,
+   "vertical_cutoff_lnp": 1.492882330641999,
+   "rmse_after_k": 0.1677069661469582,
+   "noise_floor_k": 0.09794633979486864,
+   "score_cells": 6312
+  },
+  {
+   "channel": 9,
+   "centre_ghz": 55.5,
+   "nedt_k": 0.5,
+   "error_k": 0.24202771474971518,
+   "bias_coefficients": {
+    "a": -1.1299038020694572,
+    "b": 0.023772610909967625,
+    "c": 0.013689288722577369,
+    "mean_background_k": 219.08136749038164
+   },
+   "peak_pressure_pa": 13624.579085374558,
+   "vertical_cutoff_lnp": 1.4053823814180415,
+   "rmse_after_k": 0.24202771474971518,
+   "noise_floor_k": 0.09755362563919377,
+   "score_cells": 6312
+  },
+  {
+   "channel": 10,
+   "centre_ghz": 57.290344,
+   "nedt_k": 0.75,
+   "error_k": 0.30837334657425286,
+   "bias_coefficients": {
+    "a": -0.9254403894130627,
+    "b": 0.015642875138581272,
+    "c": -0.06170637069096687,
+    "mean_background_k": 210.61339842366755
+   },
+   "peak_pressure_pa": 6565.33920082435,
+   "vertical_cutoff_lnp": 1.2246172529781303,
+   "rmse_after_k": 0.30837334657425286,
+   "noise_floor_k": 0.13281552837207927,
+   "score_cells": 6312
+  },
+  {
+   "channel": 11,
+   "centre_ghz": 57.290344,
+   "nedt_k": 1.2,
+   "error_k": 0.2943770672766147,
+   "bias_coefficients": {
+    "a": -0.6905035002528156,
+    "b": -0.009000770355127726,
+    "c": -0.0065802817141445025,
+    "mean_background_k": 214.97969766894948
+   },
+   "peak_pressure_pa": 3894.4369619540726,
+   "vertical_cutoff_lnp": 1.3088659763048094,
+   "rmse_after_k": 0.2943770672766147,
+   "noise_floor_k": 0.1819416340448507,
+   "score_cells": 6312
+  },
+  {
+   "channel": 12,
+   "centre_ghz": 57.290344,
+   "nedt_k": 1.2,
+   "error_k": 0.31138576947548635,
+   "bias_coefficients": {
+    "a": -0.6270406838828848,
+    "b": 0.01513062867569298,
+    "c": -0.39489400101961136,
+    "mean_background_k": 222.78586089126063
+   },
+   "peak_pressure_pa": 1969.4493323379204,
+   "vertical_cutoff_lnp": 1.4347543604736925,
+   "rmse_after_k": 0.31138576947548635,
+   "noise_floor_k": 0.19341295068530953,
+   "score_cells": 6312
+  },
+  {
+   "channel": 13,
+   "centre_ghz": 57.290344,
+   "nedt_k": 1.5,
+   "error_k": 0.46195091737438554,
+   "bias_coefficients": {
+    "a": -1.048129719891149,
+    "b": 0.03830754132308267,
+    "c": -0.8718752735047297,
+    "mean_background_k": 231.94336991973626
+   },
+   "peak_pressure_pa": 919.2426546480672,
+   "vertical_cutoff_lnp": 1.4745496244956415,
+   "rmse_after_k": 0.46195091737438554,
+   "noise_floor_k": 0.3001809133947045,
+   "score_cells": 6311
+  },
+  {
+   "channel": 14,
+   "centre_ghz": 57.290344,
+   "nedt_k": 2.4,
+   "error_k": 0.6348724556421872,
+   "bias_coefficients": {
+    "a": -1.201696380454437,
+    "b": 0.06841115944333831,
+    "c": -0.3932840499370439,
+    "mean_background_k": 242.271127772811
+   },
+   "peak_pressure_pa": 389.4002172849634,
+   "vertical_cutoff_lnp": 1.7860643823799043,
+   "rmse_after_k": 0.6348724556421872,
+   "noise_floor_k": 0.411029735403754,
+   "score_cells": 6177
+  }
+ ],
+ "refused": {
+  "15": "the analysis and the absorption above 5 hPa (Zeeman splitting is not modelled)"
+ },
+ "calibration_passes": {
+  "isothermal_black": true,
+  "isothermal_grey": true,
+  "weights_sum": true,
+  "planted_layer_frozen": true,
+  "planted_layer_full": true,
+  "quiet_channels": true,
+  "null": true
+ },
+ "analyses": [
+  {
+   "grib": "<gdas-archive>/2026-09-01T00/gdas.t00z.pgrb2.0p25.f000",
+   "input_sha256": {
+    "<gdas-archive>/2026-09-01T00/gdas.t00z.pgrb2.0p25.f000": "effb752cd9d29d5e85067a245b8a015662717469c37102250cbfc75c5f12e527"
+   },
+   "mapping_sha256": "e3ffc1a2dd537f59a99f15685954991b0fd816a10057ca62d24b33ac21d09137",
+   "grid_fingerprint": "f391584a7d270a121a9f1b19cb91a2c521d995050945ad074a3cd716403d522e",
+   "valid_time": "2026-09-01T00:00:00"
+  },
+  {
+   "grib": "<gdas-archive>/2026-09-01T06/gdas.t06z.pgrb2.0p25.f000",
+   "input_sha256": {
+    "<gdas-archive>/2026-09-01T06/gdas.t06z.pgrb2.0p25.f000": "eea37c7410012029641d80f929540fdb53019e6e8a39dfdb503fc32449702d47"
+   },
+   "mapping_sha256": "e3ffc1a2dd537f59a99f15685954991b0fd816a10057ca62d24b33ac21d09137",
+   "grid_fingerprint": "f391584a7d270a121a9f1b19cb91a2c521d995050945ad074a3cd716403d522e",
+   "valid_time": "2026-09-01T06:00:00"
+  },
+  {
+   "grib": "<gdas-archive>/2026-09-01T12/gdas.t12z.pgrb2.0p25.f000",
+   "input_sha256": {
+    "<gdas-archive>/2026-09-01T12/gdas.t12z.pgrb2.0p25.f000": "a0116a168edd651c44d597b9ffb643c75ce0c2c4cf72fba7ca1448eab6b8ded5"
+   },
+   "mapping_sha256": "e3ffc1a2dd537f59a99f15685954991b0fd816a10057ca62d24b33ac21d09137",
+   "grid_fingerprint": "f391584a7d270a121a9f1b19cb91a2c521d995050945ad074a3cd716403d522e",
+   "valid_time": "2026-09-01T12:00:00"
+  },
+  {
+   "grib": "<gdas-archive>/2026-09-01T18/gdas.t18z.pgrb2.0p25.f000",
+   "input_sha256": {
+    "<gdas-archive>/2026-09-01T18/gdas.t18z.pgrb2.0p25.f000": "127eb2209ea3c60ebaeaeccc4e063129c34db1ec47a02d257ac27e7cf9870aad"
+   },
+   "mapping_sha256": "e3ffc1a2dd537f59a99f15685954991b0fd816a10057ca62d24b33ac21d09137",
+   "grid_fingerprint": "f391584a7d270a121a9f1b19cb91a2c521d995050945ad074a3cd716403d522e",
+   "valid_time": "2026-09-01T18:00:00"
+  },
+  {
+   "grib": "<gdas-archive>/2026-09-02T00/gdas.t00z.pgrb2.0p25.f000",
+   "input_sha256": {
+    "<gdas-archive>/2026-09-02T00/gdas.t00z.pgrb2.0p25.f000": "9064bb50def065f192410a8182daf268faf96d008bda1e8843599d964d11afb7"
+   },
+   "mapping_sha256": "e3ffc1a2dd537f59a99f15685954991b0fd816a10057ca62d24b33ac21d09137",
+   "grid_fingerprint": "f391584a7d270a121a9f1b19cb91a2c521d995050945ad074a3cd716403d522e",
+   "valid_time": "2026-09-02T00:00:00"
+  }
+ ],
+ "fitted_utc": "2026-09-06T21:02:08Z",
+ "schema": "gpuwm-arwen-global-microwave-operator-entry-v1",
+ "stream": "atms-clear-ocean",
+ "variable": "brightness_temperature_k",
+ "operator": "arwen_global.microwave.entry:AtmsBatchOperator",
+ "levels_pa": [
+  1.0,
+  2.0,
+  4.0,
+  7.0,
+  10.0,
+  20.0,
+  40.0,
+  70.0,
+  100.0,
+  200.0,
+  300.0,
+  500.0,
+  700.0,
+  1000.0,
+  1500.0,
+  2000.0,
+  3000.0,
+  4000.0,
+  5000.0,
+  7000.0,
+  10000.0,
+  15000.0,
+  20000.0,
+  25000.0,
+  30000.0,
+  35000.0,
+  40000.0,
+  45000.0,
+  50000.0,
+  55000.0,
+  60000.0,
+  65000.0,
+  70000.0,
+  75000.0,
+  80000.0,
+  85000.0,
+  90000.0,
+  92500.0,
+  95000.0,
+  97500.0,
+  100000.0
+ ],
+ "contract": {
+  "measurement": "ATMS SDR antenna brightness temperature (IDPS, the remapped-to-scene product is not used), one thinned cell: the mean over the beams of one 0.25-degree cell in one time bin, clear sky over open ocean by the Grody 23.8/31.4 GHz liquid-water retrieval and the analysis cloud water path, |latitude| <= 60, zenith <= 60 degrees, at least three beams",
+  "time": "the mean beam time of the cell (UTC, unix seconds); granule start, end and creation times in the fetch manifest",
+  "location": "the mean beam latitude and longitude of the cell; the beam footprint is 2.2 degrees (about 32 km at nadir) for channels 3 to 16",
+  "vertical_coordinate": "the row's vertical localisation is a profile: the channel's temperature Jacobian per unit ln p on the standard column at the row's zenith, convolved with the Gaspari-Cohn kernel of the vertical length measured on the ensemble at every window, read by the filter at every analysis level (model space); ln p of the weighting-function centroid names the row for thinning and the receipt, and vertical_cutoff_lnp carries the measured length. The member operator holds the member's top-level temperature above the model top (1 hPa on the default stack): 1.8 percent of channel 13's weight and 8.3 percent of channel 14's lie above it on the standard column at nadir (29.6 percent of the refused channel 15's), so those channels read the held top temperature for that share",
+  "representativeness": "the within-cell standard deviation of each channel is carried per cell as the spread read; cells above the per-channel spread limit are not scored and not offered",
+  "bias_treatment": "per channel, O - B = a + b (B - mean_B) + c (sec z - 1), fitted on the even half of the day's clear-sky ocean cells in time order and scored on the odd half; the coefficients and the day are in the entry; the correction is applied to H(x) in the operator, never to the report",
+  "error_correlations": "channels are offered as separate batches with diagonal errors; inter-channel correlation of the residuals is not modelled (the Desroziers diagnostic is the place it will be measured); the error per channel is sqrt(NEdT^2 + rmse_after^2), never the NEdT alone",
+  "assimilation_status": "assimilated by the ensemble filter through the atms stream (arwen_global.radiance_streams): clear-sky open-ocean cells thinned to the analysis grid and the observation bin, screened by the control background's cloud water and the retrieved liquid water, localised in model space through the channel's weighting-function profile with the vertical length measured on the ensemble each window, the bias coefficients moved by the window's own departures; whether the stream is in the door's default set is the scorecard's verdict, recorded on the door page"
+ }
+}

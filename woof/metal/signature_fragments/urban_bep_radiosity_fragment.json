@@ -1,0 +1,192 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_radiosity_fragment",
+      "module": "urban_bep_radiosity_fragment",
+      "source": "woof/metal/shaders/urban_bep_radiosity_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "bep_upward_rad radiosity solve",
+      "resources": [
+        [
+          "column_param",
+          "float",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "column_view_x",
+          "float",
+          "read"
+        ],
+        [
+          "column_state",
+          "float",
+          "read"
+        ],
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "utype_urb",
+          "int32",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "glw",
+          "float",
+          "read"
+        ],
+        [
+          "direct_rsg",
+          "float",
+          "read"
+        ],
+        [
+          "direct_rsw",
+          "float",
+          "read"
+        ],
+        [
+          "rlw",
+          "float",
+          "read_write"
+        ],
+        [
+          "rlg",
+          "float",
+          "read_write"
+        ],
+        [
+          "rsw",
+          "float",
+          "read_write"
+        ],
+        [
+          "rsg",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "column_param": [
+          [
+            "ncol",
+            140
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "column_view_x": [
+          [
+            "ncol",
+            794
+          ]
+        ],
+        "column_state": [
+          [
+            "ncol",
+            1210
+          ]
+        ],
+        "class_x": [
+          [
+            1,
+            1085
+          ]
+        ],
+        "utype_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "glw": [
+          [
+            "ncol"
+          ]
+        ],
+        "direct_rsg": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "direct_rsw": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "rlw": [
+          [
+            "ncol",
+            2,
+            2,
+            18
+          ]
+        ],
+        "rlg": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "rsw": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "rsg": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "error": [
+          [
+            "ncol",
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

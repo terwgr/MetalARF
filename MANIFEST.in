@@ -1,0 +1,96 @@
+# Deliberately empty of prunes, and the two absences are worth naming so
+# neither gets "fixed" back in.
+#
+# 1. The two externalized Thompson tables (freezeH2O.dat, qr_acr_qg_V4.dat)
+#    were excluded here through 2.4.1 because without those lines this
+#    sdist exceeded PyPI's 100 MiB per-file cap.  The directory holding
+#    them moved to the `recast-woof-data` companion distribution in 2.5.0, so
+#    the exclusions moved with it: see recast-woof-data/MANIFEST.in.  There is
+#    nothing under gpuwm/ left to exclude.
+#
+# 2. The top-level `configs/` directory reaches the sdist already:
+#    setuptools folds `[tool.setuptools.package-data]` into the source
+#    distribution's default file set, so the one declaration that puts the
+#    97 repository configs in the wheel puts them in the sdist too
+#    (measured, not assumed -- tests/test_configs_are_packaged.py runs
+#    sdist._add_defaults_python and counts them).
+#    docs/public/VERIFICATION.md's reproduce recipe and docs/public/LES.md
+#    both name files under it, so a prune here would make those pages
+#    unfollowable from a source build.
+#
+# tests/test_package_data_coverage.py pins this file against the wheel
+# exclusion lists in both pyprojects.
+
+# The companion exclusion is about the OTHER distribution rather than
+# about any file's size or license.  `recast-woof-data/` belongs to the
+# companion distribution built from `recast-woof-data/pyproject.toml`, and a
+# fragment of it inside woof's own artifacts is worse than either whole
+# answer: a build carrying `woof_data/__init__.py` and none of its data
+# is a package that says where the tables are and has none.
+#
+# BOTH artifacts leaked it, by two different mechanisms, and this line
+# only ever closed one of them:
+#
+#   sdist -- setuptools' default file set sweeps every .py under the
+#     project root, which put `recast-woof-data/woof_data/__init__.py`, and
+#     nothing else, inside woof's sdist.  `prune` is the fix and is
+#     below.
+#   wheel -- [tool.setuptools.packages.find]'s `include` was `woof*`,
+#     which is fnmatch over directory names and matched `recast-woof-data`.
+#     An earlier version of this comment asserted the opposite -- that
+#     `recast-woof-data` is not a valid identifier so no wheel could contain
+#     it -- and the built wheel disproved it: a pyproject `find` defaults
+#     to `namespaces = true`, and a namespace finder needs no identifier.
+#     Fixed where it belongs, in pyproject.toml's `include`/`exclude`,
+#     and gated by tests/test_package_data_coverage.py.
+prune recast-woof-data
+
+# The staged Rust artifacts are wheel payload, and a SOURCE
+# distribution has no business carrying one platform's executables.
+# Measured on the 2.5.0 Linux shakeout: `python -m build` after
+# `tools/stage_wheel_bridges.py --platform linux-x86_64` swept all 18
+# native ELF artifacts in here -- the sdist went from 95,236,252 B to
+# 114,906,421 B and shipped Linux binaries as source.  `package-data`
+# sweeps the directory into the wheel deliberately (that is the whole
+# platform-wheel design) and setuptools folds the same declaration into
+# the sdist's default file set, so this is the line that separates the
+# two.  setup.py additionally REFUSES an sdist of a staged tree: with
+# the prune alone, `python -m build` would build its wheel from the
+# pruned sdist and quietly produce a py3-none-any wheel while the
+# operator was staging for a platform one.
+# tests/test_sdist_excludes_staged_bridges.py measures both halves.
+prune woof/libexec/bridges
+
+# Compiled Metal runtime artifacts are platform-wheel payload too; source
+# builds compile them from the checked-in Objective-C++ and MSL sources.
+prune woof/libexec/metal
+
+# Development fault-injection probes are not part of the operational package.
+prune tilestream/skeptic
+
+# The pytest suites and the six skeptic_*.py probes that live BESIDE
+# tilestream's operational modules.  `prune tilestream/skeptic` above named
+# a sub-directory that does not exist, so the 2.7.0 candidate's sdist and
+# all three wheels shipped 42 tilestream/test_*.py suites and six probes at
+# import top level (measured on the built artifacts).  This line is the
+# sdist half; setup.py's build_py filter (DEVELOPMENT_MODULE_GLOBS) is the
+# wheel half, and tests/test_operational_package_excludes_probes.py measures
+# both.
+recursive-exclude tilestream test_*.py skeptic_*.py
+
+# RELEASE-EXCLUDE.txt drops this test with the campaign harness it drives
+# (tools/n5s/**) from the public tree, but that manifest governs the
+# snapshot builders only and `python -m build` never read it: the 2.7.0
+# candidate's sdist carried the test without the harness it imports.  Named
+# here so the sdist and the public tree agree; the harness itself is not a
+# package in `packages.find` and never reached either artifact.
+exclude tests/test_n5s_toolchain.py
+# The branch-dispositions gate is development bookkeeping and RELEASE-EXCLUDE.txt
+# drops it from the public tree, so the sdist drops it too.
+exclude tests/test_branch_dispositions.py
+
+# Keep the user manuals and their directly linked workflow references
+# available to readers of the source distribution.
+include docs/public/*-USER-MANUAL.md
+include docs/public/TILES.md docs/install.md docs/run-plan.md
+recursive-include docs/integration-kit *.md *.json *.py

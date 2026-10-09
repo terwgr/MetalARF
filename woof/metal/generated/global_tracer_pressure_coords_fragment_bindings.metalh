@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 063bee484fc7a4fc10d0232e987031fd808b9d160d055a0def878f565ae2a1a9.
+struct GlobalTracerPressureCoordsFragmentResources {
+    device const ulong *density [[id(0)]];
+    device const ulong *p_top [[id(1)]];
+    device ulong *p_half [[id(2)]];
+    device ulong *p_full [[id(3)]];
+};
+struct GlobalTracerPressureCoordsFragmentParams {
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalTracerPressureCoordsFragmentParams) == 8, "global_tracer_pressure_coords_fragment parameter ABI size changed");

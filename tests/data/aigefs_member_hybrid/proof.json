@@ -1,0 +1,767 @@
+{
+  "boundary_interval_seconds": 21600,
+  "boundary_stream": {
+    "head_sha256": "5d0deb467acf78a09cc1032075eee48a3bda8bd0eafdda5a5cf0fdb93909b5dd"
+  },
+  "execution_inputs": {
+    "decoders": {
+      "gpuwm_mapped_engine": {
+        "bytes": 5945928,
+        "path": "${REPO_ROOT}/tools/rw_wps/target/release/gpuwm_mapped_engine",
+        "sha256": "c1235c932944d4544f1876451eee081f3b5053243ed34f66c0537becf61f3dd2"
+      }
+    },
+    "experiment_config": {
+      "bytes": 2108,
+      "path": "${REPO_ROOT}/tests/data/aigefs_member_hybrid/aigefs_member_demo.toml",
+      "sha256": "2b8789917a37a17ebb674b22d0c48f8f16272870c4c21f28ac9eb8e62fafe39a"
+    },
+    "geog_datasets": {
+      "albedo": "${GEOG_ROOT}/albedo_modis",
+      "greenfrac": "${GEOG_ROOT}/greenfrac_fpar_modis",
+      "lai": "${GEOG_ROOT}/lai_modis_10m",
+      "landuse": "${GEOG_ROOT}/modis_landuse_20class_30s_with_lakes",
+      "snow_albedo": "${GEOG_ROOT}/maxsnowalb_modis",
+      "soil_bottom": "${GEOG_ROOT}/soiltype_bot_30s",
+      "soil_temperature": "${GEOG_ROOT}/soiltemp_1deg",
+      "soil_top": "${GEOG_ROOT}/soiltype_top_30s",
+      "terrain": "${GEOG_ROOT}/topo_gmted2010_30s"
+    },
+    "geog_resolution_tokens": [
+      "default"
+    ],
+    "geog_root": "${GEOG_ROOT}",
+    "geog_source_binding": "resolved_dataset_paths_plus_native_static_output_sha256",
+    "root_static_provider": "native-wps-geog",
+    "root_static_receipt": null,
+    "wps_namelist": {
+      "bytes": 636,
+      "path": "${REPO_ROOT}/tests/data/aigefs_member_hybrid/aigefs_member_demo.namelist.wps",
+      "sha256": "731cbf210ab359ed3636c69b263c593f174697bfac781f61583ec5c56458bada"
+    }
+  },
+  "export": {
+    "boundary_interval_seconds": 21600,
+    "boundary_record_count": 1,
+    "boundary_times": [
+      "2026-08-17_00:00:00"
+    ],
+    "dimensions": {
+      "nx": 50,
+      "ny": 50,
+      "nz": 49
+    },
+    "files": {
+      "wrfbdy_d01": {
+        "bytes": 4387744,
+        "sha256": "12a8b0f8469e24c29bda9bcefb621176fee678ed280f3898505392211f210920"
+      },
+      "wrfinput_d01": {
+        "bytes": 11270504,
+        "sha256": "e27eba8b93b5494c2e7f7223fa77bbc2f36395d868f1bf71864516ee447a8833"
+      }
+    },
+    "forcing_hours": [
+      0,
+      6
+    ],
+    "limitations": [
+      "single specified projected domain only (lambert stock-WRF-gated; mercator/polar exports oracle-gated, not yet stock-WRF-gated)",
+      "hash-bound experiment-config suite initialized state contract",
+      "T_INIT is bound to final dry theta and is diagnostic-only",
+      "hydrometeor/W/HT_SHAD/PC external LBC arrays are zero",
+      "forcing must be uniformly spaced and begin at f00"
+    ],
+    "next_boundary_time": "2026-08-17_06:00:00",
+    "next_boundary_times": [
+      "2026-08-17_06:00:00"
+    ],
+    "physics": {
+      "acknowledgement_provenance": {},
+      "acknowledgements": [],
+      "domains": {
+        "1": {
+          "components": {
+            "cumulus": "off",
+            "land_surface": "noah",
+            "microphysics": "wsm6-mp6",
+            "pbl": "ysu",
+            "radiation": "rte-rrtmgp",
+            "surface_layer": "classic-mm5",
+            "turbulence": "smagorinsky-2d",
+            "urban": "none"
+          },
+          "governance": {
+            "acknowledged": true,
+            "required_acknowledgement": null,
+            "state": "registry-reachable"
+          },
+          "registry_blocker": null,
+          "selectors": {
+            "bl_pbl_physics": 1,
+            "cu_physics": 0,
+            "km_opt": 4,
+            "mp_physics": 6,
+            "ra_lw_physics": 4,
+            "ra_sw_physics": 4,
+            "sf_sfclay_physics": 91,
+            "sf_surface_physics": 2,
+            "sf_urban_physics": 0
+          }
+        }
+      },
+      "profile": null,
+      "registry_sha256": "ce43d0f1cb9a2f64c53bbb586d68cf838e26ac59450fbefb844e1a71e585de0a",
+      "schema": "gpuwm-front-door-physics-selection-multi-domain-v1"
+    },
+    "schema": "gpuwm-native-direct-wrf-export-v3",
+    "source": {
+      "contract_sha256": "3dc8f753e09932971f253f29bce61e254235edd55342c2e89e74ce026ae9bd02",
+      "geometry_receipt_sha256": "d5781bb416e9224470748ef823af25b357a88335c27268b4e10c51776a1d04a4",
+      "prepared_content_sha256": "2f7f7cf96411ded4db64dc877f55b639d91573cacbfb56a09f8969f4d71032ab",
+      "prepared_header_sha256": "4549e8df21d30f39fbb011b28f9386e6013f68614c886056e1a2dd7ace915bc6",
+      "resolved_physics_contract_sha256": "f486395516ca9746d8b259f06ccb5913a23210515f3cd0328348f09695cb1366",
+      "static_cache_sha256": "44f756ab7ebf82ea8808b8072e9cfec627d18a6ddca79cbd406157f8d4a33d17"
+    },
+    "status": "READY",
+    "valid_time": "2026-08-17_00:00:00"
+  },
+  "forcing_hours": [
+    0,
+    6
+  ],
+  "forcing_times": [
+    "2026-08-17T00:00:00",
+    "2026-08-17T06:00:00"
+  ],
+  "geometry": {
+    "cache": {
+      "bytes": 2085978,
+      "path": "native-static.npz",
+      "sha256": "44f756ab7ebf82ea8808b8072e9cfec627d18a6ddca79cbd406157f8d4a33d17"
+    },
+    "geometry": {
+      "center_lat": 40.0,
+      "center_lon": -92.5,
+      "definition": {
+        "dx": 30000.0,
+        "dy": 30000.0,
+        "e_sn": 51,
+        "e_we": 51,
+        "known_x": 25.5,
+        "known_y": 25.5,
+        "map_proj": "lambert",
+        "moad_cen_lat": 40.0,
+        "moad_cen_lon": -92.5,
+        "ref_lat": 40.0,
+        "ref_lon": -92.5,
+        "stand_lon": -92.5,
+        "truelat1": 30.0,
+        "truelat2": 60.0
+      },
+      "dx_m": 30000.0,
+      "dy_m": 30000.0,
+      "known_x": 25.5,
+      "known_y": 25.5,
+      "lat_range": [
+        32.905139779512886,
+        46.83683055413539
+      ],
+      "lon_range": [
+        -102.45437815248772,
+        -82.54562184751228
+      ],
+      "map_proj": "lambert",
+      "mass_shape": [
+        50,
+        50
+      ],
+      "moad_cen_lat": 40.0,
+      "moad_cen_lon": -92.5,
+      "nz": 49,
+      "ref_lat": 40.0,
+      "ref_lon": -92.5,
+      "stand_lon": -92.5,
+      "truelat1": 30.0,
+      "truelat2": 60.0
+    },
+    "schema": "gpuwm-native-static-direct-v1",
+    "static_sampling_contract": "wps-sampling-portable-v1",
+    "status": "PASS"
+  },
+  "moisture_floors": {
+    "fired": false,
+    "floors": {
+      "prognostic_moisture_floor": {
+        "fired": false
+      },
+      "surface_moisture_floor": {
+        "fired": false
+      }
+    },
+    "recorded": true,
+    "schema": "gpuwm-initialization-moisture-floors-v1"
+  },
+  "prepared_cache": {
+    "array_count": 106,
+    "content_sha256": "2f7f7cf96411ded4db64dc877f55b639d91573cacbfb56a09f8969f4d71032ab",
+    "path": "prepared-cache",
+    "payload_bytes": 17293992,
+    "schema": "gpuwm-prepared-real-cache-v1",
+    "status": "BUILT"
+  },
+  "preprocessing": {
+    "backend": "cpu",
+    "bridge": {
+      "abi_version": 1,
+      "name": "libgpuwm_preprocess_cpu.so",
+      "required_abi_version": 1,
+      "sha256": "2aca62887c132596ad69f867fcb84815501de785bce092ca5c77c2f3e3939ab7"
+    },
+    "contracts": {
+      "surface_pressure_mapping": {
+        "output_dtype": "float32",
+        "policy": "canonical-f32-coordinate-f64-bilinear-single-round-v1"
+      },
+      "vertical_stencil": {
+        "policy": "wrf-v4.6.1-strict-fp32-zap-close-levels-v1",
+        "predicate": "separation < zap_close_levels",
+        "zap_close_levels_pa": 500.0
+      }
+    },
+    "host_cpu_count": 24,
+    "implementation": "rust-scoped-threads-fp32-v1",
+    "implementation_tree": {
+      "files": {
+        "gpuwm/ingest/atmospheric_window.py": {
+          "bytes": 10659,
+          "sha256": "2bd674f105db513b0cfacc9c7881447f4a805354bef9e42f0d9f90ec65b16acd"
+        },
+        "gpuwm/ingest/cpu_backend.py": {
+          "bytes": 82972,
+          "sha256": "961d9d4e7f7b05a360ecd17d5b8248a39bbf70033516ff00972d5f3f4c744c95"
+        },
+        "gpuwm/ingest/horiz.py": {
+          "bytes": 109477,
+          "sha256": "1eff61ef52e79bdbd212dff7dd118bebe03134388a3bc4b5ad76ae8af25bae3d"
+        },
+        "gpuwm/ingest/interpolation_support.py": {
+          "bytes": 2555,
+          "sha256": "9be833136d3dc4fea8f40f4358fc7dd90225ffa0ca9936ae8bb09ba41fea9d87"
+        },
+        "gpuwm/ingest/lake_temperature.py": {
+          "bytes": 8908,
+          "sha256": "250a97b710e696c650f817be01cad3459495cc1ab20e7e509580c223f6c4a177"
+        },
+        "gpuwm/ingest/preprocess_backend.py": {
+          "bytes": 57936,
+          "sha256": "1ce60d3ccd547d9c90a5efa4c84b8f22c6baf925dc49d002527947f4915d2645"
+        },
+        "gpuwm/ingest/real.py": {
+          "bytes": 250606,
+          "sha256": "8eb3989f1860705cea4df3657413acaa7002aa0dd2267c30d1f29b4719bda1b5"
+        },
+        "gpuwm/ingest/vert.py": {
+          "bytes": 18000,
+          "sha256": "bf3d77e20d7e3a2ab4c5fdd651c38e06e26b6e057b4ac139e28bf859704c0c80"
+        },
+        "gpuwm/ingest/water_temperature.py": {
+          "bytes": 42305,
+          "sha256": "d7d3c29d09dea0103149999dbc96225abbcce6a19bebd551477d5f6a5f308f19"
+        }
+      },
+      "schema": "gpuwm-preprocess-source-tree-v1",
+      "sha256": "aeb389cbf2db1b0922d51141d4638ed812ace8217b42b7bd689914eac5b76f8e"
+    },
+    "masked_surface_chain": {
+      "bridge": {
+        "abi_version": 1,
+        "name": "libgpuwm_preprocess_cpu.so",
+        "sha256": "2aca62887c132596ad69f867fcb84815501de785bce092ca5c77c2f3e3939ab7"
+      },
+      "entry": "gpuwm_wps_masked_chain_f64",
+      "implementation": "rust-wps-masked-chain-f64-v2",
+      "stencil_entry": "gpuwm_masked_bilinear_stencil_f64",
+      "stencil_implementation": "rust-masked-bilinear-stencil-f64-v1",
+      "workers": "auto"
+    },
+    "schema": "gpuwm-preprocess-implementation-v2",
+    "selection": {
+      "backend": "cpu",
+      "reason": "named by the caller",
+      "requested": "cpu"
+    },
+    "vertical_interpolation": [
+      {
+        "backend": "cpu",
+        "column_levels": 14,
+        "kernel_level_tier": null,
+        "reason": "the CPU preprocessing backend was selected",
+        "source_levels": 13
+      }
+    ],
+    "workers": "auto"
+  },
+  "proof_content_sha256": "b94b08dd76740a98c84522c6ef6a310fcc7070cb9b25889de936042c13d36e3d",
+  "schema": "gpuwm-mapped-direct-wrf-proof-v1",
+  "soil_texture_downscale": {
+    "advisory": false,
+    "advisory_ratio": 5.0,
+    "applied": false,
+    "deep_soil_temperature": {
+      "applied": false,
+      "downscale_enabled": true,
+      "reason": "target grid is not finer than the forcing mesh, so there is no sub-source-cell scale to reconstitute",
+      "wrf_reference": {
+        "gpuwm_behaviour": "WRF's own linear-in-depth blend toward TMN is applied to the part of TMN the source mesh cannot represent, leaving the source-cell mean of every layer exactly unchanged",
+        "reproduce_wrf": "[ingest] soil_texture_downscale = false",
+        "wrf_behaviour": "init_soil_2_real (share/module_soil_pre.F:1591-1608) anchors the soil column on TMN at 3 m for level-form sources, but a layer-form source whose layers already match Noah's is copied straight through and never sees the target grid's deep-soil climatology"
+      }
+    },
+    "downscale_enabled": true,
+    "reason": "target grid is not finer than the forcing mesh, so there is no sub-source-cell scale to reconstitute",
+    "resolution_ratio": 0.687076172779044,
+    "source_cell_in_target_cells": {
+      "x": 0.687076172779044,
+      "y": 0.8987422528956865
+    },
+    "source_spacing_deg": {
+      "lat": 0.25,
+      "lon": 0.25
+    },
+    "target_spacing_deg": {
+      "lat": 0.27816651458693187,
+      "lon": 0.36386067499446995
+    },
+    "wrf_reference": {
+      "gpuwm_behaviour": "soil moisture crosses the resolution change as Noah's own degree-of-saturation SRATIO = (SMC-SMCDRY)/(SMCMAX-SMCDRY) (phys/module_sf_noahlsm.F:1214) and is reconstituted against the target grid's 30 arc-second texture",
+      "reproduce_wrf": "[ingest] soil_texture_downscale = false",
+      "wrf_behaviour": "real.exe consumes metgrid's interpolated SM layers unchanged; no stage consults the target grid's own soil texture, so SMOIS carries the forcing mesh permanently (dyn_em/module_initialize_real.F, share/module_soil_pre.F)"
+    }
+  },
+  "source_composition": {
+    "alignment": {
+      "binding": "physical_analysis_surface",
+      "broadcast_primary_valid_times": [
+        "2026-08-17T06:00:00"
+      ],
+      "coordinate_match": "exact_equivalent_contiguous_subset",
+      "donor_member": null,
+      "donor_shape": [
+        721,
+        1440
+      ],
+      "donor_source_cycles": [
+        "2026-08-17T00:00:00"
+      ],
+      "donor_valid_times": [
+        "2026-08-17T00:00:00"
+      ],
+      "field_subset_sha256": {
+        "land_fraction": "95256feb77628bfefb5709d4930ce9a6cd8d9e3ac1488f730eaa6d1db1fdeede",
+        "skin_temperature": "43f47990a51cc2bc46b6db413abe65ce9fb6faa9d47f06743f90e4b526ffa367",
+        "soil_temperature": "7e164708afce4c337a901c42f3742bddbcaea3ad2d687e02d0ebc8744ffad751",
+        "specific_humidity_2m": "3cfee18143c941728fd3119441c1dcf39801af0021a766c920b9a70c8af056d9",
+        "terrain_height": "c4d1b51b58194bef3b548ff90a06282303b76c69a36790b29e1ec97e0596aabd",
+        "volumetric_soil_moisture": "d80d5029d2ec35120417fd58b972c0102ffd77ca62f8488a5c0f9beb37c2dec0"
+      },
+      "fields": [
+        "land_fraction",
+        "skin_temperature",
+        "soil_temperature",
+        "specific_humidity_2m",
+        "terrain_height",
+        "volumetric_soil_moisture"
+      ],
+      "grid_alignment": "exact_coordinate_subset",
+      "latitude_index_range": [
+        0,
+        720
+      ],
+      "longitude_equivalence": "modulo_360_exact",
+      "longitude_index_range": [
+        0,
+        1439
+      ],
+      "matched_primary_valid_times": [
+        "2026-08-17T00:00:00"
+      ],
+      "primary_shape": [
+        721,
+        1440
+      ],
+      "schema": "gpuwm-cross-source-binding-v1",
+      "source_id": "gdas-pgrb2-0p25-analysis-donor-grib2-native",
+      "status": "PASS",
+      "time_alignment": "source_cycle_analysis_broadcast"
+    },
+    "composition": {
+      "path": "${REPO_ROOT}/gpuwm/authorities/rw-wps-aigefs-member-hybrid-grib2.composition.json",
+      "sha256": "9965904c92f08cd71323e2565d7a663863c8ca061f3e991b813b52ad2a6a5d10"
+    },
+    "contributing_sources": [
+      {
+        "alignment": {
+          "binding": "physical_analysis_surface",
+          "broadcast_primary_valid_times": [
+            "2026-08-17T06:00:00"
+          ],
+          "coordinate_match": "exact_equivalent_contiguous_subset",
+          "donor_member": null,
+          "donor_shape": [
+            721,
+            1440
+          ],
+          "donor_source_cycles": [
+            "2026-08-17T00:00:00"
+          ],
+          "donor_valid_times": [
+            "2026-08-17T00:00:00"
+          ],
+          "field_subset_sha256": {
+            "land_fraction": "95256feb77628bfefb5709d4930ce9a6cd8d9e3ac1488f730eaa6d1db1fdeede",
+            "skin_temperature": "43f47990a51cc2bc46b6db413abe65ce9fb6faa9d47f06743f90e4b526ffa367",
+            "soil_temperature": "7e164708afce4c337a901c42f3742bddbcaea3ad2d687e02d0ebc8744ffad751",
+            "specific_humidity_2m": "3cfee18143c941728fd3119441c1dcf39801af0021a766c920b9a70c8af056d9",
+            "terrain_height": "c4d1b51b58194bef3b548ff90a06282303b76c69a36790b29e1ec97e0596aabd",
+            "volumetric_soil_moisture": "d80d5029d2ec35120417fd58b972c0102ffd77ca62f8488a5c0f9beb37c2dec0"
+          },
+          "fields": [
+            "land_fraction",
+            "skin_temperature",
+            "soil_temperature",
+            "specific_humidity_2m",
+            "terrain_height",
+            "volumetric_soil_moisture"
+          ],
+          "grid_alignment": "exact_coordinate_subset",
+          "latitude_index_range": [
+            0,
+            720
+          ],
+          "longitude_equivalence": "modulo_360_exact",
+          "longitude_index_range": [
+            0,
+            1439
+          ],
+          "matched_primary_valid_times": [
+            "2026-08-17T00:00:00"
+          ],
+          "primary_shape": [
+            721,
+            1440
+          ],
+          "schema": "gpuwm-cross-source-binding-v1",
+          "source_id": "gdas-pgrb2-0p25-analysis-donor-grib2-native",
+          "status": "PASS",
+          "time_alignment": "source_cycle_analysis_broadcast"
+        },
+        "binding": "physical_analysis_surface",
+        "data": [
+          {
+            "path": "${STAGING_ROOT}/crosssource/gdas.t00z.pgrb2.0p25.f000",
+            "sha256": "ac6c46956358af5fa7e525761c4f36cdce3524f98e825f335ccfc81c779b9f52"
+          }
+        ],
+        "fields": [
+          "land_fraction",
+          "skin_temperature",
+          "soil_temperature",
+          "specific_humidity_2m",
+          "terrain_height",
+          "volumetric_soil_moisture"
+        ],
+        "mapping": {
+          "path": "${REPO_ROOT}/gpuwm/authorities/rw-wps-gdas-pgrb2-donor.mapping.json",
+          "sha256": "35e0d4e2895b38a2702952fabc97fb9f53594b41dbb2d511e39a13458f72f8cf"
+        },
+        "provenance": {
+          "path": "${REPO_ROOT}/gpuwm/authorities/rw-wps-aigefs-member-hybrid-grib2.provenance.json",
+          "sha256": "4050afea573ffa3b590deb6ef0f0e2a86f2d6feca25423b38cd31f4e025b6bb2"
+        },
+        "source_id": "gdas-pgrb2-0p25-analysis-donor-grib2-native"
+      }
+    ],
+    "decoders": {
+      "gpuwm_mapped_engine": {
+        "path": "${REPO_ROOT}/tools/rw_wps/target/release/gpuwm_mapped_engine",
+        "sha256": "c1235c932944d4544f1876451eee081f3b5053243ed34f66c0537becf61f3dd2"
+      }
+    },
+    "frame_count": 2,
+    "frames": [
+      {
+        "field_count": 17,
+        "header_sha256": "65dbab69264348f1753c1562222c49b2dcec689f5facae63d546b93f3cab079f",
+        "terrain_sha256": "c4d1b51b58194bef3b548ff90a06282303b76c69a36790b29e1ec97e0596aabd"
+      },
+      {
+        "field_count": 17,
+        "header_sha256": "23e9c5eee5f1c5c29646e2b3593916d1342cd285d22639ac9b788c5147e7f63a",
+        "terrain_sha256": "c4d1b51b58194bef3b548ff90a06282303b76c69a36790b29e1ec97e0596aabd"
+      }
+    ],
+    "input_manifest": {
+      "path": "${TMPDIR}/mem001-inputs.json",
+      "sha256": "b8c4ff124d15bc32e8c2420a20dd53d7d8dba2527d1ca06cea303dee2e713a56"
+    },
+    "mapping": {
+      "path": "${REPO_ROOT}/gpuwm/authorities/rw-wps-aigefs-member-hybrid-grib2.mapping.json",
+      "sha256": "d34ff39693af3a6cef6d4f3d83a72c7bff1d710470518d986724eae368bde623"
+    },
+    "receipt_content_sha256": "1dd7288bdc6e5c6f0576fb4f6c134bf7847f2ad165c4b6499ae58ca5cd025170",
+    "schema": "gpuwm-mapped-composition-receipt-v1",
+    "soil_layers": {
+      "depth_units": "m",
+      "missing": {
+        "land": "reject",
+        "ocean": {
+          "moisture": 1.0,
+          "stage": "after_horizontal_interpolation",
+          "temperature": "skin_temperature"
+        }
+      },
+      "moisture_field": "volumetric_soil_moisture",
+      "remap": {
+        "coverage": "require_complete",
+        "kind": "conservative_layer_means",
+        "source_value_location": "layer_mean",
+        "target_value_location": "layer_mean"
+      },
+      "source_layers": [
+        {
+          "bottom": 0.1,
+          "selectors": {
+            "soil_temperature": {
+              "category": 0,
+              "discipline": 2,
+              "format": "grib2",
+              "level_type": 106,
+              "level_value": 0.0,
+              "parameter": 2,
+              "second_level_type": 106,
+              "second_level_value": 0.1
+            },
+            "volumetric_soil_moisture": {
+              "category": 0,
+              "center": 7,
+              "discipline": 2,
+              "format": "grib2",
+              "level_type": 106,
+              "level_value": 0.0,
+              "local_table_version": 1,
+              "master_table_version": 2,
+              "parameter": 192,
+              "second_level_type": 106,
+              "second_level_value": 0.1,
+              "subcenter": 0
+            }
+          },
+          "top": 0.0
+        },
+        {
+          "bottom": 0.4,
+          "selectors": {
+            "soil_temperature": {
+              "category": 0,
+              "discipline": 2,
+              "format": "grib2",
+              "level_type": 106,
+              "level_value": 0.1,
+              "parameter": 2,
+              "second_level_type": 106,
+              "second_level_value": 0.4
+            },
+            "volumetric_soil_moisture": {
+              "category": 0,
+              "center": 7,
+              "discipline": 2,
+              "format": "grib2",
+              "level_type": 106,
+              "level_value": 0.1,
+              "local_table_version": 1,
+              "master_table_version": 2,
+              "parameter": 192,
+              "second_level_type": 106,
+              "second_level_value": 0.4,
+              "subcenter": 0
+            }
+          },
+          "top": 0.1
+        },
+        {
+          "bottom": 1.0,
+          "selectors": {
+            "soil_temperature": {
+              "category": 0,
+              "discipline": 2,
+              "format": "grib2",
+              "level_type": 106,
+              "level_value": 0.4,
+              "parameter": 2,
+              "second_level_type": 106,
+              "second_level_value": 1.0
+            },
+            "volumetric_soil_moisture": {
+              "category": 0,
+              "center": 7,
+              "discipline": 2,
+              "format": "grib2",
+              "level_type": 106,
+              "level_value": 0.4,
+              "local_table_version": 1,
+              "master_table_version": 2,
+              "parameter": 192,
+              "second_level_type": 106,
+              "second_level_value": 1.0,
+              "subcenter": 0
+            }
+          },
+          "top": 0.4
+        },
+        {
+          "bottom": 2.0,
+          "selectors": {
+            "soil_temperature": {
+              "category": 0,
+              "discipline": 2,
+              "format": "grib2",
+              "level_type": 106,
+              "level_value": 1.0,
+              "parameter": 2,
+              "second_level_type": 106,
+              "second_level_value": 2.0
+            },
+            "volumetric_soil_moisture": {
+              "category": 0,
+              "center": 7,
+              "discipline": 2,
+              "format": "grib2",
+              "level_type": 106,
+              "level_value": 1.0,
+              "local_table_version": 1,
+              "master_table_version": 2,
+              "parameter": 192,
+              "second_level_type": 106,
+              "second_level_value": 2.0,
+              "subcenter": 0
+            }
+          },
+          "top": 1.0
+        }
+      ],
+      "target_layers": [
+        {
+          "bottom": 0.1,
+          "top": 0.0
+        },
+        {
+          "bottom": 0.4,
+          "top": 0.1
+        },
+        {
+          "bottom": 1.0,
+          "top": 0.4
+        },
+        {
+          "bottom": 2.0,
+          "top": 1.0
+        }
+      ],
+      "temperature_field": "soil_temperature"
+    },
+    "status": "CANONICAL_FRAMES_COMPLETE_NOT_STOCK_WRF_CERTIFIED",
+    "terrain_products": [
+      {
+        "path": "${STAGING_ROOT}/crosssource/gdas.t00z.pgrb2.0p25.f000",
+        "sha256": "ac6c46956358af5fa7e525761c4f36cdce3524f98e825f335ccfc81c779b9f52"
+      }
+    ],
+    "terrain_provenance": {
+      "provenance_path": "${REPO_ROOT}/gpuwm/authorities/rw-wps-aigefs-member-hybrid-grib2.provenance.json",
+      "provenance_sha256": "4050afea573ffa3b590deb6ef0f0e2a86f2d6feca25423b38cd31f4e025b6bb2"
+    },
+    "valid_times": [
+      "2026-08-17T00:00:00",
+      "2026-08-17T06:00:00"
+    ]
+  },
+  "static": {
+    "bytes": 2085978,
+    "fields": [
+      "ALBEDO12M",
+      "COSALPHA",
+      "E",
+      "F",
+      "GREENFRAC",
+      "HGT_M",
+      "LAI12M",
+      "LANDMASK",
+      "LANDUSEF",
+      "LU_INDEX",
+      "MAPFAC_M",
+      "MAPFAC_U",
+      "MAPFAC_V",
+      "SCB_DOM",
+      "SCT_DOM",
+      "SINALPHA",
+      "SNOALB",
+      "SOILCBOT",
+      "SOILCTOP",
+      "SOILTEMP",
+      "TMN"
+    ],
+    "path": "native-static.npz",
+    "sha256": "44f756ab7ebf82ea8808b8072e9cfec627d18a6ddca79cbd406157f8d4a33d17"
+  },
+  "status": "READY_NOT_YET_STOCK_WRF_GATED",
+  "stock_wrf_export": "optional",
+  "timing_seconds": {
+    "decode_and_compose": 4.96526814205572,
+    "direct_wrf_export": 4.4529051900608465,
+    "initialize_all_times": 2.412525148014538,
+    "static": 9.327103109098971,
+    "total": 27.489207473001443,
+    "write_prepared_cache": 0.04337423504330218
+  },
+  "vertical_coordinate": {
+    "derivation": {
+      "configured_etac": 0.2,
+      "configured_floor_pa": 46407.92599918899,
+      "configured_floor_terrain_m": 6082.26134456414,
+      "etac": 0.2,
+      "governing_column": {
+        "field": "d01 static terrain",
+        "index": [
+          33,
+          0
+        ],
+        "surface_pressure_pa": 87183.7832220757,
+        "terrain_height_m": 1149.8656234543598
+      },
+      "hybrid_opt": 2,
+      "p_top_pa": 10000.0,
+      "reference": "WRF v4.6.1 dyn_em/nest_init_utils.F:1158-1182; doc/README.hybrid_vert_coord:65-74",
+      "schema": "gpuwm-vertical-coordinate-adaptation-v2",
+      "status": "AS_CONFIGURED",
+      "surveyed_terrain": [
+        {
+          "cells": 2500,
+          "field": "d01 static terrain",
+          "max_terrain_m": 1149.8656234543598
+        }
+      ],
+      "thinnest_layer": {
+        "configured_fraction": 0.7608561150715989,
+        "fraction": 0.7608561150715989,
+        "index": 20,
+        "margin_met": true,
+        "min_layer_fraction": 0.15
+      }
+    },
+    "etac": 0.2,
+    "hybrid_opt": 2,
+    "mass_levels": 49,
+    "p_top_pa": 10000.0
+  }
+}

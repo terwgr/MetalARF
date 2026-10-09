@@ -1,0 +1,31 @@
+{
+  "kernels": [
+    {
+      "name": "hex_normal_velocity",
+      "module": "hex_diagnostics",
+      "source": "woof/metal/shaders/hex_normal_velocity_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_normal_velocity",
+      "resources": [
+        ["rho", "float", "read"],
+        ["rho_u", "float", "read"],
+        ["cells_on_edge", "int32", "read"],
+        ["normal_velocity", "float", "read_write"]
+      ],
+      "shapes": {
+        "rho": [["nlev", "ncells"]],
+        "rho_u": [["nlev", "nedges"]],
+        "cells_on_edge": [["nedges", 2]],
+        "normal_velocity": [["nlev", "nedges"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["nedges", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

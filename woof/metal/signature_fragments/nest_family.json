@@ -1,0 +1,122 @@
+{
+  "kernels": [
+    {
+      "name": "nest_blend_terrain",
+      "module": "nest_family",
+      "source": "woof/metal/shaders/nest_family.metal",
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_blend_terrain",
+      "resources": [
+        ["interpolated", "float", "read"], ["fine", "float", "read_write"]
+      ],
+      "shapes": {
+        "interpolated": [["nk", "ny", "nx"]],
+        "fine": [["nk", "ny", "nx"]]
+      },
+      "parameters": [
+        ["spec_bdy_width", "int32"], ["blend_width", "int32"],
+        ["nk", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["domain_ny", "int32"], ["domain_nx", "int32"],
+        ["j0", "int32"], ["i0", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    },
+    {
+      "name": "nest_copy_fcn",
+      "module": "nest_family",
+      "source": "woof/metal/shaders/nest_family.metal",
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_copy_fcn",
+      "resources": [
+        ["parent", "float", "read_write"], ["child", "float", "read"]
+      ],
+      "shapes": {
+        "parent": [["nz", "nyp", "nxp"]],
+        "child": [["nz", "nyc", "nxc"]]
+      },
+      "parameters": [
+        ["ipos", "int32"], ["jpos", "int32"],
+        ["nri", "int32"], ["nrj", "int32"], ["spec_zone", "int32"],
+        ["xstag", "int32"], ["ystag", "int32"], ["nz", "int32"],
+        ["nyp", "int32"], ["nxp", "int32"], ["nyc", "int32"],
+        ["nxc", "int32"], ["parent_i0", "int32"],
+        ["parent_j0", "int32"], ["child_i0", "int32"],
+        ["child_j0", "int32"], ["loop_i0", "int32"],
+        ["loop_j0", "int32"], ["loop_ni", "int32"], ["loop_nj", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    },
+    {
+      "name": "nest_copy_fcnm",
+      "module": "nest_family",
+      "source": "woof/metal/shaders/nest_family.metal",
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_copy_fcnm",
+      "resources": [
+        ["parent", "float", "read_write"], ["child", "float", "read"]
+      ],
+      "shapes": {
+        "parent": [["nz", "nyp", "nxp"]],
+        "child": [["nz", "nyc", "nxc"]]
+      },
+      "parameters": [
+        ["ipos", "int32"], ["jpos", "int32"],
+        ["nri", "int32"], ["nrj", "int32"], ["spec_zone", "int32"],
+        ["xstag", "int32"], ["ystag", "int32"], ["nz", "int32"],
+        ["nyp", "int32"], ["nxp", "int32"], ["nyc", "int32"],
+        ["nxc", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    },
+    {
+      "name": "nest_smooth_j",
+      "module": "nest_family",
+      "source": "woof/metal/shaders/nest_family.metal",
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_smooth_j",
+      "resources": [
+        ["parent", "float", "read"], ["scratch", "float", "read_write"]
+      ],
+      "shapes": {
+        "parent": [["nz", "nyp", "nxp"]],
+        "scratch": [["nz", "nyp", "nxp"]]
+      },
+      "parameters": [
+        ["mode", "int32"], ["xnu", "float32"], ["i0", "int32"],
+        ["j0", "int32"], ["niw", "int32"], ["njw", "int32"],
+        ["nz", "int32"], ["nyp", "int32"], ["nxp", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    },
+    {
+      "name": "nest_smooth_i",
+      "module": "nest_family",
+      "source": "woof/metal/shaders/nest_family.metal",
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_smooth_i",
+      "resources": [
+        ["parent", "float", "read_write"], ["scratch", "float", "read"]
+      ],
+      "shapes": {
+        "parent": [["nz", "nyp", "nxp"]],
+        "scratch": [["nz", "nyp", "nxp"]]
+      },
+      "parameters": [
+        ["mode", "int32"], ["xnu", "float32"], ["i0", "int32"],
+        ["j0", "int32"], ["niw", "int32"], ["njw", "int32"],
+        ["nz", "int32"], ["nyp", "int32"], ["nxp", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    }
+  ]
+}

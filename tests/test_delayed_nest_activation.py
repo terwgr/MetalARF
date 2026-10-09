@@ -1,0 +1,742 @@
+"""A nest that activates later than the experiment runs to completion.
+
+Defect #205, the root fix.  Every history frame after the EXPERIMENT's
+t = 0 consumed a microphysics-time REFL_10CM stash, so a nest whose first
+frame is due at its own later activation epoch consumed a stash no step of
+that domain had produced and the run died there:
+
+    RuntimeError: REFL_10CM output is due but no microphysics-time field
+    is stashed
+
+deterministically, hours of integration in (32,350 s burned across three
+identical supervisor restarts, 2026-08-19).  2.5.0 shipped an upfront
+refusal at ``build_experiment`` naming that breakage; this suite is what
+retires it.
+
+The contract the consume sites now hold: a domain's stash exists only
+after a microphysics step OF THAT DOMAIN has run with ``refl_10cm_due``.
+The frame due at the domain's OWN start tick precedes every one of its
+steps -- for a domain that starts with the experiment that tick is 0, for
+an activating nest it is the activation epoch -- so that one frame carries
+no REFL_10CM, exactly as the root's analysis frame always has.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from datetime import timedelta
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from woof.core.clock import build_schedule, resolve_clock
+from woof.core.model import (DomainNode, ExperimentState,
+                              ModelRuntimeStatus, execute_experiment)
+from woof.core.refl import stash_refl_10cm
+from woof.static.lambert import grids_from_projection_config
+from woof.verify.cases.nest_ideal_r1_moist import load_scaffold
+
+from test_model import _Coupler, _HistoryPhysics, _HistoryState
+
+#: The child activates two root steps (120 s) after the experiment, on a
+#: forcing seam and on a parent step boundary, so no structural refusal
+#: can answer instead and the activation epoch is a history boundary.
+DELAY_SECONDS = 120
+RUN_SECONDS = 300.0
+HISTORY_SECONDS = 60.0
+
+
+class _Writers:
+    """Records what the production history handoff hands the writer."""
+
+    def __init__(self):
+        self.frames = []
+        self.drains = 0
+
+    @property
+    def pending(self):
+        return 0
+
+    def submit(self, node, ticks, *, refl_field=None):
+        self.frames.append((node.cfg.grid_id, ticks, refl_field))
+
+    def drain(self):
+        self.drains += 1
+
+
+def _stashing_step(state, cfg, *, refl_10cm_due=False, **_kwargs):
+    """The production stash contract, without a device.
+
+    Identical to the fake step in tests/test_model.py's restart-split
+    gate: a step stashes exactly when the executor says the history alarm
+    rings at its end, which is the only way a stash is ever produced.
+    """
+    if refl_10cm_due:
+        endpoint = int(round(state.elapsed_seconds + cfg.dt))
+        stash_refl_10cm(
+            state, np.asarray([cfg.grid_id, endpoint], dtype=np.int64))
+
+
+def _tree(*, delay_s: int, smooth_option: int = 0):
+    """A two-domain CPU tree whose child starts ``delay_s`` late (or not).
+
+    Hand-assembled for the same reason tests/test_model.py's fixtures are:
+    ``build_experiment`` needs real forcing and a device, and the defect
+    lives entirely in the executor/history seam above both.
+    """
+    base = load_scaffold(variant="n2b")
+    domains = tuple(
+        replace(
+            dc,
+            history_interval_s=HISTORY_SECONDS,
+            start_time=(base.start_time + timedelta(seconds=delay_s)
+                        if dc.grid_id == 2 and delay_s else dc.start_time),
+            run=replace(dc.run, run_seconds=RUN_SECONDS,
+                        output_interval_s=HISTORY_SECONDS))
+        for dc in base.domains)
+    exp = replace(base, run_seconds=RUN_SECONDS, domains=domains,
+                  smooth_option=smooth_option)
+    tick_clock = resolve_clock(exp, lbc_interval_s=60)
+    clocks = tick_clock.clocks()
+    grids = grids_from_projection_config(exp)
+    root = DomainNode(domains[0], grids[0], _HistoryState(), clocks[1],
+                      None, [], None)
+    child = DomainNode(domains[1], grids[1], _HistoryState(), clocks[2],
+                       root, [], None)
+    child.coupler = _Coupler(child)
+    child._started = clocks[2].spec.start_ticks == 0
+    root.children.append(child)
+    model = ExperimentState(
+        root, {1: root, 2: child}, build_schedule(exp, tick_clock),
+        None, "delayed-activation-fixture")
+    model._runtime_status = ModelRuntimeStatus()
+    model._resumed = False
+    model._resume_committed_history_grid_ids = frozenset()
+    model._scratch_arena = None
+    model._dycore_state_workspace = None
+    model._io_manager = None
+    model._last_checkpoint = None
+    model._input_catalog = None
+    model._prepared_by_grid_id = {}
+    model._activation_context = {
+        "experiment": exp,
+        "case_data": SimpleNamespace(source_orography=None,
+                                     sfcp_to_sfcp=None),
+        "forcing_times": (),
+        "radiation_workspace": None,
+    }
+    return exp, model
+
+
+def _run(model, monkeypatch):
+    """Drive the tree through the PRODUCTION history handoff."""
+    from woof.runtime import _submit_tree_history_frame
+
+    writers = _Writers()
+    model._io_manager = writers
+    monkeypatch.setattr("woof.core.dycore.step", _stashing_step)
+    execute_experiment(
+        model, validate_state=False,
+        history_handler=lambda _tree, node, ticks: _submit_tree_history_frame(
+            writers, node, ticks))
+    return writers
+
+
+def _activate_in_place(monkeypatch):
+    """Activate the delayed child without ingest, catalog or device.
+
+    ``on_domain_start`` re-initializes the child from the analysis at its
+    activation time; every one of those collaborators needs real forcing
+    and a GPU.  Replacing them keeps the executor, the clocks, the
+    schedule and the history handoff -- where the defect lives -- exactly
+    as production runs them.
+    """
+    _HistoryPhysics.radiation_callable = None
+    monkeypatch.setattr(
+        "woof.ingest.nest_init.initialize_child",
+        lambda cfg, parent, *args, **kwargs: SimpleNamespace(
+            grid=parent.grid, state=_HistoryState()))
+    monkeypatch.setattr("woof.runtime.prepare_child_case",
+                        lambda *args, **kwargs: SimpleNamespace())
+    # The class, never a lambda narrowed to the keywords of the day: the
+    # double carries NestCoupler's own signature, so a coupling setting
+    # the activation path forwards is recorded here instead of raising.
+    monkeypatch.setattr("woof.core.nest.NestCoupler", _Coupler)
+
+
+# --- the predicate every consume site now shares -------------------------
+
+def test_the_stash_is_never_due_at_the_domains_own_start_tick():
+    from woof.core.refl import refl_10cm_stash_is_due
+
+    # A domain that starts with the experiment: its analysis frame is
+    # tick 0, every later frame follows one of its steps.
+    assert refl_10cm_stash_is_due(0) is False
+    assert refl_10cm_stash_is_due(60) is True
+    # An activating nest: its analysis frame is the activation epoch,
+    # and reading the absolute 0 there is exactly defect #205.
+    assert refl_10cm_stash_is_due(120, domain_start_ticks=120) is False
+    assert refl_10cm_stash_is_due(180, domain_start_ticks=120) is True
+
+
+# --- the production tree seam -------------------------------------------
+
+def test_a_delayed_child_survives_its_activation_epoch_frame(monkeypatch):
+    """The reproduction, and the fix: the child's first frame is due AT
+    its activation epoch, before any of its steps, so it carries no
+    REFL_10CM and the run completes instead of raising."""
+    _activate_in_place(monkeypatch)
+    _exp, model = _tree(delay_s=DELAY_SECONDS)
+
+    writers = _run(model, monkeypatch)
+
+    child_frames = [(ticks, refl) for gid, ticks, refl in writers.frames
+                    if gid == 2]
+    assert [ticks for ticks, _refl in child_frames] == [120, 180, 240, 300]
+    # The activation-epoch frame: no stash, the same shape the root's own
+    # analysis frame has always had.
+    assert child_frames[0][1] is None
+    # Every frame after it follows a step of THAT domain, so it carries
+    # the field that step stashed.
+    assert all(refl is not None for _ticks, refl in child_frames[1:])
+
+
+def test_the_root_keeps_its_own_frames_while_the_child_waits(monkeypatch):
+    """No gate widening on the domain that starts with the experiment:
+    the root's tick-0 frame still carries no stash and every later root
+    frame still does."""
+    _activate_in_place(monkeypatch)
+    _exp, model = _tree(delay_s=DELAY_SECONDS)
+
+    writers = _run(model, monkeypatch)
+
+    root_frames = [(ticks, refl) for gid, ticks, refl in writers.frames
+                   if gid == 1]
+    assert [ticks for ticks, _refl in root_frames] == [0, 60, 120, 180,
+                                                       240, 300]
+    assert root_frames[0][1] is None
+    assert all(refl is not None for _ticks, refl in root_frames[1:])
+
+
+def test_the_delayed_child_is_coupled_with_the_experiments_settings(
+        monkeypatch):
+    """A child built at its activation epoch is coupled exactly as one
+    built at t = 0 is: every coupling setting on the experiment reaches
+    the NestCoupler that ``on_domain_start`` constructs.  Without this a
+    delayed nest silently runs one-way or unsmoothed while the config
+    asks for neither, and the two construction sites drift apart unseen.
+    """
+    _activate_in_place(monkeypatch)
+    exp, model = _tree(delay_s=DELAY_SECONDS, smooth_option=2)
+
+    _run(model, monkeypatch)
+
+    # The fixture's pre-activation coupler is built bare, so reading the
+    # experiment's non-default smoother here also proves the coupler was
+    # rebuilt at the activation epoch rather than carried over.
+    coupler = model.node(2).coupler
+    assert (coupler.feedback, coupler.smooth_option) == (exp.feedback,
+                                                         exp.smooth_option)
+    assert coupler.smooth_option == 2
+
+
+def test_the_startup_build_is_released_before_the_activation_build(
+        monkeypatch):
+    """A delayed child is built at t = 0 and built again at activation.
+
+    Nothing may still own the first build when the second one allocates:
+    not the node's state, not the prepared-case map and not the domain's
+    health validator.  While any of them held it, both builds were on the
+    card together for the whole rebuild, so a tree that fit its steady
+    state ran out of device memory at the child's activation.
+    """
+    import gc
+    import weakref
+
+    class _StartupCase:
+        """The startup build's prepared case; weak-referenceable."""
+
+    _activate_in_place(monkeypatch)
+    _exp, model = _tree(delay_s=DELAY_SECONDS)
+    child = model.node(2)
+    model._prepared_by_grid_id = {2: _StartupCase()}
+    startup = {
+        "state arrays": weakref.ref(child.state.qv),
+        "physics driver": weakref.ref(child.state.physics),
+        "prepared case": weakref.ref(model._prepared_by_grid_id[2]),
+    }
+    # The validator double holds the state exactly as StateHealthValidator
+    # does, so a validator left armed on the startup build keeps it alive.
+    monkeypatch.setattr(
+        "woof.core.health.health_validator_for_domain",
+        lambda _model, node: SimpleNamespace(
+            state=node.state, qv=node.state.qv,
+            require_healthy=lambda *, phase: None))
+    monkeypatch.setattr(
+        "woof.core.streaming.step_health",
+        lambda *_args, **_kwargs: {"nan": False, "cfl": None})
+    alive_at_rebuild = []
+
+    def initialize_child(cfg, parent, *args, **kwargs):
+        gc.collect()
+        alive_at_rebuild.append(sorted(
+            name for name, ref in startup.items() if ref() is not None))
+        return SimpleNamespace(grid=parent.grid, state=_HistoryState())
+
+    monkeypatch.setattr("woof.ingest.nest_init.initialize_child",
+                        initialize_child)
+    writers = _Writers()
+    model._io_manager = writers
+    monkeypatch.setattr("woof.core.dycore.step", _stashing_step)
+    from woof.runtime import _submit_tree_history_frame
+    execute_experiment(
+        model, validate_state=True,
+        history_handler=lambda _tree, node, ticks: _submit_tree_history_frame(
+            writers, node, ticks))
+
+    assert alive_at_rebuild == [[]]
+    # The rebuilt child is the one that runs, and it runs to the end.
+    assert model.node(2).state.qv is not None
+    assert [ticks for gid, ticks, _refl in writers.frames if gid == 2] == [
+        120, 180, 240, 300]
+
+
+class _StandInTiles:
+    """The TiledRun surface a StreamedDomain steps, closes and rebinds."""
+
+    def __init__(self, cfg):
+        from woof.core.streaming import REFL_STORE_KEY
+
+        self.cfg = cfg
+        self._home = {REFL_STORE_KEY: np.zeros((1,), dtype=np.float32),
+                      "qv": np.zeros((1,), dtype=np.float32)}
+        self._closed = False
+        self.sweeps = 0
+
+    @property
+    def store(self):
+        return self._home
+
+    @property
+    def closed(self):
+        return self._closed
+
+    def close(self):
+        # As TiledRun.close does, the run drops its own store reference.
+        self._home = None
+        self._closed = True
+
+    def drain(self):
+        pass
+
+    def sweep(self, count, **_kwargs):
+        if self._closed:
+            raise AssertionError("a closed tile owner was swept")
+        self.sweeps += count
+
+
+def _stand_in_stepper(state, cfg, decision=None):
+    """A real StreamedDomain over stand-in tiles: its own state check."""
+    from woof.core.streaming import StreamedDomain, StreamingDecision
+
+    decision = decision or StreamingDecision(True, "stand-in", 8, 8, 2, 4)
+    return StreamedDomain(_StandInTiles(cfg), decision, state=state,
+                          scalars={})
+
+
+def test_a_streamed_delayed_child_steps_its_activation_build(monkeypatch):
+    """``woof run``: a streamed delayed child is re-attached at activation.
+
+    Activation replaces the child's state with a build from the analysis at
+    its start time, and the executor keeps one stepper per grid.  That
+    stepper stayed bound to the startup state, so the child's first step
+    after activation refused ("the state object handed to the streamed
+    stepper is not the one it was attached to") and the run stopped there.
+    Red on the head.  The outgoing tiles are closed before the rebuild
+    allocates, the startup state's arrays and the store it still publishes
+    are released with them, and the same stepper steps the rebuilt state to
+    the end of the run.
+    """
+    import weakref
+
+    from woof.core.streaming import (REFL_STORE_KEY, STREAMED_SCRATCH_ATTR,
+                                      domain_store, publish_store)
+
+    _activate_in_place(monkeypatch)
+    _exp, model = _tree(delay_s=DELAY_SECONDS)
+    child = model.node(2)
+    startup = child.state
+    startup_qv = weakref.ref(startup.qv)
+    owner = _stand_in_stepper(startup, child.cfg.run)
+    startup_tiles = owner.tiled_run
+    # As attach leaves it: the startup state publishes the store and its
+    # scratch carriers, and the stepper holds that state until the rebind.
+    publish_store(startup, owner)
+    setattr(startup, STREAMED_SCRATCH_ATTR,
+            {"refl_10cm": owner.store[REFL_STORE_KEY]})
+    startup_store = [weakref.ref(array) for array in owner.store.values()]
+    attached = []
+
+    def builder(node, **_kwargs):
+        assert node is child
+
+        def build(state, cfg, decision):
+            assert startup_tiles.closed, (
+                "the outgoing tiles must close before the replacement")
+            assert startup_qv() is None, (
+                "the startup build must be released before the rebuild")
+            assert [ref() for ref in startup_store] == [None, None], (
+                "the outgoing store must be released before the "
+                "replacement allocates its own")
+            attached.append(state)
+            return _stand_in_stepper(state, cfg, decision)
+        return build
+
+    monkeypatch.setattr("woof.core.streaming.prepared_domain_builder",
+                        builder)
+    writers = _Writers()
+    model._io_manager = writers
+    monkeypatch.setattr("woof.core.dycore.step", _stashing_step)
+    from woof.runtime import _submit_tree_history_frame
+    execute_experiment(
+        model, validate_state=False, steppers={2: owner},
+        history_handler=lambda _tree, node, ticks: _submit_tree_history_frame(
+            writers, node, ticks))
+
+    rebuilt = model.node(2).state
+    assert rebuilt is not startup
+    assert attached == [rebuilt]
+    assert owner.state is rebuilt and rebuilt._streamed_domain is owner
+    assert domain_store(rebuilt) is owner.store
+    assert owner.tiled_run is not startup_tiles
+    assert owner.steps == owner.tiled_run.sweeps > 0
+    assert [ticks for gid, ticks, _refl in writers.frames if gid == 2] == [
+        120, 180, 240, 300]
+
+
+def test_a_waiting_nest_lets_its_parents_outgoing_radiation_go():
+    """A waiting child drops its ozone link when its delayed parent starts.
+
+    Legacy RRTMG hands a nest's radiation its parent's adapter as its ozone
+    provider.  A child of a delayed nest, still waiting for its own start,
+    held the parent's STARTUP adapter through that link after the parent
+    activated, so the outgoing adapter stayed alive until the child
+    activated too.  Red on the head.  The child's startup build never
+    radiates before it starts, and a call through the released link says so.
+    A child whose radiation composes two spectra holds the link on its
+    legacy spectrum and releases it the same way.
+    """
+    import gc
+    import weakref
+
+    from woof.core.model import _release_startup_build
+    from woof.core.rrtmg_legacy import ParentOzoneProvider
+
+    class _Radiation:
+        def __init__(self, provider=None):
+            self._ozone_provider = provider
+            self._o33d_grid = np.zeros((2, 2, 2), dtype=np.float32)
+
+    parent_radiation = _Radiation()
+    outgoing = weakref.ref(parent_radiation)
+    provider = ParentOzoneProvider(parent_radiation, registration=None)
+    waiting = SimpleNamespace(
+        _started=False, children=[],
+        state=SimpleNamespace(physics=SimpleNamespace(
+            radiation_callable=_Radiation(provider))))
+    composed_provider = ParentOzoneProvider(parent_radiation,
+                                            registration=None)
+    composed = SimpleNamespace(
+        _started=False, children=[],
+        state=SimpleNamespace(physics=SimpleNamespace(
+            radiation_callable=SimpleNamespace(spectrum_adapters=(
+                _Radiation(), _Radiation(composed_provider))))))
+    running = SimpleNamespace(
+        _started=True, children=[],
+        state=SimpleNamespace(physics=SimpleNamespace(
+            radiation_callable=_Radiation(
+                ParentOzoneProvider(_Radiation(), registration=None)))))
+    node = SimpleNamespace(
+        cfg=SimpleNamespace(grid_id=2),
+        children=[waiting, composed, running],
+        coupler=object(),
+        state=SimpleNamespace(
+            qv=np.ones((1,), dtype=np.float32),
+            physics=SimpleNamespace(radiation_callable=parent_radiation,
+                                    cumulus_callable=None)))
+    del parent_radiation
+    _release_startup_build(SimpleNamespace(_prepared_by_grid_id={}), node, {})
+    gc.collect()
+
+    assert outgoing() is None
+    with pytest.raises(RuntimeError, match="released"):
+        provider()
+    with pytest.raises(RuntimeError, match="released"):
+        composed_provider()
+    running_provider = running.state.physics.radiation_callable._ozone_provider
+    assert running_provider.parent is not None
+
+
+def _catalog_at(valid_time, *, levels=37, ny=40, nx=40):
+    """A decoded catalog holding one analysis, at ``valid_time``."""
+    snapshot = SimpleNamespace(fields={
+        name: np.zeros((levels, ny, nx), dtype=np.float32)
+        for name in ("T", "U", "V", "SPFH", "Z")} | {
+        name: np.zeros((ny, nx), dtype=np.float32)
+        for name in ("PSFC", "SKINTEMP", "T2")})
+    return SimpleNamespace(snapshots=(snapshot,), valid_times=(valid_time,))
+
+
+def test_a_delayed_nest_is_priced_at_its_activation_door(monkeypatch,
+                                                         capsys):
+    """``woof run`` prices a delayed nest's rebuild before it allocates.
+
+    The nest is initialized again at its start from the analysis at that
+    time, and nothing priced that rebuild: a tree that fitted its steady
+    state could stop in a CUDA out-of-memory at the nest's start.  Priced
+    from the decoded analysis against what the card has free after the
+    startup build is released.  Red on the head: the rebuild is reached on
+    a card with 1 MiB free.  Under ``--no-memory-gate`` it proceeds.
+    """
+    import woof.core.resident_admission as resident_admission
+    from woof.core.resident_admission import MEMORY_GATE_OVERRIDE_ENV
+
+    monkeypatch.delenv(MEMORY_GATE_OVERRIDE_ENV, raising=False)
+    _activate_in_place(monkeypatch)
+    reached = []
+
+    def initialize_child(cfg, parent, *args, **kwargs):
+        reached.append(int(cfg.grid_id))
+        return SimpleNamespace(grid=parent.grid, state=_HistoryState())
+
+    monkeypatch.setattr("woof.ingest.nest_init.initialize_child",
+                        initialize_child)
+    exp, model = _tree(delay_s=DELAY_SECONDS)
+    model._input_catalog = _catalog_at(exp.domain_start_time(2))
+    monkeypatch.setattr(resident_admission, "device_free_bytes",
+                        lambda: 1024 ** 2)
+    with pytest.raises(MemoryError, match="refused before anything was "
+                                          "allocated") as refused:
+        _run(model, monkeypatch)
+    assert reached == []
+    text = str(refused.value)
+    assert "nest d02 starting at" in text
+    assert "forcing analysis on the nest's grid" in text
+    assert "start the nest with the forecast" in text
+    assert refused.value.terms["physics"] > 0
+    assert refused.value.terms["model state"] > 0
+
+    exp, model = _tree(delay_s=DELAY_SECONDS)
+    model._input_catalog = _catalog_at(exp.domain_start_time(2))
+    monkeypatch.setenv(MEMORY_GATE_OVERRIDE_ENV, "1")
+    writers = _run(model, monkeypatch)
+    assert reached == [2]
+    assert "nest d02 starting at" in capsys.readouterr().err
+    assert [ticks for gid, ticks, _refl in writers.frames if gid == 2] == [
+        120, 180, 240, 300]
+
+
+def test_a_streamed_nest_is_priced_with_its_reattached_tiles(monkeypatch):
+    """The activation door counts a streamed nest's replacement tile owner.
+
+    Re-attaching a streamed nest builds a new tile owner inside the same
+    activation, from bytes the free figure counts because closing the old
+    owner handed its buffers back.  Priced on the rebuild alone, the door
+    admitted an activation whose re-attachment then needed that claim too:
+    on a card measurement the rebuild peaked 0.23 GiB and the re-attachment
+    0.85 GiB against a 0.48 GiB price.  Red on the previous commit: the card
+    below holds the rebuild but not the claim, and the door admitted it.
+    """
+    import woof.core.resident_admission as resident_admission
+    from woof.core.resident_admission import MEMORY_GATE_OVERRIDE_ENV
+    from woof.core.streaming import StreamingDecision
+
+    monkeypatch.delenv(MEMORY_GATE_OVERRIDE_ENV, raising=False)
+    _activate_in_place(monkeypatch)
+    reached = []
+
+    def initialize_child(cfg, parent, *args, **kwargs):
+        reached.append(int(cfg.grid_id))
+        return SimpleNamespace(grid=parent.grid, state=_HistoryState())
+
+    monkeypatch.setattr("woof.ingest.nest_init.initialize_child",
+                        initialize_child)
+    exp, model = _tree(delay_s=DELAY_SECONDS)
+    model._input_catalog = _catalog_at(exp.domain_start_time(2))
+    child = model.node(2)
+    claim, corridor = 64 * 1024 ** 3, 1024 ** 2
+    decision = StreamingDecision(
+        True, "stand-in", 8, 8, 2, 4,
+        detail={"claim_bytes": claim, "corridor_claim_bytes": corridor})
+    owner = _stand_in_stepper(child.state, child.cfg.run, decision)
+    monkeypatch.setattr(
+        "woof.core.streaming.prepared_domain_builder",
+        lambda node, **_kwargs: _stand_in_stepper)
+    monkeypatch.setattr(resident_admission, "device_free_bytes",
+                        lambda: 8 * 1024 ** 3)
+    writers = _Writers()
+    model._io_manager = writers
+    monkeypatch.setattr("woof.core.dycore.step", _stashing_step)
+    from woof.runtime import _submit_tree_history_frame
+    with pytest.raises(MemoryError, match="refused before anything was "
+                                          "allocated") as refused:
+        execute_experiment(
+            model, validate_state=False, steppers={2: owner},
+            history_handler=lambda _tree, node, ticks: (
+                _submit_tree_history_frame(writers, node, ticks)))
+    assert reached == []
+    assert refused.value.terms["streamed tile buffers"] == claim
+    assert refused.value.terms["nest coupling corridor"] == corridor
+    assert "streamed tile buffers" in str(refused.value)
+
+
+def test_all_domains_at_the_experiment_start_are_untouched(monkeypatch):
+    """The non-delayed path is the one that must not move: both domains
+    publish a stashless tick-0 frame and a stashed frame at every later
+    boundary, exactly as before this fix."""
+    _exp, model = _tree(delay_s=0)
+
+    writers = _run(model, monkeypatch)
+
+    for grid_id in (1, 2):
+        frames = [(ticks, refl) for gid, ticks, refl in writers.frames
+                  if gid == grid_id]
+        assert [ticks for ticks, _refl in frames] == [0, 60, 120, 180,
+                                                      240, 300]
+        assert frames[0][1] is None
+        assert all(refl is not None for _ticks, refl in frames[1:])
+
+
+# --- the other consume sites --------------------------------------------
+
+def test_prepared_forecast_due_helper_follows_the_domains_own_start():
+    from woof import prepared_single_domain_forecast as runner
+
+    sentinel = object()
+    state = SimpleNamespace(
+        qv=np.ones((1,), dtype=np.float32),
+        physics=SimpleNamespace(mp_physics=10))
+
+    def consumer(_state):
+        return sentinel
+
+    assert runner._consume_due_native_refl_10cm(state, 0, consumer) is None
+    assert runner._consume_due_native_refl_10cm(
+        state, 1, consumer) is sentinel
+    assert runner._consume_due_native_refl_10cm(
+        state, 120, consumer, domain_start_ticks=120) is None
+    assert runner._consume_due_native_refl_10cm(
+        state, 180, consumer, domain_start_ticks=120) is sentinel
+
+
+def test_ideal_nest_history_consume_follows_the_domains_own_start(
+        monkeypatch):
+    from woof.verify.cases import nest_ideal_common
+
+    consumed = []
+    monkeypatch.setattr("woof.core.refl.consume_refl_10cm",
+                        lambda state: consumed.append(state))
+    state = SimpleNamespace(physics=object())
+    node = SimpleNamespace(
+        cfg=SimpleNamespace(run=SimpleNamespace(mp_physics=10), grid_id=2),
+        state=state,
+        clock=SimpleNamespace(spec=SimpleNamespace(start_ticks=120)))
+
+    nest_ideal_common.consume_history_reflectivity(node, 120)
+    assert consumed == []
+    nest_ideal_common.consume_history_reflectivity(node, 180)
+    assert consumed == [state]
+
+
+# --- the upfront refusal, retired ---------------------------------------
+
+def test_a_delayed_child_config_loads_instead_of_refusing(tmp_path):
+    """``build_experiment``'s categorical refusal is gone: the config the
+    2.5.0 release refused by name now loads and resolves the child's own
+    start."""
+    from datetime import datetime
+
+    from woof.experiment import load_experiment
+    from test_experiment import _write
+
+    exp = load_experiment(
+        _write(tmp_path, d02="start_time = 1974-04-03T12:30:00"))
+
+    assert exp.domain_start_time(2) == datetime(1974, 4, 3, 12, 30)
+    assert exp.domain_start_offset_exact(2) == 1800
+
+
+def test_the_shipped_run_door_accepts_a_delayed_child(tmp_path, capsys,
+                                                    monkeypatch):
+    """The exit code, not just the exception.  This config exited 2 with
+    the categorical refusal in 2.5.0; it now passes the load gate and is
+    refused only by what it genuinely lacks here -- a [case_data] table.
+
+    That substitute refusal has to keep carrying its own weight, so it is
+    pinned to the two things a refusal owes: the concrete breakage it
+    prevents, and the remedy for it.  Matching a bare phrase would go on
+    passing for a message that had been reduced to naming a failure.
+    """
+    import woof.cli as cli
+    from woof import capabilities
+    from test_experiment import _write
+
+    # No model runs: the real loader must refuse the absent case-data table.
+    installed = capabilities.is_installed
+    monkeypatch.setattr(capabilities, "is_installed",
+                        lambda module: module == "cupy" or installed(module))
+
+    path = _write(tmp_path, d02="start_time = 1974-04-03T12:30:00")
+    assert cli.main(["run", str(path)]) == 2
+    message = capsys.readouterr().err
+    assert "delayed nest activation" not in message
+    # The breakage: the table that is absent, and what the route cannot
+    # open without it.
+    assert "carries no [case_data] table" in message
+    assert ("no forcing, no Vtable, no WPS namelist and no geography root"
+            in message)
+    # The remedy: both the emitting command and the hand-edit, naming the
+    # inputs the table declares.
+    assert "remedy:" in message
+    assert "woof domain --source era5" in message
+    assert "add a [case_data] table declaring" in message
+    assert "forcing, vtable, wps_namelist, geog_root" in message
+
+
+# --- the shapes that remain unsupported, refused by route ---------------
+
+def test_a_route_without_activation_machinery_refuses_by_name():
+    from woof.experiment import (delayed_domain_ids,
+                                  refuse_delayed_activation)
+
+    exp = load_scaffold(variant="n2b")
+    assert delayed_domain_ids(exp) == ()
+    refuse_delayed_activation(exp, "prepared domain-tree")  # no-op
+
+    delayed = replace(exp, domains=tuple(
+        replace(dc, start_time=(exp.start_time + timedelta(seconds=120)
+                                if dc.grid_id == 2 else dc.start_time))
+        for dc in exp.domains))
+    assert delayed_domain_ids(delayed) == (2,)
+    with pytest.raises(ValueError) as caught:
+        refuse_delayed_activation(delayed, "prepared domain-tree")
+    message = str(caught.value)
+    assert "prepared domain-tree route does not implement delayed nest " \
+           "activation" in message
+    assert "`woof run`" in message
+    assert "tick-exact sync violated" in message
+
+
+# --- the structural refusals, untouched ---------------------------------
+
+def test_a_misaligned_delayed_start_keeps_its_structural_refusal(tmp_path):
+    """Retiring the categorical refusal does not widen the structural
+    ones: a delayed start off the parent step boundary still refuses with
+    the precise message it always had."""
+    from woof.experiment import load_experiment
+    from test_experiment import _write
+
+    with pytest.raises(ValueError, match="parent step boundary"):
+        load_experiment(_write(tmp_path, d02="start_time = "
+                                             "1974-04-03T12:00:50"))

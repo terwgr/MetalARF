@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 13552b4c1f79dc0da84d4780cca9d4b1e44a11bbeadd24a18f6fb53caa45fe98.
+struct GlobalSemilagHydrostaticFragmentResources {
+    device const ulong *virtual_temperature [[id(0)]];
+    device const ulong *ln_full [[id(1)]];
+    device const ulong *ln_ratio [[id(2)]];
+    device const ulong *surface_geopotential [[id(3)]];
+    device const ulong *gas_constant [[id(4)]];
+    device ulong *geopotential [[id(5)]];
+};
+struct GlobalSemilagHydrostaticFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalSemilagHydrostaticFragmentParams) == 12, "global_semilag_hydrostatic_fragment parameter ABI size changed");

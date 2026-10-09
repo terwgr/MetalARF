@@ -1,0 +1,84 @@
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-moist-t3-smoke"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "numpy"
+precision = "float64"
+
+[grid]
+truncation = 3
+dealias_factor = 1.5
+
+[time]
+dt_s = 10.0
+duration_s = 40.0
+output_interval_s = 20.0
+maximum_cfl = 0.90
+integrator = "ssprk3"
+
+[vertical]
+coordinate = "pressure_blend"
+nlev = 4
+p_top_pa = 100.0
+
+[initial]
+surface_pressure_pa = 100000.0
+surface_temperature_k = 286.0
+top_temperature_k = 220.0
+qv_surface = 0.006
+zonal_wind_m_s = 2.0
+perturbation_amplitude = 0.00001
+zonal_wavenumber = 2
+terrain_amplitude_m = 25.0
+surface_water_kg_m2 = 500.0
+
+[physics]
+mode = "reference"
+
+[reference_physics]
+radiation = true
+surface_fluxes = true
+turbulence = true
+convection = true
+saturation_adjustment = true
+microphysics = true
+solar_constant_w_m2 = 1361.0
+atmospheric_shortwave_absorptivity = 0.08
+atmospheric_longwave_emissivity = 0.35
+bulk_exchange_coefficient = 0.0005
+background_diffusivity_m2_s = 0.05
+pbl_diffusivity_m2_s = 2.0
+pbl_depth_m = 1200.0
+cloud_autoconversion_threshold = 0.001
+cloud_autoconversion_time_s = 1800.0
+ice_to_snow_time_s = 2400.0
+snow_to_graupel_time_s = 4800.0
+rain_fall_speed_m_s = 4.0
+snow_fall_speed_m_s = 0.7
+graupel_fall_speed_m_s = 2.0
+soil_exchange_time_s = 86400.0
+
+[diffusion]
+enabled = true
+order = 4
+e_folding_time_s_at_truncation = 21600.0
+preserve_degree = 1
+divergence_strength = 1.5
+pressure_strength = 0.25
+water_strength = 0.5
+
+[semi_implicit]
+enabled = true
+external_wave_speed_m_s = 200.0
+weight = 0.5
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 5.0e-11
+transform_parseval_relative_error = 5.0e-12
+mass_relative_drift = 1.0e-9
+total_water_relative_drift = 1.0e-8

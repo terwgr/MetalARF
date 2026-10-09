@@ -1,0 +1,39 @@
+// Generated from kernel_signatures.json; layout 6af4e81b363d44cad2f39ae3da721b8f9c9c698f49c91f72deef3651976c02d4.
+struct FinalizeStateFieldResources {
+    device float *target [[id(0)]];
+    device const float *old_mup_frame [[id(1)]];
+    device const float *mub2d [[id(2)]];
+    device const float *mup [[id(3)]];
+    device const float *thb [[id(4)]];
+    device const float *scalar_unused [[id(5)]];
+    device const float *c1h [[id(6)]];
+    device const float *c2h [[id(7)]];
+    device const float *c1f [[id(8)]];
+    device const float *c2f [[id(9)]];
+    device const float *msft [[id(10)]];
+    device const float *msfu [[id(11)]];
+    device const float *msfv [[id(12)]];
+    device const float *west [[id(13)]];
+    device const float *west_t [[id(14)]];
+    device const float *east [[id(15)]];
+    device const float *east_t [[id(16)]];
+    device const float *south [[id(17)]];
+    device const float *south_t [[id(18)]];
+    device const float *north [[id(19)]];
+    device const float *north_t [[id(20)]];
+};
+struct FinalizeStateFieldParams {
+    float dtbc;
+    int width;
+    int spec_zone;
+    int has_msf;
+    int thb_3d;
+    int kind;
+    int nz;
+    int ny;
+    int nx;
+    int mny;
+    int mnx;
+    int frame_count;
+};
+static_assert(sizeof(FinalizeStateFieldParams) == 48, "finalize_state_field parameter ABI size changed");

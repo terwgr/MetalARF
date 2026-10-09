@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "rrtmgp_append_profile_fp32_bindings.metalh"
+#include "rrtmgp_clear_upper_layers_bindings.metalh"
+#include "rrtmgp_cloud_optics_bindings.metalh"
+#include "rrtmgp_expand_band_to_gpoint_bindings.metalh"
+#include "rrtmgp_finalize_cloud_lw_bindings.metalh"
+#include "rrtmgp_finalize_cloud_sw_bindings.metalh"
+#include "rrtmgp_mask_words_to_float_bindings.metalh"
+#include "rrtmgp_prepare_sw_inputs_bindings.metalh"
+#include "rrtmgp_store_model_flux_pair_bindings.metalh"

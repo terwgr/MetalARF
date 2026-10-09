@@ -1,0 +1,715 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_driver_support.cu",
+      "cuda_symbol": "nssl2_driver_gather_initialize",
+      "layout_version": 1,
+      "module": "nssl2_driver_transport",
+      "name": "nssl2_driver_gather_initialize",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "first_step",
+          "int32"
+        ],
+        [
+          "cu_used",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "predicted_ccn",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "qh",
+          "float",
+          "read"
+        ],
+        [
+          "qndrop",
+          "float",
+          "read"
+        ],
+        [
+          "qnr",
+          "float",
+          "read"
+        ],
+        [
+          "qni",
+          "float",
+          "read"
+        ],
+        [
+          "qns",
+          "float",
+          "read"
+        ],
+        [
+          "qng",
+          "float",
+          "read"
+        ],
+        [
+          "qnh",
+          "float",
+          "read"
+        ],
+        [
+          "qnn",
+          "float",
+          "read"
+        ],
+        [
+          "qvolg",
+          "float",
+          "read"
+        ],
+        [
+          "qvolh",
+          "float",
+          "read"
+        ],
+        [
+          "qrcuten",
+          "float",
+          "read"
+        ],
+        [
+          "qscuten",
+          "float",
+          "read"
+        ],
+        [
+          "qicuten",
+          "float",
+          "read"
+        ],
+        [
+          "qccuten",
+          "float",
+          "read"
+        ],
+        [
+          "state",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qccuten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qicuten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qndrop": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qng": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnn": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qns": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qrcuten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qscuten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qvolg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qvolh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "state": [
+          [
+            16,
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_driver_transport.metal",
+      "threads_per_group": 256
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_driver_support.cu",
+      "cuda_symbol": "nssl2_driver_reduce_precipitation",
+      "layout_version": 1,
+      "module": "nssl2_driver_transport",
+      "name": "nssl2_driver_reduce_precipitation",
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "category_export",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "category_export": [
+          [
+            "5",
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_driver_transport.metal",
+      "threads_per_group": 256
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_driver_support.cu",
+      "cuda_symbol": "nssl2_driver_scatter",
+      "layout_version": 1,
+      "module": "nssl2_driver_transport",
+      "name": "nssl2_driver_scatter",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "predicted_ccn",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "state",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "qh",
+          "float",
+          "read_write"
+        ],
+        [
+          "qndrop",
+          "float",
+          "read_write"
+        ],
+        [
+          "qnr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qni",
+          "float",
+          "read_write"
+        ],
+        [
+          "qns",
+          "float",
+          "read_write"
+        ],
+        [
+          "qng",
+          "float",
+          "read_write"
+        ],
+        [
+          "qnh",
+          "float",
+          "read_write"
+        ],
+        [
+          "qnn",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvolg",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvolh",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qndrop": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qng": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnn": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qns": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qvolg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qvolh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "state": [
+          [
+            16,
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_driver_transport.metal",
+      "threads_per_group": 256
+    }
+  ]
+}

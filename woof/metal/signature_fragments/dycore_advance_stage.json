@@ -1,0 +1,163 @@
+{
+  "kernels": [
+    {
+      "name": "advance_stage_theta",
+      "module": "dycore",
+      "source": "woof/metal/shaders/dycore_advance_stage.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_advance_stage.theta",
+      "resources": [
+        ["thp", "float", "read_write"],
+        ["thp0", "float", "read"],
+        ["rth_t", "float", "read"],
+        ["thb", "float", "read"],
+        ["mub2d", "float", "read"],
+        ["mup0", "float", "read"],
+        ["mup", "float", "read"],
+        ["c1h", "float", "read"],
+        ["c2h", "float", "read"],
+        ["msft", "float", "read"]
+      ],
+      "shapes": {
+        "thp": [["nz", "ny", "nx"]],
+        "thp0": [["nz", "ny", "nx"]],
+        "rth_t": [["nz", "ny", "nx"]],
+        "thb": [["nz"], ["nz", "ny", "nx"]],
+        "mub2d": [["ny", "nx"]],
+        "mup0": [["ny", "nx"]],
+        "mup": [["ny", "nx"]],
+        "c1h": [["nz"]],
+        "c2h": [["nz"]],
+        "msft": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["dt_eff", "float32"],
+        ["has_msf", "int32"],
+        ["base3d", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "advance_stage_u",
+      "module": "dycore",
+      "source": "woof/metal/shaders/dycore_advance_stage.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_advance_stage.u",
+      "resources": [
+        ["u", "float", "read_write"],
+        ["u0", "float", "read"],
+        ["ru_t", "float", "read"],
+        ["mub2d", "float", "read"],
+        ["mup0", "float", "read"],
+        ["mup", "float", "read"],
+        ["c1h", "float", "read"],
+        ["c2h", "float", "read"],
+        ["msfu", "float", "read"]
+      ],
+      "shapes": {
+        "u": [["nz", "ny", "nx+1"]],
+        "u0": [["nz", "ny", "nx+1"]],
+        "ru_t": [["nz", "ny", "nx+1"]],
+        "mub2d": [["ny", "nx"]],
+        "mup0": [["ny", "nx"]],
+        "mup": [["ny", "nx"]],
+        "c1h": [["nz"]],
+        "c2h": [["nz"]],
+        "msfu": [["ny", "nx+1"]]
+      },
+      "parameters": [
+        ["dt_eff", "float32"],
+        ["has_msf", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "advance_stage_v",
+      "module": "dycore",
+      "source": "woof/metal/shaders/dycore_advance_stage.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_advance_stage.v",
+      "resources": [
+        ["v", "float", "read_write"],
+        ["v0", "float", "read"],
+        ["rv_t", "float", "read"],
+        ["mub2d", "float", "read"],
+        ["mup0", "float", "read"],
+        ["mup", "float", "read"],
+        ["c1h", "float", "read"],
+        ["c2h", "float", "read"],
+        ["msfv", "float", "read"]
+      ],
+      "shapes": {
+        "v": [["nz", "ny+1", "nx"]],
+        "v0": [["nz", "ny+1", "nx"]],
+        "rv_t": [["nz", "ny+1", "nx"]],
+        "mub2d": [["ny", "nx"]],
+        "mup0": [["ny", "nx"]],
+        "mup": [["ny", "nx"]],
+        "c1h": [["nz"]],
+        "c2h": [["nz"]],
+        "msfv": [["ny+1", "nx"]]
+      },
+      "parameters": [
+        ["dt_eff", "float32"],
+        ["has_msf", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "advance_stage_w",
+      "module": "dycore",
+      "source": "woof/metal/shaders/dycore_advance_stage.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_advance_stage.w",
+      "resources": [
+        ["w", "float", "read_write"],
+        ["w0", "float", "read"],
+        ["rw_t", "float", "read"],
+        ["mub2d", "float", "read"],
+        ["mup0", "float", "read"],
+        ["mup", "float", "read"],
+        ["c1f", "float", "read"],
+        ["c2f", "float", "read"],
+        ["msft", "float", "read"]
+      ],
+      "shapes": {
+        "w": [["nz+1", "ny", "nx"]],
+        "w0": [["nz+1", "ny", "nx"]],
+        "rw_t": [["nz+1", "ny", "nx"]],
+        "mub2d": [["ny", "nx"]],
+        "mup0": [["ny", "nx"]],
+        "mup": [["ny", "nx"]],
+        "c1f": [["nz+1"]],
+        "c2f": [["nz+1"]],
+        "msft": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["dt_eff", "float32"],
+        ["has_msf", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    }
+  ]
+}

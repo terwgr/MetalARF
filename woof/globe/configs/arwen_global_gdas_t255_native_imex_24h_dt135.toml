@@ -1,0 +1,120 @@
+# T255 L40, the full native suite on the SHIPPED Eulerian core at dt = 135 s,
+# one forecast day from the GDAS 2026-09-01 00Z analysis: the arm that says
+# what the semi-Lagrangian core is worth against an Eulerian arm run at the
+# step its OWN gate allows, rather than at the step the shipped config is set
+# at.
+#
+# Why it exists.  The 4.3x on the release surface is the semi-Lagrangian core
+# at 300 s against this core at 60 s, and the 60 s arm's own receipt reads a
+# maximum spectral CFL of 0.326 against the 0.750 its gate admits, so it was
+# using 43 percent of its refusal.  MEASURED 2026-09-06 on the 16 GB host, this config
+# completes the forecast day: status pass, every gate of record green, maximum
+# spectral CFL 0.7223, which is 96 percent of the refusal and where this core's
+# ladder ends on this flow, two CFL pre-warnings, global mean outflow 0.50955
+# against 0.51641 at 60 s, and 753.7 s of wall against that arm's 1290.1 s on
+# the same card in the same window.  Its surface scorecard is a wash against
+# the 60 s arm (one row better, one worse, six level); against it the
+# semi-Lagrangian core reads 2.3x rather than 4.3x.
+#
+# dt arithmetic: 86400/135 = 640 whole steps and 21600/135 = 160-step output
+# cadence.  The radiation bucket moves to 3105 s, which is 23 whole steps, so
+# it still lands on model steps; that is 0.5 percent off the 3120 s the 60 s
+# and 120 s arms use, against a step that nearly doubles.
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-gdas-t255-native-imex-24h-dt135"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 255
+dealias_factor = 1.5
+
+# dt = 60 s is the shipped step of the T255 config of record: the runner's
+# gate is the spectral CFL dt |V|max sqrt(N(N+1))/a and the measured analysis
+# jet reads 0.54 of the 0.75 cap there.  86400/60 = 1440 whole steps.
+[time]
+dt_s = 135.0
+duration_s = 86400.0
+output_interval_s = 21600.0
+integrator = "imex_ssp3"
+maximum_cfl = 0.75
+
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+# analysis_mapping is the packaged authority's BARE ID, not a path: the
+# resolver globs rw-wps-<id>-*.mapping.json under gpuwm/authorities and
+# requires exactly one match, so this spelling resolves from an installed
+# wheel as well as from a checkout root.
+[initial]
+mode = "analysis"
+analysis_grib = "cases/baseline-2026090100/gdas.t00z.pgrb2.0p25.f000"
+analysis_mapping = "gdas-global"
+surface_water_kg_m2 = 500.0
+
+# start_time_utc matches the ingested GDAS cycle (2026-09-01 00Z), so the
+# RRTMGP solar geometry runs on the analysis instant.  dx_m feeds sfclay its
+# grid-spacing-dependent branches and Grell-Freitas its scale-aware closure at
+# this grid's equatorial spacing; cumulus = "gf" is the adapter default
+# (shallow arm on), so it is not repeated in the options mapping.
+# radiation_column_chunk is the tree's own sizing for this truncation.
+[physics]
+mode = "arwen-native"
+native_adapter_name = "arwen-cuda-column-suite-v1"
+native_adapter_options = { acknowledgement = "device-pending-arwen-native-physics-v1", start_time_utc = "2026-09-01T00:00:00Z", radiation = "rrtmgp", radiation_interval_s = 3105.0, radiation_column_chunk = 12500, radiation_validation_mode = "fused", surface_layer = "sfclay", sfclay_option = 1, land_surface = "noah", land_surface_interval_s = 135.0, pbl = "ysu", ysu_topdown_pblmix = 1, microphysics = "morrison", morr_rimed_ice = 1, dx_m = 52100.0 }
+
+# Order 8 at 36 min (2026-09-04): the energy ledger read the truncation band
+# fed by the resolved cascade faster than the order 4 / 4 h drain removed it
+# (a flat tail at 0.22 to 0.27 of the observed 250 hPa spectrum).  This shape
+# drains every degree above n = 0.79 T harder (1.4x at 0.82 T, 6.7x at the
+# truncation) and 250 km six times less (config.DEFAULT_DIFFUSION_ORDER).
+[diffusion]
+enabled = true
+order = 8
+e_folding_time_s_at_truncation = 2160.0
+preserve_degree = 1
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 1.0e-6
+transform_parseval_relative_error = 5.0e-7
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-3
+# physics_water_repair gate, NATIVE-suite sizing (2026-09-01).  The
+# precision-wide 5e-4 envelope (runner._FIXER_ABSORPTION_LIMITS) was
+# measured on the reference suite, which has no kernel-internal closure
+# channel; the native suite has two -- Morrison's rainncv credited 1:1 to
+# the reservoir vs the actual column debit its fp32 process arithmetic
+# applies, and the post-kernel negative-species clamp (tolerance 1e-7 per
+# level-species; the creation ceiling is order 3e-3 kg/m2 at 20 levels and
+# the same order at 40, the column mass being the same) --
+# both genuine fp32 accumulation, NOT booking routes: the CPU repro
+# (water-repair-262, 2026-09-01, real model.step with verbatim-noah water
+# arithmetic, 217,800 column-calls of drip/melt/partition/evap/dew/qfx
+# forcing) put every booking route at <= 2 x 2^-14 = 1.22e-4 kg/m2, the
+# same ledger-summation floor the reference suite reads (~1e-4).
+# Measurement: day 1 of this config on the RTX 5090 (GDAS 2026-08-30 18Z,
+# 1440 steps) read max repair 0.00262451171875 kg/m2 = exactly 43 x 2^-14,
+# the fp32 quantum of the worst column's [512,1024) kg/m2 ledger total.
+# Sizing: 4 x that measured max = 0.010498046875 = 43 x 2^-12, which
+# admits the same 43-quantum excursion class on column totals up to the
+# 4096 kg/m2 binade (the convicted-era worst columns totalled ~1150,
+# where the class reads 5.25e-3) while staying 100x below the smallest
+# booking-route conviction at run scale (1.0943603515625, precip
+# double-entry, fixed 7d7b528d0) and 1e5 below the runoff-store
+# conviction (1072, fixed 89571245d) -- the unbooked-route breakage this
+# gate exists to catch.  Reference configs keep the 5e-4 envelope.
+physics_water_repair_max_step_kg_m2 = 0.010498046875

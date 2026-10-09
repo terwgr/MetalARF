@@ -1,0 +1,33 @@
+// Generated from kernel_signatures.json; layout 4dcbc4f9080874ee32a96e32ea06c2b812d05388a2ac86a3042975c58c021684.
+struct MynnInitializeDefaultColumnsResources {
+    device const float *dz [[id(0)]];
+    device const float *u [[id(1)]];
+    device const float *v [[id(2)]];
+    device const float *thl [[id(3)]];
+    device const float *qw [[id(4)]];
+    device const float *theta [[id(5)]];
+    device const float *edmf_w [[id(6)]];
+    device const float *edmf_a [[id(7)]];
+    device const float *sm_in [[id(8)]];
+    device const float *sh_in [[id(9)]];
+    device const float *qke_in [[id(10)]];
+    device const float *zw [[id(11)]];
+    device const float *rmo [[id(12)]];
+    device const float *ust [[id(13)]];
+    device const float *zi [[id(14)]];
+    device const float *psig_bl [[id(15)]];
+    device float *el [[id(16)]];
+    device float *qke [[id(17)]];
+    device float *tsq [[id(18)]];
+    device float *qsq [[id(19)]];
+    device float *cov [[id(20)]];
+    device float *sm [[id(21)]];
+    device float *sh [[id(22)]];
+    device float *scratch [[id(23)]];
+};
+struct MynnInitializeDefaultColumnsParams {
+    int nz;
+    int ncol;
+    int initialize_qke;
+};
+static_assert(sizeof(MynnInitializeDefaultColumnsParams) == 12, "mynn_initialize_default_columns parameter ABI size changed");

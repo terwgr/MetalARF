@@ -1,0 +1,77 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_legacy_lw_rtrn_secdiff",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_rtrn_secdiff",
+      "resources": [
+        [
+          "pwvcm",
+          "float",
+          "read"
+        ],
+        [
+          "a0",
+          "float",
+          "read"
+        ],
+        [
+          "a1",
+          "float",
+          "read"
+        ],
+        [
+          "a2",
+          "float",
+          "read"
+        ],
+        [
+          "secdiff",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pwvcm": [
+          [
+            "ncol"
+          ]
+        ],
+        "a0": [
+          [
+            "16"
+          ]
+        ],
+        "a1": [
+          [
+            "16"
+          ]
+        ],
+        "a2": [
+          [
+            "16"
+          ]
+        ],
+        "secdiff": [
+          [
+            "ncol",
+            "16"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

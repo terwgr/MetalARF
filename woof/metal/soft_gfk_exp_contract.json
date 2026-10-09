@@ -1,0 +1,61 @@
+{
+  "schema": "woof-metal-source-math-proposal-v1",
+  "id": "pinned-glibc-gfk-exp",
+  "status": "dependency-blocked-source-proposal",
+  "cuda_source": "woof/core/kernels/glibc_flt32.cuh",
+  "source_functions": [
+    "gfk_exp",
+    "gfk_exp2_core"
+  ],
+  "metal_header": "woof/metal/shaders/soft_gfk_exp.metalh",
+  "production_registration": false,
+  "representation": "binary64 values are ulong IEEE bit patterns; native binary64 operations are forbidden",
+  "provided_interfaces": [
+    "soft64_add",
+    "soft64_sub",
+    "soft64_mul",
+    "soft64_from_f32_bits",
+    "soft64_to_f32_bits"
+  ],
+  "source_contract": {
+    "range_cutoffs_f32_bits": {
+      "upper_overflow_strict": "0x42b17218",
+      "lower_underflow_magnitude_strict": "0x42cff1b4",
+      "negative_infinity_result": "0x00000000",
+      "abstop_gate": "0x42b"
+    },
+    "exp2_scale_bits": "0x40471547652b82fe",
+    "exp2_shift_bits": "0x4338000000000000",
+    "exp2_p0_scaled_bits": "0x3ebc6af84b912394",
+    "exp2_p1_scaled_bits": "0x3f2ebfce50fac4f3",
+    "exp2_p2_scaled_bits": "0x3f962e42ff0c52d6",
+    "sign_bias": "0x0000000000000000",
+    "operation_order": [
+      "kd=add(xd,shift)",
+      "ki=bits(kd)",
+      "kd=sub(kd,shift)",
+      "r=sub(xd,kd)",
+      "s=table[ki&31] + ((ki+sign_bias)<<47)",
+      "z=add(mul(p0,r),p1)",
+      "r2=mul(r,r)",
+      "y=add(mul(p2,r),1)",
+      "y=add(mul(z,r2),y)",
+      "result=mul(y,s)",
+      "round binary64 result to binary32 bits"
+    ],
+    "table": "Exact 32-entry GFK_EXP2F_TAB is embedded in soft_gfk_exp.metalh"
+  },
+  "missing_or_unverified_primitives": [
+    "The included soft_binary64.metalh base is not centrally cleared or verified; its add/sub/mul and float-bit conversions must be reviewed before consumption.",
+    "The base conversion soft64_to_f32_bits must be reviewed against gfk_d2f_rn's rint(a*2^149) subnormal path and CUDA __double2float_rn NaN payload/sign semantics.",
+    "The exceptional source FADD(x,x) uses native binary32 addition in the proposal; its signaling-NaN payload behavior needs source/toolchain review.",
+    "The soft64 base contract has no IEEE exception flags; verify whether glibc gfk_exp requires any observable flag behavior (CUDA wrapper does not expose flags)."
+  ],
+  "explicitly_absent": [
+    "gfk_pow's internal log2 polynomial (owned by pow)",
+    "generic log/exp/pow substitutes",
+    "native double arithmetic",
+    "kernel entrypoint or production signature registration"
+  ],
+  "verification": "MetalToolchain 27.1 compiled all four helpers together with the shared binary32/binary64 headers and executed the temporary kernel on Apple M2. Each of logf, expf, powf, and atanf matched the in-tree glibc 2.39 CPU transcription in woof/core/noahmp_libm.py exactly on 4,826 rows (zero bit mismatches each). Inputs covered special values, subnormals, thresholds and adjacent encodings, plus seeded random bit patterns/pairs. This is bounded evidence, not exhaustive certification; production consumption remains blocked by the shared primitive and consumer-level contracts."
+}

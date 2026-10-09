@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 975d5b43432ff1a579b3e127de9177be1af17afa7d0d366fbdca4b9fa93e244a.
+struct ThompsonAaInitProfileResources {
+    device const float *hgt [[id(0)]];
+    device float *nwfa [[id(1)]];
+    device float *nifa [[id(2)]];
+    device float *nwfa2d [[id(3)]];
+};
+struct ThompsonAaInitProfileParams {
+    int fill_ccn;
+    int fill_in;
+    int nz;
+    int ncolumns;
+};
+static_assert(sizeof(ThompsonAaInitProfileParams) == 16, "thompson_aa_init_profile parameter ABI size changed");

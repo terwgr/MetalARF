@@ -1,0 +1,36 @@
+// Generated from kernel_signatures.json; layout bc6483f5e0ee4315ba5ecfbbc99f3ebbfbbae8e3c8fa9e4d902bc527ba933035.
+struct CoupleMassRatesResources {
+    device const float *c1h [[id(0)]];
+    device const float *c2h [[id(1)]];
+    device const float *mut [[id(2)]];
+    device const float *msft [[id(3)]];
+    device const float *in0 [[id(4)]];
+    device const float *in1 [[id(5)]];
+    device const float *in2 [[id(6)]];
+    device const float *in3 [[id(7)]];
+    device const float *in4 [[id(8)]];
+    device const float *in5 [[id(9)]];
+    device float *out0 [[id(10)]];
+    device float *out1 [[id(11)]];
+    device float *out2 [[id(12)]];
+    device float *out3 [[id(13)]];
+    device float *out4 [[id(14)]];
+    device float *out5 [[id(15)]];
+    device const float *du [[id(16)]];
+    device const float *dv [[id(17)]];
+    device float *mass_u [[id(18)]];
+    device float *mass_v [[id(19)]];
+};
+struct CoupleMassRatesParams {
+    int present;
+    int wanted;
+    int nslot;
+    int theta_slot;
+    int momentum;
+    int mask_ring;
+    int has_msf;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(CoupleMassRatesParams) == 40, "couple_mass_rates parameter ABI size changed");

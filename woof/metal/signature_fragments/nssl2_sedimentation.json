@@ -1,0 +1,216 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_driver_support.cu",
+      "cuda_symbol": "nssl2_sediment_all_parallel_64",
+      "layout_version": 1,
+      "module": "nssl2_sedimentation",
+      "name": "nssl2_sediment_all_64",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "temperature_k",
+          "float",
+          "read"
+        ],
+        [
+          "state",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "ignored_accumulator",
+          "float",
+          "read_write"
+        ],
+        [
+          "category_export",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "category_export": [
+          [
+            5,
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ignored_accumulator": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state": [
+          [
+            16,
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature_k": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_sedimentation.metal",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_driver_support.cu",
+      "cuda_symbol": "nssl2_rain_sediment_256",
+      "layout_version": 1,
+      "module": "nssl2_sedimentation",
+      "name": "nssl2_sediment_all_256",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "temperature_k",
+          "float",
+          "read"
+        ],
+        [
+          "state",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "ignored_accumulator",
+          "float",
+          "read_write"
+        ],
+        [
+          "category_export",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "category_export": [
+          [
+            5,
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ignored_accumulator": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state": [
+          [
+            16,
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature_k": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_sedimentation.metal",
+      "threads_per_group": 32
+    }
+  ]
+}

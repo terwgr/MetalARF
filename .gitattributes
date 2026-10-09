@@ -1,0 +1,129 @@
+# A checkout is byte-identical to the wheel, on every platform.
+#
+# git-for-Windows ships core.autocrlf=true, so without this line a
+# Windows clone materializes CRLF in every text file it has not been
+# told to leave alone -- including `woof/*.py`.  The product hashes
+# those: `_runtime_source_identity` in the prepared-forecast runners
+# binds the SHA-256 of its own implementation files, and the
+# preparation proof binds an export-source set.  A pip-installed
+# package (LF, as the wheel stores it) and a Windows clone (CRLF) then
+# disagree about the same file, and a mixed estate -- rw-wps from the
+# venv, the runner from a clone -- dies with `proof export source
+# hashes differ from preparation`.  That was observed, not theorized.
+#
+# `* -text` means "no conversion, in either direction, anywhere": the
+# bytes in the object database are the bytes on disk.  The per-path
+# rules below stay because they say the same thing more loudly for the
+# files where it matters most, and because `text eol=lf` additionally
+# normalizes on the way IN for files a contributor might author with
+# CRLF.  tests/test_line_ending_stability.py holds the promise.
+* -text
+# A trailing CR is a line TERMINATOR here, not trailing whitespace.
+# Under `* -text` git records the CR in the blob, and `git diff --check`
+# then reports every changed line of a CRLF file as "trailing
+# whitespace".  The public release export fails closed on that check and
+# stopped on 50 such lines in two files that were already CRLF in the
+# published tree.  Flattening them would rewrite whole files; this
+# states the convention instead.  Fresh carriage returns are still
+# refused, by tools/git_hooks/pre_commit_line_endings.py and
+# tests/test_line_ending_stability.py, which read the bytes.
+* whitespace=cr-at-eol
+
+woof/data/** -text
+# Vendored crate sources keep their upstream bytes, trailing blanks included:
+# Cargo verifies them against .cargo-checksum.json, and the public export's
+# `git diff --check` would refuse the 2.8.5 export on the trailing blanks in
+# cpufeatures, digest, rayon-core and typenum (as tools/rustwx/vendor below).
+tools/grib1_bridge/vendor/** -text -whitespace
+patches/** -text
+*.sh text eol=lf
+*.ps1 text eol=lf
+*.cmd text eol=lf
+configs/rw-wps-gfs-pressure-grib2.mapping.json text eol=lf
+configs/rw-wps-gfs-terrain.composition.json text eol=lf
+configs/rw-wps-era5-1974-probe.mapping.json text eol=lf
+configs/rw-wps-era5-1974-terrain.composition.json text eol=lf
+configs/rw-wps-era5-netcdf.mapping.json text eol=lf
+configs/rw-wps-era5-netcdf-terrain.composition.json text eol=lf
+woof/authorities/*.json text eol=lf
+woof/physics_registry_v2.json text eol=lf
+# Vendored upstream sources keep their own bytes, trailing spaces included: the
+# BowEcho data-source test fixtures reproduce NHC/JTWC bulletins verbatim, and the
+# 2.8.4 cut's export whitespace check refused them (2026-10-03).
+tools/rustwx/vendor/** -text -whitespace
+tools/rustwx/crates/** -text
+tools/rustwx/assets/** -text
+tests/fixtures/**/*.grib2 -text
+# A captured NOAA index is evidence: it round-trips byte for byte or the
+# digest its README publishes stops being true on a fresh checkout.
+tests/fixtures/**/*.idx -text
+
+# The FTZ receipt commits SHA-256 over its own artifacts; a line-ending
+# rewrite on checkout would break every one of them.  The cubins are ELF.
+tools/ftz_receipt/receipt/*.json text eol=lf
+tools/ftz_receipt/receipt/*.csv text eol=lf
+tools/ftz_receipt/receipt/ptx/** text eol=lf
+tools/ftz_receipt/receipt/cubin/** -text
+tools/ftz_receipt/receipt/sass/** text eol=lf
+tools/ftz_receipt/fixtures/*.ptx text eol=lf
+tools/ftz_receipt/fixtures/*.sass text eol=lf
+woof/verify/*.json text eol=lf
+
+# Vendored upstream patches are applied with `git apply -p1` against
+# someone else's worktree: a line-ending rewrite makes them fail to
+# apply, and the README beside them publishes their digests.
+evidence/upstream/** -text
+tools/noahmp_wrf461_oracle/*.sh text eol=lf
+
+# Preserve upstream checksum bytes, including shell scripts in the UI mirror.
+tools/arwen-ui-vendor/crates-io/** -text -whitespace
+
+# Cargo verifies the original registry bytes, including upstream script endings.
+# Preserve upstream formatting in the newly vendored Zarr dependency closure.
+tools/zarr_bridge/vendor/** -text -whitespace
+
+# Generated notices and retained upstream patches preserve quoted formatting.
+licenses/THIRD-PARTY-LICENSES-zarr-binary.txt -whitespace
+tools/rustwx/assets/basemap/THIRD-PARTY-LICENSES-zarr-binary.txt -whitespace
+tools/rustwx/patches/rdps-f000-components.patch -whitespace
+# 4 Hz nvidia-smi samples end in an empty procs field (a trailing tab) when no
+# process held the card; B4-SPEED-ANCHORS.json pins their sha256, so the bytes stay.
+docs/public/receipts/obsbattery/*.tsv -whitespace
+
+# Bytes kept as their upstream or a recorded digest has them. The public export's
+# `git diff --check` refused their trailing blanks at the 2.8.1 cut battery:
+# WRF v4.7.1's urban tables (tests/data/oracles/urban/bep/oracle-sha256sums.txt pins both),
+# the generated glibc trig header (tools/glibc_trig_flt32_proof/final-hashes.txt pins it),
+# the WRF driver excerpts the urban oracle compiles, and the UW PBL oracle's retained
+# glibc sources (libm64/upstream-sha256.json pins them) and captured disassembly.
+woof/data/urban/URBPARM.TBL -whitespace
+woof/data/urban/URBPARM_LCZ.TBL -whitespace
+woof/core/kernels/glibc_trig_flt32.cuh -whitespace
+tools/urban_wrf471_oracle/couple_noahdrv_1679_1776.inc -whitespace
+tools/urban_wrf471_oracle/couple_noahmpdrv_3363_3372_3689_3776.inc -whitespace
+tools/uwpbl_wrf471_oracle/libm64/*.objdump.txt -whitespace
+tools/uwpbl_wrf471_oracle/libm64/upstream/*.c -whitespace
+
+# Byte-unmodified WRF lake oracle sources retain upstream trailing blanks.
+# Their SHA-256 values are bound in woof/data/lake/oracle/manifest.json.
+tools/lake_wrf461_oracle/upstream/** -whitespace
+
+# YSU's topo_wind arm (lane/282-terrain-drag), byte-pinned by
+# tests/test_kernel_source_freeze_per_module.py PINNED_HEADERS and graded with
+# ysu.cu by tests/test_terrain_drag_wrf471_parity.py: the 2.8.2 cut battery's
+# `git diff --check` refused its trailing blank line, which the pins record.
+woof/core/kernels/ysu_topo.cuh -whitespace
+
+# The operational HRRR namelists kept verbatim as importer fixtures: their
+# trailing blanks are the published files' own bytes and several are pinned
+# by hash, so the 2.8.6 cut's export whitespace check must not ask for them
+# to be stripped (2026-10-05).
+tests/data/albsol_config/hrrr_wrf.nl -whitespace
+tests/data/hrrr_v4121_namelists/hrrr_namelist.wps -whitespace
+tests/data/hrrr_v4121_namelists/hrrr_wrf.nl -whitespace
+tests/data/hrrr_wrf_v4_1_21.nl -whitespace
+tests/fixtures/namelist/hrrr_wrf-v4.1.21.nl -whitespace
+tests/fixtures/source_requests/hrrr_namelist.wps.c18 -whitespace
+tests/fixtures/source_requests/hrrr_wrf.nl.c18c -whitespace
+# A captured pytest log; excluded from the release (RELEASE-EXCLUDE.txt).
+tools/albsol_score/receipts/tests.log -whitespace

@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout b1df4aaee8138d9991c7a323cb100b279f35b02e694c7b0768cfbc24b79531e4.
+struct GlobalSemilagSolveShiftedFragmentResources {
+    device const ulong *divergence [[id(0)]];
+    device const ulong *theta [[id(1)]];
+    device const ulong *logps [[id(2)]];
+    device const ulong *inverse [[id(3)]];
+    device const ulong *b_matrix [[id(4)]];
+    device const ulong *c_matrix [[id(5)]];
+    device const ulong *k2 [[id(6)]];
+    device const ulong *tau_weight [[id(7)]];
+    device ulong *divergence_new [[id(8)]];
+    device ulong *x_new [[id(9)]];
+};
+struct GlobalSemilagSolveShiftedFragmentParams {
+    int nlevel;
+    int ndegree;
+    int mcount;
+};
+static_assert(sizeof(GlobalSemilagSolveShiftedFragmentParams) == 12, "global_semilag_solve_shifted_fragment parameter ABI size changed");

@@ -1,0 +1,283 @@
+# RELEASE-EXCLUDE: internal campaign material that must NOT enter the
+# public release snapshot.
+#
+# These paths are development-campaign records -- lead/controller
+# handoffs, phase plans, machine-specific runbooks -- several of which
+# bake a per-user home directory into a shipped file, contradicting the
+# release builder's own "no developer-specific absolute paths" bar and
+# confusing a stranger about what the product is (acceptance finding
+# F13, PRODUCT-V1-ACCEPTANCE-20260729).
+#
+# This file is an exclusion manifest for the snapshot/release builders;
+# nothing listed here is deleted from the development tree.  One path or
+# glob per line, relative to the repository root; lines starting with
+# '#' are comments.
+#
+# Exclusion is only half the job.  A manifest cannot name the file that
+# grows a machine path next, so work/build_release_snapshot.py scans
+# every staged text file for one and FAILs the build; see
+# MACHINE_PATH_MARKERS there.  Adding a path here is the escape hatch
+# for a file that is genuinely not worth scrubbing -- never the first
+# resort.
+
+# The mp_physics=28 port's own working spec and closing handoff.  The spec
+# is 127 KB of work-package narrative with a developer's WRF checkout path
+# in five places; the handoff is the port author's note to its successor.
+# Both are development-campaign records, and both are tracked here because
+# the port survived only as an unversioned directory -- committing them is
+# what stops the design record from having exactly one copy again.
+MP28_PORT_SPEC.md
+HANDOFF.md
+MP28_HANDOFF.md
+
+# The Noah mosaic column oracle's run receipts: per-.bin SHA-256 lists, GPU
+# replay dumps and mutation transcripts, development evidence behind
+# tests/data/oracles/noah_mosaic/PROVENANCE.md.  The fixtures, the harness
+# sources and SOURCES.sha256 ship; these do not, and the fixture family named
+# "ftz" would otherwise put nine thousand hash lines into the FTZ claim census.
+tools/noah_mosaic_wrf471_oracle/receipts/*
+
+# The project's binding agent instructions.  Tracked so every worktree and
+# agent reads one law file, but it is a development-process document -- it
+# names this machine's Downloads directory and program ledger -- and means
+# nothing to a release reader.
+CLAUDE.md
+AGENTS.md
+
+# Campaign handoffs and internal project history (developer paths inside).
+docs/gpuwm-controller-handoff.md
+docs/lead-handoff-2026-07-26.md
+docs/gpuwm-project-history.md
+docs/tree_triage_2026-07-26.md
+docs/assembly-execution-20260728.md
+
+# Internal development-campaign plans/specs (machine paths inside).
+docs/superpowers/**
+
+# Internal campaign reports and machine-specific runbooks.
+docs/morrison_oracle_report.md
+docs/mynn_four_domain_report.md
+docs/mynn_noahmp_ruc_completion_plan.md
+docs/easy-physics-rtx5090-runbook.md
+docs/easy-physics-integration-status.md
+docs/wsm6-rtx5090-runbook.md
+docs/real74-nssl2-500m-runbook.md
+docs/real74-nssl2-500m-comparison-ratification-v1.md
+docs/ports/rrtm-dudhia-remote-gpu-runbook.md
+docs/ports/wrf-rrtm-dudhia-status.md
+
+# Internal acceptance/handoff ledgers (the release ships its own docs).
+handoffs/**
+evidence/**
+work/**
+
+# Detailed research-catalog campaign audit. Its raw measurements are retained
+# under work/** and are not part of the public snapshot. Keep the original
+# audit and its evidence links together in the development tree; the public
+# research guide and development qualification summary remain distributed.
+docs/dev/research-catalog-review.md
+
+# Campaign ensemble harness.  Every entry point needs a privately-built
+# WRF oracle (wrf.exe/real.exe at pinned SHAs), a private reference
+# bundle, and the campaign's own case directory, none of which a public
+# reader has or can obtain -- so the scripts are unrunnable outside the
+# campaign and carry its case naming and machine layout.  Its test goes
+# with it; nothing else in the tree imports tools.n5s.
+tools/n5s/**
+tests/test_n5s_toolchain.py
+
+# NOT excluded, deliberately: tools/data/knob_survey_lanes.jsonl.  It
+# looked like internal campaign output, but tools/build_registry.py
+# reads it to regenerate woof/physics_registry_v2.json and
+# tests/test_build_registry.py asserts that regeneration reproduces the
+# shipped file byte for byte.  Dropping it would trade a reproducibility
+# proof for a hygiene win, so the developer paths inside it were
+# scrubbed instead -- twice: once when this note was written, and again
+# for two survey-tree paths on line 14 that the release scan could not
+# see until its Windows marker learned to read escaped separators.
+
+# A generated `sha256sum` receipt whose second column is one machine's
+# absolute paths into a private reference bundle.  The hashes it pins
+# are reproduced by tools/rrtmg_wrf461_oracle/sw_build.sh, which writes
+# this file; nothing reads it.
+tools/rrtmg_wrf461_oracle/sw_fixtures/sw-oracle-sha256sums.txt
+
+# Externalized large asset: GitHub rejects plain blobs over 100 MiB, so
+# this 243 MiB table is published as a GitHub release asset instead of
+# living in the public git history.  `woof fetch-tables` stages it,
+# SHA-256-verified against woof/core/thompson_contract.py, and the
+# install scripts run that automatically; the development tree keeps
+# the file tracked as the source of truth for the release asset.
+recast-woof-data/woof_data/data/thompson/tables/freezeH2O.dat
+
+# Raw test-run transcripts must never ship at repo root: they are triage
+# working evidence (the 1.4.1 battery evidence deliberately lived beside
+# the repo, not in it), and a top-level failure log is the first thing a
+# stranger would open (1.5.0 cut finding, 2026-08-03).
+cpu_suite.log
+gpu_tier.log
+gpu_retry.log
+gpu_failed_ids.txt
+
+# Ensemble-sweep node drivers.  These are the shell harness that runs the
+# ensemble-size ladder on the project's rented Linux nodes: they hard-code
+# that layout as defaults (a sweep root, a tree root and a geography root,
+# all under the node's root account), drive each other through status files
+# in the same home directory, and are unrunnable anywhere else.  Spelling
+# those defaults out here would put the very paths this file exists to keep
+# out of the release into the release.  The Python beside them is NOT
+# excluded --
+# score_free_forecast.py is the scorer of record for the published FSS
+# numbers, and decompose_skill.py, score_resolution.py and
+# summarize_sweep.py read committed composites -- so the analysis half of
+# the directory ships and only the machine-shaped driver half does not.
+tools/ens_sweep/build_obs.sh
+tools/ens_sweep/ceiling_probe.sh
+tools/ens_sweep/chain.sh
+tools/ens_sweep/chain2.sh
+tools/ens_sweep/pool_limit_probe.sh
+tools/ens_sweep/prepare_case.sh
+tools/ens_sweep/resolution_cost_probe.sh
+tools/ens_sweep/run_sweep.sh
+
+# Grell-Freitas dual-run byte-comparison harness.  A Windows Task Scheduler
+# job (task.xml) plus the PowerShell queue it launches, both written around
+# one box: the queue names an absolute worktree path and a local Downloads
+# directory.  Dual-run byte comparison is the project's corruption screen on
+# a card without ECC, and it is worth keeping tracked, but it is a bench
+# fixture for this machine rather than anything a reader can run. Nothing
+# in the tree references it.
+tools/gf_real74_dual/**
+
+# The streamed-run lane's engineering records.  Each one is the provenance
+# of a number the lane quotes -- which box, which venv, which run directory,
+# which rescued fork the digest came off -- so the machine paths inside them
+# are the measurement conditions, not sloppiness, and scrubbing them would
+# falsify the record rather than clean it.  They are internal engineering
+# documents in the sense docs/superpowers/** already is: the user-facing
+# page for this feature is docs/public/TILES.md, which carries no machine
+# path and ships.
+tilestream/BRANCHES.md
+tilestream/DEV-BOX-CUPY.md
+tilestream/GPU-SCHEDULING-TRAPS.md
+tilestream/HANDOFF-case-imagery.md
+tilestream/HANDOFF.md
+tilestream/HARDENED-SEAM-GATE.md
+tilestream/OVERLAP-RECEIPT.md
+tilestream/PERF-FINDINGS.md
+tilestream/PLOTS-AS-YOU-GO.md
+tilestream/RENDER-CLI.md
+tilestream/RESULTS.md
+
+# The same lane's RAW measurement records: gate logs, seam-gate captures,
+# per-arm digests and the skeptic timing transcripts.  Each names the tree,
+# venv and run directory on the rented node it was taken on -- in tracebacks,
+# in header blocks and in "wrote <path>" lines -- which is the same
+# measurement-conditions argument as the .md records above, in a form that
+# cannot be reworded without falsifying a traceback.  No shipped page links
+# them (the user-facing page is docs/public/TILES.md) and no module reads
+# them: the only tilestream package data is output-scaling.json.  They
+# became visible when the release scan stopped reading by suffix, which is
+# what a suffix allowlist was hiding.
+tilestream/evidence/**
+tilestream/evidence-reconcile/**
+tilestream/skeptic/**
+
+# Verbatim forks rescued off two destroyed boxes, kept so a digest taken on
+# a dead machine can still be diffed against the tree that replaced it.
+# They are copies of files that also exist above them, they are not on any
+# import path, and editing them is the one thing that would make them
+# useless.
+tilestream/rescued-tools/**
+
+# Campaign runbook shells: each cds into a rented node's own case tree and
+# drives a measurement that needs that node's staged inputs, on the
+# tools/ens_sweep precedent above -- the analysis Python beside them is not
+# excluded and ships.
+tilestream/rrtmgp_runall.sh
+tools/harvest_case_imagery.sh
+tools/les1m_costfinal.sh
+tools/les1m_queue.sh
+tools/les1m_trimmed.sh
+
+# The 2011 superoutbreak campaign configs.  Their forcing, vtable and
+# geography roots point into the case tree staged on the rented node the
+# runs were made on; nobody else has those files, so the configs are a
+# record of what was run rather than something a reader can run.
+#
+# Each .toml has a .namelist.wps twin carrying the same node geography
+# root, and until the release scan stopped reading by suffix nothing saw
+# them: .wps was not on the scanned-suffix allowlist, so four campaign
+# namelists went on shipping beside their excluded configs.  The twins are
+# listed here for the reason the configs are.
+configs/superoutbreak_20110427_d01_3km.toml
+configs/superoutbreak_20110427_d01_960.toml
+configs/superoutbreak_20110427_probe480.toml
+configs/superoutbreak_20110427_smoke.toml
+configs/superoutbreak_20110427_d01_3km.namelist.wps
+configs/superoutbreak_20110427_d01_960.namelist.wps
+configs/superoutbreak_20110427_probe480.namelist.wps
+configs/superoutbreak_20110427_smoke.namelist.wps
+
+# A campaign config that reached the release line by a `git add configs/`
+# sweeping an untracked working file.  Same shape as the superoutbreak
+# entries above: its forcing bundle and cache roots are absolute paths into
+# one machine's disk, so it is a record of a run rather than something a
+# reader can execute, and it would have shipped inside the wheel because
+# pyproject packages configs/ recursively.  It is also case-named, which
+# nothing in configs/ should be.
+configs/real74_morrison_d03_pressure_fix_1h.toml
+# DA-campaign drivers and a node runbook from the 2.6.1 fold wave: each
+# bakes a per-user scratch root or a rented node's home path -- exactly
+# the machine-specific runbook class this manifest exists for.  Their
+# runs of record live in the receipts they wrote; nothing here is
+# needed to use the product.
+tools/cycle_demo_a.py
+tools/cycle_demo_b.py
+tools/cycle_demo_c.py
+tools/da_real_leg.py
+tools/da_real_series.py
+tools/ens_sweep/release_card.sh
+
+# A lane's proof directory: the receipts a defect fix is reported on --
+# the reproduction read off the sealed cut, the node's build and test
+# transcripts, the `woof doctor` reports before and after, and the
+# scripts that produced them.  Committed rather than left on one disk,
+# because a receipt whose only copy is a worktree is not a receipt; kept
+# out of the snapshot because every line of it names the node path the
+# work ran under, which is precisely what the machine-path scan refuses,
+# and because a stranger opening the release tree should find the
+# product, not one lane's transcripts.  Same reason `evidence/**` and
+# `work/**` are excluded above rather than deleted.
+proof/**
+
+# The release cut's own machinery.  It carries the residue scanner's account
+# and machine patterns and the site layout it drives (hosts, mirror, caches),
+# which the export's machine-path scan exists to keep out of a public tree,
+# and it is useless without the private repository it cuts from.  The public
+# half of what it relies on ships: woof.bridge_assets.native_input_difference
+# and the pin and verifier tools that re-prove a reused binary.
+tools/release/cut/**
+docs/dev/RELEASE-CUT.md
+
+# The branch-dispositions ledger and its gate: internal branch bookkeeping
+# (branch names and their statuses) that means nothing to a release reader.
+# The gate already skips outside a git checkout; it stays in the development
+# tree, where branches exist to strand.
+docs/branch-dispositions.md
+tests/test_branch_dispositions.py
+
+# The urban Noah hand-over oracle's gfortran build log: compiler diagnostics
+# that quote the build machine's WRF checkout path line by line.  The
+# harness sources and their hashes (oracle-sha256sums.txt beside it) ship.
+tools/urban_wrf471_oracle/evidence/noah_hook/build.log
+
+# The absorbed-shortwave scorer's build and test logs and dependency
+# listings: cargo and pytest output that quote the build machine's home
+# directory on dozens of lines.  The scorer source, its README and the
+# box-scorer patch beside them ship.
+tools/albsol_score/receipts/full-build.log
+tools/albsol_score/receipts/full-build-first.log
+tools/albsol_score/receipts/tests.log
+tools/albsol_score/receipts/full-dependencies.json
+tools/albsol_score/receipts/source-packet.json

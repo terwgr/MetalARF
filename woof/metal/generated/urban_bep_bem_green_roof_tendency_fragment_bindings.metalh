@@ -1,0 +1,32 @@
+// Generated from kernel_signatures.json; layout 6388e36e257cf1715c6b6dae14e9d804c9d26a62b8cb327fe324c2bdee06644e.
+struct UrbanBepBemGreenRoofTendencyFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const int *utype [[id(1)]];
+    device const float *class_float [[id(2)]];
+    device const float *ss [[id(3)]];
+    device const float *interp [[id(4)]];
+    device const float *sfrv [[id(5)]];
+    device const float *lfrv [[id(6)]];
+    device const float *sfrpv [[id(7)]];
+    device const float *flat_uhb [[id(8)]];
+    device const float *flat_vhb [[id(9)]];
+    device const float *flat_thb [[id(10)]];
+    device const float *flat_ehb [[id(11)]];
+    device const float *flat_qhb [[id(12)]];
+    device const float *roof_uhb [[id(13)]];
+    device const float *roof_vhb [[id(14)]];
+    device const float *roof_ehb [[id(15)]];
+    device float *uhb [[id(16)]];
+    device float *vhb [[id(17)]];
+    device float *thb [[id(18)]];
+    device float *ehb [[id(19)]];
+    device float *qhb_flat [[id(20)]];
+};
+struct UrbanBepBemGreenRoofTendencyFragmentParams {
+    int ncol;
+    int nitem;
+    int green_roof;
+    float cp_u;
+    float latent;
+};
+static_assert(sizeof(UrbanBepBemGreenRoofTendencyFragmentParams) == 20, "urban_bep_bem_green_roof_tendency_fragment parameter ABI size changed");

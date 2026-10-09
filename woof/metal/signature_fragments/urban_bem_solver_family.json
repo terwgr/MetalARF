@@ -1,0 +1,1079 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_temperature_average_fragment",
+      "module": "urban_bem_temperature_average_fragment",
+      "source": "woof/metal/shaders/urban_bem_temperature_average_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_averaging_temp",
+      "resources": [
+        [
+          "ss",
+          "float",
+          "read"
+        ],
+        [
+          "pb",
+          "float",
+          "read"
+        ],
+        [
+          "tw",
+          "float",
+          "read"
+        ],
+        [
+          "twlev",
+          "float",
+          "read"
+        ],
+        [
+          "sfw",
+          "float",
+          "read"
+        ],
+        [
+          "sfwin",
+          "float",
+          "read"
+        ],
+        [
+          "tw_av",
+          "float",
+          "read_write"
+        ],
+        [
+          "twlev_av",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfw_av",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfwind_av",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ss": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "pb": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "tw": [
+          [
+            "ncol",
+            15,
+            5,
+            18,
+            4
+          ]
+        ],
+        "twlev": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "sfw": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "sfwin": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "tw_av": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "twlev_av": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "sfw_av": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "sfwind_av": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "error": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bem_roof_radiation_fragment",
+      "module": "urban_bem_roof_radiation_fragment",
+      "source": "woof/metal/shaders/urban_bem_roof_radiation_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_radfluxspv",
+      "resources": [
+        [
+          "albedo",
+          "float",
+          "read"
+        ],
+        [
+          "rs",
+          "float",
+          "read"
+        ],
+        [
+          "emissivity",
+          "float",
+          "read"
+        ],
+        [
+          "rl",
+          "float",
+          "read"
+        ],
+        [
+          "surface_temp",
+          "float",
+          "read"
+        ],
+        [
+          "pv_fraction",
+          "float",
+          "read"
+        ],
+        [
+          "panel_temp",
+          "float",
+          "read"
+        ],
+        [
+          "radflux",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "albedo": [
+          [
+            "nitem"
+          ]
+        ],
+        "rs": [
+          [
+            "nitem"
+          ]
+        ],
+        "emissivity": [
+          [
+            "nitem"
+          ]
+        ],
+        "rl": [
+          [
+            "nitem"
+          ]
+        ],
+        "surface_temp": [
+          [
+            "nitem"
+          ]
+        ],
+        "pv_fraction": [
+          [
+            "nitem"
+          ]
+        ],
+        "panel_temp": [
+          [
+            "nitem"
+          ]
+        ],
+        "radflux": [
+          [
+            "nitem"
+          ]
+        ],
+        "error": [
+          [
+            "nitem"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nitem",
+          "int32"
+        ],
+        [
+          "has_pv",
+          "int32"
+        ],
+        [
+          "level",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "sigma",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bem_occupancy_fragment",
+      "module": "urban_bem_occupancy_fragment",
+      "source": "woof/metal/shaders/urban_bem_occupancy_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_fluxeqocc",
+      "resources": [
+        [
+          "hsequip",
+          "float",
+          "read"
+        ],
+        [
+          "building_width",
+          "float",
+          "read"
+        ],
+        [
+          "building_length",
+          "float",
+          "read"
+        ],
+        [
+          "floor_fraction",
+          "float",
+          "read"
+        ],
+        [
+          "equipment_scale",
+          "float",
+          "read"
+        ],
+        [
+          "sensible_gain",
+          "float",
+          "read_write"
+        ],
+        [
+          "latent_gain",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "hsequip": [
+          [
+            "nitem",
+            24
+          ]
+        ],
+        "building_width": [
+          [
+            "nitem"
+          ]
+        ],
+        "building_length": [
+          [
+            "nitem"
+          ]
+        ],
+        "floor_fraction": [
+          [
+            "nitem"
+          ]
+        ],
+        "equipment_scale": [
+          [
+            "nitem"
+          ]
+        ],
+        "sensible_gain": [
+          [
+            "nitem"
+          ]
+        ],
+        "latent_gain": [
+          [
+            "nitem"
+          ]
+        ],
+        "error": [
+          [
+            "nitem"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nitem",
+          "int32"
+        ],
+        [
+          "nhourday",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bem_room_control_fragment",
+      "module": "urban_bem_room_control_fragment",
+      "source": "woof/metal/shaders/urban_bem_room_control_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_fluxvent/regtemp/reghum/air_cond",
+      "resources": [
+        [
+          "cpint",
+          "float",
+          "read"
+        ],
+        [
+          "rhoint",
+          "float",
+          "read"
+        ],
+        [
+          "vollev",
+          "float",
+          "read"
+        ],
+        [
+          "tlev",
+          "float",
+          "read"
+        ],
+        [
+          "tout",
+          "float",
+          "read"
+        ],
+        [
+          "latent",
+          "float",
+          "read"
+        ],
+        [
+          "humout",
+          "float",
+          "read"
+        ],
+        [
+          "rhoout",
+          "float",
+          "read"
+        ],
+        [
+          "humlev",
+          "float",
+          "read"
+        ],
+        [
+          "beta",
+          "float",
+          "read"
+        ],
+        [
+          "qb",
+          "float",
+          "read"
+        ],
+        [
+          "hsroo",
+          "float",
+          "read"
+        ],
+        [
+          "volroo",
+          "float",
+          "read"
+        ],
+        [
+          "hlroo",
+          "float",
+          "read"
+        ],
+        [
+          "shumroo",
+          "float",
+          "read"
+        ],
+        [
+          "cop",
+          "float",
+          "read"
+        ],
+        [
+          "timeon",
+          "float",
+          "read"
+        ],
+        [
+          "timeoff",
+          "float",
+          "read"
+        ],
+        [
+          "targtemp",
+          "float",
+          "read"
+        ],
+        [
+          "gaptemp",
+          "float",
+          "read"
+        ],
+        [
+          "targhum",
+          "float",
+          "read"
+        ],
+        [
+          "gaphum",
+          "float",
+          "read"
+        ],
+        [
+          "swcond",
+          "int32",
+          "read"
+        ],
+        [
+          "hsvent",
+          "float",
+          "read_write"
+        ],
+        [
+          "hlvent",
+          "float",
+          "read_write"
+        ],
+        [
+          "hsneed_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "hlneed_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "hsout",
+          "float",
+          "read_write"
+        ],
+        [
+          "hlout",
+          "float",
+          "read_write"
+        ],
+        [
+          "consump",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cpint": [
+          [
+            "nitem"
+          ]
+        ],
+        "rhoint": [
+          [
+            "nitem"
+          ]
+        ],
+        "vollev": [
+          [
+            "nitem"
+          ]
+        ],
+        "tlev": [
+          [
+            "nitem"
+          ]
+        ],
+        "tout": [
+          [
+            "nitem"
+          ]
+        ],
+        "latent": [
+          [
+            "nitem"
+          ]
+        ],
+        "humout": [
+          [
+            "nitem"
+          ]
+        ],
+        "rhoout": [
+          [
+            "nitem"
+          ]
+        ],
+        "humlev": [
+          [
+            "nitem"
+          ]
+        ],
+        "beta": [
+          [
+            "nitem"
+          ]
+        ],
+        "qb": [
+          [
+            "nitem"
+          ]
+        ],
+        "hsroo": [
+          [
+            "nitem"
+          ]
+        ],
+        "volroo": [
+          [
+            "nitem"
+          ]
+        ],
+        "hlroo": [
+          [
+            "nitem"
+          ]
+        ],
+        "shumroo": [
+          [
+            "nitem"
+          ]
+        ],
+        "cop": [
+          [
+            "nitem"
+          ]
+        ],
+        "timeon": [
+          [
+            "nitem"
+          ]
+        ],
+        "timeoff": [
+          [
+            "nitem"
+          ]
+        ],
+        "targtemp": [
+          [
+            "nitem"
+          ]
+        ],
+        "gaptemp": [
+          [
+            "nitem"
+          ]
+        ],
+        "targhum": [
+          [
+            "nitem"
+          ]
+        ],
+        "gaphum": [
+          [
+            "nitem"
+          ]
+        ],
+        "swcond": [
+          [
+            "nitem"
+          ]
+        ],
+        "hsvent": [
+          [
+            "nitem"
+          ]
+        ],
+        "hlvent": [
+          [
+            "nitem"
+          ]
+        ],
+        "hsneed_out": [
+          [
+            "nitem"
+          ]
+        ],
+        "hlneed_out": [
+          [
+            "nitem"
+          ]
+        ],
+        "hsout": [
+          [
+            "nitem"
+          ]
+        ],
+        "hlout": [
+          [
+            "nitem"
+          ]
+        ],
+        "consump": [
+          [
+            "nitem"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nitem",
+          "int32"
+        ],
+        [
+          "nhourday",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bem_shortwave_fragment",
+      "module": "urban_bem_shortwave_fragment",
+      "source": "woof/metal/shaders/urban_bem_shortwave_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_short_rad_dd",
+      "resources": [
+        [
+          "pb",
+          "float",
+          "read"
+        ],
+        [
+          "fwg",
+          "float",
+          "read"
+        ],
+        [
+          "fww",
+          "float",
+          "read"
+        ],
+        [
+          "fgw",
+          "float",
+          "read"
+        ],
+        [
+          "fsw",
+          "float",
+          "read"
+        ],
+        [
+          "fsg",
+          "float",
+          "read"
+        ],
+        [
+          "rsw",
+          "float",
+          "read_write"
+        ],
+        [
+          "rsg",
+          "float",
+          "read_write"
+        ],
+        [
+          "rsdif",
+          "float",
+          "read"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pb": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "fwg": [
+          [
+            "ncol",
+            "nd",
+            18
+          ]
+        ],
+        "fww": [
+          [
+            "ncol",
+            "nd",
+            18,
+            18
+          ]
+        ],
+        "fgw": [
+          [
+            "ncol",
+            "nd",
+            18
+          ]
+        ],
+        "fsw": [
+          [
+            "ncol",
+            "nd",
+            18
+          ]
+        ],
+        "fsg": [
+          [
+            "ncol",
+            "nd"
+          ]
+        ],
+        "rsw": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "rsg": [
+          [
+            "ncol",
+            "nd"
+          ]
+        ],
+        "rsdif": [
+          [
+            "ncol",
+            "nd"
+          ]
+        ],
+        "error": [
+          [
+            "ncol",
+            "nd"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz_u",
+          "int32"
+        ],
+        [
+          "nd",
+          "int32"
+        ],
+        [
+          "albw",
+          "float32"
+        ],
+        [
+          "albg",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bem_longwave_fragment",
+      "module": "urban_bem_longwave_fragment",
+      "source": "woof/metal/shaders/urban_bem_longwave_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_long_rad",
+      "resources": [
+        [
+          "pb",
+          "float",
+          "read"
+        ],
+        [
+          "fwg",
+          "float",
+          "read"
+        ],
+        [
+          "fww",
+          "float",
+          "read"
+        ],
+        [
+          "fgw",
+          "float",
+          "read"
+        ],
+        [
+          "fsw",
+          "float",
+          "read"
+        ],
+        [
+          "fsg",
+          "float",
+          "read"
+        ],
+        [
+          "tg_av",
+          "float",
+          "read"
+        ],
+        [
+          "tw",
+          "float",
+          "read"
+        ],
+        [
+          "twlev",
+          "float",
+          "read"
+        ],
+        [
+          "rl",
+          "float",
+          "read"
+        ],
+        [
+          "rlg",
+          "float",
+          "read_write"
+        ],
+        [
+          "rlw",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pb": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "fwg": [
+          [
+            "ncol",
+            "nd",
+            18
+          ]
+        ],
+        "fww": [
+          [
+            "ncol",
+            "nd",
+            18,
+            18
+          ]
+        ],
+        "fgw": [
+          [
+            "ncol",
+            "nd",
+            18
+          ]
+        ],
+        "fsw": [
+          [
+            "ncol",
+            "nd",
+            18
+          ]
+        ],
+        "fsg": [
+          [
+            "ncol",
+            "nd"
+          ]
+        ],
+        "tg_av": [
+          [
+            "ncol",
+            "nd"
+          ]
+        ],
+        "tw": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "twlev": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "rl": [
+          [
+            "ncol",
+            "nd"
+          ]
+        ],
+        "rlg": [
+          [
+            "ncol",
+            "nd"
+          ]
+        ],
+        "rlw": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "error": [
+          [
+            "ncol",
+            "nd"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz_u",
+          "int32"
+        ],
+        [
+          "nd",
+          "int32"
+        ],
+        [
+          "emw",
+          "float32"
+        ],
+        [
+          "emg",
+          "float32"
+        ],
+        [
+          "emwin",
+          "float32"
+        ],
+        [
+          "pwin",
+          "float32"
+        ],
+        [
+          "sigma",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

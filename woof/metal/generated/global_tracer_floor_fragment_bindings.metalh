@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 8593aec0c91356b1e7e73892dddf3080176b8c53ea756a3d7035b5b5931361e3.
+struct GlobalTracerFloorFragmentResources {
+    device ulong *mass [[id(0)]];
+    device const ulong *density [[id(1)]];
+    device const ulong *row_weight [[id(2)]];
+    device ulong *negative [[id(3)]];
+    device ulong *positive [[id(4)]];
+};
+struct GlobalTracerFloorFragmentParams {
+    int ntracer;
+    int nlevel;
+    int nlatitude;
+    int nlongitude;
+    int chunk;
+    int nblock;
+};
+static_assert(sizeof(GlobalTracerFloorFragmentParams) == 24, "global_tracer_floor_fragment parameter ABI size changed");

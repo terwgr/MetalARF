@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 60f81fb1f47c1a7d420f32116854ac0a89f4aaf7a3a55d71dd5205c77cdf5c88.
+struct ThompsonCloudSaturationAdjustHistoryMarkerOnlyResources {
+    device float *temperature [[id(0)]];
+    device const float *pressure [[id(1)]];
+    device float *qv [[id(2)]];
+    device float *qc [[id(3)]];
+    device float *condensation_marker [[id(4)]];
+};
+struct ThompsonCloudSaturationAdjustHistoryMarkerOnlyParams {
+    int n;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonCloudSaturationAdjustHistoryMarkerOnlyParams) == 16, "thompson_cloud_saturation_adjust_history_marker_only parameter ABI size changed");

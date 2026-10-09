@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "thompson_aa_rain_evaporation_bindings.metalh"
+#include "thompson_aa_saturation_adjust_bindings.metalh"

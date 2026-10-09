@@ -1,0 +1,39 @@
+{
+  "kernels": [
+    {
+      "name": "hex_pressure_gradient_euler",
+      "module": "hex_dynamics",
+      "source": "woof/metal/shaders/hex_pressure_gradient_fragment.metal",
+      "cuda_source": "woof/hex/dynamics.py",
+      "cuda_symbol": "pressure_gradient_euler_tendency",
+      "resources": [
+        ["pressure_perturbation", "float", "read"],
+        ["dpdz", "float", "read"],
+        ["cqu", "float", "read"],
+        ["zz", "float", "read"],
+        ["zxu", "float", "read"],
+        ["cells_on_edge", "int32", "read"],
+        ["inv_dc_edge", "float", "read"],
+        ["tendency", "float", "read_write"]
+      ],
+      "shapes": {
+        "pressure_perturbation": [["nlev", "ncells"]],
+        "dpdz": [["nlev", "ncells"]],
+        "cqu": [["nlev", "nedges"]],
+        "zz": [["nlev", "ncells"]],
+        "zxu": [["nlev", "nedges"]],
+        "cells_on_edge": [["nedges", 2]],
+        "inv_dc_edge": [["nedges"]],
+        "tendency": [["nlev", "nedges"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["nedges", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

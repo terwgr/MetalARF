@@ -1,0 +1,220 @@
+Third-party licences for the code in this directory
+==================================================
+
+Some of the CUDA translation units here are hand transcriptions of
+third-party work.  WOOF distributes them under the Apache License 2.0; the
+notices below belong to the transcribed parts and are reproduced because the
+licences those parts carry require it.  The same notices, with the fuller
+provenance account, are in the repository's root NOTICE, and the complete
+licence texts are in the repository's licenses/ directory, which ships in
+the wheel under recast_woof-<version>.dist-info/licenses/licenses/
+(PEP 639 keeps the source path, hence the doubled component).
+
+WHY THIS FILE EXISTS RATHER THAN A HEADER IN EACH .cu
+-----------------------------------------------------
+The bytes of these device sources ARE the identity a run receipt
+records: the loader assembles each module's compile string out of the
+files in this directory and the receipt pins its source_sha256.  A
+notice comment prepended to one of them would move that digest without
+moving a compiled image, and every receipt this model has published
+would stop matching the code that wrote it.  So the notice sits beside
+the code instead of inside it, and it ships with the code:
+pyproject.toml's package-data for woof.globe.core.kernels names this
+file explicitly.
+
+glibc_flt32.cuh is covered here for the same reason even though it is
+not a compilation unit of its own: the loader prepends it to gf and to
+ntiedtke, so its bytes sit inside those two modules' assembled
+strings.  The Python counterparts of the same transcriptions, which
+nothing digests, do carry their notice in their own header:
+woof/globe/core/rrtmgp.py and woof/globe/core/npref.py.
+
+WHAT IS COVERED, AND WHERE
+--------------------------
+1. Arm optimized-routines (MIT)        -- logf, expf, exp2f, powf
+2. FDLIBM / Sun Microsystems           -- expm1f, the lgammaf reduction
+3. AER RRTMG (BSD 3-Clause)            -- the McICA subcolumn generator the
+                                          radiation path is driven with
+4. RTE+RRTMGP (BSD 3-Clause)           -- the rest of the radiation kernels
+
+Sections 1 and 2 also state the scope of those two grants; section 5 states
+what none of the four covers, and says whose work the gamma routines in
+glibc_flt32.cuh are.
+
+The FP32 libm transcriptions exist because WOOF grades several physics
+schemes bitwise against a gfortran/glibc reference, so it carries hand
+transcriptions of the standard single-precision libm routines rather than
+calling CUDA's, whose expf, powf and tgammaf are different functions.
+
+Scope in this directory: both libm grants are carried by one file,
+glibc_flt32.cuh, which the loader prepends to gf and to ntiedtke.  It
+holds the logf / expf / exp2f / powf cores and their data tables (Arm,
+MIT), and FDLIBM's expm1f (s_expm1f.c) and the positive arm of FDLIBM's
+lgammaf reduction (e_lgammaf_r.c).  No other device source here carries
+either.  The model's own source tree transcribes the same routines in
+further files -- its boundary-layer, Noah-MP and legacy-RRTMG kernels --
+and its own copy of this notice names them; this package ships none of
+those files, and this copy names what is here.
+
+
+1. Arm optimized-routines -- logf, expf, exp2f, powf
+----------------------------------------------------
+
+Written by Szabolcs Nagy and published at
+https://github.com/ARM-software/optimized-routines (math/logf.c, math/expf.c,
+math/exp2f.c, math/powf.c and the corresponding math/*_data.c) in August 2017,
+and imported into glibc for 2.27/2.28 by their own author.  WOOF transcribed
+them from glibc's copy at sysdeps/ieee754/flt-32/, which reproduces Arm's text
+unchanged apart from symbol renaming, branch-hint and cast macro spellings and
+symbol-versioning declarations -- none of which WOOF reproduces.  WOOF takes
+this material under the MIT branch of Arm's grant.
+
+At the vintage glibc imported -- Arm 86067a740541, 2017-08-11, taken into
+glibc at 4ea49f4c08ee on 2017-09-04 -- those files read "Copyright (C) 2017,
+ARM Limited" under Apache-2.0.  Arm relicensed the same work to MIT fifteen
+months later, at 11253b0b9d6b on 2018-11-12, and each file has carried
+
+    Copyright (c) 2017-2018, Arm Limited.
+    SPDX-License-Identifier: MIT
+
+ever since.  A copyright holder may licence its own work on any terms it
+chooses; Arm's MIT offer is public, current and made by the retained
+copyright holder, and it is the offer WOOF takes.  The project LICENSE at
+that relicensing (identical at every tag through v21.02, md5
+c7e74e8165fadb7dd9ee169534fe99ef) reads:
+
+    MIT License
+
+    Copyright (c) 1999-2019, Arm Limited.
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+
+2. FDLIBM -- expm1f and the lgammaf reduction
+----------------------------------------------
+
+These reductions descend from FDLIBM, developed at SunPro, a Sun Microsystems,
+Inc. business, and converted to single precision at Cygnus Support.  glibc
+carries them substantially unmodified and presents them, in its own LICENSES
+file, as Sun's code.  The notice below is the whole of the licence: its single
+condition is that the notice be preserved, and this is that preservation.
+
+    /*
+     * ====================================================
+     * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+     *
+     * Developed at SunPro, a Sun Microsystems, Inc. business.
+     * Permission to use, copy, modify, and distribute this
+     * software is freely granted, provided that this notice
+     * is preserved.
+     * ====================================================
+     */
+
+Where WOOF must match a glibc 2.39 reference bit for bit, these
+transcriptions follow glibc's versions of these files rather than another
+FDLIBM descendant's.  For the two routines carried here that means
+lgammaf's 2**26 and 2**-30 thresholds, which are glibc's spelling of the
+same reduction.
+
+
+3. AER RRTMG -- the McICA subcolumn generator
+----------------------------------------------
+
+rrtmgp_mcica.cu is AER's work, and its name is the reason that has to be
+said out loud.  The McICA subcolumn cloud generator the radiation path is
+driven with is WRF's RRTMG generator, not rte-rrtmgp's: that file
+transcribes module mcica_subcol_gen_sw in WRF v4.6.1
+phys/module_ra_rrtmg_sw.F -- kissvec at lines 2008-2040, the
+maximum-random overlap walk at 1778-1813 -- as its own header says.  Its
+host driver in woof/globe/core/rrtmgp.py and its float64 mirror in
+woof/globe/core/npref.py mirror the same routine and carry this notice
+in their own headers.  Section 4 does not cover any of the three.
+
+That code is the work of Atmospheric and Environmental Research, Inc.,
+not of UCAR, and WRF says so by preserving AER's notice -- seven times in
+the longwave file, nine in the shortwave:
+
+    Copyright 2002-2008, Atmospheric & Environmental Research, Inc. (AER).
+    This software may be used, copied, or redistributed as long as it is
+    not sold and this copyright notice is reproduced on each copy made.
+    This model is provided as is without any express or implied warranties.
+                          (http://www.rtweb.aer.com/)
+
+All three copyright-year spans in which that notice appears are reproduced
+in licenses/NOTICE-AER-RRTMG-as-distributed-with-WRF.txt.
+
+WOOF takes this material under AER's own current grant instead: BSD
+3-Clause, "Copyright (c) 2020, Atmospheric and Environmental Research",
+published by AER at https://github.com/AER-RC/RRTMG_LW and .../RRTMG_SW.  A
+copyright holder may licence its own work on any terms it chooses, and that
+offer is public, current and unconditional.  The BSD-3-Clause text is in
+licenses/LICENSE-AER-RRTMG-BSD-3-Clause.txt.  The model's source tree
+also ships that text beside its packaged legacy-RRTMG coefficients, and
+applies this section to eight legacy translation units besides; this
+package carries neither those files nor those coefficients, and this copy
+covers the one file it does carry.
+
+
+4. RTE+RRTMGP -- the default radiation kernels
+----------------------------------------------
+
+rrtmgp_gas.cu, rrtmgp_cloud.cu and rrtmgp_rte.cu transcribe
+earth-system-radiation/rte-rrtmgp at commit
+fa107a16120051c4124305c6b3d4c87059119f58, which each of those three cites
+in its own header (rrtmgp_gas.cu line 3, rrtmgp_cloud.cu line 3,
+rrtmgp_rte.cu line 14).
+
+The other three files that share the rrtmgp_ prefix are NOT covered by
+this section, and are named so that the prefix is not read as the scope.
+rrtmgp_validation.cu is WOOF's own input validation, written against the
+host validators in woof/globe/core/rrtmgp.py.  rrtmgp_planck_common.cuh is
+WOOF's own in-kernel Planck derivation, pinned bitwise to rrtmgp_gas.cu.
+rrtmgp_mcica.cu transcribes WRF's RRTMG McICA generator and is covered by
+section 3.
+
+rte-rrtmgp is BSD 3-Clause:
+
+    Copyright (c) 2015-2025, Atmospheric and Environmental Research,
+      Regents of the University of Colorado,
+      Trustees of Columbia University in the City of New York.
+    All rights reserved.
+
+Clause 1 requires a source redistribution to retain that notice, the list of
+conditions and the disclaimer.  The full text is in
+licenses/LICENSE-RTE-RRTMGP-BSD-3-Clause.txt.  It is a DIFFERENT work from
+the rrtmgp-data k-distribution files, which carry their own, earlier
+copyright line and ship beside the data in the companion recast-woof-data
+distribution.
+
+
+5. The scope of the four grants above
+-------------------------------------
+
+Each is stated by routine or by file on purpose.  They cover what sections 1
+to 4 name and nothing else.  Other code in this directory -- including other
+transcriptions, and there are many: these kernels are transcriptions of WRF
+schemes -- takes nothing from Arm, Sun, AER or the RTE+RRTMGP copyright
+holders, and is not offered to a reader on the strength of these notices.
+Its provenance is recorded where it lives: in the repository NOTICE, in
+PROVENANCE.md, and in each file's own header.
+
+gfk_gamma_product, gfk_gammaf_positive and gfk_tgamma in glibc_flt32.cuh
+are this project's own work under this distribution's Apache-2.0 licence.
+They are not a transcription of any C library.  Nothing in that block needs
+a third-party notice.

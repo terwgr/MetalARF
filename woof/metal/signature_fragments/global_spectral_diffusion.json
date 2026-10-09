@@ -1,0 +1,28 @@
+{
+  "kernels": [
+    {
+      "name": "global_spectral_diffusion",
+      "module": "global_spectral_diffusion",
+      "source": "woof/metal/shaders/global_spectral_diffusion.metal",
+      "cuda_source": "woof/globe/spectral/diffusion.py",
+      "cuda_symbol": "ExponentialHyperdiffusion.apply",
+      "resources": [
+        ["coefficients", "float64_bits", "read"],
+        ["factors", "float64_bits", "read"],
+        ["output", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "coefficients": [["coefficient_count", 2]],
+        "factors": [["truncation+1"]],
+        "output": [["coefficient_count", 2]]
+      },
+      "parameters": [
+        ["truncation", "int32"],
+        ["coefficient_count", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

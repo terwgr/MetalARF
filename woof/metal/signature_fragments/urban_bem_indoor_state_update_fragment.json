@@ -1,0 +1,35 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_indoor_state_update_fragment",
+      "module": "urban_bem_indoor_state_update_fragment",
+      "source": "woof/metal/shaders/urban_bem_indoor_state_update_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_bem: module_sf_bem.F:809-811 indoor air temperature and humidity updates",
+      "resources": [
+        ["active_cols", "int32", "read"], ["building_nlev", "int32", "read"],
+        ["tlev", "float", "read"], ["humlev", "float", "read"],
+        ["qb", "float", "read"], ["vollev", "float", "read"],
+        ["rhoint", "float", "read"], ["latent", "float", "read"],
+        ["hsroo", "float", "read"], ["hlroo", "float", "read"],
+        ["hsneed", "float", "read"], ["hlneed", "float", "read"],
+        ["tlev_next", "float", "read_write"], ["humlev_next", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]], "building_nlev": [["ncol", 15]],
+        "tlev": [["nitem"]], "humlev": [["nitem"]],
+        "qb": [["nitem"]], "vollev": [["nitem"]],
+        "rhoint": [["nitem"]], "latent": [["nitem"]],
+        "hsroo": [["nitem"]], "hlroo": [["nitem"]],
+        "hsneed": [["nitem"]], "hlneed": [["nitem"]],
+        "tlev_next": [["nitem"]], "humlev_next": [["nitem"]],
+        "error": [["nitem"]]
+      },
+      "parameters": [["ncol", "int32"], ["nitem", "int32"], ["dt", "float32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

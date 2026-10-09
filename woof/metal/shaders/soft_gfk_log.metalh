@@ -1,0 +1,125 @@
+#ifndef WOOF_SOFT_GFK_LOG_METALH
+#define WOOF_SOFT_GFK_LOG_METALH
+
+// Dependency-blocked source proposal for glibc 2.39 gfk_log from
+// woof/core/kernels/glibc_flt32.cuh. Binary64 values are soft64 ulong bits.
+// Do not consume until soft_binary64.metalh has passed central review.
+// Transcribed Arm optimized-routines logf reduction and constants:
+// Copyright (c) 2017-2018, Arm Limited. SPDX-License-Identifier: MIT
+//
+// MIT License
+// Copyright (c) 1999-2019, Arm Limited.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+#include "soft_binary64.metalh"
+
+constant ulong SOFT_GFK_LOGF_INVC[16] = {
+    0x3ff661ec79f8f3beul, 0x3ff571ed4aaf883dul,
+    0x3ff49539f0f010b0ul, 0x3ff3c995b0b80385ul,
+    0x3ff30d190c8864a5ul, 0x3ff25e227b0b8ea0ul,
+    0x3ff1bb4a4a1a343ful, 0x3ff12358f08ae5baul,
+    0x3ff0953f419900a7ul, 0x3ff0000000000000ul,
+    0x3fee608cfd9a47acul, 0x3feca4b31f026aa0ul,
+    0x3feb2036576afce6ul, 0x3fe9c2d163a1aa2dul,
+    0x3fe886e6037841edul, 0x3fe767dcf5534862ul
+};
+
+constant ulong SOFT_GFK_LOGF_LOGC[16] = {
+    0xbfd57bf7808caadeul, 0xbfd2bef0a7c06ddbul,
+    0xbfd01eae7f513a67ul, 0xbfcb31d8a68224e9ul,
+    0xbfc6574f0ac07758ul, 0xbfc1aa2bc79c8100ul,
+    0xbfba4e76ce8c0e5eul, 0xbfb1973c5a611cccul,
+    0xbfa252f438e10c1eul, 0x0000000000000000ul,
+    0x3faaa5aa5df25984ul, 0x3fbc5e53aa362eb4ul,
+    0x3fc526e57720db08ul, 0x3fcbc2860d224770ul,
+    0x3fd1058bc8a07ee1ul, 0x3fd4043057b6ee09ul
+};
+
+constant ulong SOFT_GFK_LOGF_LN2 = 0x3fe62e42fefa39eful;
+constant ulong SOFT_GFK_LOGF_A0 = 0xbfd00ea348b88334ul;
+constant ulong SOFT_GFK_LOGF_A1 = 0x3fd5575b0be00b6aul;
+constant ulong SOFT_GFK_LOGF_A2 = 0xbfdffffef20a4123ul;
+
+// Exact conversion for gfk_log's bounded signed int k (|k| < 2^31).
+// This is local to the source operation; soft64 has no general int conversion.
+static inline uint soft_gfk_log_msb_index(uint value)
+{
+    uint index = 0u;
+    for (uint remaining = value; remaining > 1u; remaining >>= 1u)
+        ++index;
+    return index;
+}
+
+static inline ulong soft_gfk_log_i32_to_f64(int value)
+{
+    if (value == 0) return 0ul;
+    const bool negative = value < 0;
+    const uint magnitude = negative ? uint(-value) : uint(value);
+    const uint top = soft_gfk_log_msb_index(magnitude);
+    const ulong significand = ulong(magnitude) << (52u - top);
+    const ulong sign = negative ? 0x8000000000000000ul : 0ul;
+    const ulong exponent = ulong(int(top) + 1023) << 52;
+    return sign | exponent | (significand & 0x000ffffffffffffful);
+}
+
+// Exact bit equivalent of gfk_log's RN multiplication of a positive FP32
+// subnormal by 2^23. The source rejects negative inputs before reaching here.
+static inline uint soft_gfk_log_scale_subnormal(uint mantissa)
+{
+    const uint top = soft_gfk_log_msb_index(mantissa);
+    const uint exponent = top + 1u; // biased exponent of mantissa * 2^-126
+    const uint significand = mantissa << (23u - top);
+    return (exponent << 23) | (significand & 0x007fffffu);
+}
+
+// Return the exact FP32 result bits of glibc 2.39 e_logf.c's operation graph.
+// Soft64 arithmetic interfaces are the declared integer-bit RN-even ops:
+// soft64_from_f32_bits, soft64_add/sub/mul, and soft64_to_f32_bits.
+static inline uint soft_gfk_log(uint xbits)
+{
+    uint ix = xbits;
+    if (ix == 0x3f800000u) return 0x00000000u;
+    if (ix - 0x00800000u >= 0x7f800000u - 0x00800000u) {
+        if (ix * 2u == 0u) return 0xff800000u;
+        if (ix == 0x7f800000u) return ix;
+        if ((ix & 0x80000000u) != 0u || ix * 2u >= 0xff000000u)
+            return 0x7fc00000u;
+        ix = soft_gfk_log_scale_subnormal(ix);
+        ix -= 23u << 23;
+    }
+
+    const uint tmp = ix - 0x3f330000u;
+    const uint i = (tmp >> 19) & 15u;
+    const int k = int(tmp) >> 23;
+    const uint iz = ix - (tmp & 0xff800000u);
+
+    const ulong z = soft64_from_f32_bits(iz);
+    const ulong r = soft64_fma(z, SOFT_GFK_LOGF_INVC[i],
+                               0xbff0000000000000ul);
+    const ulong y0 = soft64_fma(soft_gfk_log_i32_to_f64(k),
+                                SOFT_GFK_LOGF_LN2,
+                                SOFT_GFK_LOGF_LOGC[i]);
+    const ulong r2 = soft64_mul(r, r);
+    ulong y = soft64_fma(SOFT_GFK_LOGF_A1, r, SOFT_GFK_LOGF_A2);
+    y = soft64_fma(r2, SOFT_GFK_LOGF_A0, y);
+    y = soft64_fma(r2, y, soft64_add(y0, r));
+    return soft64_to_f32_bits(y);
+}
+
+#endif

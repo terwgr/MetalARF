@@ -1,0 +1,291 @@
+{
+  "kernels": [
+    {
+      "name": "acoustic_boundary_frame",
+      "module": "acoustic",
+      "source": "woof/metal/shaders/acoustic_boundary_frame.metal",
+      "cuda_source": "woof/core/kernels/acoustic.cu",
+      "cuda_symbol": "advance_specified_phi_w",
+      "resources": [
+        [
+          "ph_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "w_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "p_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "al_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "rph_t",
+          "float",
+          "read"
+        ],
+        [
+          "rw_t",
+          "float",
+          "read"
+        ],
+        [
+          "th_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mu_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "rmu_t",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "c2a",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ph_pp": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w_pp": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "al_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rph_t": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rw_t": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "th_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu_pp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rmu_t": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c2a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "c1f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz+1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dtau",
+          "float32"
+        ],
+        [
+          "spec_zone",
+          "int32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "table_w",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

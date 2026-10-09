@@ -1,0 +1,80 @@
+{
+  "kernels": [
+    {
+      "name": "health_partial",
+      "module": "health_family",
+      "source": "woof/metal/shaders/health_family.metal",
+      "cuda_source": "woof/core/kernels/health.cu",
+      "cuda_symbol": "health_partial",
+      "resources": [
+        ["u", "float", "read"], ["w", "float", "read"],
+        ["thp", "float", "read"], ["ph", "float", "read"],
+        ["phb", "float", "read"], ["partial", "float", "read_write"]
+      ],
+      "shapes": {
+        "u": [["nu"]], "w": [["nw"]], "thp": [["nth"]],
+        "ph": [["nph"]], "phb": [["nphb"]],
+        "partial": [["nblocks", 9]]
+      },
+      "parameters": [
+        ["nu", "int32"], ["nw", "int32"], ["nth", "int32"],
+        ["ncells", "int32"], ["nph", "int32"], ["nphb", "int32"],
+        ["phb_full", "int32"], ["width", "int32"],
+        ["ny", "int32"], ["nx", "int32"],
+        ["nblocks", "int32"], ["gravity", "float32"]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "health_final",
+      "module": "health_family",
+      "source": "woof/metal/shaders/health_family.metal",
+      "cuda_source": "woof/core/kernels/health.cu",
+      "cuda_symbol": "health_final",
+      "resources": [
+        ["partial", "float", "read"], ["result", "float", "read_write"]
+      ],
+      "shapes": {
+        "partial": [["nblocks", 9]], "result": [[8]]
+      },
+      "parameters": [["nblocks", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "health_partial_tile",
+      "module": "health_family",
+      "source": "woof/metal/shaders/health_family.metal",
+      "cuda_source": "woof/core/kernels/health_tile.cu",
+      "cuda_symbol": "health_partial_tile",
+      "resources": [
+        ["u", "float", "read"], ["w", "float", "read"],
+        ["thp", "float", "read"], ["ph", "float", "read"],
+        ["phb", "float", "read"], ["partial", "float", "read_write"]
+      ],
+      "shapes": {
+        "u": [["nu"]], "w": [["nw"]], "thp": [["nth"]],
+        "ph": [["nph"]], "phb": [["nphb"]],
+        "partial": [["npartial_words"]]
+      },
+      "parameters": [
+        ["block_offset", "int32"], ["bny", "int32"], ["bnx", "int32"],
+        ["jb", "int32"], ["ib", "int32"], ["iny", "int32"],
+        ["inx", "int32"], ["jd", "int32"], ["id", "int32"],
+        ["dny", "int32"], ["dnx", "int32"], ["nz", "int32"],
+        ["u_extra", "int32"], ["phb_full", "int32"],
+        ["have_geopotential", "int32"], ["width", "int32"],
+        ["nblocks", "int32"], ["npartial", "int32"],
+        ["nu", "int32"], ["nw", "int32"], ["nth", "int32"],
+        ["nph", "int32"], ["nphb", "int32"],
+        ["npartial_words", "int32"], ["gravity", "float32"]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

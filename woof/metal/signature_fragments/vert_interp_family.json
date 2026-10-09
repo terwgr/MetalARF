@@ -1,0 +1,34 @@
+{
+  "kernels": [
+    {
+      "name": "vertical_interpolate_logp",
+      "module": "vert_interp_family",
+      "source": "woof/metal/shaders/vert_interp_family.metal",
+      "cuda_source": "woof/core/kernels/vert_interp.cu",
+      "cuda_symbol": "vertical_interpolate_logp",
+      "resources": [
+        ["field", "float", "read"],
+        ["source_p", "float", "read"],
+        ["target_p", "float", "read"],
+        ["output", "float", "read_write"]
+      ],
+      "shapes": {
+        "field": [["nsource", "ncolumn"]],
+        "source_p": [["nsource", "ncolumn"]],
+        "target_p": [["ntarget", "ncolumn"]],
+        "output": [["ntarget", "ncolumn"]]
+      },
+      "parameters": [
+        ["nsource", "int32"],
+        ["ntarget", "int32"],
+        ["ncolumn", "int32"],
+        ["below_temperature", "int32"],
+        ["p0", "float32"],
+        ["rcp", "float32"]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_surface_temp_fragment",
+      "module": "urban_bem_surface_temp_fragment",
+      "source": "woof/metal/shaders/urban_bem_surface_temp_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_surf_temp/bb_soil_temp/bb_invert",
+      "resources": [
+        ["active_cols", "int32", "read"], ["utype", "int32", "read"],
+        ["class_int", "int32", "read"], ["class_float", "float", "read"],
+        ["alag", "float", "read"], ["csg", "float", "read"],
+        ["interp", "float", "read"], ["rsg", "float", "read"],
+        ["rlg", "float", "read"], ["tg", "float", "read_write"],
+        ["ptg", "float", "read_write"], ["sfg", "float", "read_write"],
+        ["lfg", "float", "read_write"], ["gfg", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]], "utype": [["ncol"]],
+        "class_int": [[37]], "class_float": [[1320]],
+        "alag": [["ncol", 10]], "csg": [["ncol", 10]],
+        "interp": [["ncol", 7, 18]], "rsg": [["ncol", 2]],
+        "rlg": [["ncol", 2]], "tg": [["ncol", 10, 2]],
+        "ptg": [["ncol", 2]], "sfg": [["ncol", 2]],
+        "lfg": [["ncol", 2]], "gfg": [["ncol", 2]],
+        "error": [["ncol", 2]]
+      },
+      "parameters": [
+        ["ncol", "int32"], ["nurbm", "int32"],
+        ["dt", "float32"], ["sigma", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

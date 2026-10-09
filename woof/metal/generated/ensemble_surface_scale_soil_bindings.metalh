@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout 008a47ffa5284cb9f83ffbd7d83cab0aeb032f256f85b8efefc2d11ab63a8ee4.
+struct EnsembleSurfaceScaleSoilResources {
+    device float *total [[id(0)]];
+    device float *liquid [[id(1)]];
+    device float *frozen [[id(2)]];
+    device const float *land [[id(3)]];
+    device const float *ice [[id(4)]];
+    device const float *parameters [[id(5)]];
+    device const int *soil_type [[id(6)]];
+    device const float *dry [[id(7)]];
+};
+struct EnsembleSurfaceScaleSoilParams {
+    int columns;
+    int cells;
+    int has_frozen;
+    int floor_categories;
+    float fallback_floor;
+    float maximum_total;
+};
+static_assert(sizeof(EnsembleSurfaceScaleSoilParams) == 24, "ensemble_surface_scale_soil parameter ABI size changed");

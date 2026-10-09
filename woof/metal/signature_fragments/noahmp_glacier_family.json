@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "name": "noahmp_glacier_column",
+      "module": "noahmp_glacier_family",
+      "source": "woof/metal/shaders/noahmp_glacier_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_glacier.cu",
+      "cuda_symbol": "noahmp_glacier_column",
+      "resources": [
+        ["in", "float32", "read"], ["ii", "int32", "read"],
+        ["zsoil_row", "float32", "read"],
+        ["out", "float32", "read_write"], ["io", "int32", "read_write"]
+      ],
+      "shapes": {
+        "in": [["ncase", 52]], "ii": [["ncase"]],
+        "zsoil_row": [[4]], "out": [["ncase", 68]],
+        "io": [["ncase", 2]]
+      },
+      "parameters": [["dt", "float32"], ["ncase", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+// Generated from kernel_signatures.json; layout 6b12624667029e93d539b2289563a983ccef3a41990f02bc4ed9cec8f489b937.
+struct NtiedtkeMidlevelResources {
+    device const float *pten [[id(0)]];
+    device const float *pqen [[id(1)]];
+    device const float *pqsen [[id(2)]];
+    device const float *pverv [[id(3)]];
+    device const float *pgeo [[id(4)]];
+    device const float *pgeoh [[id(5)]];
+    device int *ldcum [[id(6)]];
+    device int *ktype [[id(7)]];
+    device int *kcbot [[id(8)]];
+    device int *klab [[id(9)]];
+    device float *plrain [[id(10)]];
+    device float *pmfu [[id(11)]];
+    device float *pmfub [[id(12)]];
+    device float *ptu [[id(13)]];
+    device float *pqu [[id(14)]];
+    device float *plu [[id(15)]];
+    device float *pmfus [[id(16)]];
+    device float *pmfuq [[id(17)]];
+    device float *pmful [[id(18)]];
+    device float *pdmfup [[id(19)]];
+    device float *dmfen [[id(20)]];
+    device float *dmfde [[id(21)]];
+};
+struct NtiedtkeMidlevelParams {
+    int ncol;
+    int nz;
+    float cp;
+    float rd;
+    float rv;
+    float xlv;
+    float xlf;
+    float grav;
+};
+static_assert(sizeof(NtiedtkeMidlevelParams) == 32, "ntiedtke_midlevel parameter ABI size changed");

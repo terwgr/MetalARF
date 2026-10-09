@@ -1,0 +1,274 @@
+"""Prove the mp=28 kernel-loader hook is inert for every other module.
+
+``woof/core/kernels/__init__.py`` grew one additive ``_EXTRA_HEADERS``
+allow-list so the six aerosol-aware Thompson translation units can share
+``thompson_aerosol_common.cuh``; there is no ``#include`` path under
+``cupy.RawModule``.
+
+That hook touches the ONE file ``mp_physics=8`` also uses, so its inertness is
+what keeps WP-00's freeze gate meaningful.  The guarantee claimed in the port
+spec is *by construction*, not by measurement: a module absent from the
+allow-list contributes the empty string and therefore assembles a
+byte-identical source string, hence identical PTX, hence identical FP32
+results.  This module enumerates every ``.cu`` in the tree and asserts exactly
+that -- no spot checks.
+
+These tests are CPU-only on purpose.  They read and compare source strings and
+never compile anything, so they run in environments with no CUDA device.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from woof.core import kernels as kernel_loader
+
+
+_KDIR = Path(kernel_loader.__file__).parent
+
+#: The only modules that may appear in the allow-list.  Kept literal so a
+#: future package cannot quietly add itself to the dict.
+_ALLOWED_AEROSOL_MODULES = frozenset({
+    "thompson_aerosol_probe",
+    "thompson_aerosol_state",
+    "thompson_aerosol_sat",
+    "thompson_aerosol_cold",
+    "thompson_aerosol_warm",
+    "thompson_aerosol_sed",
+})
+
+#: The whole allow-list, module -> its exact header tuple.  Closed and
+#: literal, which is the property these tests hold: NOTHING receives a
+#: device header without being named here, in a second place.
+#: rrtmgp_rte joined when the LW solver started deriving its own Planck
+#: sources; rrtmgp_gas is deliberately absent (it keeps its own copies so
+#: its assembled source and PTX stay byte-identical).
+#: gf joined when the glibc 2.39 float32 transcendentals were lifted out of
+#: gf.cu into glibc_flt32.cuh for New Tiedtke to share.  It is the one entry
+#: whose module KNOWINGLY gives up the byte-identical-source guarantee the
+#: unlisted modules keep -- gf's correctness is held by its 396 parity tests
+#: at max_ulp 0, which is a stronger gate than source identity and the only
+#: reason the trade was takeable.
+_EXPECTED_HEADERS = {
+    "upper_wind_limiter": ("glibc_flt32.cuh",),
+    # New order-five scalar eta entry, qualified against the native fork.
+    # No existing translation unit gains a header through this grant.
+    "pd_vertical_sl": ("pd_advection.cu",),
+    "noah_init": ("noah.cu",),
+    "horizontal": ("portable_libm64.cuh",),
+    # Test-only bit grading, with the same shared header future callers use.
+    "portable_libm64_grade": ("portable_libm64.cuh",),
+    "vert_interp": ("glibc_flt32.cuh",),
+    "thompson_cold_start": ("glibc_flt32.cuh", "portable_libm64.cuh"),
+    **{name: ("thompson_aerosol_common.cuh",)
+       for name in _ALLOWED_AEROSOL_MODULES},
+    "rrtmgp_rte": ("rrtmgp_planck_common.cuh",),
+    "gf": ("glibc_flt32.cuh",),
+    "ntiedtke": ("glibc_flt32.cuh",),
+    # A new module, so no pre-hook source to stay identical to; its WRF
+    # v4.7.1 parity suites grade it bitwise.
+    "urban_ucm": ("glibc_flt32.cuh",),
+    "urban_bep": ("glibc_flt32.cuh", "glibc_trig_flt32.cuh"),
+    "urban_bep_couple": ("glibc_flt32.cuh",),
+    "myjurb": ("glibc_flt32.cuh",),
+    # YSU's topo_wind arm (ysu_column_topo) takes glibc's powf; the default
+    # entry points compile to byte-identical PTX with the header present
+    # (tests/test_mp8_frozen.py, the ysu re-pin).
+    "ysu": ("glibc_flt32.cuh", "ysu_topo.cuh"),
+    # Lane 286-aer-swint: WRF swint_opt = 1 and aer_opt = 3, graded
+    # bitwise against the operational HRRR fork's gfortran/glibc Fortran.
+    "swint": ("glibc_flt32.cuh", "glibc_trig_flt32.cuh"),
+    "rrtmg_aer3": ("glibc_flt32.cuh",),
+    # The UW moist-turbulence PBL: a new module, so no existing unit moves.
+    "uwpbl": ("glibc_flt64.cuh", "uwpbl_common.cuh", "uwpbl_wvsat.cuh",
+              "uwpbl_vdiff.cuh", "uwpbl_zisocl.cuh", "uwpbl_caleddy.cuh",
+              "uwpbl_eddy.cuh", "uwpbl_driver.cuh"),
+    "real_init_math": ("real_init_common.cuh", "portable_libm64.cuh"),
+    # gp-device: only the new REAL unit receives its NaN/rounding vocabulary.
+    "real_init": ("real_init_common.cuh",),
+    # A new module; the WRF v4.7.1 Noah mosaic column oracle grades it
+    # bitwise.
+    "noah_mosaic": ("glibc_flt32.cuh",),
+    # RUC LOG/EXP mixture words and the new lake driver's REAL32 power
+    # use the shared WRF-oracle float32 functions.
+    "ruc": ("glibc_flt32.cuh",),
+    "lake": ("glibc_flt32.cuh", "lake_support.cuh", "lake_wrf.cuh"),
+}
+
+
+def _module_names() -> list[str]:
+    names = sorted(path.stem for path in _KDIR.glob("*.cu"))
+    assert names, "no CUDA translation units found"
+    assert "thompson" in names
+    return names
+
+
+def test_lake_compile_options_do_not_change_existing_modules():
+    # Disabling contraction belongs to the lake Fortran translation. A
+    # global option change would also move previously qualified kernels.
+    assert kernel_loader.module_options("lake") == ("-std=c++17", "--fmad=false")
+    for name in _module_names():
+        if name != "lake":
+            assert kernel_loader.module_options(name) == ("-std=c++17",)
+
+
+def _pre_hook_source(name: str) -> str:
+    """The exact string the loader assembled BEFORE _EXTRA_HEADERS existed.
+
+    Written out literally rather than derived from the loader, so a change to
+    the loader cannot make this test agree with itself.
+
+    The encoding is named for the same reason the loader names it: this test
+    asserts two independent reads of one file are byte-identical, so if the
+    two sides can disagree about how to decode it the assertion is about the
+    locale rather than about the hook.  On Windows both sides used to decode
+    the em dashes in acoustic.cu, advection.cu and coriolis_map.cu as cp1252
+    and agree with each other while both being wrong.
+    """
+    return (kernel_loader._preamble()
+            + (_KDIR / f"{name}.cu").read_text(encoding="utf-8"))
+
+
+def _pre_hook_source_int_defines(name: str, prefix: str) -> str:
+    return (kernel_loader._preamble() + prefix + "\n"
+            + (_KDIR / f"{name}.cu").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("name", _module_names())
+def test_non_aerosol_module_source_is_byte_identical(name):
+    """Every module outside the allow-list assembles the pre-hook string."""
+    if name in kernel_loader.EXTRA_HEADERS:
+        pytest.skip(f"{name} is an allow-listed aerosol module")
+    assembled = kernel_loader.module_source(name)
+    expected = _pre_hook_source(name)
+    assert assembled == expected, (
+        f"{name}.cu no longer assembles its pre-hook source string; the "
+        "mp=8 numerics guarantee rests on this being byte-identical")
+
+
+@pytest.mark.parametrize("name", _module_names())
+def test_non_aerosol_int_define_source_is_byte_identical(name):
+    """The specialized-integer loader is inert for the same modules."""
+    if name in kernel_loader.EXTRA_HEADERS:
+        pytest.skip(f"{name} is an allow-listed aerosol module")
+    defines = (("KMAX", 64), ("NLEVELS", 3))
+    prefix = "\n".join(f"#define {key} {value}" for key, value in defines)
+    assembled = kernel_loader.module_source_int_defines(name, defines)
+    assert assembled == _pre_hook_source_int_defines(name, prefix)
+
+
+def test_thompson_cu_source_is_byte_identical():
+    """The single most essential case, asserted without parametrization."""
+    assert "thompson" not in kernel_loader.EXTRA_HEADERS
+    assert (kernel_loader.module_source("thompson")
+            == _pre_hook_source("thompson"))
+
+
+def test_allow_list_is_a_closed_literal_mapping():
+    extra = kernel_loader.EXTRA_HEADERS
+    assert dict(extra) == _EXPECTED_HEADERS, (
+        "the extra-header allow-list is a closed literal mapping; a module "
+        "may receive a device header only by being named here too")
+    for name, headers in extra.items():
+        assert isinstance(headers, tuple)
+
+
+def test_allow_listed_headers_exist_and_translation_units_are_explicit():
+    for module, headers in kernel_loader.EXTRA_HEADERS.items():
+        for header in headers:
+            path = _KDIR / header
+            assert path.is_file(), f"missing device header {header}"
+            assert path.suffix == ".cuh" or (module, header) in (
+                ("noah_init", "noah.cu"), ("pd_vertical_sl", "pd_advection.cu")), (
+                "only the explicitly reused initialization and scalar units may supply a .cu header")
+
+
+def test_allow_list_has_no_implicit_filesystem_behaviour():
+    """A module not named in the dict gets nothing, even if a .cuh exists."""
+    assert kernel_loader._extra_header_text("thompson") == ""
+    assert kernel_loader._extra_header_text("no_such_module_at_all") == ""
+    # A same-named .cuh sitting next to a .cu must NOT be picked up.
+    assert (_KDIR / "thompson_aerosol_common.cuh").is_file()
+    assert kernel_loader._extra_header_text("thompson_aerosol_common") == ""
+
+
+def test_allow_listed_module_actually_receives_the_header():
+    """The hook must not be inert for the modules it is FOR."""
+    name = "thompson_aerosol_probe"
+    assert name in kernel_loader.EXTRA_HEADERS
+    header = (_KDIR / "thompson_aerosol_common.cuh").read_text(
+        encoding="utf-8")
+    assembled = kernel_loader.module_source(name)
+    assert assembled != _pre_hook_source(name)
+    assert assembled == (kernel_loader._preamble() + header
+                         + (_KDIR / f"{name}.cu").read_text(encoding="utf-8"))
+    # The header must precede the module body, or the helpers are undeclared.
+    assert assembled.index("thompson_aa_droplet_bin") < assembled.index(
+        "thompson_aa_probe_droplet_bin")
+
+
+def test_launch_module_names_agree_with_the_allow_list():
+    from woof.core import thompson_aerosol_launch as launch
+
+    assert set(launch.AEROSOL_KERNEL_MODULES) == (
+        set(kernel_loader.EXTRA_HEADERS) & _ALLOWED_AEROSOL_MODULES)
+    assert launch.CLASSIC_MODULE not in kernel_loader.EXTRA_HEADERS
+    assert launch.AEROSOL_COMMON_HEADER == "thompson_aerosol_common.cuh"
+
+
+def test_preamble_is_unchanged_by_the_hook():
+    """_preamble() still ends with common.cuh and carries no aerosol text."""
+    preamble = kernel_loader._preamble()
+    assert preamble.endswith(
+        (_KDIR / "common.cuh").read_text(encoding="utf-8") + "\n")
+    assert "thompson_aa_" not in preamble
+
+
+def test_the_noahmp_runtime_route_assembles_the_loader_source_byte_for_byte():
+    """``load_module`` sends a standalone Noah-MP unit through
+    ``noahmp_kernel_sources.compile_runtime_unit``; the string that route
+    compiles must be exactly ``module_source(name)``.
+
+    The two assemblers agree today because no ``noahmp_*`` module is in the
+    header allow-list.  The breakage this prevents is the day one is added:
+    ``module_source`` would gain a header the runtime unit does not carry,
+    the recorded frame row would describe one image and the loader another,
+    and nothing would say so.  ``noahmp_vegeflux`` is excluded on purpose --
+    its runtime unit is C++14 without the preamble and takes its own
+    factory, and ``load_module`` does not route it.
+    """
+    from woof.core.noahmp_kernel_sources import (
+        NOAHMP_TRANSLATION_UNITS, runtime_unit)
+
+    routed = [name for name, parts in NOAHMP_TRANSLATION_UNITS.items()
+              if len(parts) == 1 and name != "noahmp_vegeflux"]
+    assert routed, "the loader route covers no unit at all"
+    for name in routed:
+        unit = runtime_unit(name)
+        assert unit.source == kernel_loader.module_source(name), name
+        assert unit.options == ("-std=c++17",), name
+        assert name not in kernel_loader.EXTRA_HEADERS, (
+            f"{name} joined the header allow-list; the Noah-MP runtime unit "
+            "must carry the same header or the loader must stop routing it")
+
+
+def test_mosaic_ucm_composes_one_header_and_unchanged_ucm():
+    from woof.core.noah_mosaic import mosaic_ucm_source
+    source = mosaic_ucm_source()
+    assert source == ("#define NOAH_MOSAIC_UCM 1\n"
+                      + kernel_loader.module_source("urban_ucm") + "\n"
+                      + (_KDIR / "noah_mosaic.cu").read_text(encoding="utf-8"))
+    assert source.count("struct UcmCol {") == 1
+    assert "NOAH_MOSAIC_UCM" not in kernel_loader.module_source("urban_ucm")
+
+
+def test_noah_initialization_reuses_device_physics_without_moving_forecast_source():
+    assert "noah" not in kernel_loader.EXTRA_HEADERS
+    assert kernel_loader.module_source("noah") == _pre_hook_source("noah")
+    assert kernel_loader.EXTRA_HEADERS["noah_init"] == ("noah.cu",)
+    reused = (_KDIR / "noah.cu").read_text(encoding="utf-8")
+    body = (_KDIR / "noah_init.cu").read_text(encoding="utf-8")
+    assert kernel_loader.module_source("noah_init") == kernel_loader._preamble() + reused + body
+    assert "__device__ static real noah_frh2o(" not in body

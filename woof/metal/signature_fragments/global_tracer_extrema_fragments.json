@@ -1,0 +1,186 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._floor_grid_tracers",
+      "layout_version": 1,
+      "module": "global_tracer_extrema_fragment",
+      "name": "global_tracer_extrema_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "chunk_size",
+          "int32"
+        ],
+        [
+          "partial_count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "qc",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qr",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qs",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qg",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "nc",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "nr",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ni",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ns",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ng",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "partial_extrema",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ns": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ng": [
+          [
+            "any_1d"
+          ]
+        ],
+        "partial_extrema": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_tracer_extrema_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._floor_grid_tracers",
+      "layout_version": 1,
+      "module": "global_tracer_extrema_finalize_fragment",
+      "name": "global_tracer_extrema_finalize_fragment",
+      "parameters": [
+        [
+          "partial_count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "partial_extrema",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "extrema",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "partial_extrema": [
+          [
+            "any_1d"
+          ]
+        ],
+        "extrema": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_tracer_extrema_finalize_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

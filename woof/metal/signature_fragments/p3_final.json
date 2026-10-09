@@ -1,0 +1,45 @@
+{
+  "kernels": [
+    {
+      "name": "p3_final",
+      "module": "p3_final",
+      "source": "woof/metal/shaders/p3_final.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_final",
+      "resources": [
+        ["qc", "float", "read_write"], ["nc", "float", "read_write"],
+        ["qr", "float", "read_write"], ["nr", "float", "read_write"],
+        ["qi", "float", "read_write"], ["qir", "float", "read_write"],
+        ["ni", "float", "read_write"], ["qib", "float", "read_write"],
+        ["theta", "float", "read_write"], ["qv", "float", "read_write"],
+        ["temperature", "float", "read"], ["tmparr1", "float", "read"],
+        ["rho", "float", "read"], ["inv_rho", "float", "read"],
+        ["rhofaci", "float", "read"],
+        ["zdbz", "float", "read_write"], ["effc", "float", "read_write"],
+        ["effi", "float", "read_write"], ["vmi", "float", "read_write"],
+        ["di", "float", "read_write"], ["rhopo", "float", "read_write"],
+        ["itab", "float", "read"], ["flags", "float", "read"]
+      ],
+      "shapes": {
+        "qc": [["nz", "ny", "nx"]], "nc": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]], "nr": [["nz", "ny", "nx"]],
+        "qi": [["nz", "ny", "nx"]], "qir": [["nz", "ny", "nx"]],
+        "ni": [["nz", "ny", "nx"]], "qib": [["nz", "ny", "nx"]],
+        "theta": [["nz", "ny", "nx"]], "qv": [["nz", "ny", "nx"]],
+        "temperature": [["nz", "ny", "nx"]], "tmparr1": [["nz", "ny", "nx"]],
+        "rho": [["nz", "ny", "nx"]], "inv_rho": [["nz", "ny", "nx"]],
+        "rhofaci": [["nz", "ny", "nx"]],
+        "zdbz": [["nz", "ny", "nx"]], "effc": [["nz", "ny", "nx"]],
+        "effi": [["nz", "ny", "nx"]], "vmi": [["nz", "ny", "nx"]],
+        "di": [["nz", "ny", "nx"]], "rhopo": [["nz", "ny", "nx"]],
+        "itab": [[14000]], "flags": [[2, "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

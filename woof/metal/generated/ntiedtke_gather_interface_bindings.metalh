@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout 07635c74694c4c98d892591907c76327d4428f762c3fabe426b817d06e1acb80.
+struct NtiedtkeGatherInterfaceResources {
+    device const float *source [[id(0)]];
+    device float *target [[id(1)]];
+};
+struct NtiedtkeGatherInterfaceParams {
+    int full_ncol;
+    int start;
+    int count;
+    int width;
+    int nzi;
+};
+static_assert(sizeof(NtiedtkeGatherInterfaceParams) == 20, "ntiedtke_gather_interface parameter ABI size changed");

@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 3c4a56197be1085921d419e850bff595a94ca0528547ef5240555f1b96f619e4.
+struct ThompsonHydrometeorColumnMaskResources {
+    device const float *mixing_ratio [[id(0)]];
+    device float *active_columns [[id(1)]];
+};
+struct ThompsonHydrometeorColumnMaskParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonHydrometeorColumnMaskParams) == 12, "thompson_hydrometeor_column_mask parameter ABI size changed");

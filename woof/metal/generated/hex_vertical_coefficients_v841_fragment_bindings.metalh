@@ -1,0 +1,38 @@
+// Generated from kernel_signatures.json; layout aca2b72236385ac8b16045a8dd0fccf14bbbfa16410ca8ba353ecbab25b685f8.
+struct HexVerticalCoefficientsV841FragmentResources {
+    device const float *zz [[id(0)]];
+    device const float *cqw [[id(1)]];
+    device const float *exner [[id(2)]];
+    device const float *theta [[id(3)]];
+    device const float *rho_base [[id(4)]];
+    device const float *rho_theta_base [[id(5)]];
+    device const float *exner_base [[id(6)]];
+    device const float *rho_theta_perturbation [[id(7)]];
+    device const float *qtot [[id(8)]];
+    device const float *rdzw [[id(9)]];
+    device const float *fzm [[id(10)]];
+    device const float *fzp [[id(11)]];
+    device const float *rdzu [[id(12)]];
+    device const float *etp [[id(13)]];
+    device const float *ewp [[id(14)]];
+    device float *cofwr [[id(15)]];
+    device float *cofwz [[id(16)]];
+    device float *coftz [[id(17)]];
+    device float *cofwt [[id(18)]];
+    device float *cofrz [[id(19)]];
+    device float *a_tri [[id(20)]];
+    device float *b_tri [[id(21)]];
+    device float *c_tri [[id(22)]];
+    device float *alpha_tri [[id(23)]];
+    device float *gamma_tri [[id(24)]];
+    device int *errors [[id(25)]];
+};
+struct HexVerticalCoefficientsV841FragmentParams {
+    int nlev;
+    int ncells;
+    float dts;
+    float gravity;
+    float rgas;
+    float cp;
+};
+static_assert(sizeof(HexVerticalCoefficientsV841FragmentParams) == 24, "hex_vertical_coefficients_v841_fragment parameter ABI size changed");

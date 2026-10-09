@@ -1,0 +1,159 @@
+#ifndef WOOF_SOFT_GFK_POW_METALH
+#define WOOF_SOFT_GFK_POW_METALH
+
+// Dependency-blocked source proposal for glibc 2.39 e_powf.c.
+//
+// This header deliberately implements no native float/double arithmetic.
+// Binary64 operands and results are IEEE bit patterns in ulong, operated on
+// by the integer-bit soft64 primitives. It is not production-consumable yet:
+// its soft32, soft64, and exp-owned dependencies are present but unverified,
+// as is this source translation.
+//
+// External interfaces are supplied by soft_binary32.metalh,
+// soft_binary64.metalh, and soft_gfk_exp.metalh. The exp2 interface remains
+// owned by the exp packet. Do not add a second exp/log implementation here;
+// pow owns only the pinned log2 polynomial below.
+
+#include "soft_binary64.metalh"
+#include "soft_binary32.metalh"
+#include "soft_gfk_exp.metalh"
+
+constant ulong soft_gfk_powf_invc[16] = {
+    0x3ff661ec79f8f3beul, 0x3ff571ed4aaf883dul,
+    0x3ff49539f0f010b0ul, 0x3ff3c995b0b80385ul,
+    0x3ff30d190c8864a5ul, 0x3ff25e227b0b8ea0ul,
+    0x3ff1bb4a4a1a343ful, 0x3ff12358f08ae5baul,
+    0x3ff0953f419900a7ul, 0x3ff0000000000000ul,
+    0x3fee608cfd9a47acul, 0x3feca4b31f026aa0ul,
+    0x3feb2036576afce6ul, 0x3fe9c2d163a1aa2dul,
+    0x3fe886e6037841edul, 0x3fe767dcf5534862ul
+};
+
+constant ulong soft_gfk_powf_logc[16] = {
+    0xbfdefec65b963019ul, 0xbfdb0b6832d4fca4ul,
+    0xbfd7418b0a1fb77bul, 0xbfd39de91a6dcf7bul,
+    0xbfd01d9bf3f2b631ul, 0xbfc97c1d1b3b7af0ul,
+    0xbfc2f9e393af3c9ful, 0xbfb960cbbf788d5cul,
+    0xbfaa6f9db6475fceul, 0x0000000000000000ul,
+    0x3fb338ca9f24f53dul, 0x3fc476a9543891baul,
+    0x3fce840b4ac4e4d2ul, 0x3fd40645f0c6651cul,
+    0x3fd88e9c2c1b9ff8ul, 0x3fdce0a44eb17bccul
+};
+
+constant ulong soft_gfk_powf_a[5] = {
+    0x3fd27616c9496e0bul, 0xbfd71969a075c67aul,
+    0x3fdec70a6ca7baddul, 0xbfe7154748bef6c8ul,
+    0x3ff71547652ab82bul
+};
+
+static inline int soft_gfk_checkint(uint iy)
+{
+    const int e = int((iy >> 23) & 0xffu);
+    if (e < 0x7f) return 0;
+    if (e > 0x7f + 23) return 2;
+    if ((iy & ((1u << uint(0x7f + 23 - e)) - 1u)) != 0u) return 0;
+    if ((iy & (1u << uint(0x7f + 23 - e))) != 0u) return 1;
+    return 2;
+}
+
+static inline bool soft_gfk_zeroinfnan(uint ix)
+{
+    return uint(2u * ix - 1u) >= uint(2u * 0x7f800000u - 1u);
+}
+
+// `k` is in [-127, 127] on this normalized-float path, so its conversion to
+// binary64 is exact and can be encoded without a missing integer-conversion
+// primitive or a native floating-point cast.
+static inline ulong soft_gfk_i32_to_f64_bits(int value)
+{
+    if (value == 0) return 0ul;
+    const bool negative = value < 0;
+    const uint magnitude = uint(negative ? -value : value);
+    uint msb = 0u;
+    for (uint v = magnitude; v > 1u; v >>= 1) ++msb;
+    const ulong significand = ulong(magnitude) << (52u - msb);
+    const ulong sign = negative ? 0x8000000000000000ul : 0ul;
+    return sign | (ulong(int(msb) + 1023) << 52)
+         | (significand & 0x000ffffffffffffful);
+}
+
+// Faithful operation graph of pinned glibc 2.39 powf log2_inline.
+// `ix` is a positive, normalized float32 encoding prepared by soft_gfk_pow.
+static inline ulong soft_gfk_powf_log2_bits(uint ix)
+{
+    const uint tmp = ix - 0x3f330000u;
+    const int i = int((tmp >> 19) & 15u);
+    const uint top = tmp & 0xff800000u;
+    const uint iz = ix - top;
+    const int k = as_type<int>(top) >> 23;
+    const ulong z = soft64_from_f32_bits(iz);
+    const ulong r = soft64_fma(z, soft_gfk_powf_invc[i],
+                               0xbff0000000000000ul);
+    const ulong y0 = soft64_add(soft_gfk_powf_logc[i],
+                                soft_gfk_i32_to_f64_bits(k));
+    const ulong r2 = soft64_mul(r, r);
+    const ulong y = soft64_fma(soft_gfk_powf_a[0], r,
+                               soft_gfk_powf_a[1]);
+    const ulong p = soft64_fma(soft_gfk_powf_a[2], r,
+                               soft_gfk_powf_a[3]);
+    const ulong r4 = soft64_mul(r2, r2);
+    ulong q = soft64_fma(soft_gfk_powf_a[4], r, y0);
+    q = soft64_fma(p, r2, q);
+    return soft64_fma(y, r4, q);
+}
+
+// Bitwise translation of pinned glibc 2.39 gfk_pow. The only binary32
+// arithmetic is routed through explicit RN bit-operation prerequisites.
+static inline uint soft_gfk_pow_bits(uint x, uint y)
+{
+    uint sign_bias = 0u;
+    uint ix = x;
+    const uint iy = y;
+    if (ix - 0x00800000u >= 0x7f800000u - 0x00800000u
+        || soft_gfk_zeroinfnan(iy)) {
+        if (soft_gfk_zeroinfnan(iy)) {
+            if (2u * iy == 0u) return 0x3f800000u;
+            if (ix == 0x3f800000u) return 0x3f800000u;
+            if (2u * ix > 2u * 0x7f800000u
+                || 2u * iy > 2u * 0x7f800000u)
+                return soft32_add(x, y);
+            if (2u * ix == 2u * 0x3f800000u) return 0x3f800000u;
+            if ((2u * ix < 2u * 0x3f800000u)
+                == ((iy & 0x80000000u) == 0u)) return 0u;
+            return soft32_mul(y, y);
+        }
+        if (soft_gfk_zeroinfnan(ix)) {
+            uint x2 = soft32_mul(x, x);
+            if ((ix & 0x80000000u) != 0u && soft_gfk_checkint(iy) == 1)
+                x2 ^= 0x80000000u;
+            return (iy & 0x80000000u) != 0u
+                ? soft32_div(0x3f800000u, x2) : x2;
+        }
+        if ((ix & 0x80000000u) != 0u) {
+            const int yint = soft_gfk_checkint(iy);
+            if (yint == 0) return 0x7fc00000u;
+            if (yint == 1) sign_bias = 1u << (5 + 11);
+            ix &= 0x7fffffffu;
+        }
+        if (ix < 0x00800000u) {
+            ix = soft32_mul(x, 0x4b000000u) & 0x7fffffffu;
+            ix -= 23u << 23;
+        }
+    }
+
+    const ulong logx = soft_gfk_powf_log2_bits(ix);
+    const ulong ylogx = soft64_mul(soft64_from_f32_bits(y), logx);
+    const uint hi = uint((ylogx >> 47) & 0xfffful);
+    if (hi >= uint((0x405f800000000000ul >> 47) & 0xfffful)) {
+        if (soft64_greater(ylogx, 0x405fffffffd1d571ul))
+            return sign_bias != 0u ? 0xff800000u : 0x7f800000u;
+        if (soft64_less_equal(ylogx, 0xc062c00000000000ul))
+            return sign_bias != 0u ? 0x80000000u : 0u;
+    }
+    return soft64_to_f32_bits(soft_gfk_exp2_core(
+        ylogx, 0x42e8000000000000ul, 0x3fac6af84b912394ul,
+        0x3fcebfce50fac4f3ul, 0x3fe62e42ff0c52d6ul,
+        ulong(sign_bias)));
+}
+
+#endif // WOOF_SOFT_GFK_POW_METALH

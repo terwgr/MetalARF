@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout cd786c8caa90efd2f94551bfd85d1df43d8cda81615c112c7001ba396cd708e4.
+struct GlobalBettsMillerTemperatureFragmentResources {
+    device const ulong *theta [[id(0)]];
+    device const ulong *exner [[id(1)]];
+    device ulong *temperature [[id(2)]];
+};
+struct GlobalBettsMillerTemperatureFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalBettsMillerTemperatureFragmentParams) == 4, "global_betts_miller_temperature_fragment parameter ABI size changed");

@@ -1,0 +1,44 @@
+{
+  "kernels": [
+    {
+      "name": "mynn_driver_surface_gsd41_columns",
+      "module": "mynn_pbl_family",
+      "source": "woof/metal/shaders/mynn_pbl_family.metal",
+      "cuda_source": "woof/core/kernels/mynn_pbl.cu",
+      "cuda_symbol": "mynn_driver_surface_gsd41_columns",
+      "resources": [
+        ["rho", "float", "read"], ["exner", "float", "read"],
+        ["dz", "float", "read"], ["qv1", "float", "read"],
+        ["ust", "float", "read"], ["hfx", "float", "read"],
+        ["qfx", "float", "read"], ["ts", "float", "read"],
+        ["rmol_in", "float", "read"],
+        ["flt", "float", "read_write"],
+        ["fltv", "float", "read_write"],
+        ["flq", "float", "read_write"],
+        ["flqv", "float", "read_write"],
+        ["flqc", "float", "read_write"],
+        ["th_sfc", "float", "read_write"],
+        ["rmol", "float", "read_write"],
+        ["zet", "float", "read_write"],
+        ["pmz", "float", "read_write"],
+        ["phh", "float", "read_write"]
+      ],
+      "shapes": {
+        "rho": [["nz", "ncol"]], "exner": [["nz", "ncol"]],
+        "dz": [["nz", "ncol"]], "qv1": [["nz", "ncol"]],
+        "ust": [["ncol"]], "hfx": [["ncol"]],
+        "qfx": [["ncol"]], "ts": [["ncol"]],
+        "rmol_in": [["ncol"]],
+        "flt": [["ncol"]], "fltv": [["ncol"]],
+        "flq": [["ncol"]], "flqv": [["ncol"]],
+        "flqc": [["ncol"]], "th_sfc": [["ncol"]],
+        "rmol": [["ncol"]], "zet": [["ncol"]],
+        "pmz": [["ncol"]], "phh": [["ncol"]]
+      },
+      "parameters": [["nz", "int32"], ["ncol", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

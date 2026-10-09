@@ -1,0 +1,1699 @@
+{
+  "kernels": [
+    {
+      "name": "morrison_sediment_64",
+      "module": "morrison",
+      "source": "woof/metal/shaders/morrison_family.metal",
+      "cuda_source": "woof/core/kernels/morrison.cu",
+      "cuda_symbol": "morrison_sediment_64",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "nc",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "ns",
+          "float",
+          "read_write"
+        ],
+        [
+          "ng",
+          "float",
+          "read_write"
+        ],
+        [
+          "cloud_nc",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "rho_in",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ns": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ng": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cloud_nc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "morr_ag",
+          "float32"
+        ],
+        [
+          "morr_bg",
+          "float32"
+        ],
+        [
+          "morr_rhog",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "j_start",
+          "int32"
+        ],
+        [
+          "j_stop",
+          "int32"
+        ],
+        [
+          "i_start",
+          "int32"
+        ],
+        [
+          "i_stop",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "morrison_sediment_256",
+      "module": "morrison",
+      "source": "woof/metal/shaders/morrison_family.metal",
+      "cuda_source": "woof/core/kernels/morrison.cu",
+      "cuda_symbol": "morrison_sediment_256",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "nc",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "ns",
+          "float",
+          "read_write"
+        ],
+        [
+          "ng",
+          "float",
+          "read_write"
+        ],
+        [
+          "cloud_nc",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "rho_in",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ns": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ng": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cloud_nc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "morr_ag",
+          "float32"
+        ],
+        [
+          "morr_bg",
+          "float32"
+        ],
+        [
+          "morr_rhog",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "j_start",
+          "int32"
+        ],
+        [
+          "j_stop",
+          "int32"
+        ],
+        [
+          "i_start",
+          "int32"
+        ],
+        [
+          "i_stop",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "morrison_finalize_levels",
+      "module": "morrison",
+      "source": "woof/metal/shaders/morrison_family.metal",
+      "cuda_source": "woof/core/kernels/morrison.cu",
+      "cuda_symbol": "morrison_finalize_levels",
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "nc",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "ns",
+          "float",
+          "read_write"
+        ],
+        [
+          "ng",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_in",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "ice_to_snow_scratch",
+          "float",
+          "read"
+        ],
+        [
+          "effc",
+          "float",
+          "read_write"
+        ],
+        [
+          "effi",
+          "float",
+          "read_write"
+        ],
+        [
+          "effs",
+          "float",
+          "read_write"
+        ],
+        [
+          "effr",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ns": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ng": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ice_to_snow_scratch": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "morr_rhog",
+          "float32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "j_start",
+          "int32"
+        ],
+        [
+          "j_stop",
+          "int32"
+        ],
+        [
+          "i_start",
+          "int32"
+        ],
+        [
+          "i_stop",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "morrison_process_levels",
+      "module": "morrison",
+      "source": "woof/metal/shaders/morrison_family.metal",
+      "cuda_source": "woof/core/kernels/morrison.cu",
+      "cuda_symbol": "morrison_process_levels",
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "nc",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "ns",
+          "float",
+          "read_write"
+        ],
+        [
+          "ng",
+          "float",
+          "read_write"
+        ],
+        [
+          "qrcuten",
+          "float",
+          "read"
+        ],
+        [
+          "qscuten",
+          "float",
+          "read"
+        ],
+        [
+          "qicuten",
+          "float",
+          "read"
+        ],
+        [
+          "rho_in",
+          "float",
+          "read_write"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "ice_to_snow_scratch",
+          "float",
+          "read_write"
+        ],
+        [
+          "effc",
+          "float",
+          "read_write"
+        ],
+        [
+          "effi",
+          "float",
+          "read_write"
+        ],
+        [
+          "effs",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ns": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ng": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qrcuten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qscuten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qicuten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ice_to_snow_scratch": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "effs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "morr_ag",
+          "float32"
+        ],
+        [
+          "morr_bg",
+          "float32"
+        ],
+        [
+          "morr_rhog",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "has_cu_tendencies",
+          "int32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "j_start",
+          "int32"
+        ],
+        [
+          "j_stop",
+          "int32"
+        ],
+        [
+          "i_start",
+          "int32"
+        ],
+        [
+          "i_stop",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "morrison_prepare_fields",
+      "module": "morrison",
+      "source": "woof/metal/shaders/morrison_family.metal",
+      "cuda_source": "woof/core/morrison.py",
+      "cuda_symbol": "_prepare_fields",
+      "resources": [
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "pii",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz",
+          "float",
+          "read_write"
+        ],
+        [
+          "h_diabatic",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            1,
+            1
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nzi"
+          ],
+          [
+            "nzi",
+            1,
+            1
+          ],
+          [
+            "nzi",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nzi",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_diabatic": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nzi",
+          "int32"
+        ],
+        [
+          "thb_full",
+          "int32"
+        ],
+        [
+          "phb_full",
+          "int32"
+        ],
+        [
+          "p0",
+          "float32"
+        ],
+        [
+          "rcp",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "j_start",
+          "int32"
+        ],
+        [
+          "j_stop",
+          "int32"
+        ],
+        [
+          "i_start",
+          "int32"
+        ],
+        [
+          "i_stop",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "morrison_finish",
+      "module": "morrison",
+      "source": "woof/metal/shaders/morrison_family.metal",
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "moist_physics_finish",
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "h_diabatic",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_diabatic": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "limit",
+          "float32"
+        ],
+        [
+          "no_mp_heating",
+          "int32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "j_start",
+          "int32"
+        ],
+        [
+          "j_stop",
+          "int32"
+        ],
+        [
+          "i_start",
+          "int32"
+        ],
+        [
+          "i_stop",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "morrison_validate_diagnostics",
+      "module": "morrison",
+      "source": "woof/metal/shaders/morrison_family.metal",
+      "cuda_source": "woof/core/kernels/morrison.cu",
+      "cuda_symbol": "morrison_sediment_impl",
+      "resources": [
+        [
+          "rainnc",
+          "float",
+          "read"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read"
+        ],
+        [
+          "snownc",
+          "float",
+          "read"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read"
+        ],
+        [
+          "sr",
+          "float",
+          "read"
+        ],
+        [
+          "status",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "status": [
+          [
+            "1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "sr_upper",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "kernels": [
+    {
+      "name": "coriolis_curvature",
+      "module": "coriolis_map",
+      "source": "woof/metal/shaders/coriolis_curvature.metal",
+      "cuda_source": "woof/core/kernels/coriolis_map.cu",
+      "cuda_symbol": "coriolis_curvature",
+      "resources": [
+        ["ru", "float", "read"], ["rv", "float", "read"],
+        ["u", "float", "read"], ["v", "float", "read"],
+        ["w", "float", "read"], ["mut", "float", "read"],
+        ["msft", "float", "read"], ["msfu", "float", "read"],
+        ["msfv", "float", "read"], ["f", "float", "read"],
+        ["e", "float", "read"], ["sina", "float", "read"],
+        ["cosa", "float", "read"], ["c1f", "float", "read"],
+        ["c2f", "float", "read"], ["fnm", "float", "read"],
+        ["fnp", "float", "read"], ["ru_t", "float", "read_write"],
+        ["rv_t", "float", "read_write"], ["rw_t", "float", "read_write"]
+      ],
+      "shapes": {
+        "ru": [["nz", "ny", "nx+1"]], "rv": [["nz", "ny+1", "nx"]],
+        "u": [["nz", "ny", "nx+1"]], "v": [["nz", "ny+1", "nx"]],
+        "w": [["nz+1", "ny", "nx"]], "mut": [["ny", "nx"]],
+        "msft": [["ny", "nx"]], "msfu": [["ny", "nx+1"]],
+        "msfv": [["ny+1", "nx"]], "f": [["ny", "nx"]],
+        "e": [["ny", "nx"]], "sina": [["ny", "nx"]],
+        "cosa": [["ny", "nx"]], "c1f": [["nz+1"]],
+        "c2f": [["nz+1"]], "fnm": [["nz"]], "fnp": [["nz"]],
+        "ru_t": [["nz", "ny", "nx+1"]],
+        "rv_t": [["nz", "ny+1", "nx"]],
+        "rw_t": [["nz+1", "ny", "nx"]]
+      },
+      "parameters": [
+        ["rdx", "float32"], ["rdy", "float32"],
+        ["reradius", "float32"], ["boundary_x", "int32"],
+        ["boundary_y", "int32"], ["nz", "int32"],
+        ["ny", "int32"], ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

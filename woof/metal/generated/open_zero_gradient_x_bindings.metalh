@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout b628a9aaf8f78ac8ba4d9ab9a6bc572ad6ed99d48f31b3fb7e75c14a1e7aa2b0.
+struct OpenZeroGradientXResources {
+    device float *thp [[id(0)]];
+    device const float *u [[id(1)]];
+    device float *v [[id(2)]];
+    device float *w [[id(3)]];
+};
+struct OpenZeroGradientXParams {
+    int nz;
+    int ny;
+    int nx;
+    int boundary_y;
+};
+static_assert(sizeof(OpenZeroGradientXParams) == 16, "open_zero_gradient_x parameter ABI size changed");

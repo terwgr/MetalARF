@@ -1,0 +1,45 @@
+// Generated from kernel_signatures.json; layout cf40ec8c82f3d3afb212a226810202c907c2d4f3493465472b0d17f5eb580826.
+struct GfGfdrvStageResources {
+    device const float *u [[id(0)]];
+    device const float *v [[id(1)]];
+    device const float *w [[id(2)]];
+    device const float *temperature [[id(3)]];
+    device const float *qv [[id(4)]];
+    device const float *pressure [[id(5)]];
+    device const float *exner [[id(6)]];
+    device const float *rho [[id(7)]];
+    device const float *dz8w [[id(8)]];
+    device const float *p_interface [[id(9)]];
+    device const float *rthften [[id(10)]];
+    device const float *rqvften [[id(11)]];
+    device const float *rthraten_lw [[id(12)]];
+    device const float *rthraten_sw [[id(13)]];
+    device const float *rthblten [[id(14)]];
+    device const float *rqvblten [[id(15)]];
+    device const float *ht [[id(16)]];
+    device const float *hfx [[id(17)]];
+    device const float *qfx [[id(18)]];
+    device const float *xland [[id(19)]];
+    device const int *kpbl [[id(20)]];
+    device float *rthcuten [[id(21)]];
+    device float *rqvcuten [[id(22)]];
+    device float *rqccuten [[id(23)]];
+    device float *rqicuten [[id(24)]];
+    device float *rucuten [[id(25)]];
+    device float *rvcuten [[id(26)]];
+    device float *rainc [[id(27)]];
+    device const float *dx_column [[id(28)]];
+    device float *workspace [[id(29)]];
+    device const float *spp_conv [[id(30)]];
+};
+struct GfGfdrvStageParams {
+    int ncol;
+    int nz;
+    float dt;
+    float dx;
+    int use_dx_column;
+    int ishallow;
+    int ichoice;
+    int spp_enabled;
+};
+static_assert(sizeof(GfGfdrvStageParams) == 32, "gf_gfdrv_stage parameter ABI size changed");

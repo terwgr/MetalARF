@@ -1,0 +1,499 @@
+{
+  "kernels": [
+    {
+      "name": "shinhong_column",
+      "module": "shinhong_family",
+      "source": "woof/metal/shaders/shinhong_column.metal",
+      "cuda_source": "woof/core/kernels/shinhong.cu",
+      "cuda_symbol": "shinhong_column",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "p_interface",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "tke",
+          "float",
+          "read"
+        ],
+        [
+          "psfc",
+          "float",
+          "read"
+        ],
+        [
+          "znt",
+          "float",
+          "read"
+        ],
+        [
+          "ust",
+          "float",
+          "read"
+        ],
+        [
+          "hfx",
+          "float",
+          "read"
+        ],
+        [
+          "qfx",
+          "float",
+          "read"
+        ],
+        [
+          "wspd",
+          "float",
+          "read"
+        ],
+        [
+          "br",
+          "float",
+          "read"
+        ],
+        [
+          "psim",
+          "float",
+          "read"
+        ],
+        [
+          "psih",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "u10",
+          "float",
+          "read"
+        ],
+        [
+          "v10",
+          "float",
+          "read"
+        ],
+        [
+          "corf",
+          "float",
+          "read"
+        ],
+        [
+          "du",
+          "float",
+          "read_write"
+        ],
+        [
+          "dv",
+          "float",
+          "read_write"
+        ],
+        [
+          "dtheta",
+          "float",
+          "read_write"
+        ],
+        [
+          "dqv",
+          "float",
+          "read_write"
+        ],
+        [
+          "dqc",
+          "float",
+          "read_write"
+        ],
+        [
+          "dqi",
+          "float",
+          "read_write"
+        ],
+        [
+          "exch_h",
+          "float",
+          "read_write"
+        ],
+        [
+          "tke_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "el",
+          "float",
+          "read_write"
+        ],
+        [
+          "hpbl",
+          "float",
+          "read_write"
+        ],
+        [
+          "wstar",
+          "float",
+          "read_write"
+        ],
+        [
+          "delta",
+          "float",
+          "read_write"
+        ],
+        [
+          "kpbl",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ws",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_interface": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "exner": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tke": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "psfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "znt": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ust": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wspd": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "br": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "psim": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "psih": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xland": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "u10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "v10": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "corf": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "du": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dtheta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dqv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dqc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dqi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "exch_h": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tke_out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "el": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "hpbl": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "kpbl": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wstar": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "delta": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ws": [
+          [
+            "ws_count"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "col0",
+          "int32"
+        ],
+        [
+          "wskp",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "tke_diag",
+          "int32"
+        ],
+        [
+          "ws_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

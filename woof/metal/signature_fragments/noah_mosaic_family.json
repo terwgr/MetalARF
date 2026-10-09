@@ -1,0 +1,1698 @@
+{
+  "kernels": [
+    {
+      "name": "noah_mosaic_pack",
+      "module": "noah_mosaic_family",
+      "source": "woof/metal/shaders/noah_mosaic_family.metal",
+      "cuda_source": "woof/core/kernels/noah_mosaic.cu",
+      "cuda_symbol": "noah_mosaic_column",
+      "resources": [
+        [
+          "psfc_a",
+          "float",
+          "read"
+        ],
+        [
+          "sfcprs_a",
+          "float",
+          "read"
+        ],
+        [
+          "sfctmp_a",
+          "float",
+          "read"
+        ],
+        [
+          "qv1_a",
+          "float",
+          "read"
+        ],
+        [
+          "qgh_a",
+          "float",
+          "read"
+        ],
+        [
+          "dz8w1_a",
+          "float",
+          "read"
+        ],
+        [
+          "glw_a",
+          "float",
+          "read"
+        ],
+        [
+          "swdown_a",
+          "float",
+          "read"
+        ],
+        [
+          "rainbl_a",
+          "float",
+          "read"
+        ],
+        [
+          "sr_a",
+          "float",
+          "read"
+        ],
+        [
+          "chs_a",
+          "float",
+          "read"
+        ],
+        [
+          "cqs2_a",
+          "float",
+          "read"
+        ],
+        [
+          "chs2_a",
+          "float",
+          "read"
+        ],
+        [
+          "rib_a",
+          "float",
+          "read"
+        ],
+        [
+          "vegfra_a",
+          "float",
+          "read"
+        ],
+        [
+          "shdmin_a",
+          "float",
+          "read"
+        ],
+        [
+          "shdmax_a",
+          "float",
+          "read"
+        ],
+        [
+          "tmn_a",
+          "float",
+          "read"
+        ],
+        [
+          "xland_a",
+          "float",
+          "read"
+        ],
+        [
+          "xice_a",
+          "float",
+          "read"
+        ],
+        [
+          "snoalb_a",
+          "float",
+          "read"
+        ],
+        [
+          "embck_a",
+          "float",
+          "read"
+        ],
+        [
+          "tsk_a",
+          "float",
+          "read"
+        ],
+        [
+          "hfx_a",
+          "float",
+          "read"
+        ],
+        [
+          "qfx_a",
+          "float",
+          "read"
+        ],
+        [
+          "lh_a",
+          "float",
+          "read"
+        ],
+        [
+          "grdflx_a",
+          "float",
+          "read"
+        ],
+        [
+          "qsfc_a",
+          "float",
+          "read"
+        ],
+        [
+          "canwat_a",
+          "float",
+          "read"
+        ],
+        [
+          "snow_a",
+          "float",
+          "read"
+        ],
+        [
+          "snowc_a",
+          "float",
+          "read"
+        ],
+        [
+          "snowh_a",
+          "float",
+          "read"
+        ],
+        [
+          "albedo_a",
+          "float",
+          "read"
+        ],
+        [
+          "albbck_a",
+          "float",
+          "read"
+        ],
+        [
+          "emiss_a",
+          "float",
+          "read"
+        ],
+        [
+          "znt_a",
+          "float",
+          "read"
+        ],
+        [
+          "z0_a",
+          "float",
+          "read"
+        ],
+        [
+          "snotime_a",
+          "float",
+          "read"
+        ],
+        [
+          "lai_a",
+          "float",
+          "read"
+        ],
+        [
+          "smstav_a",
+          "float",
+          "read"
+        ],
+        [
+          "smstot_a",
+          "float",
+          "read"
+        ],
+        [
+          "sfcrunoff_a",
+          "float",
+          "read"
+        ],
+        [
+          "udrunoff_a",
+          "float",
+          "read"
+        ],
+        [
+          "acsnow_a",
+          "float",
+          "read"
+        ],
+        [
+          "acsnom_a",
+          "float",
+          "read"
+        ],
+        [
+          "snopcx_a",
+          "float",
+          "read"
+        ],
+        [
+          "potevp_a",
+          "float",
+          "read"
+        ],
+        [
+          "noahres_a",
+          "float",
+          "read"
+        ],
+        [
+          "chklowq_a",
+          "float",
+          "read"
+        ],
+        [
+          "smois_a",
+          "float",
+          "read"
+        ],
+        [
+          "tslb_a",
+          "float",
+          "read"
+        ],
+        [
+          "sh2o_a",
+          "float",
+          "read"
+        ],
+        [
+          "smcrel_a",
+          "float",
+          "read"
+        ],
+        [
+          "state_fields",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "psfc_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfcprs_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfctmp_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv1_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qgh_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz8w1_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "glw_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "swdown_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainbl_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chs_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "cqs2_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chs2_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rib_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "vegfra_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "shdmin_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "shdmax_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tmn_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xland_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xice_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snoalb_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "embck_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tsk_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lh_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "grdflx_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qsfc_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "canwat_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowc_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowh_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "albedo_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "albbck_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "emiss_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "znt_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "z0_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snotime_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lai_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smstav_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smstot_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfcrunoff_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "udrunoff_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "acsnow_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "acsnom_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snopcx_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "potevp_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "noahres_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chklowq_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smois_a": [
+          [
+            "4",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tslb_a": [
+          [
+            "4",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sh2o_a": [
+          [
+            "4",
+            "ny",
+            "nx"
+          ]
+        ],
+        "smcrel_a": [
+          [
+            "4",
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_fields": [
+          [
+            "nstate",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nstate",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "noah_mosaic_unpack",
+      "module": "noah_mosaic_family",
+      "source": "woof/metal/shaders/noah_mosaic_family.metal",
+      "cuda_source": "woof/core/kernels/noah_mosaic.cu",
+      "cuda_symbol": "noah_mosaic_column",
+      "resources": [
+        [
+          "psfc_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfcprs_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfctmp_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv1_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "qgh_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz8w1_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "glw_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "swdown_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainbl_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "chs_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "cqs2_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "chs2_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "rib_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "vegfra_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "shdmin_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "shdmax_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "tmn_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "xland_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "xice_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "snoalb_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "embck_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsk_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "hfx_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "qfx_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "lh_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "grdflx_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsfc_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "canwat_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowc_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowh_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "albedo_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "albbck_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "emiss_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "znt_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "z0_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "snotime_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "lai_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "smstav_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "smstot_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfcrunoff_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "udrunoff_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "acsnow_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "acsnom_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "snopcx_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "potevp_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "noahres_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "chklowq_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "smois_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "tslb_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "sh2o_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "smcrel_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_fields",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "psfc_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfcprs_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfctmp_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv1_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qgh_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz8w1_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "glw_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "swdown_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainbl_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chs_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "cqs2_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chs2_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rib_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "vegfra_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "shdmin_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "shdmax_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tmn_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xland_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xice_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snoalb_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "embck_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tsk_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lh_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "grdflx_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qsfc_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "canwat_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowc_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowh_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "albedo_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "albbck_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "emiss_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "znt_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "z0_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snotime_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lai_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smstav_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smstot_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfcrunoff_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "udrunoff_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "acsnow_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "acsnom_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snopcx_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "potevp_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "noahres_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chklowq_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smois_a": [
+          [
+            "4",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tslb_a": [
+          [
+            "4",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sh2o_a": [
+          [
+            "4",
+            "ny",
+            "nx"
+          ]
+        ],
+        "smcrel_a": [
+          [
+            "4",
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_fields": [
+          [
+            "nstate",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nstate",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "noah_mosaic_column",
+      "module": "noah_mosaic_family",
+      "source": "woof/metal/shaders/noah_mosaic_family.metal",
+      "cuda_source": "woof/core/kernels/noah_mosaic.cu",
+      "cuda_symbol": "noah_mosaic_column",
+      "resources": [
+        [
+          "ivgtyp",
+          "int32",
+          "read"
+        ],
+        [
+          "isltyp",
+          "int32",
+          "read"
+        ],
+        [
+          "state_fields",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsk_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsfc_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "canwat_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowh_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowc_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "albedo_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "albbck_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "emiss_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "embck_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "znt_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "z0_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "hfx_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "qfx_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "lh_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "grdflx_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "snotime_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "tslb_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "smois_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "sh2o_mosaic",
+          "float",
+          "read_write"
+        ],
+        [
+          "mosaic_cat_index",
+          "int32",
+          "read"
+        ],
+        [
+          "landusef2",
+          "float",
+          "read"
+        ],
+        [
+          "lcz",
+          "int32",
+          "read"
+        ],
+        [
+          "vegtbl",
+          "float",
+          "read"
+        ],
+        [
+          "soiltbl",
+          "float",
+          "read"
+        ],
+        [
+          "genp",
+          "float",
+          "read"
+        ],
+        [
+          "dzs",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ivgtyp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "isltyp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_fields": [
+          [
+            "nstate",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tsk_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qsfc_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "canwat_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowh_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowc_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "albedo_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "albbck_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "emiss_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "embck_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "znt_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "z0_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "lh_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "grdflx_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snotime_mosaic": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tslb_mosaic": [
+          [
+            "ntile_soil",
+            "ny",
+            "nx"
+          ]
+        ],
+        "smois_mosaic": [
+          [
+            "ntile_soil",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sh2o_mosaic": [
+          [
+            "ntile_soil",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mosaic_cat_index": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "landusef2": [
+          [
+            "mosaic_cat",
+            "ny",
+            "nx"
+          ]
+        ],
+        "lcz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vegtbl": [
+          [
+            "lucats",
+            15
+          ]
+        ],
+        "soiltbl": [
+          [
+            "slcats",
+            10
+          ]
+        ],
+        "genp": [
+          [
+            16
+          ]
+        ],
+        "dzs": [
+          [
+            4
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlcz",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "lucats",
+          "int32"
+        ],
+        [
+          "slcats",
+          "int32"
+        ],
+        [
+          "isurban",
+          "int32"
+        ],
+        [
+          "isice",
+          "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
+        ],
+        [
+          "itimestep",
+          "int32"
+        ],
+        [
+          "frpcpn",
+          "int32"
+        ],
+        [
+          "usemonalb",
+          "int32"
+        ],
+        [
+          "rdlai2d",
+          "int32"
+        ],
+        [
+          "opt_thcnd",
+          "int32"
+        ],
+        [
+          "mosaic_cat",
+          "int32"
+        ],
+        [
+          "ntile_soil",
+          "int32"
+        ],
+        [
+          "nstate",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

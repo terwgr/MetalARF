@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "cumulus_clock_advance_bindings.metalh"
+#include "cumulus_clock_clear_bindings.metalh"

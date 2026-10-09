@@ -1,0 +1,1225 @@
+//! Build isobaric sounding volumes from a WRF file.
+//!
+//! Updated from BowEcho v0.30.5's memory-hardened volume builder so Rusty
+//! Weather owns the optimized implementation consumed by desktop hosts.
+//!
+//! WRF is on native (eta) levels, but the skew-T builder
+//! ([`rw_ui::skewt::build_sounding_column`]) needs the same `*_iso` isobaric
+//! 3D variables the model ingest writes for HRRR/GFS: `temperature_iso`,
+//! `dewpoint_iso`, `u_iso`, `v_iso`, `height_iso`. This module reads WRF's 3D
+//! fields through `wrf-core`'s `getvar` (which already handles destaggering,
+//! theta -> T, and QVAPOR -> Td) and log-pressure interpolates each column
+//! onto the canonical isobaric levels, so imported WRF runs produce soundings
+//! exactly like the downloaded models do.
+//!
+//! Height is not read off the mass levels.  The model knows its height at
+//! the interfaces of its layers (PH + PHB); a layer-mean height paired with
+//! the mass-level pressure reads 4 to 6 m high at 500 hPa, because on an eta
+//! grid the mean of two interface heights belongs to the geometric mean of
+//! their pressures and the mass level sits at the arithmetic mean.  Every
+//! isobaric height here is read between interfaces
+//! ([`rw_isobaric::isobaric_heights_into`]); a frame without the interface
+//! geometry falls back to the mass-level pairing by name and says so in the
+//! import's notes ([`ColumnHeights::MassLevels`]).
+#![allow(dead_code)]
+// `try_interpolate_iso_volumes` takes the five column fields + shape as separate
+// slices by design (the shared raw/post-processed reader contract); factoring
+// them into a struct would only obscure the call sites.
+#![allow(clippy::too_many_arguments)]
+
+use rustwx_core::checked_volume_elements;
+// The log-pressure column walk is shared with the ML exporter
+// (crates/rw-isobaric), so a chart and a training sample read off one
+// history file agree about where a pressure level is.
+use rw_isobaric::{InterfaceStencil, STANDARD_GRAVITY, bracket, isobaric_heights_into, lerp};
+use rw_store::PressureVolumeInput;
+use wrf_core::file::SharedField;
+use wrf_core::{ComputeOpts, VarOutput, WrfFile, getvar};
+
+const STANDARD_LEVEL_COUNT: usize = 37;
+const MAX_NATIVE_F64_COMPONENT_COUNT: u128 = 8;
+const ISO_VOLUME_COUNT: u128 = 5;
+const SURFACE_F32_PLANE_COUNT: u128 = 5;
+/// The owned-buffer ceiling no host is held below, whatever memory it
+/// reports. Owned buffers deliberately exclude wrf-core's memoization cache,
+/// whose lifetime is managed separately. The known 800x800x79 workflow needs
+/// 3,722,240,000 bytes (~3.47 GiB) by this accounting. This was once the
+/// whole ceiling, so every grid under it builds its volumes on every host
+/// exactly as it did then.
+const WRF_VOLUME_OWNED_FLOOR_BYTES: u128 = 4 * 1024 * 1024 * 1024;
+
+/// Canonical isobaric levels (hPa), matching the model-ingest convention
+/// (`100..=1000` step 25 -> 37 levels). Levels outside a column's model range
+/// are left NaN and pruned by the sounding column builder.
+fn standard_levels() -> Vec<u16> {
+    (100..=1000u16).step_by(25).collect()
+}
+
+/// Preflight the complete known owned working set before any 3-D reads or
+/// output allocations. The five `*_iso` products all share the canonical
+/// 37-level shape. Raw wrfout owns at most six native-sized f64 components;
+/// postprocessed severe processing can retain pressure/QVAPOR alongside its
+/// derived hPa/dewpoint arrays and therefore reaches eight. We conservatively
+/// budget eight for every caller. Five f32 lowest-level surface planes are also
+/// included.
+///
+/// Callers that receive an error must not begin the 3-D volume read. A caller
+/// that already owns independent 2-D products may retain them; a volume-only
+/// caller may instead return the error. The returned value is the total known
+/// owned byte count. Per-volume checked addressability remains independent of the aggregate
+/// working-set ceiling, which is the memory this host has available now and
+/// never less than 4 GiB
+/// ([`volume_owned_ceiling`]).
+pub(crate) fn preflight_iso_volume_shape(nz: usize, cells: usize) -> Result<u64, String> {
+    preflight_iso_volume_shape_within(nz, cells, rusty_weather::host_memory::available_bytes())
+}
+
+/// The aggregate owned-byte ceiling for one volume build on a host that has
+/// `available_bytes` of memory available now (`None` where the platform does
+/// not say): that memory, never less than the 4 GiB floor.
+///
+/// WHAT BREAKAGE THE CEILING PREVENTS: a build larger than the memory the
+/// host has left runs it out of memory part way through the import, and the
+/// process is killed with every picture of the frame, not only the
+/// pressure-level ones. The ceiling leaves those products out instead and
+/// the frame's 2-D products still draw.
+///
+/// Why it reads the host: the floor alone was the ceiling, so a 3 km frame
+/// of about 1,000,000 columns at 55 levels (1132x906x55 needs 4,389,533,760
+/// owned bytes) drew none of its pressure-level charts on a 30 GiB worker
+/// with the memory to spare, and a 1792x1024x55 frame lost them on every
+/// host. The columns cannot be built in bounded chunks instead: wrf-core's
+/// `getvar` reads and derives every native field over the whole grid, and
+/// the 37-level volumes are whole-grid store products.
+fn volume_owned_ceiling(available_bytes: Option<u64>) -> u128 {
+    available_bytes.map_or(WRF_VOLUME_OWNED_FLOOR_BYTES, |bytes| {
+        u128::from(bytes).max(WRF_VOLUME_OWNED_FLOOR_BYTES)
+    })
+}
+
+/// [`preflight_iso_volume_shape`] on a host that reports `available_bytes`
+/// of memory available now, or `None` where the platform does not say.
+fn preflight_iso_volume_shape_within(
+    nz: usize,
+    cells: usize,
+    available_bytes: Option<u64>,
+) -> Result<u64, String> {
+    let owned_bytes = iso_volume_owned_bytes(nz, cells)?;
+    let ceiling = volume_owned_ceiling(available_bytes);
+    if owned_bytes > ceiling {
+        let host = match available_bytes {
+            Some(bytes) => format!("this process has {bytes} bytes available now"),
+            None => "this host does not report its available memory".to_string(),
+        };
+        return Err(format!(
+            "WRF volume path requires {owned_bytes} known owned bytes for {nz} levels x {cells} cells, exceeding the {ceiling}-byte host memory ceiling ({host}; no host is held below {WRF_VOLUME_OWNED_FLOOR_BYTES} bytes, 4 GiB), so the volumes are not built rather than risk the host killing the import with every picture of the frame"
+        ));
+    }
+    u64::try_from(owned_bytes)
+        .map_err(|_| format!("WRF volume owned-byte total {owned_bytes} does not fit u64"))
+}
+
+/// The complete known owned working set of one volume build, after the
+/// shape, addressability and overflow checks. Host independent.
+fn iso_volume_owned_bytes(nz: usize, cells: usize) -> Result<u128, String> {
+    if nz < 2 {
+        return Err(format!(
+            "WRF native pressure volume requires at least two levels, got {nz}"
+        ));
+    }
+    if cells == 0 {
+        return Err("WRF grid has zero cells".to_string());
+    }
+    let iso_elements = checked_volume_elements(STANDARD_LEVEL_COUNT, cells).map_err(|err| {
+        format!("canonical {STANDARD_LEVEL_COUNT}-level WRF pressure volume is unsupported: {err}")
+    })?;
+
+    let native_bytes = checked_byte_product(
+        "native WRF volume buffers",
+        &[
+            MAX_NATIVE_F64_COMPONENT_COUNT,
+            nz as u128,
+            cells as u128,
+            std::mem::size_of::<f64>() as u128,
+        ],
+    )?;
+    let iso_bytes = checked_byte_product(
+        "isobaric WRF output buffers",
+        &[
+            ISO_VOLUME_COUNT,
+            iso_elements as u128,
+            std::mem::size_of::<f32>() as u128,
+        ],
+    )?;
+    let surface_bytes = checked_byte_product(
+        "WRF surface fallback buffers",
+        &[
+            SURFACE_F32_PLANE_COUNT,
+            cells as u128,
+            std::mem::size_of::<f32>() as u128,
+        ],
+    )?;
+    native_bytes
+        .checked_add(iso_bytes)
+        .and_then(|bytes| bytes.checked_add(surface_bytes))
+        .ok_or_else(|| "WRF volume owned-byte total overflows u128".to_string())
+}
+
+fn checked_byte_product(name: &str, factors: &[u128]) -> Result<u128, String> {
+    factors.iter().try_fold(1u128, |product, &factor| {
+        product
+            .checked_mul(factor)
+            .ok_or_else(|| format!("{name} factors {factors:?} overflow u128"))
+    })
+}
+
+/// One isobaric volume ready for the store writer: owned row-major planes.
+pub struct IsoVolume {
+    pub name: String,
+    pub units: String,
+    /// `(level_hpa, plane)` where each plane holds `ny * nx` row-major values.
+    pub levels: Vec<(u16, Vec<f32>)>,
+}
+
+impl IsoVolume {
+    /// Borrowed view for the store writer's [`PressureVolumeInput`].
+    pub fn as_input(&self) -> PressureVolumeInput<'_> {
+        PressureVolumeInput {
+            name: &self.name,
+            units: &self.units,
+            selector_template: serde_json::json!({
+                "source": "wrf",
+                "field": self.name,
+                "vertical": "isobaric",
+            }),
+            levels: self
+                .levels
+                .iter()
+                .map(|(hpa, plane)| (*hpa, plane.as_slice()))
+                .collect(),
+        }
+    }
+}
+
+/// Lowest-model-level surface fallbacks, in the units the skew-T expects
+/// (Pa, K, K, m/s, m/s). Used to synthesize the 2D surface fields a split
+/// `wrf3d` file (CONUS404 / GDEX CONUS-II) omits (chiefly `PSFC`) so the
+/// sounding can still start near the surface. Callers expose these substitutes
+/// only under explicit `approx_*` names, never as true 2 m/10 m products. Each
+/// plane is row-major `ny * nx`.
+pub struct SurfaceFallback {
+    pub surface_pressure_pa: Vec<f32>,
+    pub temperature_2m_k: Vec<f32>,
+    pub dewpoint_2m_k: Vec<f32>,
+    pub u_10m: Vec<f32>,
+    pub v_10m: Vec<f32>,
+}
+
+/// Where a column's isobaric heights are read from.
+pub(crate) enum ColumnHeights<'a> {
+    /// Interface values, `[(nz + 1) * cells]` bottom up, of which
+    /// `per_metre` make one metre (geopotential with standard gravity, or
+    /// heights with 1), read in log-pressure between the interfaces whose
+    /// pressures `stencil` finds from the mass-level pressures.
+    Interfaces {
+        interface: &'a [f64],
+        per_metre: f64,
+        stencil: &'a InterfaceStencil,
+    },
+    /// THE NAMED FALLBACK, for a frame without interface geometry: heights
+    /// at the mass levels, `[nz * cells]`, read at the mass-level pressure.
+    /// On an eta grid these are layer means and the surface reads about
+    /// 5 m high at 500 hPa; the caller says so ([`mass_level_heights_note`]).
+    MassLevels(&'a [f64]),
+}
+
+impl ColumnHeights<'_> {
+    fn expected_len(&self, nz: usize, cells: usize) -> Option<usize> {
+        match self {
+            Self::Interfaces { .. } => nz.checked_add(1)?.checked_mul(cells),
+            Self::MassLevels(_) => nz.checked_mul(cells),
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Self::Interfaces { interface, .. } => interface.len(),
+            Self::MassLevels(heights) => heights.len(),
+        }
+    }
+}
+
+/// A raw wrfout frame's interface geometry: geopotential on the layer
+/// interfaces (PH + PHB, m2 s-2) and where each interface sits between the
+/// mass levels (from ZNU and ZNW).
+pub(crate) struct InterfaceGeometry {
+    pub geopotential: SharedField,
+    pub stencil: InterfaceStencil,
+}
+
+/// The heights one frame's isobaric surfaces are read from, owned.
+pub(crate) enum FrameHeights {
+    Interfaces(InterfaceGeometry),
+    /// The named fallback: `getvar("height")`, metres at the mass levels.
+    MassLevels(Vec<f64>),
+}
+
+impl FrameHeights {
+    /// The frame's interface geometry, or -- the named fallback, for a frame
+    /// without it -- its mass-level heights together with the note the
+    /// import must carry.  `stage` names the read in an error.
+    pub(crate) fn read(
+        file: &WrfFile,
+        timeidx: usize,
+        stage: &str,
+    ) -> Result<(Self, Option<String>), String> {
+        match read_interface_geometry(file, timeidx) {
+            Ok(geometry) => Ok((Self::Interfaces(geometry), None)),
+            Err(reason) => {
+                let height = getvar(file, "height", Some(timeidx), &ComputeOpts::default())
+                    .map_err(|err| format!("read WRF height ({stage}): {err}"))?;
+                check_native_3d_output(&height, "height", file.nz, file.ny, file.nx)?;
+                Ok((
+                    Self::MassLevels(height.data),
+                    Some(mass_level_heights_note(&reason)),
+                ))
+            }
+        }
+    }
+
+    pub(crate) fn view(&self) -> ColumnHeights<'_> {
+        match self {
+            Self::Interfaces(geometry) => ColumnHeights::Interfaces {
+                interface: &geometry.geopotential,
+                per_metre: STANDARD_GRAVITY,
+                stencil: &geometry.stencil,
+            },
+            Self::MassLevels(heights) => ColumnHeights::MassLevels(heights),
+        }
+    }
+}
+
+/// The frame's [`InterfaceGeometry`], or why it has none.
+///
+/// `ZNU` is read when the frame carries it and is otherwise the middle of
+/// each layer in `ZNW`, which is how WRF defines it.
+pub(crate) fn read_interface_geometry(
+    file: &WrfFile,
+    timeidx: usize,
+) -> Result<InterfaceGeometry, String> {
+    let missing: Vec<&str> = ["PH", "PHB", "ZNW"]
+        .into_iter()
+        .filter(|name| !file.has_var(name))
+        .collect();
+    if !missing.is_empty() {
+        return Err(format!("the frame carries no {}", missing.join(", ")));
+    }
+    let read = |name: &str| {
+        file.read_var(name, timeidx)
+            .map_err(|err| format!("read WRF {name}: {err}"))
+    };
+    let eta_interface = read("ZNW")?;
+    let stencil = if file.has_var("ZNU") {
+        InterfaceStencil::new(&read("ZNU")?, &eta_interface)
+    } else {
+        InterfaceStencil::from_interfaces(&eta_interface)
+    }
+    .map_err(|err| format!("the frame's eta levels: {err}"))?;
+    if stencil.levels() != file.nz {
+        return Err(format!(
+            "the frame's eta levels describe {} layers and its fields {}",
+            stencil.levels(),
+            file.nz
+        ));
+    }
+    let geopotential = file
+        .geopotential_stag(timeidx)
+        .map_err(|err| format!("read WRF PH + PHB: {err}"))?;
+    let expected = file
+        .nz
+        .checked_add(1)
+        .and_then(|levels| levels.checked_mul(file.nxy()));
+    if Some(geopotential.len()) != expected {
+        return Err(format!(
+            "WRF PH + PHB has {} values, not {} interfaces of {} cells",
+            geopotential.len(),
+            file.nz + 1,
+            file.nxy()
+        ));
+    }
+    Ok(InterfaceGeometry {
+        geopotential,
+        stencil,
+    })
+}
+
+/// The note an import carries when its isobaric heights took the named
+/// fallback, so the product's metadata says which heights a reader is
+/// looking at.
+pub(crate) fn mass_level_heights_note(reason: &str) -> String {
+    format!(
+        "isobaric heights (height_iso, the isobaric height charts and soundings) are mass-level heights read at the mass-level pressure, not read between layer interfaces, because {reason}: exact for a height-coordinate model, about 5 m high at 500 hPa for an eta-coordinate one (interface heights need PH, PHB and ZNW)"
+    )
+}
+
+/// Isobaric heights at `levels` (hPa) from mass-level `pressure_hpa`, read
+/// from `heights` -- the chart-plane twin of the sounding volume's height.
+pub(crate) fn heights_at_levels(
+    pressure_hpa: &[f64],
+    heights: &ColumnHeights<'_>,
+    nz: usize,
+    cells: usize,
+    levels: &[u16],
+) -> Result<Vec<(u16, Vec<f32>)>, String> {
+    match heights {
+        ColumnHeights::MassLevels(data) => {
+            interpolate_field_at_levels(pressure_hpa, data, nz, cells, levels)
+        }
+        ColumnHeights::Interfaces { .. } => {
+            let mut planes = try_init_planes("height_levels", levels.len(), cells)?;
+            fill_interface_heights(pressure_hpa, heights, nz, cells, levels, &mut planes)?;
+            Ok(pack(levels, planes))
+        }
+    }
+}
+
+/// Write the interface-read heights at `levels` into `planes`.
+fn fill_interface_heights(
+    pressure_hpa: &[f64],
+    heights: &ColumnHeights<'_>,
+    nz: usize,
+    cells: usize,
+    levels: &[u16],
+    planes: &mut [Vec<f32>],
+) -> Result<(), String> {
+    let ColumnHeights::Interfaces {
+        interface,
+        per_metre,
+        stencil,
+    } = heights
+    else {
+        return Err("mass-level heights have no interfaces to be read between".into());
+    };
+    if stencil.levels() != nz {
+        return Err(format!(
+            "the interface stencil has {} layers and the fields {nz}",
+            stencil.levels()
+        ));
+    }
+    let targets: Vec<f64> = levels.iter().map(|level| f64::from(*level)).collect();
+    isobaric_heights_into(
+        interface,
+        *per_metre,
+        pressure_hpa,
+        stencil,
+        cells,
+        &targets,
+        planes,
+    )
+}
+
+/// Read WRF 3D fields for `timeidx` and interpolate them to the canonical
+/// isobaric levels, returning the five `*_iso` volumes the skew-T needs plus
+/// the lowest-model-level [`SurfaceFallback`] (so callers can fill in any 2D
+/// surface field the file omits).
+///
+/// `cells` is the horizontal grid size (`ny * nx`) of the hour being written;
+/// every returned plane matches it. Fails (leaving the caller to skip volumes
+/// and still write the 2D fields) if the required 3D fields are unreadable.
+///
+/// `progress` receives per-stage messages (which 3D field is being read /
+/// getvar'd, then interpolation percentage), on a 250 m grid each stage is
+/// tens of seconds, and both import paths surface these lines in the dock.
+/// The isobaric levels the production direct chart recipes plot.  RH and
+/// absolute vorticity interpolate at these levels only: unlike the five
+/// sounding fields they feed no skew-T column, so full 37-level volumes
+/// would be pure store weight.
+pub(crate) const CHART_RECIPE_LEVELS_HPA: [u16; 6] = [200, 250, 300, 500, 700, 850];
+
+/// What [`build_iso_volumes`] returns: the five sounding volumes, the
+/// chart-only RH and vorticity level planes, the lowest-model-level surface
+/// fallback, and the note the import must carry when the heights took the
+/// named mass-level fallback ([`mass_level_heights_note`]).
+pub type IsoVolumeBuild = (Vec<IsoVolume>, Vec<IsoVolume>, SurfaceFallback, Option<String>);
+
+pub fn build_iso_volumes(
+    file: &WrfFile,
+    timeidx: usize,
+    cells: usize,
+    progress: &mut dyn FnMut(String),
+) -> Result<IsoVolumeBuild, String> {
+    // This must precede the first getvar: an otherwise valid 2-D grid can be
+    // too large for either a 37-level dense store volume or the aggregate
+    // native/output working set. In that case callers omit these products
+    // rather than reading several enormous native fields.
+    let (nx, ny, nz) = (file.nx, file.ny, file.nz);
+    let file_cells = checked_dimension_product("WRF horizontal grid", &[ny, nx])?;
+    if cells != file_cells {
+        return Err(format!(
+            "WRF caller supplied {cells} horizontal cells, but file dimensions [{ny}, {nx}] describe {file_cells}"
+        ));
+    }
+    preflight_iso_volume_shape(nz, cells)?;
+    let read = |name: &str, stage: &str| -> Result<VarOutput, String> {
+        getvar(file, name, Some(timeidx), &ComputeOpts::default())
+            .map_err(|err| format!("read WRF {name} ({stage}): {err}"))
+    };
+
+    progress("reading WRF pressure (sounding field 1/5)".to_string());
+    let pressure = read("pressure", "sounding field 1/5")?; // hPa, [nz, ny, nx]
+    let expected_3d = check_native_3d_output(&pressure, "pressure", nz, ny, nx)?;
+
+    progress("reading WRF temperature (sounding field 2/5)".to_string());
+    let temp = read("temp", "sounding field 2/5")?; // K
+    check_native_3d_output(&temp, "temp", nz, ny, nx)?;
+    progress("reading WRF dewpoint (sounding field 3/5)".to_string());
+    let td = read("td", "sounding field 3/5")?; // degC
+    check_native_3d_output(&td, "td", nz, ny, nx)?;
+    // Heights between layer interfaces when the frame has them; the
+    // mass-level pairing by name when it does not.
+    progress("reading WRF interface geopotential (sounding field 4/5)".to_string());
+    let (heights, height_note) = FrameHeights::read(file, timeidx, "sounding field 4/5")?;
+    if let Some(note) = &height_note {
+        progress(note.clone());
+    }
+
+    // Earth-relative winds. `uvmet` returns [u_earth.., v_earth..]
+    // (2 * nz * cells). There is intentionally NO ua/va fallback: those are
+    // grid-relative components, while the store's canonical u_iso/v_iso fields
+    // drive geographic sounding wind barbs. Publishing ua/va under those names
+    // silently rotates every profile away from true north on projected grids.
+    // Split without copying: on a 50 M-cell grid the two halves are ~400 MB
+    // each, and `to_vec`-ing them while the 800 MB source was still alive
+    // measurably spiked the peak working set of the whole import.
+    progress("reading WRF winds (sounding field 5/5)".to_string());
+    let uvmet = read("uvmet", "sounding field 5/5")?;
+    let wind_data = validate_earth_relative_uvmet(uvmet, nz, ny, nx, expected_3d)?;
+
+    // Chart-recipe planes: RH and absolute vorticity at the six production
+    // chart levels.  Read while the memoized cache is still warm (their
+    // dependency chains share the intermediates above), interpolate each at
+    // once, and DROP the native 3-D array before the next read -- the peak
+    // working set grows by exactly one native field, keeping the raw-wrfout
+    // path inside the preflight's eight-component budget.  Either field's
+    // failure degrades to a progress note: the sounding volumes and every
+    // 2-D product still publish, and the chart recipes that needed the
+    // missing planes stay accurately "not stored".
+    let mut recipe_volumes: Vec<IsoVolume> = Vec::new();
+    for (var, stage, volume_name, units) in [
+        ("rh", "chart-level relative humidity", "rh_chart_levels", "%"),
+        ("avo", "chart-level absolute vorticity", "avo_chart_levels", "s-1"),
+    ] {
+        progress(format!("reading WRF {var} ({stage})"));
+        match read(var, stage) {
+            Ok(output) => match check_native_3d_output(&output, var, nz, ny, nx) {
+                Ok(_) => {
+                    let planes = interpolate_field_at_levels(
+                        &pressure.data,
+                        &output.data,
+                        nz,
+                        cells,
+                        &CHART_RECIPE_LEVELS_HPA,
+                    )?;
+                    recipe_volumes.push(IsoVolume {
+                        name: volume_name.to_string(),
+                        units: units.to_string(),
+                        levels: planes,
+                    });
+                }
+                Err(err) => progress(format!("{volume_name} skipped: {err}")),
+            },
+            Err(err) => progress(format!("{volume_name} skipped: {err}")),
+        }
+    }
+
+    // The hour's LAST `getvar` is behind us, and every input the interpolator
+    // needs is owned above: release wrf-core's memoized 3-D f64 intermediates
+    // NOW, before the interpolation loop and the store write. `getvar`
+    // memoizes every intermediate (full pressure, theta, temperature,
+    // geopotential, heights, QVAPOR, destaggered winds, …) inside `WrfFile`
+    // and only evicts on a timestep CHANGE; on the 800×800×79 Enderlin grid
+    // that cache is ~5 GB of dead weight from here on. Clearing any EARLIER
+    // was measured to more than double the peak (every read recomputes its
+    // whole dependency chain: see docs/wrf-import-large-grids.md); clearing
+    // here costs zero recompute. catch_unwind: a poisoned cache mutex (from a
+    // caught diagnostic panic upstream) must not fail the volumes.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| file.clear_cache()));
+
+    // Dewpoint arrives in degC from wrf-core's `td`; the shared interpolator
+    // works in Kelvin like every other field. Convert in place: a separate
+    // Kelvin copy is another ~400 MB on large grids.
+    let mut dewpoint_k = td.data;
+    for value in &mut dewpoint_k {
+        *value += 273.15;
+    }
+    // Borrow the two contiguous components directly. Vec::split_off would
+    // allocate a seventh native-sized f64 buffer while retaining the original
+    // allocation's two-component capacity. Borrowing keeps raw wrfout at its
+    // actual six components and preserves the conservative cap's headroom.
+    let (u_wind, v_wind) = wind_data.split_at(expected_3d);
+    let (volumes, surface) = try_interpolate_iso_volumes(
+        &pressure.data,
+        &temp.data,
+        &dewpoint_k,
+        heights.view(),
+        u_wind,
+        v_wind,
+        nz,
+        cells,
+        progress,
+    )?;
+    Ok((volumes, recipe_volumes, surface, height_note))
+}
+
+/// Interpolate one native `[nz, ny, nx]` field onto the given isobaric
+/// levels -- the same per-column `bracket` + `lerp` walk the five-field
+/// interpolator runs, applied to a single field.  Cells outside a column's
+/// model pressure range stay NaN, exactly like the sounding volumes.
+pub(crate) fn interpolate_field_at_levels(
+    pressure_hpa: &[f64],
+    data: &[f64],
+    nz: usize,
+    cells: usize,
+    levels: &[u16],
+) -> Result<Vec<(u16, Vec<f32>)>, String> {
+    let expected = checked_dimension_product("chart-level field", &[nz, cells])?;
+    if pressure_hpa.len() != expected || data.len() != expected {
+        return Err(format!(
+            "chart-level interpolation inputs must be [nz={nz}, cells={cells}]; got pressure {} and field {}",
+            pressure_hpa.len(),
+            data.len()
+        ));
+    }
+    let mut planes = try_init_planes("chart_levels", levels.len(), cells)?;
+    let mut col_p = vec![0.0f64; nz];
+    for c in 0..cells {
+        for k in 0..nz {
+            col_p[k] = pressure_hpa[k * cells + c];
+        }
+        for (li, &lev) in levels.iter().enumerate() {
+            let Some((k, t)) = bracket(&col_p, f64::from(lev)) else {
+                continue;
+            };
+            let (i0, i1) = (k * cells + c, (k + 1) * cells + c);
+            if let Some(value) = lerp(data[i0], data[i1], t) {
+                planes[li][c] = value as f32;
+            }
+        }
+    }
+    Ok(pack(levels, planes))
+}
+
+/// Interpolate pre-read WRF column fields onto the canonical isobaric levels
+/// and derive the lowest-level surface fallback. All inputs are row-major
+/// `[nz, ny, nx]` (index `k * cells + c`) in skew-T units: pressure hPa,
+/// temperature K, dewpoint K, winds m/s. Shared by the raw-wrfout
+/// ([`build_iso_volumes`]) and post-processed (`TK`/`Z`/`P`) reader paths.
+/// `heights` is where the height volume is read from: between layer
+/// interfaces, or the named mass-level fallback ([`ColumnHeights`]).
+///
+/// File readers must call [`preflight_iso_volume_shape`] with trustworthy
+/// metadata before reading their 3-D inputs. This function repeats that
+/// guard's shape, store-volume and overflow checks, validates all input
+/// lengths, and uses fallible reservations for the large output, surface, and
+/// scratch buffers. It does not repeat the host comparison: the reader made it
+/// before its reads, and the inputs it read are resident now, counted in the
+/// memory the host reports in use, so a second comparison would count them
+/// twice and could leave out the volumes of a frame already admitted and read.
+pub(crate) fn try_interpolate_iso_volumes(
+    pressure_hpa: &[f64],
+    temp_k: &[f64],
+    dewpoint_k: &[f64],
+    heights: ColumnHeights<'_>,
+    u_ms: &[f64],
+    v_ms: &[f64],
+    nz: usize,
+    cells: usize,
+    progress: &mut dyn FnMut(String),
+) -> Result<(Vec<IsoVolume>, SurfaceFallback), String> {
+    iso_volume_owned_bytes(nz, cells)?;
+    validate_interpolation_inputs(
+        pressure_hpa,
+        temp_k,
+        dewpoint_k,
+        &heights,
+        u_ms,
+        v_ms,
+        nz,
+        cells,
+    )?;
+
+    let levels = standard_levels();
+    debug_assert_eq!(levels.len(), STANDARD_LEVEL_COUNT);
+    let planes = IsoPlanes::try_new(levels.len(), cells)?;
+    let surface = try_surface_fallback(pressure_hpa, temp_k, dewpoint_k, u_ms, v_ms, cells)?;
+    let mut column_pressure = Vec::new();
+    column_pressure
+        .try_reserve_exact(nz)
+        .map_err(|err| format!("reserve {nz}-level WRF pressure column: {err}"))?;
+    column_pressure.resize(nz, 0.0);
+    interpolate_iso_volumes_with_allocations(
+        pressure_hpa,
+        temp_k,
+        dewpoint_k,
+        &heights,
+        u_ms,
+        v_ms,
+        nz,
+        cells,
+        &levels,
+        planes,
+        surface,
+        column_pressure,
+        progress,
+    )
+}
+
+struct IsoPlanes {
+    temperature: Vec<Vec<f32>>,
+    dewpoint: Vec<Vec<f32>>,
+    u_wind: Vec<Vec<f32>>,
+    v_wind: Vec<Vec<f32>>,
+    height: Vec<Vec<f32>>,
+}
+
+impl IsoPlanes {
+    fn try_new(levels: usize, cells: usize) -> Result<Self, String> {
+        Ok(Self {
+            temperature: try_init_planes("temperature_iso", levels, cells)?,
+            dewpoint: try_init_planes("dewpoint_iso", levels, cells)?,
+            u_wind: try_init_planes("u_iso", levels, cells)?,
+            v_wind: try_init_planes("v_iso", levels, cells)?,
+            height: try_init_planes("height_iso", levels, cells)?,
+        })
+    }
+}
+
+fn interpolate_iso_volumes_with_allocations(
+    pressure_hpa: &[f64],
+    temp_k: &[f64],
+    dewpoint_k: &[f64],
+    heights: &ColumnHeights<'_>,
+    u_ms: &[f64],
+    v_ms: &[f64],
+    nz: usize,
+    cells: usize,
+    levels: &[u16],
+    mut planes: IsoPlanes,
+    surface: SurfaceFallback,
+    mut col_p: Vec<f64>,
+    progress: &mut dyn FnMut(String),
+) -> Result<(Vec<IsoVolume>, SurfaceFallback), String> {
+    let mass_heights = match heights {
+        ColumnHeights::MassLevels(data) => Some(*data),
+        ColumnHeights::Interfaces { .. } => None,
+    };
+    let progress_step = (cells / 10).max(1);
+    for c in 0..cells {
+        if c % progress_step == 0 {
+            progress(format!(
+                "interpolating 5 sounding fields to {} isobaric levels: {}%",
+                levels.len(),
+                c * 100 / cells
+            ));
+        }
+        for k in 0..nz {
+            col_p[k] = pressure_hpa[k * cells + c];
+        }
+        for (li, &lev) in levels.iter().enumerate() {
+            let Some((k, t)) = bracket(&col_p, f64::from(lev)) else {
+                continue;
+            };
+            let (i0, i1) = (k * cells + c, (k + 1) * cells + c);
+            if let Some(value) = lerp(temp_k[i0], temp_k[i1], t) {
+                planes.temperature[li][c] = value as f32;
+            }
+            if let Some(value) = lerp(dewpoint_k[i0], dewpoint_k[i1], t) {
+                planes.dewpoint[li][c] = value as f32;
+            }
+            if let Some(value) = lerp(u_ms[i0], u_ms[i1], t) {
+                planes.u_wind[li][c] = value as f32;
+            }
+            if let Some(value) = lerp(v_ms[i0], v_ms[i1], t) {
+                planes.v_wind[li][c] = value as f32;
+            }
+            if let Some(height_m) = mass_heights
+                && let Some(value) = lerp(height_m[i0], height_m[i1], t)
+            {
+                planes.height[li][c] = value as f32;
+            }
+        }
+    }
+    if mass_heights.is_none() {
+        fill_interface_heights(pressure_hpa, heights, nz, cells, levels, &mut planes.height)?;
+    }
+
+    let volumes = vec![
+        IsoVolume {
+            name: "temperature_iso".to_string(),
+            units: "K".to_string(),
+            levels: pack(levels, planes.temperature),
+        },
+        IsoVolume {
+            name: "dewpoint_iso".to_string(),
+            units: "K".to_string(),
+            levels: pack(levels, planes.dewpoint),
+        },
+        IsoVolume {
+            name: "u_iso".to_string(),
+            units: "m/s".to_string(),
+            levels: pack(levels, planes.u_wind),
+        },
+        IsoVolume {
+            name: "v_iso".to_string(),
+            units: "m/s".to_string(),
+            levels: pack(levels, planes.v_wind),
+        },
+        IsoVolume {
+            name: "height_iso".to_string(),
+            units: "gpm".to_string(),
+            levels: pack(levels, planes.height),
+        },
+    ];
+    Ok((volumes, surface))
+}
+
+pub(crate) fn check_native_3d_output(
+    out: &VarOutput,
+    name: &str,
+    nz: usize,
+    ny: usize,
+    nx: usize,
+) -> Result<usize, String> {
+    let expected_shape = [nz, ny, nx];
+    if out.shape.as_slice() != expected_shape.as_slice() {
+        return Err(format!(
+            "WRF {name} has shape {:?}, expected exact native shape {expected_shape:?}",
+            out.shape
+        ));
+    }
+    let expected = checked_dimension_product("WRF native 3-D field", &expected_shape)?;
+    if out.data.len() != expected {
+        return Err(format!(
+            "WRF {name} shape {expected_shape:?} describes {expected} values, but the output contains {}",
+            out.data.len()
+        ));
+    }
+    Ok(expected)
+}
+
+pub(crate) fn validate_earth_relative_uvmet(
+    uvmet: VarOutput,
+    nz: usize,
+    ny: usize,
+    nx: usize,
+    expected_component_values: usize,
+) -> Result<Vec<f64>, String> {
+    let expected_shape = [2, nz, ny, nx];
+    if uvmet.shape.as_slice() != expected_shape.as_slice() {
+        return Err(format!(
+            "WRF uvmet has shape {:?}, expected exact two-component native shape {expected_shape:?}",
+            uvmet.shape,
+        ));
+    }
+    let expected_total = expected_component_values.checked_mul(2).ok_or_else(|| {
+        "WRF uvmet two-component length overflows the platform address space".to_string()
+    })?;
+    if uvmet.data.len() != expected_total {
+        return Err(format!(
+            "WRF uvmet has {} values, expected {expected_total} for two earth-relative components",
+            uvmet.data.len()
+        ));
+    }
+    Ok(uvmet.data)
+}
+
+/// Multiply dimensions supplied by an untrusted file without relying on
+/// release-mode wrapping (or a debug-mode panic). The caller can then report a
+/// malformed shape as an ordinary import error.
+fn checked_dimension_product(name: &str, dimensions: &[usize]) -> Result<usize, String> {
+    dimensions.iter().try_fold(1usize, |product, &dimension| {
+        product.checked_mul(dimension).ok_or_else(|| {
+            format!("{name} dimensions {dimensions:?} overflow the platform address space")
+        })
+    })
+}
+
+fn validate_interpolation_inputs(
+    pressure_hpa: &[f64],
+    temp_k: &[f64],
+    dewpoint_k: &[f64],
+    heights: &ColumnHeights<'_>,
+    u_ms: &[f64],
+    v_ms: &[f64],
+    nz: usize,
+    cells: usize,
+) -> Result<(), String> {
+    let expected = checked_dimension_product("WRF native 3-D field", &[nz, cells])?;
+    if nz < 2 {
+        return Err(format!(
+            "WRF native 3-D fields require at least two levels, got {nz}"
+        ));
+    }
+    for (name, values) in [
+        ("pressure", pressure_hpa),
+        ("temperature", temp_k),
+        ("dewpoint", dewpoint_k),
+        ("u wind", u_ms),
+        ("v wind", v_ms),
+    ] {
+        if values.len() != expected {
+            return Err(format!(
+                "WRF {name} has {} values, expected {expected} for {nz} levels x {cells} cells",
+                values.len()
+            ));
+        }
+    }
+    let (name, layers) = match heights {
+        ColumnHeights::Interfaces { stencil, .. } => ("interface height", stencil.levels()),
+        ColumnHeights::MassLevels(_) => ("height", nz),
+    };
+    if layers != nz {
+        return Err(format!(
+            "WRF {name} describes {layers} layers, expected {nz}"
+        ));
+    }
+    let height_expected = heights
+        .expected_len(nz, cells)
+        .ok_or_else(|| format!("WRF {name} dimensions overflow the platform address space"))?;
+    if heights.len() != height_expected {
+        return Err(format!(
+            "WRF {name} has {} values, expected {height_expected} for {nz} levels x {cells} cells",
+            heights.len()
+        ));
+    }
+    Ok(())
+}
+
+fn try_surface_fallback(
+    pressure_hpa: &[f64],
+    temp_k: &[f64],
+    dewpoint_k: &[f64],
+    u_ms: &[f64],
+    v_ms: &[f64],
+    cells: usize,
+) -> Result<SurfaceFallback, String> {
+    Ok(SurfaceFallback {
+        surface_pressure_pa: try_surface_plane(
+            "approx_surface_pressure",
+            pressure_hpa,
+            cells,
+            |value| (value * 100.0) as f32,
+        )?,
+        temperature_2m_k: try_surface_plane("approx_temperature_2m", temp_k, cells, |value| {
+            value as f32
+        })?,
+        dewpoint_2m_k: try_surface_plane("approx_dewpoint_2m", dewpoint_k, cells, |value| {
+            value as f32
+        })?,
+        u_10m: try_surface_plane("approx_u_10m", u_ms, cells, |value| value as f32)?,
+        v_10m: try_surface_plane("approx_v_10m", v_ms, cells, |value| value as f32)?,
+    })
+}
+
+fn try_surface_plane(
+    name: &str,
+    source: &[f64],
+    cells: usize,
+    convert: impl Fn(f64) -> f32,
+) -> Result<Vec<f32>, String> {
+    let mut plane = Vec::new();
+    plane
+        .try_reserve_exact(cells)
+        .map_err(|err| format!("reserve {cells}-cell WRF surface plane '{name}': {err}"))?;
+    plane.extend(source.iter().take(cells).map(|value| convert(*value)));
+    Ok(plane)
+}
+
+fn try_init_planes(name: &str, levels: usize, cells: usize) -> Result<Vec<Vec<f32>>, String> {
+    let mut planes = Vec::new();
+    planes
+        .try_reserve_exact(levels)
+        .map_err(|err| format!("reserve {levels} WRF pressure planes for '{name}': {err}"))?;
+    for level_index in 0..levels {
+        let mut plane = Vec::new();
+        plane.try_reserve_exact(cells).map_err(|err| {
+            format!(
+                "reserve {cells}-cell WRF pressure plane {level_index}/{levels} for '{name}': {err}"
+            )
+        })?;
+        plane.resize(cells, f32::NAN);
+        planes.push(plane);
+    }
+    Ok(planes)
+}
+
+fn pack(levels: &[u16], planes: Vec<Vec<f32>>) -> Vec<(u16, Vec<f32>)> {
+    levels.iter().copied().zip(planes).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn standard_levels_span_the_isobaric_ladder() {
+        let levels = standard_levels();
+        assert_eq!(levels.len(), 37);
+        assert_eq!(*levels.first().unwrap(), 100);
+        assert_eq!(*levels.last().unwrap(), 1000);
+    }
+
+    #[test]
+    fn volume_preflight_accepts_large_arrays_and_checks_owned_working_set_without_allocating() {
+        // A host that does not report its memory is held at the floor, the
+        // fixed ceiling every host had before the ceiling read the host.
+        let floor_host = |nz, cells| preflight_iso_volume_shape_within(nz, cells, None);
+        // The former element ceiling must not omit a volume on a host with memory.
+        let large_cells = 2695 * 1585;
+        assert!(checked_volume_elements(50, large_cells).unwrap() > 134_217_728);
+        assert!(preflight_iso_volume_shape_within(50, large_cells, Some(64 << 30)).is_ok());
+        assert!(floor_host(50, large_cells).is_err());
+
+        assert_eq!(
+            floor_host(79, 800 * 800).unwrap(),
+            3_722_240_000,
+            "known 800x800x79 workflow remains below the 4 GiB owned-buffer cap"
+        );
+        assert_eq!(
+            floor_host(92, 800 * 800).unwrap(),
+            4_254_720_000,
+            "largest accepted level count for this grid remains just under 4 GiB"
+        );
+        let aggregate_error = floor_host(93, 800 * 800)
+            .expect_err("one level beyond the aggregate boundary must fail before getvar");
+        assert!(
+            aggregate_error.contains("4 GiB"),
+            "unexpected aggregate error: {aggregate_error}"
+        );
+        assert!(floor_host(usize::MAX, 1).is_err());
+        assert!(floor_host(1, 1).is_err());
+        assert!(floor_host(2, 0).is_err());
+        assert!(checked_byte_product("test", &[u128::MAX, 2]).is_err());
+    }
+
+    /// THE BREAKAGE: the 4 GiB floor was the whole ceiling, so a 1132x906x55
+    /// frame (4,389,533,760 owned bytes) drew 43 pictures where an 880x704x55
+    /// frame drew 67 on a 30 GiB worker with the memory to spare: every
+    /// pressure-level chart was left out.
+    #[test]
+    fn a_frame_past_the_floor_builds_its_volumes_where_the_host_has_the_memory() {
+        const GIB: u64 = 1 << 30;
+        let large = (55, 1132 * 906);
+        assert_eq!(
+            preflight_iso_volume_shape_within(large.0, large.1, Some(8 * GIB)).unwrap(),
+            4_389_533_760
+        );
+        // A 1792x1024x55 CONUS 3 km frame on a host with 16 GiB available.
+        assert_eq!(
+            preflight_iso_volume_shape_within(55, 1792 * 1024, Some(16 * GIB)).unwrap(),
+            7_853_834_240
+        );
+        // Exactly the memory the host has is still admitted; one byte more is not.
+        assert!(preflight_iso_volume_shape_within(large.0, large.1, Some(4_389_533_760)).is_ok());
+        let short = preflight_iso_volume_shape_within(large.0, large.1, Some(4_389_533_759))
+            .expect_err("a build past the host's available memory must not start");
+        assert!(
+            short.contains(
+                "exceeding the 4389533759-byte host memory ceiling \
+                 (this process has 4389533759 bytes available now;"
+            ),
+            "the refusal names the host's measured memory: {short}"
+        );
+        let unreported = preflight_iso_volume_shape_within(large.0, large.1, None)
+            .expect_err("a host that does not say is held at the floor");
+        assert!(
+            unreported.contains("4294967296-byte host memory ceiling")
+                && unreported.contains("does not report its available memory"),
+            "unexpected refusal: {unreported}"
+        );
+        // A host with less than the floor still builds every grid under it,
+        // as every host did before the ceiling read the host.
+        assert_eq!(
+            preflight_iso_volume_shape_within(92, 800 * 800, Some(GIB)).unwrap(),
+            4_254_720_000
+        );
+        assert!(preflight_iso_volume_shape_within(93, 800 * 800, Some(GIB)).is_err());
+    }
+
+    /// The real entry point reads the host: on a host with the memory, the
+    /// 1132x906x55 frame is admitted where the fixed ceiling refused it.
+    #[test]
+    fn the_preflight_reads_the_memory_this_host_has_available() {
+        let need = 4_389_533_760u64;
+        match rusty_weather::host_memory::available_bytes() {
+            // Room for the frame with a GiB spare, so a host whose free
+            // memory moves while the test runs still answers the same.
+            Some(available) if available > need + (1 << 30) => {
+                assert_eq!(preflight_iso_volume_shape(55, 1132 * 906), Ok(need));
+            }
+            Some(available) if available + (1 << 30) < need => {
+                assert!(preflight_iso_volume_shape(55, 1132 * 906).is_err());
+            }
+            // Too close to call, or a platform that does not say.
+            _ => {}
+        }
+    }
+
+    /// The interpolator repeats the shape and addressability checks but not the host
+    /// comparison: its inputs are resident and already counted in use.
+    #[test]
+    fn the_interpolator_does_not_count_its_resident_inputs_against_the_host_again() {
+        assert!(iso_volume_owned_bytes(55, 1132 * 906).is_ok());
+        assert!(iso_volume_owned_bytes(50, 2695 * 1585).is_ok());
+        assert!(iso_volume_owned_bytes(2, usize::MAX).is_err());
+        assert!(iso_volume_owned_bytes(1, 1).is_err());
+    }
+
+    #[test]
+    fn bracket_interpolates_in_log_pressure_and_clamps_to_range() {
+        // Decreasing pressure with index (level 0 nearest the surface).
+        let col = [1000.0, 850.0, 700.0, 500.0];
+        // Midway between 1000 and 850 in ln-p.
+        let (k, t) = bracket(&col, 925.0).expect("in range");
+        assert_eq!(k, 0);
+        let expected = (925f64.ln() - 1000f64.ln()) / (850f64.ln() - 1000f64.ln());
+        assert!((t - expected).abs() < 1e-9);
+        // Below the lowest level and above the top are both out of range.
+        assert!(bracket(&col, 1013.0).is_none());
+        assert!(bracket(&col, 300.0).is_none());
+    }
+
+    #[test]
+    fn lerp_skips_non_finite_endpoints() {
+        assert_eq!(lerp(0.0, 10.0, 0.5), Some(5.0));
+        assert_eq!(lerp(f64::NAN, 10.0, 0.5), None);
+        assert_eq!(lerp(0.0, f64::NAN, 0.5), None);
+    }
+
+    #[test]
+    fn malformed_dimension_products_return_errors_instead_of_overflowing() {
+        let error = checked_dimension_product("test field", &[2, usize::MAX, 2])
+            .expect_err("oversized file dimensions must fail closed");
+        assert!(error.contains("overflow"));
+        assert_eq!(checked_dimension_product("test field", &[2, 3, 4]), Ok(24));
+    }
+
+    #[test]
+    fn checked_interpolator_rejects_bad_native_shape_before_output_allocation() {
+        let one_value = [1.0];
+        let error = try_interpolate_iso_volumes(
+            &one_value,
+            &one_value,
+            &one_value,
+            ColumnHeights::MassLevels(&one_value),
+            &one_value,
+            &one_value,
+            2,
+            1,
+            &mut |_| {},
+        )
+        .err()
+        .expect("two levels x one cell requires two values per input");
+        assert!(error.contains("expected 2"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn native_outputs_require_exact_declared_wrf_shapes() {
+        let valid = VarOutput {
+            data: vec![1.0, 2.0],
+            shape: vec![2, 1, 1],
+            units: "K".to_string(),
+            description: "valid native field".to_string(),
+        };
+        assert_eq!(check_native_3d_output(&valid, "temp", 2, 1, 1), Ok(2));
+
+        let transposed = VarOutput {
+            data: vec![1.0, 2.0],
+            shape: vec![1, 1, 2],
+            units: "K".to_string(),
+            description: "wrongly shaped field".to_string(),
+        };
+        let error = check_native_3d_output(&transposed, "temp", 2, 1, 1)
+            .expect_err("same-length transposed shape must fail closed");
+        assert!(
+            error.contains("exact native shape"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn uvmet_validation_rejects_grid_relative_or_malformed_fallback_shapes() {
+        let uvmet = VarOutput {
+            data: vec![1.0, 2.0, 3.0, 4.0],
+            shape: vec![2, 2, 1, 1],
+            units: "m/s".to_string(),
+            description: "earth-relative wind".to_string(),
+        };
+        let winds =
+            validate_earth_relative_uvmet(uvmet, 2, 1, 1, 2).expect("valid uvmet components");
+        let (u, v) = winds.split_at(2);
+        assert_eq!(u, &[1.0, 2.0]);
+        assert_eq!(v, &[3.0, 4.0]);
+
+        let one_component = VarOutput {
+            data: vec![1.0, 2.0],
+            shape: vec![1, 2, 1, 1],
+            units: "m/s".to_string(),
+            description: "grid-relative wind".to_string(),
+        };
+        assert!(
+            validate_earth_relative_uvmet(one_component, 2, 1, 1, 2)
+                .expect_err("one grid-relative component must not be accepted")
+                .contains("two-component native shape")
+        );
+    }
+
+    /// The shared interpolator must stream progress (both import paths surface
+    /// it) and still produce correct planes: guard for the progress plumbing.
+    #[test]
+    fn interpolate_streams_progress_and_interpolates() {
+        // 2 columns × 3 levels, pressure decreasing with index.
+        let pressure = vec![1000.0, 1000.0, 850.0, 850.0, 700.0, 700.0];
+        let temp = vec![300.0, 301.0, 290.0, 291.0, 280.0, 281.0];
+        let dewp = vec![295.0, 296.0, 285.0, 286.0, 275.0, 276.0];
+        let height = vec![100.0, 110.0, 1500.0, 1510.0, 3000.0, 3010.0];
+        let u = vec![1.0; 6];
+        let v = vec![2.0; 6];
+
+        let mut messages = Vec::new();
+        let (volumes, surface) = try_interpolate_iso_volumes(
+            &pressure,
+            &temp,
+            &dewp,
+            ColumnHeights::MassLevels(&height),
+            &u,
+            &v,
+            3,
+            2,
+            &mut |message| messages.push(message),
+        )
+        .expect("small valid volume");
+
+        assert!(
+            messages
+                .iter()
+                .all(|message| message.contains("isobaric levels")),
+            "unexpected progress lines: {messages:?}"
+        );
+        assert!(!messages.is_empty(), "interpolation must report progress");
+
+        // 850 hPa is an exact native level: temperature lands unchanged.
+        let temps = &volumes[0];
+        assert_eq!(temps.name, "temperature_iso");
+        let (_, plane_850) = temps
+            .levels
+            .iter()
+            .find(|(hpa, _)| *hpa == 850)
+            .expect("850 hPa plane");
+        assert!((plane_850[0] - 290.0).abs() < 1e-3);
+        assert!((plane_850[1] - 291.0).abs() < 1e-3);
+        // Surface fallback comes from level 0 in Pa/K.
+        assert!((surface.surface_pressure_pa[0] - 100_000.0).abs() < 1e-3);
+        assert!((surface.temperature_2m_k[1] - 301.0).abs() < 1e-3);
+    }
+}

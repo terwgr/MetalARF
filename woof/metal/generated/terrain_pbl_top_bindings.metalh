@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 19ae6eb9243d24781e8fac6bbd673350be9dddba40d330505fd907497cd31138.
+struct TerrainPblTopResources {
+    device const float *dz [[id(0)]];
+    device const float *pblh [[id(1)]];
+    device int *kpbl [[id(2)]];
+};
+struct TerrainPblTopParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(TerrainPblTopParams) == 12, "terrain_pbl_top parameter ABI size changed");

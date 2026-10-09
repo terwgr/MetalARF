@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout 0870f8d0090f84f6da9d33111bc527c5647ea6466a05a446e9fb72724f74c347.
+struct GlobalLevelWaterMassRowsFragmentResources {
+    device const ulong *stacked [[id(0)]];
+    device const ulong *dp [[id(1)]];
+    device ulong *rows [[id(2)]];
+};
+struct GlobalLevelWaterMassRowsFragmentParams {
+    int nspecies;
+    int nlev;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalLevelWaterMassRowsFragmentParams) == 16, "global_level_water_mass_rows_fragment parameter ABI size changed");

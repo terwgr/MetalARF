@@ -1,0 +1,123 @@
+{
+  "kernels": [
+    {
+      "name": "noah_forcing",
+      "module": "noah_forcing",
+      "source": "woof/metal/shaders/noah_forcing_family.metal",
+      "cuda_source": "woof/core/noah_forcing.py",
+      "cuda_symbol": "noah_forcing",
+      "resources": [
+        ["p_if0_a", "float", "read"],
+        ["p_if1_a", "float", "read"],
+        ["temperature0_a", "float", "read"],
+        ["qv0_a", "float", "read"],
+        ["dz0_a", "float", "read"],
+        ["br_a", "float", "read"],
+        ["sr_scheme_a", "float", "read"],
+        ["pending_a", "float", "read"],
+        ["sfcprs_a", "float", "read_write"],
+        ["sfctmp_a", "float", "read_write"],
+        ["qv1_a", "float", "read_write"],
+        ["dz8w1_a", "float", "read_write"],
+        ["rib_a", "float", "read_write"],
+        ["sr_a", "float", "read_write"],
+        ["rainbl_a", "float", "read_write"]
+      ],
+      "shapes": {
+        "p_if0_a": [["ny", "nx"]],
+        "p_if1_a": [["ny", "nx"]],
+        "temperature0_a": [["ny", "nx"]],
+        "qv0_a": [["ny", "nx"]],
+        "dz0_a": [["ny", "nx"]],
+        "br_a": [["ny", "nx"]],
+        "sr_scheme_a": [["ny", "nx"]],
+        "pending_a": [["ny", "nx"]],
+        "sfcprs_a": [["ny", "nx"]],
+        "sfctmp_a": [["ny", "nx"]],
+        "qv1_a": [["ny", "nx"]],
+        "dz8w1_a": [["ny", "nx"]],
+        "rib_a": [["ny", "nx"]],
+        "sr_a": [["ny", "nx"]],
+        "rainbl_a": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["freezing", "float32"],
+        ["use_scheme_sr", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["ncol", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "noah_rain_clear",
+      "module": "noah_forcing",
+      "source": "woof/metal/shaders/noah_forcing_family.metal",
+      "cuda_source": "woof/core/noah_forcing.py",
+      "cuda_symbol": "noah_rain_clear",
+      "resources": [
+        ["rainbl_a", "float", "read_write"],
+        ["pending_a", "float", "read_write"]
+      ],
+      "shapes": {
+        "rainbl_a": [["ny", "nx"]],
+        "pending_a": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["ncol", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "noah_rain_add",
+      "module": "noah_forcing",
+      "source": "woof/metal/shaders/noah_forcing_family.metal",
+      "cuda_source": "woof/core/noah_forcing.py",
+      "cuda_symbol": "noah_rain_add",
+      "resources": [
+        ["rainbl_a", "float", "read_write"],
+        ["pending_a", "float", "read"]
+      ],
+      "shapes": {
+        "rainbl_a": [["ny", "nx"]],
+        "pending_a": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["ncol", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "noah_sr_from_temperature",
+      "module": "noah_forcing",
+      "source": "woof/metal/shaders/noah_forcing_family.metal",
+      "cuda_source": "woof/core/noah_forcing.py",
+      "cuda_symbol": "noah_sr_from_temperature",
+      "resources": [
+        ["temperature_a", "float", "read"],
+        ["sr_a", "float", "read_write"]
+      ],
+      "shapes": {
+        "temperature_a": [["ncol"]],
+        "sr_a": [["ncol"]]
+      },
+      "parameters": [
+        ["freezing", "float32"],
+        ["ncol", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

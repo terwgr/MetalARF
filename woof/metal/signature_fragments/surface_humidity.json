@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "name": "surface_cap_land_q2",
+      "module": "surface_humidity",
+      "source": "woof/metal/shaders/surface_humidity.metal",
+      "cuda_source": "woof/core/surface_humidity.py",
+      "cuda_symbol": "cap_land_q2",
+      "resources": [
+        ["q2", "float", "read_write"],
+        ["qv1", "float", "read"],
+        ["xland", "float", "read"]
+      ],
+      "shapes": {
+        "q2": [["ny", "nx"]],
+        "qv1": [["ny", "nx"]],
+        "xland": [["ny", "nx"]]
+      },
+      "parameters": [["nx", "int32"], ["ny", "int32"], ["n", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

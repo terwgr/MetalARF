@@ -1,0 +1,86 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/semilag/step.py",
+      "cuda_symbol": "resident pointwise Global SL theta tendency update",
+      "layout_version": 1,
+      "module": "global_semilag_add_scaled_fragment",
+      "name": "global_semilag_add_scaled_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "base",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "increment",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "previous",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "current_scale",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "previous_scale",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "destination",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "current_scale": [
+          [
+            1
+          ]
+        ],
+        "destination": [
+          [
+            "any_1d"
+          ]
+        ],
+        "increment": [
+          [
+            "any_1d"
+          ]
+        ],
+        "previous": [
+          [
+            "any_1d"
+          ]
+        ],
+        "previous_scale": [
+          [
+            1
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_semilag_add_scaled_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

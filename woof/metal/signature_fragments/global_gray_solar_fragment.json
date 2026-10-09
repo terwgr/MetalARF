@@ -1,0 +1,36 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "solar zenith and shortwave column geometry",
+      "layout_version": 1,
+      "module": "global_gray_solar_fragment",
+      "name": "global_gray_solar_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["cos_lat", "float64_bits", "read"],
+        ["sin_lon", "float64_bits", "read"],
+        ["cos_lon", "float64_bits", "read"],
+        ["albedo", "float64_bits", "read"],
+        ["solar_angle", "float64_bits", "read"],
+        ["solar_constant", "float64_bits", "read"],
+        ["atmospheric_absorptivity", "float64_bits", "read"],
+        ["cosine_zenith", "float64_bits", "read_write"],
+        ["sw_atmosphere", "float64_bits", "read_write"],
+        ["absorbed_shortwave", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "cos_lat": [["any_1d"]], "sin_lon": [["any_1d"]],
+        "cos_lon": [["any_1d"]], "albedo": [["any_1d"]],
+        "solar_angle": [[1]], "solar_constant": [[1]],
+        "atmospheric_absorptivity": [[1]],
+        "cosine_zenith": [["any_1d"]],
+        "sw_atmosphere": [["any_1d"]],
+        "absorbed_shortwave": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_gray_solar_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

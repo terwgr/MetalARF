@@ -1,0 +1,917 @@
+{
+  "kernels": [
+    {
+      "name": "small_step_init_uv",
+      "module": "dycore",
+      "source": "woof/metal/shaders/small_step.metal",
+      "cuda_source": "woof/core/kernels/dycore.cu",
+      "cuda_symbol": "small_step_init_uv",
+      "resources": [
+        [
+          "u_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "v_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "u0",
+          "float",
+          "read"
+        ],
+        [
+          "v0",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "mup0",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "u_pp": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v_pp": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "u0": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v0": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mup0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "small_step_init_column",
+      "module": "dycore",
+      "source": "woof/metal/shaders/small_step.metal",
+      "cuda_source": "woof/core/kernels/dycore.cu",
+      "cuda_symbol": "small_step_init_column",
+      "resources": [
+        [
+          "w_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "th_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "ph_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "mu_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "al_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "p_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "p_pp_old",
+          "float",
+          "read_write"
+        ],
+        [
+          "w0",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "thp0",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "php0",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "mup0",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "w_pp": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "th_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph_pp": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu_pp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "al_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_pp_old": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w0": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php0": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "c1f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "gamma",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "small_step_finish_uv",
+      "module": "dycore",
+      "source": "woof/metal/shaders/small_step.metal",
+      "cuda_source": "woof/core/kernels/dycore.cu",
+      "cuda_symbol": "small_step_finish_uv",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read_write"
+        ],
+        [
+          "u_pp",
+          "float",
+          "read"
+        ],
+        [
+          "v_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mu_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "u_pp": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v_pp": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu_pp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "small_step_finish_column",
+      "module": "dycore",
+      "source": "woof/metal/shaders/small_step.metal",
+      "cuda_source": "woof/core/kernels/dycore.cu",
+      "cuda_symbol": "small_step_finish_column",
+      "resources": [
+        [
+          "w",
+          "float",
+          "read_write"
+        ],
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "php",
+          "float",
+          "read_write"
+        ],
+        [
+          "mup",
+          "float",
+          "read_write"
+        ],
+        [
+          "w_pp",
+          "float",
+          "read"
+        ],
+        [
+          "th_pp",
+          "float",
+          "read"
+        ],
+        [
+          "ph_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mu_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "h_diabatic",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "w_pp": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "th_pp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph_pp": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu_pp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "c1f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_diabatic": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "hdiab_dt",
+          "float32"
+        ],
+        [
+          "remove_hdiab",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

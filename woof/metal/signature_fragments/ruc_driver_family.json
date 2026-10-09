@@ -1,0 +1,350 @@
+{
+  "kernels": [
+    {
+      "name": "ruc_driver_prologue",
+      "module": "ruc_driver_family",
+      "source": "woof/metal/shaders/ruc_driver_family.metal",
+      "cuda_source": "woof/core/kernels/ruc_fused_driver.cuh",
+      "cuda_symbol": "ruc_driver_prologue",
+      "resources": [
+        [
+          "raw",
+          "uint32",
+          "read_write"
+        ],
+        [
+          "flags",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "raw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flags": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "int_base",
+          "int32"
+        ],
+        [
+          "run_base",
+          "int32"
+        ],
+        [
+          "pending_base",
+          "int32"
+        ],
+        [
+          "frzfrac_mode",
+          "int32"
+        ],
+        [
+          "ktau",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "iswater",
+          "int32"
+        ],
+        [
+          "isice",
+          "int32"
+        ],
+        [
+          "nv",
+          "int32"
+        ],
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "icealbedo",
+          "float32"
+        ],
+        [
+          "cn",
+          "float32"
+        ],
+        [
+          "table_base",
+          "int32"
+        ],
+        [
+          "table_offset_ifortbl",
+          "int32"
+        ],
+        [
+          "table_offset_z0tbl",
+          "int32"
+        ],
+        [
+          "table_offset_lemitbl",
+          "int32"
+        ],
+        [
+          "table_offset_pctbl",
+          "int32"
+        ],
+        [
+          "table_offset_laitbl",
+          "int32"
+        ],
+        [
+          "table_offset_bb",
+          "int32"
+        ],
+        [
+          "table_offset_drysmc",
+          "int32"
+        ],
+        [
+          "table_offset_hc",
+          "int32"
+        ],
+        [
+          "table_offset_maxsmc",
+          "int32"
+        ],
+        [
+          "table_offset_refsmc",
+          "int32"
+        ],
+        [
+          "table_offset_satpsi",
+          "int32"
+        ],
+        [
+          "table_offset_satdk",
+          "int32"
+        ],
+        [
+          "table_offset_wltsmc",
+          "int32"
+        ],
+        [
+          "table_offset_qtz",
+          "int32"
+        ],
+        [
+          "table_offset_tbq",
+          "int32"
+        ],
+        [
+          "nlcat",
+          "int32"
+        ],
+        [
+          "nscat",
+          "int32"
+        ],
+        [
+          "mosaic_lu",
+          "int32"
+        ],
+        [
+          "mosaic_soil",
+          "int32"
+        ],
+        [
+          "lakemodel",
+          "int32"
+        ],
+        [
+          "qvg_air",
+          "int32"
+        ],
+        [
+          "rdlai2d",
+          "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
+        ],
+        [
+          "forms",
+          "int32"
+        ],
+        [
+          "table_offset_landusef",
+          "int32"
+        ],
+        [
+          "table_offset_soilctop",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "ruc_driver_epilogue",
+      "module": "ruc_driver_family",
+      "source": "woof/metal/shaders/ruc_driver_family.metal",
+      "cuda_source": "woof/core/kernels/ruc_fused_driver.cuh",
+      "cuda_symbol": "ruc_driver_epilogue",
+      "resources": [
+        [
+          "raw",
+          "uint32",
+          "read_write"
+        ],
+        [
+          "flags",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "raw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flags": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "table_base",
+          "int32"
+        ],
+        [
+          "table_offset_tbq",
+          "int32"
+        ],
+        [
+          "table_offset_lemitbl",
+          "int32"
+        ],
+        [
+          "table_offset_zshalf",
+          "int32"
+        ],
+        [
+          "table_offset_landusef",
+          "int32"
+        ],
+        [
+          "nlcat",
+          "int32"
+        ],
+        [
+          "mosaic_lu",
+          "int32"
+        ],
+        [
+          "crop",
+          "int32"
+        ],
+        [
+          "natural",
+          "int32"
+        ],
+        [
+          "irrigation",
+          "int32"
+        ],
+        [
+          "log_profile",
+          "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "ruc_driver_commit",
+      "module": "ruc_driver_family",
+      "source": "woof/metal/shaders/ruc_driver_family.metal",
+      "cuda_source": "woof/core/kernels/ruc_fused_driver.cuh",
+      "cuda_symbol": "ruc_driver_commit",
+      "resources": [
+        [
+          "raw",
+          "uint32",
+          "read_write"
+        ],
+        [
+          "flags",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "raw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flags": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "sf_flag_words",
+          "int32"
+        ],
+        [
+          "sf_flag_base",
+          "int32"
+        ],
+        [
+          "alive_base",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

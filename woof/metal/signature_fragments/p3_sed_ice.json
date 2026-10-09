@@ -1,0 +1,40 @@
+{
+  "kernels": [
+    {
+      "name": "p3_sed_ice",
+      "module": "p3_sed_ice",
+      "source": "woof/metal/shaders/p3_sed_ice.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_sed_ice",
+      "resources": [
+        ["qi", "float", "read_write"], ["qir", "float", "read_write"],
+        ["ni", "float", "read_write"], ["qib", "float", "read_write"],
+        ["dz", "float", "read"], ["rho", "float", "read"],
+        ["inv_rho", "float", "read"], ["rhofaci", "float", "read"],
+        ["vq", "float", "read_write"], ["vn", "float", "read_write"],
+        ["fq", "float", "read_write"], ["fn", "float", "read_write"],
+        ["fqir", "float", "read_write"], ["fbir", "float", "read_write"],
+        ["itab", "float", "read"], ["prt_sol", "float", "read_write"],
+        ["flags", "float", "read"]
+      ],
+      "shapes": {
+        "qi": [["nz", "ny", "nx"]], "qir": [["nz", "ny", "nx"]],
+        "ni": [["nz", "ny", "nx"]], "qib": [["nz", "ny", "nx"]],
+        "dz": [["nz", "ny", "nx"]], "rho": [["nz", "ny", "nx"]],
+        "inv_rho": [["nz", "ny", "nx"]], "rhofaci": [["nz", "ny", "nx"]],
+        "vq": [["nz", "ny", "nx"]], "vn": [["nz", "ny", "nx"]],
+        "fq": [["nz", "ny", "nx"]], "fn": [["nz", "ny", "nx"]],
+        "fqir": [["nz", "ny", "nx"]], "fbir": [["nz", "ny", "nx"]],
+        "itab": [[14000]], "prt_sol": [["ny", "nx"]],
+        "flags": [[2, "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["dt", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

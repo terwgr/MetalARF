@@ -1,0 +1,126 @@
+[build-system]
+# >=77 turns the SPDX `license` string into License-Expression metadata.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recast-woof"
+version = "1.0.3"
+description = "Recast WOOF: GPU-native regional weather forecasting with WRF-class physics, data assimilation and native preprocessing, plus preview hex and global models"
+readme = "README.md"
+license = "Apache-2.0"
+# Every licence whose terms ask for its text to travel with the copy ships
+# in the wheel and the sdist under the dist-info licenses/ folder.
+license-files = ["LICENSE", "NOTICE", "licenses/*"]
+requires-python = ">=3.11"
+# numpy>=2: the FP32 radiation chains rely on NEP-50 weak promotion.
+# jsonschema: every forecast validates its certification capsule.
+# scipy, pyshp: the vad-region dealiasing engine and the basemap reader.
+# cdsapi: the ERA5 route through the Copernicus CDS.
+# recast-woof-data: reference tables and map assets, pinned to this version.
+dependencies = ["numpy>=2.0", "netCDF4>=1.6", "matplotlib>=3.8",
+                "jsonschema>=4.0",
+                "scipy>=1.11", "pyshp>=2.3", "cdsapi>=0.7.7", "recast-woof-data==1.0.3"]
+keywords = ["WRF", "WPS", "GRIB", "NetCDF", "weather", "CUDA", "MPAS", "data-assimilation"]
+classifiers = [
+    "Environment :: GPU :: NVIDIA CUDA",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+]
+
+[project.urls]
+Homepage = "https://github.com/recastsystems/woof"
+Repository = "https://github.com/recastsystems/woof"
+Changelog = "https://github.com/recastsystems/woof/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# One CuPy/CUDA major per environment.
+gpu-cu12 = ["cupy-cuda12x[ctk]>=14.0"]
+gpu-cu13 = ["cupy-cuda13x[ctk]>=14.0"]
+gpu = ["recast-woof[gpu-cu12]"]
+# The wrf-rust Python bindings, for the renderer's Python-side helpers.
+render = ["wrf-rust>=0.2.39,<0.3"]
+# The legacy Python warp path of the high-resolution static builder; the
+# default path is the Rust static-fields library in the bundle.
+geog = ["rasterio>=1.3", "pyproj>=3.6"]
+obs = []
+dealias = []
+dev = ["pytest>=8.0", "pytest-xdist>=3.5", "psutil>=5.9", "pyyaml>=6.0"]
+publish = ["huggingface_hub>=0.23", "h5py>=3.10"]
+all-cu12 = ["recast-woof[gpu-cu12]", "recast-woof[render]"]
+all-cu13 = ["recast-woof[gpu-cu13]", "recast-woof[render]"]
+all = ["recast-woof[all-cu12]"]
+
+[project.scripts]
+woof = "woof.cli:main"
+woof-carried-channel = "tools.carried_physics_channel:main"
+woof-wrf-init = "woof.source_cli:main"
+rw-wps = "woof.source_cli:main"
+woof-wrf-runtime-check = "woof.native_wrf_distribution:main"
+woof-mapped-inspect = "woof.mapped_source:main"
+woof-prepared-forecast = "woof.prepared_single_domain_forecast:main"
+woof-prepared-tree-forecast = "woof.prepared_domain_tree_forecast:main"
+woof-member-prep = "woof.member_prep:main"
+
+[tool.setuptools.packages.find]
+include = ["woof", "woof.*", "tools", "tilestream*", "configs*", "docs", "mpas_cycle_bridge*"]
+# woof.hex.mod is a name reserved for a private extension row; extra rows
+# arrive through the woof.hex.rows entry-point group instead.
+exclude = ["tilestream.rescued-tools*", "tilestream.skeptic*", "recast-woof-data*",
+           "woof.hex.mod", "woof.hex.mod.*"]
+
+[tool.setuptools.package-data]
+woof = [
+    "*.json",
+    "authorities/**/*",
+    "data/**/*",
+    # Prebuilt native bridge and Metal payloads are present only in a
+    # platform wheel (setup.py validates manifests and sets the wheel tag).
+    "libexec/bridges/*",
+    "libexec/metal/*",
+]
+"woof.metal" = ["native/*.h", "native/*.mm", "shaders/*.metal",
+                 "shaders/*.metalh", "kernel_signatures.json",
+                 "signature_fragments/*.json",
+                 "generated/*.metalh", "generated/*.json"]
+"woof.core.kernels" = ["*.cu", "*.cuh", "LICENSE-third-party.txt"]
+"woof.obs" = ["data/**/*"]
+"woof.verify" = ["*.json"]
+"woof.certify" = ["*.json"]
+"woof.ingest" = ["*.md"]
+"woof.hex" = ["*.json", "data/**/*", "*.cu", "*.cuh"]
+"woof.globe" = [
+    "*.cu",
+    "*.cuh",
+    "*.json",
+    "configs/**/*",
+    "core/kernels/*.cu",
+    "core/kernels/*.cuh",
+    "core/kernels/*.txt",
+    "data/**/*",
+    "radiance_tables/**/*",
+    "semilag/*.cu",
+]
+tools = ["prepare_hrrr_*.sh"]
+tilestream = ["output-scaling.json"]
+configs = ["**/*"]
+docs = ["mpas-seam.md"]
+
+[tool.setuptools.exclude-package-data]
+woof = []
+
+[tool.pytest.ini_options]
+markers = ["gpu: requires a CUDA GPU + cupy",
+           "slow: an exhaustive sweep, minutes rather than seconds",
+           "network: live-internet smoke, additionally gated on WOOF_NETWORK_TESTS=1",
+           "static_rust_parity: static-fields bridge, builder and parity coverage; run with -m static_rust_parity",
+           "static_platform_qualification: exact Python/Rust WPS comparisons reported by the dedicated platform qualification job",
+           "bigcard: hex model tests that need the x4 full-physics free-memory floor",
+           "assets: needs a byte-pinned data asset that ships with no fetch path",
+           "doors: needs a staged Rust binary from a release bundle",
+           "cpu_only: these tests must not open the local device"]
+testpaths = ["tests", "tilestream"]

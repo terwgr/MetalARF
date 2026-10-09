@@ -1,0 +1,34 @@
+{
+  "schema": "woof-metal-soft-binary32-contract-v1",
+  "status": "implemented-unverified",
+  "representation": "IEEE-754 binary32 bit pattern stored in MSL uint; arithmetic uses integer operations only",
+  "rounding": "round-to-nearest, ties-to-even",
+  "implemented": [
+    "classification: sign, zero, finite, infinity, quiet NaN, signaling NaN",
+    "sign, absolute-value, and sign-bit negation operations",
+    "binary32 add and subtract",
+    "binary32 multiply using an exact 48-bit integer product",
+    "binary32 divide using restoring quotient generation and sticky remainder",
+    "ordered equality and relational comparisons; unordered NaN results",
+    "binary32-bit to binary64-bit exact widening conversion",
+    "binary64-bit to binary32-bit RN-even conversion with gradual underflow",
+    "correctly rounded binary32 square root using integer radicand and gradual-underflow packing"
+  ],
+  "special_values": {
+    "zero": "signed zeros are preserved by sign operations, multiplication, division, and widening; exact cancellation returns positive zero under RN-even",
+    "underflow": "gradual; subnormal results are rounded rather than flushed",
+    "overflow": "finite arithmetic and narrowing conversion round to signed infinity when the rounded exponent exceeds the binary32 range",
+    "nan_arithmetic": "the first NaN operand is quieted while preserving its sign and payload; invalid non-NaN operations return canonical positive quiet NaN",
+    "nan_conversion": "NaNs are quieted; narrowing keeps high payload bits and widening places the binary32 payload in the high binary64 fraction bits",
+    "nan_comparison": "all ordered comparisons return false; soft32_compare returns 2 for unordered"
+  },
+  "unimplemented": [
+    "integer conversions",
+    "remainder, modulo, nextafter, scalbn, and frexp",
+    "transcendental functions including log, exp, and pow",
+    "directed rounding modes and IEEE exception flags",
+    "NaN totalOrder and signaling exception behavior",
+    "fused multiply-add"
+  ],
+  "verification": "MetalToolchain 27.1 compiled and executed temporary probes on the installed Apple GPU. A deterministic 256-lane boundary/pseudo-random finite probe emitted 5,888 words; bounded comparisons returned zero mismatches. A separate 59-lane edge probe made 1,121 oracle comparisons with zero mismatches, including signed zero, qNaN/sNaN payload quieting, invalid-operation NaNs, int32/uint32 conversion boundaries, and binary64-to-binary32 rounding ties. This remains bounded evidence; it does not exhaust all IEEE input space or consumer-specific CUDA behavior, so the contract status remains implemented-unverified."
+}

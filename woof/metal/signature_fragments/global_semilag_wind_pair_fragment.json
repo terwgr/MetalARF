@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/spectral/vector.py",
+      "cuda_symbol": "resident Global semi-Lagrangian wind pair stack",
+      "layout_version": 1,
+      "module": "global_semilag_wind_pair_fragment",
+      "name": "global_semilag_wind_pair_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["u", "float64_bits", "read"],
+        ["v", "float64_bits", "read"],
+        ["pair", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "u": [["any_1d"]],
+        "v": [["any_1d"]],
+        "pair": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_wind_pair_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

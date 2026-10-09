@@ -1,0 +1,23 @@
+// Generated from kernel_signatures.json; layout 186f77697886f6d968b38f3eaf01831a6b0d518c74827decd5f7574620c00469.
+struct HexInterfaceVelocityTerrainFragmentResources {
+    device const float *rho [[id(0)]];
+    device const float *rho_u [[id(1)]];
+    device const int *n_edges_on_cell [[id(2)]];
+    device const int *edges_on_cell [[id(3)]];
+    device const float *edge_sign [[id(4)]];
+    device const float *zb_cell [[id(5)]];
+    device const float *zb3_cell [[id(6)]];
+    device const float *fzm [[id(7)]];
+    device const float *fzp [[id(8)]];
+    device float *velocity [[id(9)]];
+};
+struct HexInterfaceVelocityTerrainFragmentParams {
+    int nlev;
+    int ncells;
+    int nedges;
+    int max_edges;
+    float cf1;
+    float cf2;
+    float cf3;
+};
+static_assert(sizeof(HexInterfaceVelocityTerrainFragmentParams) == 28, "hex_interface_velocity_terrain_fragment parameter ABI size changed");

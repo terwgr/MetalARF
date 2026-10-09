@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout b7b64941beac5ed05f9e30ba1b04d9910709217651aafb2caf098fce2d412232.
+struct RrtmgLegacySwPostResources {
+    device const float *pdp [[id(0)]];
+    device const float *pbbfu [[id(1)]];
+    device const float *pbbfd [[id(2)]];
+    device const float *pbbcu [[id(3)]];
+    device const float *pbbcd [[id(4)]];
+    device float *swhr [[id(5)]];
+    device float *swhrc [[id(6)]];
+};
+struct RrtmgLegacySwPostParams {
+    int ncol;
+    int nl;
+    float heatfac;
+};
+static_assert(sizeof(RrtmgLegacySwPostParams) == 12, "rrtmg_legacy_sw_post parameter ABI size changed");

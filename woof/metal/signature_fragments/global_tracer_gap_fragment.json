@@ -1,0 +1,32 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._transport_grid_tracers",
+      "layout_version": 1,
+      "module": "global_tracer_gap_fragment",
+      "name": "global_tracer_gap_fragment",
+      "parameters": [
+        ["count", "int32"], ["nlevel", "int32"],
+        ["nlat", "int32"], ["nlon", "int32"]
+      ],
+      "resources": [
+        ["pseudo", "float64_bits", "read"],
+        ["dp_end", "float64_bits", "read"],
+        ["lat_weights", "float64_bits", "read"],
+        ["gap", "float64_bits", "read_write"],
+        ["weighted_gap", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "pseudo": [["any_1d"]],
+        "dp_end": [["any_1d"]],
+        "lat_weights": [["any_1d"]],
+        "gap": [["any_1d"]],
+        "weighted_gap": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_tracer_gap_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "kernels": [
+    {
+      "name": "global_spectral_project_fragment",
+      "module": "global_spectral_project_fragment",
+      "source": "woof/metal/shaders/global_spectral_project_fragment.metal",
+      "cuda_source": "woof/globe/spectral/transform.py",
+      "cuda_symbol": "SphericalHarmonicTransform.project",
+      "resources": [
+        ["input", "float64_bits", "read"],
+        ["output", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "input": [["count", 2]],
+        "output": [["count", 2]]
+      },
+      "parameters": [
+        ["count", "int32"],
+        ["ndegree", "int32"],
+        ["nfreq", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

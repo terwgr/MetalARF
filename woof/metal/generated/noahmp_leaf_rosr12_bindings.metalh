@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 7e9d3ec7221598d6ba5babde808f211f72d6e97856477cf1f89c577bf6565c0f.
+struct NoahmpLeafRosr12Resources {
+    device const float *xs [[id(0)]];
+    device float *ys [[id(1)]];
+};
+struct NoahmpLeafRosr12Params {
+    int ntop0;
+    int n_in;
+    int n_out;
+};
+static_assert(sizeof(NoahmpLeafRosr12Params) == 12, "noahmp_leaf_rosr12 parameter ABI size changed");

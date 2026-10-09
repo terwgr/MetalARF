@@ -1,0 +1,470 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_param_fragment",
+      "module": "urban_bem_param_fragment",
+      "source": "woof/metal/shaders/urban_bem_param_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_param (module_sf_bep_bem.F:1964-2093)",
+      "resources": [
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "utype",
+          "int32",
+          "read"
+        ],
+        [
+          "class_float",
+          "float",
+          "read"
+        ],
+        [
+          "class_int",
+          "int32",
+          "read"
+        ],
+        [
+          "ss_class",
+          "float",
+          "read"
+        ],
+        [
+          "pb_class",
+          "float",
+          "read"
+        ],
+        [
+          "nzu_class",
+          "int32",
+          "read"
+        ],
+        [
+          "ss_urban",
+          "float",
+          "read"
+        ],
+        [
+          "pb_urban",
+          "float",
+          "read"
+        ],
+        [
+          "nzurb_column",
+          "int32",
+          "read"
+        ],
+        [
+          "lp_urb",
+          "float",
+          "read"
+        ],
+        [
+          "lb_urb",
+          "float",
+          "read"
+        ],
+        [
+          "hgt_urb",
+          "float",
+          "read"
+        ],
+        [
+          "frc_urb",
+          "float",
+          "read"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ],
+        [
+          "nzurban",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ss",
+          "float",
+          "read_write"
+        ],
+        [
+          "pb",
+          "float",
+          "read_write"
+        ],
+        [
+          "ss_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "pb_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "csg",
+          "float",
+          "read_write"
+        ],
+        [
+          "alag",
+          "float",
+          "read_write"
+        ],
+        [
+          "csgb",
+          "float",
+          "read_write"
+        ],
+        [
+          "alagb",
+          "float",
+          "read_write"
+        ],
+        [
+          "csf",
+          "float",
+          "read_write"
+        ],
+        [
+          "alaf",
+          "float",
+          "read_write"
+        ],
+        [
+          "csr",
+          "float",
+          "read_write"
+        ],
+        [
+          "alar",
+          "float",
+          "read_write"
+        ],
+        [
+          "csw",
+          "float",
+          "read_write"
+        ],
+        [
+          "alaw",
+          "float",
+          "read_write"
+        ],
+        [
+          "z0",
+          "float",
+          "read_write"
+        ],
+        [
+          "strd",
+          "float",
+          "read_write"
+        ],
+        [
+          "drst",
+          "float",
+          "read_write"
+        ],
+        [
+          "ws",
+          "float",
+          "read_write"
+        ],
+        [
+          "bs",
+          "float",
+          "read_write"
+        ],
+        [
+          "ws_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "bs_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "dzw",
+          "float",
+          "read_write"
+        ],
+        [
+          "dzr",
+          "float",
+          "read_write"
+        ],
+        [
+          "dzf",
+          "float",
+          "read_write"
+        ],
+        [
+          "dzgb",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "utype": [
+          [
+            "ncol"
+          ]
+        ],
+        "class_float": [
+          [
+            1320
+          ]
+        ],
+        "class_int": [
+          [
+            37
+          ]
+        ],
+        "ss_class": [
+          [
+            "nurbm",
+            19
+          ]
+        ],
+        "pb_class": [
+          [
+            "nurbm",
+            19
+          ]
+        ],
+        "nzu_class": [
+          [
+            "nurbm"
+          ]
+        ],
+        "ss_urban": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "pb_urban": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "nzurb_column": [
+          [
+            "ncol"
+          ]
+        ],
+        "lp_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "lb_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "hgt_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "frc_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "error": [
+          [
+            "ncol"
+          ]
+        ],
+        "nzurban": [
+          [
+            "ncol"
+          ]
+        ],
+        "ss": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "pb": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "ss_urb": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "pb_urb": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "csg": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "alag": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "csgb": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "alagb": [
+          [
+            "ncol",
+            11
+          ]
+        ],
+        "csf": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "alaf": [
+          [
+            "ncol",
+            11
+          ]
+        ],
+        "csr": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "alar": [
+          [
+            "ncol",
+            11
+          ]
+        ],
+        "csw": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "alaw": [
+          [
+            "ncol",
+            11
+          ]
+        ],
+        "z0": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "strd": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "drst": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "ws": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "bs": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "ws_urb": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "bs_urb": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "dzw": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "dzr": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "dzf": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "dzgb": [
+          [
+            "ncol",
+            10
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nurbm",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32"
+      ]
+    }
+  ]
+}

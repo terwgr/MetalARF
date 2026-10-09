@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 09b1204c51673fbc1b26ca6e5c6271be5680279d28d1a42b28a50fb0a9b55e0b.
+struct MynnSurfaceSeedResources {
+    device const float *u1 [[id(0)]];
+    device const float *v1 [[id(1)]];
+    device const float *qv1 [[id(2)]];
+    device float *ust [[id(3)]];
+    device float *mol [[id(4)]];
+    device float *qsfc [[id(5)]];
+    device float *qstar [[id(6)]];
+};
+struct MynnSurfaceSeedParams {
+    int n;
+};
+static_assert(sizeof(MynnSurfaceSeedParams) == 4, "mynn_surface_seed parameter ABI size changed");

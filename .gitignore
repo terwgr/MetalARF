@@ -1,0 +1,110 @@
+__pycache__/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+out/
+# Prebuilt Rust artifacts staged into the package for a platform wheel
+# (tools/stage_wheel_bridges.py).  Built output, never source: a release
+# stages them between `cargo build` and `python -m build`, and a
+# committed copy would be a binary in the tree that nothing rebuilds and
+# that setup.py would silently platform-tag every local wheel from.
+woof/libexec/
+*.nc
+# Declared config artifacts are tracked: the repo-wide *.nc rule silently
+# dropped the committed source-orography assets from a plain `git add`
+# once (they had to be force-added at 4dd3e82).  Output/scratch NetCDF
+# stays ignored; anything under configs/ is a deliberate, reviewed asset.
+!configs/**/*.nc
+# The companion's shipped reference tables are NetCDF too, and the same
+# rule sprang again: a fresh `git add` of the public release snapshot
+# silently dropped all nine data/rrtmgp/*.nc, so the published tree's
+# companion wheel imported, version-checked, and had no k-distributions
+# in it (first public-tree CI run, 32280494350).  The development copies
+# are force-added; this negation is what makes the NEXT fresh add keep
+# them, and tests/test_package_data_coverage.py gates it.
+!recast-woof-data/woof_data/data/**/*.nc
+# Third spring of the same rule: rw-store's classic-netCDF writer pins its
+# byte layout against three tiny fixtures written by the netCDF-C library,
+# and `include_bytes!` them.  They were authored on lane/mpas-render-bridge
+# and silently dropped from every commit there, so the crate's test build
+# only ever compiled in the worktree that still had the untracked files --
+# `cargo test -p rw-store` failed to compile the instant the lane merged
+# anywhere else.  The generator sits beside them (make_goldens.py); this
+# negation is what keeps the regenerated copies tracked.
+!tools/rustwx/crates/rw-store/tests/goldens/*.nc
+# rw-wrfbatch's wrfout time-axis fixtures are ncks cuts its import tests
+# open by path; make_fixtures.sh beside them regenerates them.
+!tools/rustwx/crates/rw-wrfbatch/tests/time_axis_fixtures/*.nc
+# Externalized table asset: published as a GitHub release asset and
+# staged by `woof fetch-tables` (never in the public git history --
+# GitHub rejects blobs over 100 MiB).  The development tree force-tracks
+# its copy as the source of truth; a fetched copy in any other checkout
+# must not show up as dirt.
+woof/data/thompson/tables/freezeH2O.dat
+*.png
+!docs/**
+.superpowers/
+.worktrees/
+tools/grib1_bridge/target/
+tools/hrrr_grib2_bridge-*
+.pytest-ckpt/
+!tools/grib1_bridge/vendor/**
+tools/region_global_dealias/target/
+tools/rustwx/target/
+tools/rw_wps/target/
+tools/arwen-tui/target/
+!tools/rw_wps/vendor/**
+# Build output only where a vendored crate carries its own manifest and
+# can therefore be built on its own.  NOT `vendor/**/target/`: that also
+# matched vendor/crates-io/cc-1.4.3/src/target/, four real crate source
+# files, so the checked-in mirror was incomplete and an offline
+# `cargo build --locked` in a fresh clone died on a missing checksum.
+# Mirror crates under vendor/crates-io are never built in place.
+tools/rw_wps/vendor/netcrust/target/
+tools/rw_wps/vendor/netcrust/vendor/*/target/
+!tools/rustwx/vendor/**
+# ... but not build output or a lock file cargo drops there when an
+# excluded vendor crate is built on its own manifest.  Build the
+# workspace target instead:
+#   cargo test --offline --manifest-path vendor/wx-radar/Cargo.toml \n#     --target-dir target
+tools/rustwx/vendor/**/target/
+tools/rustwx/vendor/wx-radar/Cargo.lock
+!tools/rustwx/assets/**
+# The two vendor negations above exist so an offline `cargo build` has
+# its crates, and they re-admit EVERYTHING under those trees -- including
+# the __pycache__ that `python -m compileall -q woof tools` writes
+# beside the handful of Python scripts some crates vendor.  That is how
+# five .pyc files reached a release-branch commit.  Vendored sources
+# still ship; their bytecode does not.
+tools/grib1_bridge/vendor/**/__pycache__/
+tools/rustwx/vendor/**/__pycache__/
+
+# Scratch for live acceptance runs (fetched GRIB, decoded arrays, prepared
+# wrfinput/wrfbdy).  Real data, reproducible from the commands in the
+# handoff report, and never a build input.
+/cache/
+
+# the object cache the observation front doors default to when a
+# caller names no --cache directory
+.rw-obs-cache/
+
+# Scratch output from tools/da_synthetic_cycle runs (dirs and redirect files).
+.gate-*
+
+# woof/data/thompson/tables/CCN_ACTIVATE.BIN was ignored here until
+# 2026-08-01.  It is now committed and shipped: it is WRF v4.6.1's own
+# run/CCN_ACTIVATE.BIN under WRF's public-domain dedication, and the notice
+# travels with it in LICENSE-WRF.txt.  See woof/data/thompson/PROVENANCE.md.
+
+# rw-store golden NetCDF fixtures are SOURCE, not output.  netcdf_classic.rs
+# include_bytes!() them, so the repo-wide *.nc rule above does not just hide
+# them -- it makes `cargo test -p rw-store` fail to COMPILE from a clean
+# checkout.  That has now happened twice (see 4dd3e82).  Negated, not
+# force-added, so it cannot silently regress a third time.
+!tools/rustwx/crates/rw-store/tests/goldens/*.nc
+docs/branch-dispositions-private.md
+
+# Cargo checksum manifests require every upstream source and documentation file.
+!tools/arwen-ui-vendor/**
+tools/arwen-ui-vendor/**/__pycache__/

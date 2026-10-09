@@ -1,0 +1,67 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/core/kernels/solar_albedo.cu",
+      "cuda_symbol": "solar_albedo_update",
+      "layout_version": 1,
+      "module": "solar_albedo_fragment",
+      "name": "solar_albedo_validate",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["xland", "float32", "read"],
+        ["snow", "float32", "read"],
+        ["xice", "float32", "read"],
+        ["ivgtyp", "int32", "read"],
+        ["coszen", "float32", "read"],
+        ["status", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "coszen": [["count"]],
+        "ivgtyp": [["count"]],
+        "snow": [["count"]],
+        "status": [["count"]],
+        "xice": [["count"]],
+        "xland": [["count"]]
+      },
+      "source": "woof/metal/shaders/solar_albedo_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/core/kernels/solar_albedo.cu",
+      "cuda_symbol": "solar_albedo_update",
+      "layout_version": 1,
+      "module": "solar_albedo_fragment",
+      "name": "solar_albedo_update",
+      "parameters": [
+        ["count", "int32"],
+        ["initialize", "int32"]
+      ],
+      "resources": [
+        ["albedo", "float32", "read"],
+        ["albbck", "float32", "read"],
+        ["xland", "float32", "read"],
+        ["snow", "float32", "read"],
+        ["xice", "float32", "read"],
+        ["ivgtyp", "int32", "read"],
+        ["albsol", "float32", "read_write"],
+        ["albbcksol", "float32", "read_write"],
+        ["coszen", "float32", "read"]
+      ],
+      "shapes": {
+        "albedo": [["count"]],
+        "albbck": [["count"]],
+        "albsol": [["count"]],
+        "albbcksol": [["count"]],
+        "coszen": [["count"]],
+        "ivgtyp": [["count"]],
+        "snow": [["count"]],
+        "xice": [["count"]],
+        "xland": [["count"]]
+      },
+      "source": "woof/metal/shaders/solar_albedo_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

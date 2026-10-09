@@ -1,0 +1,34 @@
+{
+  "kernels": [
+    {
+      "name": "p3_saveold_precip",
+      "module": "p3_saveold_precip",
+      "source": "woof/metal/shaders/p3_saveold_precip.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_saveold_precip",
+      "resources": [
+        ["theta", "float", "read"], ["qv", "float", "read"],
+        ["th_old", "float", "read_write"], ["qv_old", "float", "read_write"],
+        ["prt_liq", "float", "read"], ["prt_sol", "float", "read"],
+        ["rainnc", "float", "read_write"], ["rainncv", "float", "read_write"],
+        ["sr", "float", "read_write"], ["snownc", "float", "read_write"],
+        ["snowncv", "float", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["nz", "ny", "nx"]], "qv": [["nz", "ny", "nx"]],
+        "th_old": [["nz", "ny", "nx"]], "qv_old": [["nz", "ny", "nx"]],
+        "prt_liq": [["ny", "nx"]], "prt_sol": [["ny", "nx"]],
+        "rainnc": [["ny", "nx"]], "rainncv": [["ny", "nx"]],
+        "sr": [["ny", "nx"]], "snownc": [["ny", "nx"]],
+        "snowncv": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["dt", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

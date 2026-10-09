@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout 9ca848bdd0fe5907ddd581f0823275d24dce0ce229a42280160ff7adfc3fb419.
+struct RrtmgpPrepareClampTopResources {
+    device float *plev [[id(0)]];
+};
+struct RrtmgpPrepareClampTopParams {
+    int ncol;
+    int nlev;
+    float pressure_floor;
+};
+static_assert(sizeof(RrtmgpPrepareClampTopParams) == 12, "rrtmgp_prepare_clamp_top parameter ABI size changed");

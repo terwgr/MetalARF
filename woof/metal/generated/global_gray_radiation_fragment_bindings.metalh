@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 1a5ce5dcbaf5a9e62dc3305cfe9a8df6ad97b219d7ebc2b74b45d42149ed8f21.
+struct GlobalGrayRadiationFragmentResources {
+    device const ulong *epsilon [[id(0)]];
+    device const ulong *emission [[id(1)]];
+    device const ulong *surface_emission [[id(2)]];
+    device const ulong *surface_emissivity [[id(3)]];
+    device const ulong *absorbed_shortwave [[id(4)]];
+    device ulong *longwave_heating [[id(5)]];
+    device ulong *outgoing_longwave [[id(6)]];
+    device ulong *net_surface_radiation [[id(7)]];
+};
+struct GlobalGrayRadiationFragmentParams {
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalGrayRadiationFragmentParams) == 8, "global_gray_radiation_fragment parameter ABI size changed");

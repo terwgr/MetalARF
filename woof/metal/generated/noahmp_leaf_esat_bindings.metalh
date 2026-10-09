@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 50ab0b04991b32b04ec70608d03cf88e17d751b7c01b625a525bc08ae8ee93ac.
+struct NoahmpLeafEsatResources {
+    device const float *xs [[id(0)]];
+    device float *ys [[id(1)]];
+};
+struct NoahmpLeafEsatParams {
+    int ncase;
+    int n_in;
+    int n_out;
+};
+static_assert(sizeof(NoahmpLeafEsatParams) == 12, "noahmp_leaf_esat parameter ABI size changed");

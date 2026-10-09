@@ -1,0 +1,27 @@
+{
+  "kernels": [
+    {
+      "name": "global_dynamics_fragment",
+      "module": "global_dynamics",
+      "source": "woof/metal/shaders/global_dynamics_fragment.metal",
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._metal_dynamics_divergence",
+      "resources": [
+        ["advective", "float64_bits", "read"],
+        ["pressure_gradient", "float64_bits", "read"],
+        ["coriolis", "float64_bits", "read"],
+        ["tendency", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "advective": [["any_1d"]],
+        "pressure_gradient": [["any_1d"]],
+        "coriolis": [["any_1d"]],
+        "tendency": [["any_1d"]]
+      },
+      "parameters": [["count", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

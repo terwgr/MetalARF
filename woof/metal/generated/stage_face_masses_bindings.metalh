@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 0d7ebc8070bca4c6e16fc0c53bbf955cb9a0fd549c75b10496ee5d2b8c728526.
+struct StageFaceMassesResources {
+    device const float *mup [[id(0)]];
+    device const float *mub2d [[id(1)]];
+    device float *mux [[id(2)]];
+    device float *muy [[id(3)]];
+};
+struct StageFaceMassesParams {
+    int wrf_exact;
+    int boundary_x;
+    int boundary_y;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(StageFaceMassesParams) == 20, "stage_face_masses parameter ABI size changed");

@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 123831dadd3fab24f1729875df02a7a1b59da7a1b2572f3d56daa181e270cc1a.
+struct NoahRainClearResources {
+    device float *rainbl_a [[id(0)]];
+    device float *pending_a [[id(1)]];
+};
+struct NoahRainClearParams {
+    int ny;
+    int nx;
+    int ncol;
+};
+static_assert(sizeof(NoahRainClearParams) == 12, "noah_rain_clear parameter ABI size changed");

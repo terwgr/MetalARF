@@ -1,0 +1,644 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/advection.cu",
+      "cuda_symbol": "flux_div_scalar",
+      "layout_version": 1,
+      "module": "advection",
+      "name": "flux_div_scalar_vorder",
+      "parameters": [
+        [
+          "dx_inv",
+          "float32"
+        ],
+        [
+          "dy_inv",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "spec",
+          "int32"
+        ],
+        [
+          "vorder",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "q",
+          "float",
+          "read"
+        ],
+        [
+          "ru",
+          "float",
+          "read"
+        ],
+        [
+          "rv",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "msf",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "msf": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "q": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "ru": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "rv": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "rw": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tend": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/advection_flux_div_scalar_vorder.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/advection.cu",
+      "cuda_symbol": "flux_div_u",
+      "layout_version": 1,
+      "module": "advection",
+      "name": "flux_div_u_vorder",
+      "parameters": [
+        [
+          "dx_inv",
+          "float32"
+        ],
+        [
+          "dy_inv",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "spec",
+          "int32"
+        ],
+        [
+          "vorder",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "ru",
+          "float",
+          "read"
+        ],
+        [
+          "rv",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "msf",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "msf": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "ru": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "rv": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "rw": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tend": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/advection_flux_div_u_vorder.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/advection.cu",
+      "cuda_symbol": "flux_div_v",
+      "layout_version": 1,
+      "module": "advection",
+      "name": "flux_div_v_vorder",
+      "parameters": [
+        [
+          "dx_inv",
+          "float32"
+        ],
+        [
+          "dy_inv",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "spec",
+          "int32"
+        ],
+        [
+          "vorder",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "ru",
+          "float",
+          "read"
+        ],
+        [
+          "rv",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "msf",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "msf": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "ru": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "rv": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "rw": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tend": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/advection_flux_div_v_vorder.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/advection.cu",
+      "cuda_symbol": "flux_div_w",
+      "layout_version": 1,
+      "module": "advection",
+      "name": "flux_div_w_vorder",
+      "parameters": [
+        [
+          "dx_inv",
+          "float32"
+        ],
+        [
+          "dy_inv",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "spec",
+          "int32"
+        ],
+        [
+          "vorder",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "ru",
+          "float",
+          "read"
+        ],
+        [
+          "rv",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read_write"
+        ],
+        [
+          "rdn",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "msf",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "msf": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rdn": [
+          [
+            "nz"
+          ]
+        ],
+        "ru": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "rv": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "rw": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tend": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/advection_flux_div_w_vorder.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

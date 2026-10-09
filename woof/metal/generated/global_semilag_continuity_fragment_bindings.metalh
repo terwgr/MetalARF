@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 09048224638261ee69e35d4ae146f5c93d8d7826e7f16167d312c6c723dfa94d.
+struct GlobalSemilagContinuityFragmentResources {
+    device const ulong *divergence_mass [[id(0)]];
+    device const ulong *ps_t [[id(1)]];
+    device const ulong *delta_b [[id(2)]];
+    device ulong *omega [[id(3)]];
+    device ulong *residual [[id(4)]];
+};
+struct GlobalSemilagContinuityFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalSemilagContinuityFragmentParams) == 12, "global_semilag_continuity_fragment parameter ABI size changed");

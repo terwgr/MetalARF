@@ -1,0 +1,366 @@
+{
+  "kernels": [
+    {
+      "name": "hex_pv_vertex_fragment",
+      "module": "hex_pv_diagnostics_fragment",
+      "source": "woof/metal/shaders/hex_pv_diagnostics_fragment.metal",
+      "cuda_source": "woof/hex/diagnostics.py",
+      "cuda_symbol": "compute_solve_diagnostics",
+      "resources": [
+        [
+          "f_vertex",
+          "float",
+          "read"
+        ],
+        [
+          "vorticity",
+          "float",
+          "read"
+        ],
+        [
+          "pv_vertex",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "f_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vorticity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_vertex": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hex_pv_cell_fragment",
+      "module": "hex_pv_diagnostics_fragment",
+      "source": "woof/metal/shaders/hex_pv_diagnostics_fragment.metal",
+      "cuda_source": "woof/hex/diagnostics.py",
+      "cuda_symbol": "compute_solve_diagnostics",
+      "resources": [
+        [
+          "pv_vertex",
+          "float",
+          "read"
+        ],
+        [
+          "vertices_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "kite_index",
+          "int32",
+          "read"
+        ],
+        [
+          "kite_areas",
+          "float",
+          "read"
+        ],
+        [
+          "area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "pv_cell",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pv_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kite_index": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kite_areas": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_cell": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "max_cell_edges",
+          "int32"
+        ],
+        [
+          "max_vertex_edges",
+          "int32"
+        ],
+        [
+          "use_inverse_area",
+          "int32"
+        ],
+        [
+          "apvm_upwinding",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hex_pv_edge_fragment",
+      "module": "hex_pv_diagnostics_fragment",
+      "source": "woof/metal/shaders/hex_pv_diagnostics_fragment.metal",
+      "cuda_source": "woof/hex/diagnostics.py",
+      "cuda_symbol": "compute_solve_diagnostics",
+      "resources": [
+        [
+          "pv_vertex",
+          "float",
+          "read"
+        ],
+        [
+          "pv_cell",
+          "float",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "normal_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "tangential_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "dc_edge",
+          "float",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float",
+          "read"
+        ],
+        [
+          "inv_dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "pv_edge",
+          "float",
+          "read_write"
+        ],
+        [
+          "grad_pv_normal",
+          "float",
+          "read_write"
+        ],
+        [
+          "grad_pv_tangential",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pv_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tangential_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "grad_pv_normal": [
+          [
+            "any_1d"
+          ]
+        ],
+        "grad_pv_tangential": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "apvm_upwinding",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "use_inverse_dc",
+          "int32"
+        ],
+        [
+          "use_inverse_dv",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

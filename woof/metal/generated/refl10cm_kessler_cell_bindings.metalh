@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 6f2c2ec649ced58008679d0e36fa0cb774c26ddbeb843bc56cf1ecefc799a3b5.
+struct Refl10CmKesslerCellResources {
+    device const float *qv [[id(0)]];
+    device const float *qr [[id(1)]];
+    device const float *t [[id(2)]];
+    device const float *p [[id(3)]];
+    device float *refl [[id(4)]];
+};
+struct Refl10CmKesslerCellParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Refl10CmKesslerCellParams) == 12, "refl10cm_kessler_cell parameter ABI size changed");

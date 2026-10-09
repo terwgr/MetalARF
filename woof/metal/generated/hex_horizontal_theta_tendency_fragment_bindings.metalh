@@ -1,0 +1,29 @@
+// Generated from kernel_signatures.json; layout 73587add949e6d39463706ef51f0bc13b664934d42e4dd65ce1921b5555f5b6a.
+struct HexHorizontalThetaTendencyFragmentResources {
+    device const float *theta [[id(0)]];
+    device const float *theta_saved [[id(1)]];
+    device const float *rho_u [[id(2)]];
+    device const float *rho_u_saved [[id(3)]];
+    device const float *adv_coefs [[id(4)]];
+    device const float *adv_coefs_3rd [[id(5)]];
+    device const int *adv_cells_for_edge [[id(6)]];
+    device const int *n_adv_cells_for_edge [[id(7)]];
+    device const int *edges_on_cell [[id(8)]];
+    device const int *edge_counts [[id(9)]];
+    device const float *edge_signs [[id(10)]];
+    device const int *cells_on_edge [[id(11)]];
+    device const float *dv_edge [[id(12)]];
+    device const float *inv_area_cell [[id(13)]];
+    device const int *skip_cell [[id(14)]];
+    device float *tendency [[id(15)]];
+};
+struct HexHorizontalThetaTendencyFragmentParams {
+    int nlev;
+    int ncells;
+    int nedges;
+    int max_cell_edges;
+    int max_adv_cells;
+    int rk_step;
+    float third_order_coefficient;
+};
+static_assert(sizeof(HexHorizontalThetaTendencyFragmentParams) == 28, "hex_horizontal_theta_tendency_fragment parameter ABI size changed");

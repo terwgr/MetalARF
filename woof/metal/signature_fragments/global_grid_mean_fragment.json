@@ -1,0 +1,103 @@
+{
+  "kernels": [
+    {
+      "name": "global_grid_mean_rows_fragment",
+      "module": "global_grid_mean_fragment",
+      "source": "woof/metal/shaders/global_grid_mean_fragment.metal",
+      "cuda_source": "woof/globe/spectral/grid.py",
+      "cuda_symbol": "GaussianGrid.global_mean",
+      "resources": [
+        [
+          "values",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "quadrature_weights",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "weighted_rows",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "values": [
+          [
+            "nlat",
+            "nlon"
+          ]
+        ],
+        "quadrature_weights": [
+          [
+            "nlat"
+          ]
+        ],
+        "weighted_rows": [
+          [
+            "nlat"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlat",
+          "int32"
+        ],
+        [
+          "nlon",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_grid_mean_finalize_fragment",
+      "module": "global_grid_mean_fragment",
+      "source": "woof/metal/shaders/global_grid_mean_fragment.metal",
+      "cuda_source": "woof/globe/spectral/grid.py",
+      "cuda_symbol": "GaussianGrid.global_mean",
+      "resources": [
+        [
+          "weighted_rows",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "mean",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "weighted_rows": [
+          [
+            "nlat"
+          ]
+        ],
+        "mean": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlat",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

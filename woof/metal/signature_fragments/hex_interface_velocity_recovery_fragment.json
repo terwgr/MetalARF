@@ -1,0 +1,107 @@
+{
+  "kernels": [
+    {
+      "name": "hex_interface_velocity_recovery_fragment",
+      "module": "hex_diagnostics",
+      "source": "woof/metal/shaders/hex_interface_velocity_recovery_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_interface_velocity",
+      "resources": [
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "rho_w",
+          "float",
+          "read"
+        ],
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "fzm",
+          "float",
+          "read"
+        ],
+        [
+          "fzp",
+          "float",
+          "read"
+        ],
+        [
+          "velocity",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "fzm": [
+          [
+            "nlev"
+          ]
+        ],
+        "fzp": [
+          [
+            "nlev"
+          ]
+        ],
+        "velocity": [
+          [
+            "nlev_plus_one",
+            "ncells"
+          ]
+        ],
+        "error": [
+          [
+            "nlev_plus_one",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nlev_plus_one",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

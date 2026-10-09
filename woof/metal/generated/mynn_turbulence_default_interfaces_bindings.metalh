@@ -1,0 +1,32 @@
+// Generated from kernel_signatures.json; layout 6d07497e304a42bc07f8be462316b9976d16178c25531cdd9071f052ebe60f32.
+struct MynnTurbulenceDefaultInterfacesResources {
+    device const float *dz [[id(0)]];
+    device const float *u [[id(1)]];
+    device const float *v [[id(2)]];
+    device const float *cldfra [[id(3)]];
+    device const float *edmf_w [[id(4)]];
+    device const float *edmf_a [[id(5)]];
+    device const float *tkeprodtd [[id(6)]];
+    device const float *el [[id(7)]];
+    device const float *qkw [[id(8)]];
+    device const float *dtl [[id(9)]];
+    device const float *dqw [[id(10)]];
+    device const float *gm [[id(11)]];
+    device const float *gh [[id(12)]];
+    device float *sm [[id(13)]];
+    device float *sh [[id(14)]];
+    device float *dfm [[id(15)]];
+    device float *dfh [[id(16)]];
+    device float *dfq [[id(17)]];
+    device float *pdk [[id(18)]];
+    device float *pdt [[id(19)]];
+    device float *pdq [[id(20)]];
+    device float *pdc [[id(21)]];
+    device float *tcd [[id(22)]];
+    device float *qcd [[id(23)]];
+};
+struct MynnTurbulenceDefaultInterfacesParams {
+    int nz;
+    int count;
+};
+static_assert(sizeof(MynnTurbulenceDefaultInterfacesParams) == 8, "mynn_turbulence_default_interfaces parameter ABI size changed");

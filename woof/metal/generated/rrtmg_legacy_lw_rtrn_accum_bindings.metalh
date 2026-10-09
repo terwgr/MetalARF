@@ -1,0 +1,22 @@
+// Generated from kernel_signatures.json; layout 5adbc020aa12f15707c3d116c4b089e03845b910bbf4607e61df17c932eac07a.
+struct RrtmgLegacyLwRtrnAccumResources {
+    device const float *radld_p [[id(0)]];
+    device const float *radclrd_p [[id(1)]];
+    device const float *radlu_p [[id(2)]];
+    device const float *radclru_p [[id(3)]];
+    device const int *iclddn_p [[id(4)]];
+    device const float *radlu_sfc [[id(5)]];
+    device const float *radclru_sfc [[id(6)]];
+    device const int *ngs [[id(7)]];
+    device const float *delwave [[id(8)]];
+    device float *totuflux [[id(9)]];
+    device float *totdflux [[id(10)]];
+    device float *totuclfl [[id(11)]];
+    device float *totdclfl [[id(12)]];
+};
+struct RrtmgLegacyLwRtrnAccumParams {
+    int ncol;
+    int nl;
+    float wtdiff;
+};
+static_assert(sizeof(RrtmgLegacyLwRtrnAccumParams) == 12, "rrtmg_legacy_lw_rtrn_accum parameter ABI size changed");

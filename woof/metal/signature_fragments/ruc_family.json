@@ -1,0 +1,49 @@
+{
+  "kernels": [
+    {
+      "name": "ruc_surface_parameters",
+      "module": "ruc_family",
+      "source": "woof/metal/shaders/ruc_family.metal",
+      "cuda_source": "woof/core/kernels/ruc.cu",
+      "cuda_symbol": "ruc_surface_parameters",
+      "resources": [
+        ["isltyp", "int32", "read"], ["ivgtyp", "int32", "read"],
+        ["shdmin", "float", "read"], ["shdmax", "float", "read"],
+        ["vegfrac", "float", "read"], ["znt_in", "float", "read"],
+        ["lai_in", "float", "read"], ["ifortbl", "int32", "read"],
+        ["z0tbl", "float", "read"], ["lemitbl", "float", "read"],
+        ["pctbl", "float", "read"], ["laitbl", "float", "read"],
+        ["bb", "float", "read"], ["drysmc", "float", "read"],
+        ["hc", "float", "read"], ["maxsmc", "float", "read"],
+        ["refsmc", "float", "read"], ["satpsi", "float", "read"],
+        ["satdk", "float", "read"], ["wltsmc", "float", "read"],
+        ["qtz", "float", "read"], ["iforest_out", "int32", "read_write"],
+        ["emiss_out", "float", "read_write"], ["pc_out", "float", "read_write"],
+        ["znt_out", "float", "read_write"], ["lai_out", "float", "read_write"],
+        ["qwrtz_out", "float", "read_write"], ["rhocs_out", "float", "read_write"],
+        ["bclh_out", "float", "read_write"], ["dqm_out", "float", "read_write"],
+        ["ksat_out", "float", "read_write"], ["psis_out", "float", "read_write"],
+        ["qmin_out", "float", "read_write"], ["ref_out", "float", "read_write"],
+        ["wilt_out", "float", "read_write"]
+      ],
+      "shapes": {
+        "isltyp": [["n"]], "ivgtyp": [["n"]], "shdmin": [["n"]],
+        "shdmax": [["n"]], "vegfrac": [["n"]], "znt_in": [["n"]],
+        "lai_in": [["n"]], "ifortbl": [["any_1d"]], "z0tbl": [["any_1d"]],
+        "lemitbl": [["any_1d"]], "pctbl": [["any_1d"]],
+        "laitbl": [["any_1d"]], "bb": [["any_1d"]], "drysmc": [["any_1d"]],
+        "hc": [["any_1d"]], "maxsmc": [["any_1d"]], "refsmc": [["any_1d"]],
+        "satpsi": [["any_1d"]], "satdk": [["any_1d"]], "wltsmc": [["any_1d"]],
+        "qtz": [["any_1d"]], "iforest_out": [["n"]], "emiss_out": [["n"]],
+        "pc_out": [["n"]], "znt_out": [["n"]], "lai_out": [["n"]],
+        "qwrtz_out": [["n"]], "rhocs_out": [["n"]], "bclh_out": [["n"]],
+        "dqm_out": [["n"]], "ksat_out": [["n"]], "psis_out": [["n"]],
+        "qmin_out": [["n"]], "ref_out": [["n"]], "wilt_out": [["n"]]
+      },
+      "parameters": [["iswater", "int32"], ["rdlai2d", "int32"], ["n", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    }
+  ]
+}

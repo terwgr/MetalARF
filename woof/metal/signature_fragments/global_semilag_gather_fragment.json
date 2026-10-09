@@ -1,0 +1,160 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/semilag/kernels.cu",
+      "cuda_symbol": "sl_gather_f64/sl_gather_qm_f64",
+      "layout_version": 1,
+      "module": "global_semilag_gather_fragment",
+      "name": "global_semilag_gather_fragment",
+      "parameters": [
+        [
+          "nfield",
+          "int32"
+        ],
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nlat",
+          "int32"
+        ],
+        [
+          "nlon",
+          "int32"
+        ],
+        [
+          "lookup_bins",
+          "int32"
+        ],
+        [
+          "quasi_monotone",
+          "int32"
+        ],
+        [
+          "surface_mode",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "source",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "xi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "phi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "level",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "lat_ext",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "mrden",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "mlut",
+          "int32",
+          "read"
+        ],
+        [
+          "rowoff",
+          "int32",
+          "read"
+        ],
+        [
+          "rowshift",
+          "int32",
+          "read"
+        ],
+        [
+          "lut_scale",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "destination",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "destination": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lat_ext": [
+          [
+            "any_1d"
+          ]
+        ],
+        "level": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lut_scale": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mlut": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mrden": [
+          [
+            "any_1d"
+          ]
+        ],
+        "phi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rowoff": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rowshift": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xi": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_semilag_gather_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

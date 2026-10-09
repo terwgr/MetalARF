@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout aa867d6f6a638e381db7d92d2b8ef9333eb2c52340175775703fa2da5a9319f5.
+struct CumulusClockAdvanceResources {
+    device float *rainc [[id(0)]];
+    device float *pending_rainbl [[id(1)]];
+    device float *surface_raincv [[id(2)]];
+    device float *nca [[id(3)]];
+    device const float *pratec [[id(4)]];
+    device float *expiring [[id(5)]];
+};
+struct CumulusClockAdvanceParams {
+    float dt;
+    int has_surface_raincv;
+    int ncol;
+};
+static_assert(sizeof(CumulusClockAdvanceParams) == 12, "cumulus_clock_advance parameter ABI size changed");

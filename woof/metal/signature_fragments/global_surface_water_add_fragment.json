@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_add_surface_water",
+      "layout_version": 1,
+      "module": "global_surface_water_add_fragment",
+      "name": "global_surface_water_add_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["water", "float64_bits", "read"],
+        ["precip", "float64_bits", "read"],
+        ["water_out", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "water": [["any_1d"]],
+        "precip": [["any_1d"]],
+        "water_out": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_surface_water_add_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

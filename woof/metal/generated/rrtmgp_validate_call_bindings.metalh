@@ -1,0 +1,47 @@
+// Generated from kernel_signatures.json; layout f47289d3e44d696dd93f81c95e03ce9cd33b580f858a3aad6ee7688b01a9aec5.
+struct RrtmgpValidateCallResources {
+    device const float *play [[id(0)]];
+    device const float *plev [[id(1)]];
+    device const float *tlay [[id(2)]];
+    device const float *tlev [[id(3)]];
+    device const float *tsfc [[id(4)]];
+    device const float *exner [[id(5)]];
+    device const float *qv [[id(6)]];
+    device const float *qc [[id(7)]];
+    device const float *qr [[id(8)]];
+    device const float *qi [[id(9)]];
+    device const float *qs [[id(10)]];
+    device const float *cldfra [[id(11)]];
+    device const float *nc [[id(12)]];
+    device const float *nr [[id(13)]];
+    device const float *ni [[id(14)]];
+    device const float *ns [[id(15)]];
+    device const float *effc [[id(16)]];
+    device const float *effr [[id(17)]];
+    device const float *effi [[id(18)]];
+    device const float *effs [[id(19)]];
+    device const float *emiss [[id(20)]];
+    device uint *flags [[id(21)]];
+};
+struct RrtmgpValidateCallParams {
+    int ncol;
+    int nlay;
+    int nemiss;
+    int nflag;
+    int morrison;
+    int have_effective;
+    float play_lower;
+    float play_upper;
+    float temp_lower;
+    float temp_upper;
+    float effc_lower;
+    float effc_upper;
+    float effi_lower;
+    float effi_upper;
+    float effs_lower;
+    float effs_upper;
+    int has_expected_top;
+    float expected_top;
+    float top_tolerance;
+};
+static_assert(sizeof(RrtmgpValidateCallParams) == 76, "rrtmgp_validate_call parameter ABI size changed");

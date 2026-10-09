@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 0aba9893b7d41a1e56b0ce32d35a9cd73f4c118785693b6557785d701a8a1987.
+struct ThompsonCloudSaturationAdjustResources {
+    device float *temperature [[id(0)]];
+    device const float *pressure [[id(1)]];
+    device float *qv [[id(2)]];
+    device float *qc [[id(3)]];
+};
+struct ThompsonCloudSaturationAdjustParams {
+    int n;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonCloudSaturationAdjustParams) == 16, "thompson_cloud_saturation_adjust parameter ABI size changed");

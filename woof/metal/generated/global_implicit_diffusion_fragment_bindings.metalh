@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 18872c734e4bcd120d1c1ccf208188658e802c85781d094a3a66651544933b13.
+struct GlobalImplicitDiffusionFragmentResources {
+    device const ulong *fields [[id(0)]];
+    device const ulong *height [[id(1)]];
+    device const ulong *dp [[id(2)]];
+    device const ulong *diffusivity [[id(3)]];
+    device const ulong *dt [[id(4)]];
+    device ulong *updated_fields [[id(5)]];
+};
+struct GlobalImplicitDiffusionFragmentParams {
+    int nlevel;
+    int ncolumn;
+    int nfield;
+};
+static_assert(sizeof(GlobalImplicitDiffusionFragmentParams) == 12, "global_implicit_diffusion_fragment parameter ABI size changed");

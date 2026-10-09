@@ -1,0 +1,26 @@
+{
+  "kernels": [
+    {
+      "name": "kf_w0avg_update",
+      "module": "kf_w0avg_update",
+      "source": "woof/metal/shaders/kf_w0avg_update.metal",
+      "cuda_source": "woof/core/kf.py",
+      "cuda_symbol": "KainFritsch.update_trigger_history",
+      "resources": [
+        ["w", "float", "read"],
+        ["w0avg", "float", "read_write"]
+      ],
+      "shapes": {
+        "w": [["nz+1", "ny", "nx"]],
+        "w0avg": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["tst", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

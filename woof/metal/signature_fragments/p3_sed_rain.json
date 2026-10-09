@@ -1,0 +1,36 @@
+{
+  "kernels": [
+    {
+      "name": "p3_sed_rain",
+      "module": "p3_sed_rain",
+      "source": "woof/metal/shaders/p3_sed_rain.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_sed_rain",
+      "resources": [
+        ["qr", "float", "read_write"], ["nr", "float", "read_write"],
+        ["dz", "float", "read"], ["rho", "float", "read"],
+        ["inv_rho", "float", "read"], ["rhofacr", "float", "read"],
+        ["vq", "float", "read_write"], ["vn", "float", "read_write"],
+        ["fq", "float", "read_write"], ["fn", "float", "read_write"],
+        ["vm_table", "float", "read"], ["vn_table", "float", "read"],
+        ["prt_liq", "float", "read_write"], ["flags", "float", "read"]
+      ],
+      "shapes": {
+        "qr": [["nz", "ny", "nx"]], "nr": [["nz", "ny", "nx"]],
+        "dz": [["nz", "ny", "nx"]], "rho": [["nz", "ny", "nx"]],
+        "inv_rho": [["nz", "ny", "nx"]], "rhofacr": [["nz", "ny", "nx"]],
+        "vq": [["nz", "ny", "nx"]], "vn": [["nz", "ny", "nx"]],
+        "fq": [["nz", "ny", "nx"]], "fn": [["nz", "ny", "nx"]],
+        "vm_table": [[3000]], "vn_table": [[3000]],
+        "prt_liq": [["ny", "nx"]], "flags": [[2, "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["dt", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

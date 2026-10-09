@@ -1,0 +1,585 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/uwpbl.cu",
+      "cuda_symbol": "uwpbl_columns",
+      "layout_version": 1,
+      "module": "uwpbl_family",
+      "name": "uwpbl_columns",
+      "parameters": [
+        [
+          "ncols",
+          "int32"
+        ],
+        [
+          "col0",
+          "int32"
+        ],
+        [
+          "nchunk",
+          "int32"
+        ],
+        [
+          "pool_stride",
+          "int32"
+        ],
+        [
+          "nk",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "r8size",
+          "int32"
+        ],
+        [
+          "i4size",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "itimestep",
+          "int32"
+        ],
+        [
+          "r8cap",
+          "int32"
+        ],
+        [
+          "i4cap",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "th",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qnc",
+          "float",
+          "read"
+        ],
+        [
+          "qni",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "z",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "rthratenlw",
+          "float",
+          "read"
+        ],
+        [
+          "wsedl3d",
+          "float",
+          "read"
+        ],
+        [
+          "p8w",
+          "float",
+          "read"
+        ],
+        [
+          "z_at_w",
+          "float",
+          "read"
+        ],
+        [
+          "hfx",
+          "float",
+          "read"
+        ],
+        [
+          "qfx",
+          "float",
+          "read"
+        ],
+        [
+          "ust",
+          "float",
+          "read"
+        ],
+        [
+          "ht",
+          "float",
+          "read"
+        ],
+        [
+          "kvm3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "kvh3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "tauresx2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "tauresy2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "rublten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rvblten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rthblten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqvblten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqcblten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqiblten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqniblten",
+          "float",
+          "read_write"
+        ],
+        [
+          "tke_pbl",
+          "float",
+          "read_write"
+        ],
+        [
+          "turbtype3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "smaw3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "tpert2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "qpert2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "wpert2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "pblh2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "kpbl2d",
+          "int32",
+          "read_write"
+        ],
+        [
+          "r8pool",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "i4pool",
+          "int32",
+          "read_write"
+        ],
+        [
+          "err",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cldfra": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "err": [
+          [
+            "1"
+          ]
+        ],
+        "exner": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ht": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "i4pool": [
+          [
+            "i4size"
+          ]
+        ],
+        "kpbl2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "kvh3d": [
+          [
+            "nk+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "kvm3d": [
+          [
+            "nk+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p8w": [
+          [
+            "nk+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pblh2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnc": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qni": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qpert2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "r8pool": [
+          [
+            "r8size"
+          ]
+        ],
+        "rho": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rqcblten": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rqiblten": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rqniblten": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rqvblten": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rthblten": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rthratenlw": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rublten": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rvblten": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "smaw3d": [
+          [
+            "nk+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tauresx2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tauresy2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "th": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tke_pbl": [
+          [
+            "nk+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tpert2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "turbtype3d": [
+          [
+            "nk+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ust": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "wpert2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wsedl3d": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "z": [
+          [
+            "nk",
+            "ny",
+            "nx"
+          ]
+        ],
+        "z_at_w": [
+          [
+            "nk+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/uwpbl_family.metal",
+      "threads_per_group": 64
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "kernels": [
+    {
+      "name": "noahmp_water_batch",
+      "module": "noahmp_water_family",
+      "source": "woof/metal/shaders/noahmp_water_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_water.cu",
+      "cuda_symbol": "k_water",
+      "resources": [
+        [
+          "par",
+          "float",
+          "read"
+        ],
+        [
+          "fin",
+          "float",
+          "read"
+        ],
+        [
+          "iin",
+          "int32",
+          "read"
+        ],
+        [
+          "fout",
+          "float",
+          "read_write"
+        ],
+        [
+          "iout",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "par": [
+          [
+            "n",
+            26
+          ]
+        ],
+        "fin": [
+          [
+            "n",
+            76
+          ]
+        ],
+        "iin": [
+          [
+            "n",
+            9
+          ]
+        ],
+        "fout": [
+          [
+            "n",
+            73
+          ]
+        ],
+        "iout": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "fp32-precise-native-metal-math",
+        "cuda-libm-identity-unverified"
+      ]
+    }
+  ]
+}

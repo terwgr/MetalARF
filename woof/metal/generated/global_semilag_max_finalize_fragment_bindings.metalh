@@ -1,0 +1,9 @@
+// Generated from kernel_signatures.json; layout cdb0274d313475ea81506a0ecc4b5254b2e16d0c3afafe03f8e436ccda48f847.
+struct GlobalSemilagMaxFinalizeFragmentResources {
+    device const ulong *partial_max [[id(0)]];
+    device ulong *maximum [[id(1)]];
+};
+struct GlobalSemilagMaxFinalizeFragmentParams {
+    int partial_count;
+};
+static_assert(sizeof(GlobalSemilagMaxFinalizeFragmentParams) == 4, "global_semilag_max_finalize_fragment parameter ABI size changed");

@@ -1,0 +1,128 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_effective_radius",
+      "module": "thompson_effective_radius",
+      "source": "woof/metal/shaders/thompson_effective_radius.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_effective_radius",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "ni",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "effc",
+          "float",
+          "read_write"
+        ],
+        [
+          "effi",
+          "float",
+          "read_write"
+        ],
+        [
+          "effs",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "effc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "effi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "effs": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "fp32-precise-libm",
+        "soft64-rn-bit-ops",
+        "cuda-libm-identity-unverified"
+      ]
+    }
+  ]
+}

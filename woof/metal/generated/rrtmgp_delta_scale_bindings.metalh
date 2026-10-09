@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout bf56462debef2c562f344031b08fb6cdec8a642314f4d3597f13b96941505721.
+struct RrtmgpDeltaScaleResources {
+    device const float *tau_in [[id(0)]];
+    device const float *ssa_in [[id(1)]];
+    device const float *g_in [[id(2)]];
+    device float *tau [[id(3)]];
+    device float *ssa [[id(4)]];
+    device float *asym [[id(5)]];
+};
+struct RrtmgpDeltaScaleParams {
+    int n;
+};
+static_assert(sizeof(RrtmgpDeltaScaleParams) == 4, "rrtmgp_delta_scale parameter ABI size changed");

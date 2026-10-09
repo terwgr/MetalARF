@@ -1,0 +1,91 @@
+{
+  "_how_to_re_record": "python tools/record_sph_harm_reference.py <this-file> using any interpreter with scipy>=1.15; values are sph_harm_y(n, m, colatitude, longitude) at the latitude/longitude points below.",
+  "_purpose": "Pinned complex spherical-harmonic reference values so the basis gate runs on every in-spec install; scipy.special.sph_harm_y exists only in scipy>=1.15 while the project floor is scipy>=1.11.",
+  "convention": "complex-orthonormal-condon-shortley sph_harm_y(n, m, pi/2 - latitude, longitude)",
+  "generator_numpy_version": "2.5.2",
+  "generator_scipy_version": "1.18.1",
+  "latitude_deg": [
+    -73.0,
+    -21.5,
+    14.0,
+    67.0
+  ],
+  "longitude_deg": [
+    3.0,
+    121.0,
+    251.0,
+    319.0
+  ],
+  "values": {
+    "0,0": {
+      "imag": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "real": [
+        0.28209479177387814,
+        0.28209479177387814,
+        0.28209479177387814,
+        0.28209479177387814
+      ]
+    },
+    "1,0": {
+      "imag": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "real": [
+        -0.4672529059082479,
+        -0.17907341999299317,
+        0.11820364587431356,
+        0.44976098361569156
+      ]
+    },
+    "10,7": {
+      "imag": [
+        0.0008675798536383169,
+        -0.07629826436644638,
+        -0.24321629930644428,
+        -0.015460300094513194
+      ],
+      "real": [
+        0.002260122789461828,
+        0.057494866129149384,
+        0.2608175491442284,
+        -0.0047266880834508935
+      ]
+    },
+    "2,1": {
+      "imag": [
+        0.011304660364089397,
+        0.22581075849797708,
+        0.1714648328209953,
+        0.18229414116512882
+      ],
+      "real": [
+        0.21570576961553312,
+        -0.13568079213417747,
+        0.05904007664836477,
+        -0.20970542081785104
+      ]
+    },
+    "5,3": {
+      "imag": [
+        -0.009779629393094399,
+        -0.0030464573593180647,
+        0.08145733441978917,
+        0.11467793709533709
+      ],
+      "real": [
+        -0.06174614989361034,
+        -0.05812986928648347,
+        0.12543329531876124,
+        0.07447272312193814
+      ]
+    }
+  }
+}

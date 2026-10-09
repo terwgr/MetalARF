@@ -1,0 +1,31 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semilag/step.py",
+      "cuda_symbol": "departure bundle pointwise assembly",
+      "layout_version": 1,
+      "module": "global_semilag_assemble_fragment",
+      "name": "global_semilag_assemble_fragment",
+      "parameters": [["nlevel", "int32"], ["nlat", "int32"], ["nlon", "int32"]],
+      "resources": [
+        ["u", "float64_bits", "read"], ["v", "float64_bits", "read"], ["theta", "float64_bits", "read"], ["logps", "float64_bits", "read"],
+        ["a_u", "float64_bits", "read"], ["a_v", "float64_bits", "read"], ["a_lnps", "float64_bits", "read"],
+        ["l_u", "float64_bits", "read"], ["l_v", "float64_bits", "read"], ["l_theta", "float64_bits", "read"], ["l_lnps", "float64_bits", "read"],
+        ["lead", "float64_bits", "read"], ["half_dt", "float64_bits", "read"],
+        ["n_u", "float64_bits", "read_write"], ["n_v", "float64_bits", "read_write"], ["n_theta", "float64_bits", "read_write"], ["n_lnps", "float64_bits", "read_write"],
+        ["bundle_u", "float64_bits", "read_write"], ["bundle_v", "float64_bits", "read_write"], ["bundle_theta", "float64_bits", "read_write"], ["bundle_lnps", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "u": [["any_1d"]], "v": [["any_1d"]], "theta": [["any_1d"]], "logps": [["any_1d"]],
+        "a_u": [["any_1d"]], "a_v": [["any_1d"]], "a_lnps": [["any_1d"]],
+        "l_u": [["any_1d"]], "l_v": [["any_1d"]], "l_theta": [["any_1d"]], "l_lnps": [["any_1d"]],
+        "lead": [["any_1d"]], "half_dt": [["any_1d"]],
+        "n_u": [["any_1d"]], "n_v": [["any_1d"]], "n_theta": [["any_1d"]], "n_lnps": [["any_1d"]],
+        "bundle_u": [["any_1d"]], "bundle_v": [["any_1d"]], "bundle_theta": [["any_1d"]], "bundle_lnps": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_assemble_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._fix_total_water deficit guard",
+      "layout_version": 1,
+      "module": "global_any_u32_fragment",
+      "name": "global_any_u32_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["flags", "uint32", "read"],
+        ["any", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "any": [[1]],
+        "flags": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_any_u32_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

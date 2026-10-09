@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout 5a62b8d7f2b9a359b386b49540e6c650ab8aa4219c3c33daf528b60c91a077e9.
+struct RrtmgpPrepareClearUpperFieldsResources {
+    device const float *in_0 [[id(0)]];
+    device const float *in_1 [[id(1)]];
+    device const float *in_2 [[id(2)]];
+    device const float *in_3 [[id(3)]];
+    device const float *in_4 [[id(4)]];
+    device float *out_0 [[id(5)]];
+    device float *out_1 [[id(6)]];
+    device float *out_2 [[id(7)]];
+    device float *out_3 [[id(8)]];
+    device float *out_4 [[id(9)]];
+};
+struct RrtmgpPrepareClearUpperFieldsParams {
+    int ncol;
+    int model_nlay;
+    int nlay;
+};
+static_assert(sizeof(RrtmgpPrepareClearUpperFieldsParams) == 12, "rrtmgp_prepare_clear_upper_fields parameter ABI size changed");

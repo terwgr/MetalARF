@@ -1,0 +1,29 @@
+{
+  "kernels": [{
+    "name": "urban_bem_flat_flux_pack_fragment",
+    "module": "urban_bem_flat_flux_pack_fragment",
+    "source": "woof/metal/shaders/urban_bem_flat_flux_pack_fragment.metal",
+    "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+    "cuda_symbol": "bb_bep1d:1642-1655 and bb_flux_flat outputs",
+    "resources": [
+      ["active_cols", "int32", "read"], ["building_nlev", "int32", "read"],
+      ["sf", "float", "read"], ["lf", "float", "read"],
+      ["sfr", "float", "read_write"], ["lfr", "float", "read_write"],
+      ["sfg", "float", "read_write"], ["lfg", "float", "read_write"],
+      ["hsrof", "float", "read_write"], ["lsrof", "float", "read_write"],
+      ["error", "int32", "read_write"]
+    ],
+    "shapes": {
+      "active_cols": [["ncol"]], "building_nlev": [["ncol", 15]],
+      "sf": [["ncol", 2, 18]], "lf": [["ncol", 2, 18]],
+      "sfr": [["ncol", 18, 2]], "lfr": [["ncol", 18, 2]],
+      "sfg": [["ncol", 2]], "lfg": [["ncol", 2]],
+      "hsrof": [["ncol", 15]], "lsrof": [["ncol", 15]],
+      "error": [["ncol"]]
+    },
+    "parameters": [["ncol", "int32"]],
+    "threads_per_group": 64,
+    "layout_version": 1,
+    "arithmetic_policies": ["soft32"]
+  }]
+}

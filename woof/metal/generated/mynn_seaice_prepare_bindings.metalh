@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout d22707469bfa5f82d7585d2e3932b8b8cb862ea6514fc0c147a9b655dbe3b0b9.
+struct MynnSeaicePrepareResources {
+    device const float *xice [[id(0)]];
+    device const float *tsk [[id(1)]];
+    device const float *mavail [[id(2)]];
+    device const float *xland [[id(3)]];
+    device float *tsk_sea [[id(4)]];
+    device float *znt_sea [[id(5)]];
+    device float *local_tsk [[id(6)]];
+    device float *sea_tsk [[id(7)]];
+    device float *sea_mavail [[id(8)]];
+    device float *sea_xland [[id(9)]];
+};
+struct MynnSeaicePrepareParams {
+    int n;
+    int itimestep;
+};
+static_assert(sizeof(MynnSeaicePrepareParams) == 8, "mynn_seaice_prepare parameter ABI size changed");

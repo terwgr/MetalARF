@@ -1,0 +1,30 @@
+{
+  "kernels": [
+    {
+      "name": "evaluate_linear_boundary",
+      "module": "lbc_time",
+      "source": "woof/metal/shaders/lbc_time.metal",
+      "cuda_source": "woof/core/kernels/lbc_time.cu",
+      "cuda_symbol": "evaluate_linear_boundary",
+      "resources": [
+        ["value", "float", "read"],
+        ["tendency", "float", "read"],
+        ["out_value", "float", "read_write"],
+        ["out_tendency", "float", "read_write"]
+      ],
+      "shapes": {
+        "value": [["count"]],
+        "tendency": [["count"]],
+        "out_value": [["count"]],
+        "out_tendency": [["count"]]
+      },
+      "parameters": [
+        ["seconds", "float32"],
+        ["count", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "kernels": [
+    {
+      "name": "ruc_sfctmp_stage0",
+      "module": "ruc_sfctmp_family",
+      "source": "woof/metal/shaders/ruc_sfctmp_family.metal",
+      "cuda_source": "woof/core/kernels/ruc_fused_sfctmp.cuh",
+      "cuda_symbol": "ruc_sfctmp_stage0",
+      "resources": [
+        ["raw", "uint32", "read_write"], ["flags", "uint64", "read_write"],
+        ["pattern_spp_lsm", "float", "read"], ["field_sf", "float", "read_write"]
+      ],
+      "shapes": {
+        "raw": [["any_1d"]], "flags": [["any_1d"]],
+        "pattern_spp_lsm": [["any_1d"]], "field_sf": [["any_1d"]]
+      },
+      "parameters": [
+        ["n", "int32"], ["run_base", "int32"], ["alive_base", "int32"],
+        ["int_base", "int32"], ["table_base", "int32"],
+        ["table_offset_rstbl", "int32"], ["table_offset_rgltbl", "int32"],
+        ["table_offset_z0tbl", "int32"], ["table_offset_lemitbl", "int32"],
+        ["table_offset_tbq", "int32"], ["table_offset_zshalf", "int32"],
+        ["delt", "float32"], ["c1sn", "float32"], ["c2sn", "float32"],
+        ["rsmax", "float32"], ["isice", "int32"], ["urban", "int32"],
+        ["ncategory", "int32"], ["limit", "int32"], ["forms", "int32"],
+        ["spp_lsm", "int32"], ["has_field_sf", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    },
+    {
+      "name": "ruc_sfctmp_stage1",
+      "module": "ruc_sfctmp_family",
+      "source": "woof/metal/shaders/ruc_sfctmp_family.metal",
+      "cuda_source": "woof/core/kernels/ruc_fused_sfctmp.cuh",
+      "cuda_symbol": "ruc_sfctmp_stage1",
+      "resources": [["raw", "uint32", "read_write"], ["flags", "uint64", "read_write"]],
+      "shapes": {"raw": [["any_1d"]], "flags": [["any_1d"]]},
+      "parameters": [
+        ["n", "int32"], ["run_base", "int32"], ["alive_base", "int32"],
+        ["int_base", "int32"], ["table_base", "int32"],
+        ["table_offset_rstbl", "int32"], ["table_offset_rgltbl", "int32"],
+        ["table_offset_z0tbl", "int32"], ["table_offset_lemitbl", "int32"],
+        ["table_offset_tbq", "int32"], ["table_offset_zshalf", "int32"],
+        ["delt", "float32"], ["c1sn", "float32"], ["c2sn", "float32"],
+        ["rsmax", "float32"], ["isice", "int32"], ["urban", "int32"],
+        ["ncategory", "int32"], ["limit", "int32"], ["forms", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    },
+    {
+      "name": "ruc_sfctmp_stage2",
+      "module": "ruc_sfctmp_family",
+      "source": "woof/metal/shaders/ruc_sfctmp_family.metal",
+      "cuda_source": "woof/core/kernels/ruc_fused_sfctmp.cuh",
+      "cuda_symbol": "ruc_sfctmp_stage2",
+      "resources": [["raw", "uint32", "read_write"], ["flags", "uint64", "read_write"]],
+      "shapes": {"raw": [["any_1d"]], "flags": [["any_1d"]]},
+      "parameters": [
+        ["n", "int32"], ["run_base", "int32"], ["alive_base", "int32"],
+        ["int_base", "int32"], ["table_base", "int32"],
+        ["table_offset_rstbl", "int32"], ["table_offset_rgltbl", "int32"],
+        ["table_offset_z0tbl", "int32"], ["table_offset_lemitbl", "int32"],
+        ["table_offset_tbq", "int32"], ["table_offset_zshalf", "int32"],
+        ["delt", "float32"], ["c1sn", "float32"], ["c2sn", "float32"],
+        ["rsmax", "float32"], ["isice", "int32"], ["urban", "int32"],
+        ["ncategory", "int32"], ["limit", "int32"], ["forms", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    }
+  ]
+}

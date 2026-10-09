@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 52064e5adb1f1db76418edcd7e7ebe399181dfa5df40f9dfff0c44cbb52c692f.
+struct NestRectScatterF32Resources {
+    device const float *packed_a [[id(0)]];
+    device float *target_a [[id(1)]];
+};
+struct NestRectScatterF32Params {
+    int j0;
+    int i0;
+    int ny;
+    int nx;
+    int nz;
+    int target_ny;
+    int target_nx;
+};
+static_assert(sizeof(NestRectScatterF32Params) == 28, "nest_rect_scatter_f32 parameter ABI size changed");

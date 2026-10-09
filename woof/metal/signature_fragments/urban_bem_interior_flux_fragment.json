@@ -1,0 +1,47 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_interior_flux_fragment",
+      "module": "urban_bem_interior_flux_fragment",
+      "source": "woof/metal/shaders/urban_bem_interior_flux_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bem_bem: bem_hsinsflux/bem_fluxcond/bem_fluxroo",
+      "resources": [
+        ["tlev", "float", "read"],
+        ["wall_surface_temp", "float", "read"],
+        ["window_surface_temp", "float", "read"],
+        ["surface_area", "float", "read"],
+        ["hseqocc", "float", "read"],
+        ["hleqocc", "float", "read"],
+        ["hsvent", "float", "read"],
+        ["hlvent", "float", "read"],
+        ["hswalins", "float", "read_write"],
+        ["hswinins", "float", "read_write"],
+        ["hscond", "float", "read_write"],
+        ["hslev", "float", "read_write"],
+        ["hllev", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "tlev": [["ncol", "nlev"]],
+        "wall_surface_temp": [["ncol", "nlev", 6]],
+        "window_surface_temp": [["ncol", "nlev", 4]],
+        "surface_area": [["ncol", "nlev", 6]],
+        "hseqocc": [["ncol", "nlev"]],
+        "hleqocc": [["ncol", "nlev"]],
+        "hsvent": [["ncol", "nlev"]],
+        "hlvent": [["ncol", "nlev"]],
+        "hswalins": [["ncol", "nlev", 6]],
+        "hswinins": [["ncol", "nlev", 4]],
+        "hscond": [["ncol", "nlev"]],
+        "hslev": [["ncol", "nlev"]],
+        "hllev": [["ncol", "nlev"]],
+        "error": [["ncol", "nlev"]]
+      },
+      "parameters": [["ncol", "int32"], ["nlev", "int32"], ["pwin", "float32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

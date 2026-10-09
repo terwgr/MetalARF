@@ -1,0 +1,86 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/model.py",
+      "cuda_symbol": "MoistHybridModel._rhs_from_sources",
+      "layout_version": 1,
+      "module": "global_tracer_flux_fragment",
+      "name": "global_tracer_flux_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tracer",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "zonal_wind",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "meridional_wind",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "zonal_flux",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "meridional_flux",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dp": [
+          [
+            "count"
+          ]
+        ],
+        "meridional_flux": [
+          [
+            "count"
+          ]
+        ],
+        "meridional_wind": [
+          [
+            "count"
+          ]
+        ],
+        "tracer": [
+          [
+            "count"
+          ]
+        ],
+        "zonal_flux": [
+          [
+            "count"
+          ]
+        ],
+        "zonal_wind": [
+          [
+            "count"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_tracer_flux_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

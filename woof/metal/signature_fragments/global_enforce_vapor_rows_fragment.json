@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel.enforce resident vapor mass rows",
+      "layout_version": 1,
+      "module": "global_enforce_vapor_rows_fragment",
+      "name": "global_enforce_vapor_rows_fragment",
+      "parameters": [
+        ["nlev", "int32"],
+        ["band_nlat", "int32"],
+        ["full_nlat", "int32"],
+        ["nlon", "int32"],
+        ["start_latitude", "int32"]
+      ],
+      "resources": [
+        ["qv", "float64_bits", "read"],
+        ["dp", "float64_bits", "read"],
+        ["negative_rows", "float64_bits", "read_write"],
+        ["positive_rows", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "qv": [["any_1d"]],
+        "dp": [["any_1d"]],
+        "negative_rows": [["any_1d"]],
+        "positive_rows": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_enforce_vapor_rows_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

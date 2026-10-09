@@ -1,0 +1,30 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_profile_init_fragment",
+      "module": "urban_bem_profile_init_fragment",
+      "source": "woof/metal/shaders/urban_bem_profile_init_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_icbep",
+      "resources": [["z_u", "float", "read"], ["h_b", "float", "read"], ["d_b", "float", "read_write"], ["ss_u", "float", "read_write"], ["pb_u", "float", "read_write"], ["nz_u", "int32", "read_write"], ["error", "int32", "read_write"]],
+      "shapes": {"z_u": [[19]], "h_b": [["nurbm", 18]], "d_b": [["nurbm", 18]], "ss_u": [["nurbm", 19]], "pb_u": [["nurbm", 19]], "nz_u": [["nurbm"]], "error": [["nurbm"]]},
+      "parameters": [["nurbm", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "urban_bem_height_init_fragment",
+      "module": "urban_bem_height_init_fragment",
+      "source": "woof/metal/shaders/urban_bem_height_init_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_icbephi_xy",
+      "resources": [["z_u", "float", "read"], ["hi_urb1d", "float", "read_write"], ["hb_u", "float", "read_write"], ["ss_u", "float", "read_write"], ["pb_u", "float", "read_write"], ["nzu_out", "int32", "read_write"], ["error", "int32", "read_write"]],
+      "shapes": {"z_u": [[19]], "hi_urb1d": [["nitem", 18]], "hb_u": [["nitem", 18]], "ss_u": [["nitem", 19]], "pb_u": [["nitem", 19]], "nzu_out": [["nitem"]], "error": [["nitem"]]},
+      "parameters": [["nitem", "int32"], ["dz_u", "float32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

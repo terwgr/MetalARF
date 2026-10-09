@@ -1,0 +1,31 @@
+// Generated from kernel_signatures.json; layout bb035dd2509445277610eb8b75f01e3501d2cfa75a8ca2347e9d1d931e829857.
+struct LakeInitColumnsResources {
+    device const float *lakemask [[id(0)]];
+    device const int *isltyp [[id(1)]];
+    device const float *lake_depth [[id(2)]];
+    device const float *tsk [[id(3)]];
+    device const float *snow [[id(4)]];
+    device float *xice [[id(5)]];
+    device float *lake_columns [[id(6)]];
+    device float *lake_static [[id(7)]];
+    device const float *lake_latitude [[id(8)]];
+    device int *ivgtyp [[id(9)]];
+    device float *xland [[id(10)]];
+    device int *errors [[id(11)]];
+};
+struct LakeInitColumnsParams {
+    int n;
+    int ny;
+    int nx;
+    int use_depth;
+    int depth_flag;
+    float default_depth;
+    float xice_threshold;
+    int iswater;
+    float lake_min_elev;
+    int latitude_present;
+    int state_words;
+    int static_words;
+    int two;
+};
+static_assert(sizeof(LakeInitColumnsParams) == 52, "lake_init_columns parameter ABI size changed");

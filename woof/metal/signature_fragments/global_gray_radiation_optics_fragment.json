@@ -1,0 +1,36 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "gray longwave emissivity and source function",
+      "layout_version": 1,
+      "module": "global_gray_radiation_optics_fragment",
+      "name": "global_gray_radiation_optics_fragment",
+      "parameters": [["count", "int32"], ["nlevel", "int32"], ["ncolumn", "int32"]],
+      "resources": [
+        ["theta", "float64_bits", "read"], ["exner", "float64_bits", "read"],
+        ["dp", "float64_bits", "read"], ["qc", "float64_bits", "read"],
+        ["qi", "float64_bits", "read"], ["qs", "float64_bits", "read"],
+        ["sw_atmosphere", "float64_bits", "read"],
+        ["tau_column", "float64_bits", "read"],
+        ["cloud_optical_depth", "float64_bits", "read"],
+        ["stefan_boltzmann", "float64_bits", "read"],
+        ["epsilon", "float64_bits", "read_write"],
+        ["emission", "float64_bits", "read_write"],
+        ["shortwave_heating", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["any_1d"]], "exner": [["any_1d"]],
+        "dp": [["any_1d"]], "qc": [["any_1d"]],
+        "qi": [["any_1d"]], "qs": [["any_1d"]],
+        "sw_atmosphere": [["any_1d"]],
+        "tau_column": [[1]], "cloud_optical_depth": [[1]],
+        "stefan_boltzmann": [[1]], "epsilon": [["any_1d"]],
+        "emission": [["any_1d"]], "shortwave_heating": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_gray_radiation_optics_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

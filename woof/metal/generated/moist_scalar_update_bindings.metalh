@@ -1,0 +1,28 @@
+// Generated from kernel_signatures.json; layout 808613850a86816901d416c772e68e6b148db3bf3d57a439c335a364d34e5390.
+struct MoistScalarUpdateResources {
+    device const float *q0 [[id(0)]];
+    device const float *tend [[id(1)]];
+    device const float *c1h [[id(2)]];
+    device const float *c2h [[id(3)]];
+    device const float *mu0 [[id(4)]];
+    device const float *mu [[id(5)]];
+    device const float *msft [[id(6)]];
+    device const float *physics [[id(7)]];
+    device const float *fixed [[id(8)]];
+    device const float *lbc [[id(9)]];
+    device float *q [[id(10)]];
+};
+struct MoistScalarUpdateParams {
+    int has_msf;
+    int has_physics;
+    int has_fixed;
+    int has_lbc;
+    int spec_zone;
+    int clear_specified_advection;
+    int clamp;
+    float dt_eff;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(MoistScalarUpdateParams) == 44, "moist_scalar_update parameter ABI size changed");

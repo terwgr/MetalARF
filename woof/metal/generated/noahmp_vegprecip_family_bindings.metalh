@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "noahmp_vegprecip_phenology_bindings.metalh"
+#include "noahmp_vegprecip_precip_heat_bindings.metalh"

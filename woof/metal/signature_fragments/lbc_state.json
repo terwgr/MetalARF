@@ -1,0 +1,64 @@
+{
+  "kernels": [
+    {
+      "name": "couple_nest_field",
+      "module": "lbc_state",
+      "source": "woof/metal/shaders/lbc_state.metal",
+      "cuda_source": "woof/core/kernels/lbc_state.cu",
+      "cuda_symbol": "couple_nest_field",
+      "resources": [["target", "float", "read"], ["mub2d", "float", "read"], ["mup", "float", "read"], ["thb", "float", "read"], ["c1h", "float", "read"], ["c2h", "float", "read"], ["c1f", "float", "read"], ["c2f", "float", "read"], ["msft", "float", "read"], ["msfu", "float", "read"], ["msfv", "float", "read"], ["out", "float", "read_write"]],
+      "shapes": {"target": [["nz", "ny", "nx"]], "mub2d": [["mny", "mnx"]], "mup": [["mny", "mnx"]], "thb": [["nz"], ["nz-1"], ["nz", "mny", "mnx"], ["nz-1", "mny", "mnx"]], "c1h": [["nz"], ["nz-1"]], "c2h": [["nz"], ["nz-1"]], "c1f": [["nz"], ["nz+1"]], "c2f": [["nz"], ["nz+1"]], "msft": [["mny", "mnx"], ["ny", "nx"]], "msfu": [["mny", "mnx+1"], ["ny", "nx"]], "msfv": [["mny+1", "mnx"], ["ny", "nx"]], "out": [["nz", "ny", "nx"]]},
+      "parameters": [["has_msf", "int32"], ["thb_3d", "int32"], ["kind", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["mny", "int32"], ["mnx", "int32"], ["j0", "int32"], ["i0", "int32"], ["nj", "int32"], ["ni", "int32"], ["width", "int32"], ["points", "int32"], ["wrf_exact", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "couple_nest_field_window",
+      "module": "lbc_state",
+      "source": "woof/metal/shaders/lbc_state.metal",
+      "cuda_source": "woof/core/kernels/lbc_state.cu",
+      "cuda_symbol": "couple_nest_field_window",
+      "resources": [["target", "float", "read"], ["mub2d", "float", "read"], ["mup", "float", "read"], ["thb", "float", "read"], ["c1h", "float", "read"], ["c2h", "float", "read"], ["c1f", "float", "read"], ["c2f", "float", "read"], ["msft", "float", "read"], ["msfu", "float", "read"], ["msfv", "float", "read"], ["out", "float", "read_write"]],
+      "shapes": {"target": [["nz", "ny", "nx"]], "mub2d": [["mny", "mnx"]], "mup": [["mny", "mnx"]], "thb": [["nz"], ["nz-1"], ["nz", "mny", "mnx"], ["nz-1", "mny", "mnx"]], "c1h": [["nz"], ["nz-1"]], "c2h": [["nz"], ["nz-1"]], "c1f": [["nz"], ["nz+1"]], "c2f": [["nz"], ["nz+1"]], "msft": [["mny", "mnx"], ["ny", "nx"]], "msfu": [["mny", "mnx+1"], ["ny", "nx"]], "msfv": [["mny+1", "mnx"], ["ny", "nx"]], "out": [["nz", "ny", "nx"]]},
+      "parameters": [["has_msf", "int32"], ["thb_3d", "int32"], ["kind", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["mny", "int32"], ["mnx", "int32"], ["j0", "int32"], ["i0", "int32"], ["nj", "int32"], ["ni", "int32"], ["width", "int32"], ["points", "int32"], ["wrf_exact", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "couple_nest_field_frame",
+      "module": "lbc_state",
+      "source": "woof/metal/shaders/lbc_state.metal",
+      "cuda_source": "woof/core/kernels/lbc_state.cu",
+      "cuda_symbol": "couple_nest_field_frame",
+      "resources": [["target", "float", "read"], ["mub2d", "float", "read"], ["mup", "float", "read"], ["thb", "float", "read"], ["c1h", "float", "read"], ["c2h", "float", "read"], ["c1f", "float", "read"], ["c2f", "float", "read"], ["msft", "float", "read"], ["msfu", "float", "read"], ["msfv", "float", "read"], ["out", "float", "read_write"]],
+      "shapes": {"target": [["nz", "ny", "nx"]], "mub2d": [["mny", "mnx"]], "mup": [["mny", "mnx"]], "thb": [["nz"], ["nz-1"], ["nz", "mny", "mnx"], ["nz-1", "mny", "mnx"]], "c1h": [["nz"], ["nz-1"]], "c2h": [["nz"], ["nz-1"]], "c1f": [["nz"], ["nz+1"]], "c2f": [["nz"], ["nz+1"]], "msft": [["mny", "mnx"], ["ny", "nx"]], "msfu": [["mny", "mnx+1"], ["ny", "nx"]], "msfv": [["mny+1", "mnx"], ["ny", "nx"]], "out": [["nz", "ny", "nx"]]},
+      "parameters": [["has_msf", "int32"], ["thb_3d", "int32"], ["kind", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["mny", "int32"], ["mnx", "int32"], ["j0", "int32"], ["i0", "int32"], ["nj", "int32"], ["ni", "int32"], ["width", "int32"], ["points", "int32"], ["wrf_exact", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "state_specified_relaxation",
+      "module": "lbc_state", "source": "woof/metal/shaders/lbc_state.metal",
+      "cuda_source": "woof/core/kernels/lbc_state.cu", "cuda_symbol": "state_specified_relaxation",
+      "resources": [["field_tend","float","read_write"],["held","float","read"],["mub2d","float","read"],["mup","float","read"],["u","float","read"],["v","float","read"],["w","float","read"],["thp","float","read"],["thb","float","read"],["php","float","read"],["scalar","float","read"],["c1h","float","read"],["c2h","float","read"],["c1f","float","read"],["c2f","float","read"],["msft","float","read"],["msfu","float","read"],["msfv","float","read"],["west","float","read"],["west_t","float","read"],["east","float","read"],["east_t","float","read"],["south","float","read"],["south_t","float","read"],["north","float","read"],["north_t","float","read"],["fcx","float","read"],["gcx","float","read"]],
+      "shapes": {"field_tend":[["nz","ny","nx"]],"held":[["nz","ny","nx"]],"mub2d":[["mny","mnx"]],"mup":[["mny","mnx"]],"u":[["nz","ny","nx"]],"v":[["nz","ny","nx"]],"w":[["nz","ny","nx"]],"thp":[["nz","ny","nx"]],"thb":[["nz"],["nz-1"],["nz","mny","mnx"],["nz-1","mny","mnx"]],"php":[["nz","ny","nx"]],"scalar":[["nz","ny","nx"]],"c1h":[["nz"],["nz-1"]],"c2h":[["nz"],["nz-1"]],"c1f":[["nz"],["nz+1"]],"c2f":[["nz"],["nz+1"]],"msft":[["mny","mnx"],["ny","nx"]],"msfu":[["mny","mnx+1"],["ny","nx"]],"msfv":[["mny+1","mnx"],["ny","nx"]],"west":[["nz","ny","width"]],"west_t":[["nz","ny","width"]],"east":[["nz","ny","width"]],"east_t":[["nz","ny","width"]],"south":[["nz","width","nx"]],"south_t":[["nz","width","nx"]],"north":[["nz","width","nx"]],"north_t":[["nz","width","nx"]],"fcx":[["width"]],"gcx":[["width"]]},
+      "parameters": [["dtbc","float32"],["width","int32"],["spec_zone","int32"],["relax_zone","int32"],["apply_relax","int32"],["clear_specified","int32"],["add_held","int32"],["divide_msf","int32"],["has_msf","int32"],["thb_3d","int32"],["kind","int32"],["nz","int32"],["ny","int32"],["nx","int32"],["mny","int32"],["mnx","int32"],["relax_sides","int32"]],
+      "threads_per_group":128,"layout_version":1,"arithmetic_policies":["default"]
+    },
+    {
+      "name":"install_mu_boundary","module":"lbc_state","source":"woof/metal/shaders/lbc_state.metal","cuda_source":"woof/core/kernels/lbc_state.cu","cuda_symbol":"install_mu_boundary",
+      "resources":[["mup","float","read_write"],["old_mup_frame","float","read_write"],["west","float","read"],["west_t","float","read"],["east","float","read"],["east_t","float","read"],["south","float","read"],["south_t","float","read"],["north","float","read"],["north_t","float","read"]],
+      "shapes":{"mup":[["ny","nx"]],"old_mup_frame":[["frame_count"]],"west":[["one","ny","width"]],"west_t":[["one","ny","width"]],"east":[["one","ny","width"]],"east_t":[["one","ny","width"]],"south":[["one","width","nx"]],"south_t":[["one","width","nx"]],"north":[["one","width","nx"]],"north_t":[["one","width","nx"]]},
+      "parameters":[["dtbc","float32"],["width","int32"],["spec_zone","int32"],["ny","int32"],["nx","int32"],["frame_count","int32"],["one","int32"]],"threads_per_group":128,"layout_version":1,"arithmetic_policies":["default"]
+    },
+    {
+      "name":"uncouple_feedback_field","module":"lbc_state","source":"woof/metal/shaders/lbc_state.metal","cuda_source":"woof/core/kernels/lbc_state.cu","cuda_symbol":"uncouple_feedback_field",
+      "resources":[["target","float","read_write"],["coupled","float","read"],["mub2d","float","read"],["mup","float","read"],["thb","float","read"],["c1h","float","read"],["c2h","float","read"],["c1f","float","read"],["c2f","float","read"],["msft","float","read"],["msfu","float","read"],["msfv","float","read"]],
+      "shapes":{"target":[["nz","ny","nx"]],"coupled":[["nz","ny","nx"]],"mub2d":[["mny","mnx"]],"mup":[["mny","mnx"]],"thb":[["nz"],["nz-1"],["nz","mny","mnx"],["nz-1","mny","mnx"]],"c1h":[["nz"],["nz-1"]],"c2h":[["nz"],["nz-1"]],"c1f":[["nz"],["nz+1"]],"c2f":[["nz"],["nz+1"]],"msft":[["mny","mnx"],["ny","nx"]],"msfu":[["mny","mnx+1"],["ny","nx"]],"msfv":[["mny+1","mnx"],["ny","nx"]]},
+      "parameters":[["has_msf","int32"],["thb_3d","int32"],["kind","int32"],["i_lo","int32"],["i_hi","int32"],["j_lo","int32"],["j_hi","int32"],["nz","int32"],["ny","int32"],["nx","int32"],["mny","int32"],["mnx","int32"]],"threads_per_group":128,"layout_version":1,"arithmetic_policies":["default"]
+    },
+    {
+      "name":"finalize_state_field","module":"lbc_state","source":"woof/metal/shaders/lbc_state.metal","cuda_source":"woof/core/kernels/lbc_state.cu","cuda_symbol":"finalize_state_field",
+      "resources":[["target","float","read_write"],["old_mup_frame","float","read"],["mub2d","float","read"],["mup","float","read"],["thb","float","read"],["scalar_unused","float","read"],["c1h","float","read"],["c2h","float","read"],["c1f","float","read"],["c2f","float","read"],["msft","float","read"],["msfu","float","read"],["msfv","float","read"],["west","float","read"],["west_t","float","read"],["east","float","read"],["east_t","float","read"],["south","float","read"],["south_t","float","read"],["north","float","read"],["north_t","float","read"]],
+      "shapes":{"target":[["nz","ny","nx"]],"old_mup_frame":[["frame_count"]],"mub2d":[["mny","mnx"]],"mup":[["mny","mnx"]],"thb":[["nz"],["nz-1"],["nz","mny","mnx"],["nz-1","mny","mnx"]],"scalar_unused":[["nz","ny","nx"]],"c1h":[["nz"],["nz-1"]],"c2h":[["nz"],["nz-1"]],"c1f":[["nz"],["nz+1"]],"c2f":[["nz"],["nz+1"]],"msft":[["mny","mnx"],["ny","nx"]],"msfu":[["mny","mnx+1"],["ny","nx"]],"msfv":[["mny+1","mnx"],["ny","nx"]],"west":[["nz","ny","width"]],"west_t":[["nz","ny","width"]],"east":[["nz","ny","width"]],"east_t":[["nz","ny","width"]],"south":[["nz","width","nx"]],"south_t":[["nz","width","nx"]],"north":[["nz","width","nx"]],"north_t":[["nz","width","nx"]]},
+      "parameters":[["dtbc","float32"],["width","int32"],["spec_zone","int32"],["has_msf","int32"],["thb_3d","int32"],["kind","int32"],["nz","int32"],["ny","int32"],["nx","int32"],["mny","int32"],["mnx","int32"],["frame_count","int32"]],"threads_per_group":128,"layout_version":1,"arithmetic_policies":["default"]
+    }
+  ]
+}

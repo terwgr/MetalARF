@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout a3d3e72de06d8ba2586906fb7cc2348b94e11a6eaa74a9e34b005257e6e73c97.
+struct NestRectGatherF32Resources {
+    device const float *source_a [[id(0)]];
+    device float *packed_a [[id(1)]];
+};
+struct NestRectGatherF32Params {
+    int j0;
+    int i0;
+    int ny;
+    int nx;
+    int nz;
+    int source_ny;
+    int source_nx;
+};
+static_assert(sizeof(NestRectGatherF32Params) == 28, "nest_rect_gather_f32 parameter ABI size changed");

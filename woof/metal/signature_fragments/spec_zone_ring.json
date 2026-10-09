@@ -1,0 +1,99 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "bitwise-float32-copy",
+        "no-arithmetic-transform"
+      ],
+      "cuda_source": "woof/core/kernels/microphysics_validation.cu",
+      "cuda_symbol": "mp_ring_copy",
+      "layout_version": 1,
+      "module": "microphysics_validation",
+      "name": "spec_zone_ring_copy",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "row_length",
+          "int32"
+        ],
+        [
+          "plane",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "row_start",
+          "int32"
+        ],
+        [
+          "rows",
+          "int32"
+        ],
+        [
+          "column_start",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "direction",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "source",
+          "float",
+          "read_write"
+        ],
+        [
+          "target",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source": [
+          [
+            "ny",
+            "row_length"
+          ],
+          [
+            "nz",
+            "ny",
+            "row_length"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ],
+          [
+            "rows",
+            "columns"
+          ],
+          [
+            "nz",
+            "rows",
+            "columns"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/spec_zone_ring.metal",
+      "threads_per_group": 256
+    }
+  ],
+  "schema": "woof-metal-kernel-signature-fragment-v1"
+}

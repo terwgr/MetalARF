@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout 19159ac2cbbecaf829aa3526f15c47ce99a5a50b67a434084481e5904479b84b.
+struct ColdStartAltResources {
+    device const float *input_words [[id(0)]];
+    device float *output [[id(1)]];
+};
+struct ColdStartAltParams {
+    int n;
+    int word_count;
+};
+static_assert(sizeof(ColdStartAltParams) == 8, "cold_start_alt parameter ABI size changed");

@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout c2eec587523e5310adc16b0cb23fa4fca43d99e21dcd8dc01dc87b585d953665.
+struct GlobalConvectiveAdjustFragmentResources {
+    device const ulong *mass [[id(0)]];
+    device ulong *theta [[id(1)]];
+    device ulong *q [[id(2)]];
+    device uint *mixed_pairs [[id(3)]];
+};
+struct GlobalConvectiveAdjustFragmentParams {
+    int nlevel;
+    int ncolumn;
+    int nspecies;
+};
+static_assert(sizeof(GlobalConvectiveAdjustFragmentParams) == 12, "global_convective_adjust_fragment parameter ABI size changed");

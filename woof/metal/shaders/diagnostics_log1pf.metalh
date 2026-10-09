@@ -1,0 +1,68 @@
+// FDLIBM/glibc 2.39 log1pf transcription. Adapted from
+// woof/core/kernels/portable_libm64.cuh::plm_log1pf, itself transcribed from
+// glibc 2.39 sysdeps/ieee754/flt-32/s_log1pf.c. This FP32-only function uses
+// no binary64 helpers. It is not claimed bitwise identical to CUDA log1pf.
+//
+// Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+// Developed at SunPro, a Sun Microsystems, Inc. business.
+// Permission to use, copy, modify, and distribute this software is freely
+// granted, provided that this notice is preserved.
+#ifndef WOOF_DIAGNOSTICS_LOG1PF_METALH
+#define WOOF_DIAGNOSTICS_LOG1PF_METALH
+
+#pragma clang fp contract(off)
+static inline float diag_add_rn(float a, float b) { return a + b; }
+static inline float diag_sub_rn(float a, float b) { return a - b; }
+static inline float diag_mul_rn(float a, float b) { return a * b; }
+static inline float diag_div_rn(float a, float b) { return a / b; }
+
+static inline float plm_log1pf(float x) {
+    int hx = as_type<int>(x), ax = hx & 0x7fffffff, k = 1, hu = 0;
+    // plm_CUDA float addition canonicalizes NaNs. The host x+x quiets the
+    // input payload and retains its sign, so perform that bit operation.
+    if (ax > 0x7f800000) return as_type<float>(hx | 0x00400000);
+    float f = 0.0f, c = 0.0f;
+    const float plm_LN2_HI = as_type<float>(0x3f317180), plm_LN2_LO = as_type<float>(0x3717f7d1);
+    if (hx < 0x3ed413d7) {
+        if (ax >= 0x3f800000) {
+            if (x == -1.0f) return as_type<float>(0xff800000U);
+            if (ax > 0x7f800000) return diag_add_rn(x, x);
+            return as_type<float>(0xffc00000U);
+        }
+        if (ax < 0x31000000) return x;
+        if (hx > 0 || hx <= (int)0xbe95f61fU) { k = 0; f = x; hu = 1; }
+    } else if (hx >= 0x7f800000) return diag_add_rn(x, x);
+    if (k != 0) {
+        float u;
+        if (hx < 0x5a000000) {
+            u = diag_add_rn(1.0f, x); hu = as_type<int>(u); k = (hu >> 23) - 127;
+            c = k > 0 ? diag_sub_rn(1.0f, diag_sub_rn(u, x)) : diag_sub_rn(x, diag_sub_rn(u, 1.0f)); c = diag_div_rn(c, u);
+        } else { u = x; hu = as_type<int>(u); k = (hu >> 23) - 127; }
+        hu &= 0x007fffff;
+        if (hu < 0x3504f7) u = as_type<float>(hu | 0x3f800000);
+        else { k += 1; u = as_type<float>(hu | 0x3f000000); hu = (0x00800000 - hu) >> 2; }
+        f = diag_sub_rn(u, 1.0f);
+    }
+    float hfsq = diag_mul_rn(diag_mul_rn(0.5f, f), f), kf = float(k);
+    if (hu == 0) {
+        if (f == 0.0f) {
+            if (k == 0) return 0.0f;
+            c = diag_add_rn(c, diag_mul_rn(kf, plm_LN2_LO)); return diag_add_rn(diag_mul_rn(kf, plm_LN2_HI), c);
+        }
+        float r = diag_mul_rn(hfsq, diag_sub_rn(1.0f, diag_mul_rn(as_type<float>(0x3f2aaaab), f)));
+        if (k == 0) return diag_sub_rn(f, r);
+        return diag_sub_rn(diag_mul_rn(kf, plm_LN2_HI), diag_sub_rn(diag_sub_rn(r, diag_add_rn(diag_mul_rn(kf, plm_LN2_LO), c)), f));
+    }
+    const float plm_LP1 = as_type<float>(0x3f2aaaab), plm_LP2 = as_type<float>(0x3ecccccd), plm_LP3 = as_type<float>(0x3e924925);
+    const float plm_LP4 = as_type<float>(0x3e638e29), plm_LP5 = as_type<float>(0x3e3a3325), plm_LP6 = as_type<float>(0x3e1cd04f), plm_LP7 = as_type<float>(0x3e178897);
+    float s = diag_div_rn(f, diag_add_rn(2.0f, f)), z = diag_mul_rn(s, s);
+    float r = diag_mul_rn(z, diag_add_rn(plm_LP1, diag_mul_rn(z, diag_add_rn(plm_LP2, diag_mul_rn(z, diag_add_rn(plm_LP3, diag_mul_rn(z, diag_add_rn(plm_LP4, diag_mul_rn(z, diag_add_rn(plm_LP5, diag_mul_rn(z, diag_add_rn(plm_LP6, diag_mul_rn(z, plm_LP7)))))))))))));
+    if (k == 0) return diag_sub_rn(f, diag_sub_rn(hfsq, diag_mul_rn(s, diag_add_rn(hfsq, r))));
+    return diag_sub_rn(diag_mul_rn(kf, plm_LN2_HI), diag_sub_rn(diag_sub_rn(hfsq, diag_add_rn(diag_mul_rn(s, diag_add_rn(hfsq, r)), diag_add_rn(diag_mul_rn(kf, plm_LN2_LO), c))), f));
+}
+#if defined(GPUWM_WRF_EXACT) && GPUWM_WRF_EXACT
+#pragma clang fp contract(off)
+#else
+#pragma clang fp contract(fast)
+#endif
+#endif // WOOF_DIAGNOSTICS_LOG1PF_METALH

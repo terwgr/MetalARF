@@ -1,0 +1,71 @@
+{
+  "kernels": [
+    {
+      "name": "cumulus_clock_advance",
+      "module": "cumulus_clock_family",
+      "source": "woof/metal/shaders/cumulus_clock_family.metal",
+      "cuda_source": "woof/core/cumulus_clock.py",
+      "cuda_symbol": "cumulus_clock_advance",
+      "resources": [
+        ["rainc", "float", "read_write"],
+        ["pending_rainbl", "float", "read_write"],
+        ["surface_raincv", "float", "read_write"],
+        ["nca", "float", "read_write"],
+        ["pratec", "float", "read"],
+        ["expiring", "float", "read_write"]
+      ],
+      "shapes": {
+        "rainc": [["ncol"]],
+        "pending_rainbl": [["ncol"]],
+        "surface_raincv": [["ncol"]],
+        "nca": [["ncol"]],
+        "pratec": [["ncol"]],
+        "expiring": [["ncol"]]
+      },
+      "parameters": [
+        ["dt", "float32"], ["has_surface_raincv", "int32"],
+        ["ncol", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "cumulus_clock_clear",
+      "module": "cumulus_clock_family",
+      "source": "woof/metal/shaders/cumulus_clock_family.metal",
+      "cuda_source": "woof/core/cumulus_clock.py",
+      "cuda_symbol": "cumulus_clock_clear",
+      "resources": [
+        ["expiring", "float", "read_write"],
+        ["v0", "float", "read_write"], ["v1", "float", "read_write"],
+        ["v2", "float", "read_write"], ["v3", "float", "read_write"],
+        ["v4", "float", "read_write"], ["v5", "float", "read_write"],
+        ["v6", "float", "read_write"], ["v7", "float", "read_write"],
+        ["v8", "float", "read_write"], ["v9", "float", "read_write"],
+        ["v10", "float", "read_write"], ["v11", "float", "read_write"]
+      ],
+      "shapes": {
+        "expiring": [["ncol"]],
+        "v0": [["any_1d"]],
+        "v1": [["any_1d"]],
+        "v2": [["any_1d"]],
+        "v3": [["any_1d"]],
+        "v4": [["any_1d"]],
+        "v5": [["any_1d"]],
+        "v6": [["any_1d"]],
+        "v7": [["any_1d"]],
+        "v8": [["any_1d"]],
+        "v9": [["any_1d"]],
+        "v10": [["any_1d"]],
+        "v11": [["any_1d"]]
+      },
+      "parameters": [
+        ["nvolume", "int32"], ["nz", "int32"], ["ncol", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

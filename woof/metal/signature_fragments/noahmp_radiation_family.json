@@ -1,0 +1,17 @@
+{
+  "kernels": [
+    {
+      "name": "noahmp_radiation_batch",
+      "module": "noahmp_radiation_family",
+      "source": "woof/metal/shaders/noahmp_radiation_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_radiation.cu",
+      "cuda_symbol": "noahmp_radiation_batch",
+      "resources": [["in", "float", "read"], ["ist", "int32", "read"], ["out", "float", "read_write"]],
+      "shapes": {"in": [["n", 56]], "ist": [["n"]], "out": [["n", 19]]},
+      "parameters": [["n", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

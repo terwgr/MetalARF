@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 35560bdd8536e46b3f68c49ca73cec9efc978aee6fbcb2635350b4ac8eb5205f.
+struct GlobalHybridPressureSetupFragmentResources {
+    device const ulong *a_half [[id(0)]];
+    device const ulong *b_half [[id(1)]];
+    device const ulong *surface_pressure [[id(2)]];
+    device ulong *pressure_half [[id(3)]];
+    device ulong *pressure_full [[id(4)]];
+    device ulong *layer_thickness [[id(5)]];
+};
+struct GlobalHybridPressureSetupFragmentParams {
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalHybridPressureSetupFragmentParams) == 8, "global_hybrid_pressure_setup_fragment parameter ABI size changed");

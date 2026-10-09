@@ -1,0 +1,107 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/ensemble/surface_recipe.py",
+      "cuda_symbol": "surface_validate_soil",
+      "layout_version": 1,
+      "module": "ensemble_surface_recipe_fragment",
+      "name": "ensemble_surface_validate_soil",
+      "parameters": [["columns", "int32"], ["cells", "int32"], ["has_frozen", "int32"], ["frozen_limit", "float32"], ["maximum_total", "float32"]],
+      "resources": [
+        ["total", "float32", "read"],
+        ["liquid", "float32", "read"],
+        ["frozen", "float32", "read"],
+        ["land", "float32", "read"],
+        ["ice", "float32", "read"],
+        ["bad", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "total": [["any_1d"]], "liquid": [["any_1d"]],
+        "frozen": [["any_1d"]], "land": [["any_1d"]],
+        "ice": [["any_1d"]], "bad": [[1]]
+      },
+      "source": "woof/metal/shaders/ensemble_surface_recipe_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/ensemble/surface_recipe.py",
+      "cuda_symbol": "surface_scale_soil",
+      "layout_version": 1,
+      "module": "ensemble_surface_recipe_fragment",
+      "name": "ensemble_surface_scale_soil",
+      "parameters": [["columns", "int32"], ["cells", "int32"], ["has_frozen", "int32"], ["floor_categories", "int32"], ["fallback_floor", "float32"], ["maximum_total", "float32"]],
+      "resources": [
+        ["total", "float32", "read_write"],
+        ["liquid", "float32", "read_write"],
+        ["frozen", "float32", "read_write"],
+        ["land", "float32", "read"],
+        ["ice", "float32", "read"],
+        ["parameters", "float32", "read"],
+        ["soil_type", "int32", "read"],
+        ["dry", "float32", "read"]
+      ],
+      "shapes": {
+        "total": [["any_1d"]], "liquid": [["any_1d"]],
+        "frozen": [["any_1d"]], "land": [["any_1d"]],
+        "ice": [["any_1d"]], "parameters": [[2]],
+        "soil_type": [["any_1d"]], "dry": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/ensemble_surface_recipe_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/ensemble/surface_recipe.py",
+      "cuda_symbol": "surface_ruc_availability",
+      "layout_version": 1,
+      "module": "ensemble_surface_recipe_fragment",
+      "name": "ensemble_surface_ruc_availability",
+      "parameters": [["columns", "int32"], ["categories", "int32"], ["apply", "int32"], ["availability_floor", "float32"], ["availability_ceiling", "float32"]],
+      "resources": [
+        ["total", "float32", "read"],
+        ["soil_type", "int32", "read"],
+        ["dry", "float32", "read"],
+        ["reference", "float32", "read"],
+        ["availability", "float32", "read_write"],
+        ["land", "float32", "read"],
+        ["ice", "float32", "read"],
+        ["parameters", "float32", "read"],
+        ["bad", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "total": [["any_1d"]], "soil_type": [["any_1d"]],
+        "dry": [["any_1d"]], "reference": [["any_1d"]],
+        "availability": [["any_1d"]], "land": [["any_1d"]],
+        "ice": [["any_1d"]], "parameters": [[2]], "bad": [[1]]
+      },
+      "source": "woof/metal/shaders/ensemble_surface_recipe_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/ensemble/surface_recipe.py",
+      "cuda_symbol": "surface_offset_sst",
+      "layout_version": 1,
+      "module": "ensemble_surface_recipe_fragment",
+      "name": "ensemble_surface_offset_sst",
+      "parameters": [["columns", "int32"], ["apply", "int32"], ["minimum_temperature", "float32"], ["maximum_temperature", "float32"]],
+      "resources": [
+        ["temperature", "float32", "read_write"],
+        ["land", "float32", "read"],
+        ["lake", "float32", "read"],
+        ["ice", "float32", "read"],
+        ["parameters", "float32", "read"],
+        ["bad", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "temperature": [["any_1d"]], "land": [["any_1d"]],
+        "lake": [["any_1d"]], "ice": [["any_1d"]],
+        "parameters": [[2]], "bad": [[1]]
+      },
+      "source": "woof/metal/shaders/ensemble_surface_recipe_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

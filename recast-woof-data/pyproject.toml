@@ -1,0 +1,101 @@
+# The companion distribution.  One repository, two distributions: this
+# directory is built on its own (`python -m build --wheel recast-woof-data`)
+# and the root `pyproject.toml` builds `woof`.  Both are cut from the
+# same commit, at the same version, and are uploaded together.
+#
+# Why it exists, measured rather than asserted: the engine's wheel
+# built to 103.62 MiB against PyPI's 100 MiB per-file cap.  The two
+# directories moved here are 64.21 MiB of that -- pure reference tables,
+# no code, no platform coupling -- and taking them out puts `woof` at
+# 39.41 MiB with room for the native artifacts that are still landing.
+#
+# It is a HARD dependency of `woof`, never an extra: `pip install recast-woof`
+# must be a complete install, and radiation and Thompson microphysics are
+# not optional parts of a weather model.
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "recast-woof-data"
+description = "Physics reference tables and map assets for Recast WOOF (RRTMGP k-distributions, Thompson microphysics lookups, Natural Earth and US Census basemaps)"
+readme = "README.md"
+license = "Apache-2.0"
+# `licenses/*` joined at 2.7.0.  A `pip install recast-woof-data` used to
+# receive LICENSE and NOTICE and none of the texts the NOTICE names, which
+# performs no reproduction condition at all.  The three that apply to what
+# this distribution actually ships -- WRF's public-domain dedication for
+# the Thompson tables, the Numerical Recipes notice those tables inherit
+# from the generator, and RTE+RRTMGP's BSD-3-Clause for the k-distribution
+# files -- are in licenses/ and land in the wheel at
+# woof_data-<version>.dist-info/licenses/licenses/.  The RTE+RRTMGP and
+# Creative Commons texts ALSO ship inside the package beside their data,
+# through package-data; that is a second route, not a substitute, because
+# a compliance scanner reads dist-info.
+license-files = ["LICENSE", "NOTICE", "licenses/*"]
+requires-python = ">=3.11"
+# NO dependencies, deliberately.  This distribution is bytes on disk plus
+# eleven lines of pathlib; giving it a dependency would make a table
+# unreadable for a reason that has nothing to do with tables.  In
+# particular it does NOT depend on `woof`: the arrow points the other
+# way, and a cycle would make either one unresolvable on its own.
+dependencies = []
+keywords = ["WRF", "RRTMGP", "Thompson", "weather", "woof"]
+# Read from woof_data/VERSION rather than written here, because this
+# version is not free: it must equal `woof`'s to the character, and
+# `woof` pins `recast-woof-data==<that exact string>`.  The file is the one
+# spelling that travels inside the built distribution, so a wheel can
+# state its own version without the sibling project's pyproject.toml
+# beside it.  tests/test_companion_distribution.py fails if the file,
+# the root pyproject's `[project].version` and that pin ever disagree.
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/recastsystems/woof"
+Repository = "https://github.com/recastsystems/woof"
+
+[tool.setuptools.dynamic]
+version = { file = ["woof_data/VERSION"] }
+
+[tool.setuptools.packages.find]
+# One package, named explicitly.  A glob here would sweep `data/` and its
+# subdirectories in as PEP 420 namespace packages, which is how a data
+# directory ends up importable.
+include = ["woof_data"]
+
+[tool.setuptools.package-data]
+# A recursive glob, never an enumeration of filenames -- the same rule the
+# root pyproject.toml states, and for the same reason: an enumeration here
+# had already drifted 52 files behind the tree once.  `woof_data` holds
+# no Python except __init__.py, so "everything under data/" is both
+# correct and incapable of going stale.
+# tests/test_companion_distribution.py fails if any file lands outside it.
+woof_data = ["VERSION", "data/**/*"]
+
+# One exclusion class travelled here with the files it names; it is one of
+# the two the root pyproject.toml documented while these directories lived
+# under gpuwm/.  Nothing may be excluded for any other reason, and
+# tests/test_package_data_coverage.py pins the list exactly.
+#
+# The other class (license-driven: the four CC-BY-NC-SA-4.0 RFMIP
+# reference results) retired in 2.8.0 with the files themselves: no RFMIP
+# file is in this tree any more, the tests fetch them from upstream, and
+# tests/test_package_data_coverage.py::test_no_rfmip_file_is_carried
+# holds it so.
+#
+# Size-driven externalized assets: the two largest Thompson tables
+#    would put this wheel over PyPI's cap by themselves (freezeH2O.dat is
+#    243 MiB and additionally exceeds GitHub's 100 MiB blob limit).  Both
+#    are published as GitHub release assets and staged by
+#    `woof fetch-tables` (woof/table_assets.py) under the same size +
+#    SHA-256 pins every mp8 run enforces
+#    (woof/core/thompson_contract.py).  Moving the directory did not
+#    move that contract: `woof fetch-tables` still stages into
+#    ~/.woof/tables/thompson, outside every install.
+#    MANIFEST.in carries the same two exclusions for the sdist.
+[tool.setuptools.exclude-package-data]
+woof_data = [
+    "data/thompson/tables/freezeH2O.dat",
+    "data/thompson/tables/qr_acr_qg_V4.dat",
+]

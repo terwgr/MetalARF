@@ -1,0 +1,41 @@
+// Generated from kernel_signatures.json; layout 50eb34f7f2de875371724f573e266d6dad11fdded9f3559d55600f02df46998b.
+struct WrfSmagFluxSResources {
+    device const float *u [[id(0)]];
+    device const float *v [[id(1)]];
+    device const float *w [[id(2)]];
+    device const float *php [[id(3)]];
+    device const float *phb [[id(4)]];
+    device const float *alt [[id(5)]];
+    device const float *qv [[id(6)]];
+    device const float *msft [[id(7)]];
+    device const float *msfu [[id(8)]];
+    device const float *msfv [[id(9)]];
+    device const float *fnm [[id(10)]];
+    device const float *fnp [[id(11)]];
+    device const float *dn [[id(12)]];
+    device const float *dnw [[id(13)]];
+    device const float *f [[id(14)]];
+    device const float *kh [[id(15)]];
+    device const float *thb [[id(16)]];
+    device float *fx [[id(17)]];
+    device float *fy [[id(18)]];
+};
+struct WrfSmagFluxSParams {
+    float rdx;
+    float rdy;
+    float dx;
+    float dy;
+    float cf1;
+    float cf2;
+    float cf3;
+    int moist;
+    int nz;
+    int ny;
+    int nx;
+    int phb3d;
+    int boundary_x;
+    int boundary_y;
+    int full_theta;
+    int thb3d;
+};
+static_assert(sizeof(WrfSmagFluxSParams) == 64, "wrf_smag_flux_s parameter ABI size changed");

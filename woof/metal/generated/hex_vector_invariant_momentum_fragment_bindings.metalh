@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout 9609deaa89258efec2543c53a5525090d3bf9cb34698b653ec2d68389b107ed9.
+struct HexVectorInvariantMomentumFragmentResources {
+    device const float *normal_velocity [[id(0)]];
+    device const float *rho_edge [[id(1)]];
+    device const float *pv_edge [[id(2)]];
+    device const float *kinetic_energy [[id(3)]];
+    device const float *horizontal_divergence [[id(4)]];
+    device const int *cells_on_edge [[id(5)]];
+    device const int *edges_on_edge [[id(6)]];
+    device const int *edge_counts [[id(7)]];
+    device const float *weights_on_edge [[id(8)]];
+    device const float *inv_dc [[id(9)]];
+    device float *tendency [[id(10)]];
+};
+struct HexVectorInvariantMomentumFragmentParams {
+    int nlev;
+    int nedges;
+    int ncells;
+    int max_edges;
+};
+static_assert(sizeof(HexVectorInvariantMomentumFragmentParams) == 16, "hex_vector_invariant_momentum_fragment parameter ABI size changed");

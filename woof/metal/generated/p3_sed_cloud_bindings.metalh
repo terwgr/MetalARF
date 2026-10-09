@@ -1,0 +1,23 @@
+// Generated from kernel_signatures.json; layout 9510431cb6779518ffd60ad361f00c2b3c9083f9b8ed14b416e0091da2448938.
+struct P3SedCloudResources {
+    device float *qc [[id(0)]];
+    device float *nc [[id(1)]];
+    device const float *dz [[id(2)]];
+    device const float *rho [[id(3)]];
+    device const float *inv_rho [[id(4)]];
+    device const float *acn [[id(5)]];
+    device float *vq [[id(6)]];
+    device float *vn [[id(7)]];
+    device float *fq [[id(8)]];
+    device float *fn [[id(9)]];
+    device float *prt_liq [[id(10)]];
+    device const float *flags [[id(11)]];
+};
+struct P3SedCloudParams {
+    int nz;
+    int ny;
+    int nx;
+    float dt;
+    int log_predict_nc;
+};
+static_assert(sizeof(P3SedCloudParams) == 20, "p3_sed_cloud parameter ABI size changed");

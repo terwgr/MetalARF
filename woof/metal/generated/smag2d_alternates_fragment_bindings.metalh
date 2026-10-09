@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "wrf_calc_n2_bindings.metalh"
+#include "wrf_smag3d_km_bindings.metalh"

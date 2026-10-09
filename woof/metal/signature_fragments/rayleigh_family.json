@@ -1,0 +1,27 @@
+{
+  "kernels": [
+    {
+      "name": "rayleigh_damp",
+      "module": "rayleigh_family",
+      "source": "woof/metal/shaders/rayleigh_family.metal",
+      "cuda_source": "woof/core/kernels/diffusion.cu",
+      "cuda_symbol": "rayleigh_damp",
+      "resources": [
+        ["f", "float", "read_write"],
+        ["rdamp", "float", "read"]
+      ],
+      "shapes": {
+        "f": [["nlev", "nys", "nxs"]],
+        "rdamp": [["nlev"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["nys", "int32"],
+        ["nxs", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

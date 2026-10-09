@@ -1,0 +1,243 @@
+{
+  "schema": "gpuwm-tui-plot-presets-v1",
+  "default": "general",
+  "note": "Plot requests only. Availability depends on saved history fields and forecast times; the renderer reports missing inputs. No preset changes physics, history output, or forecast settings.",
+  "presets": [
+    {
+      "id": "general",
+      "label": "General",
+      "description": "22 everyday surface, precipitation, cloud, upper-air and storm-environment plots.",
+      "products": [
+        "composite_reflectivity",
+        "1km_reflectivity",
+        "2m_temperature",
+        "2m_dewpoint",
+        "2m_relative_humidity",
+        "10m_wind_speed_and_direction",
+        "mslp_10m_winds",
+        "total_qpf",
+        "qpf_1h",
+        "cloud_cover_levels",
+        "precipitable_water",
+        "850mb_temperature_height_winds",
+        "850mb_height_winds",
+        "700mb_rh_height_winds",
+        "500mb_height_winds",
+        "300mb_height_winds",
+        "sbcape",
+        "mlcape",
+        "sbcin",
+        "bulk_shear_0_6km",
+        "srh_0_1km",
+        "uh_2to5km"
+      ]
+    },
+    {
+      "id": "tornado",
+      "label": "Tornado / severe",
+      "description": "Storm structure and severe-weather environment; these diagnostics do not predict individual tornadoes.",
+      "products": [
+        "composite_reflectivity",
+        "1km_reflectivity",
+        "composite_reflectivity_uh",
+        "uh_2to5km",
+        "uh_2to5km_run_max",
+        "sbcape",
+        "mlcape",
+        "mucape",
+        "sbcin",
+        "mlcin",
+        "srh_0_1km",
+        "srh_0_3km",
+        "bulk_shear_0_1km",
+        "bulk_shear_0_6km",
+        "ehi_0_1km",
+        "stp_fixed",
+        "2m_dewpoint_10m_winds",
+        "10m_wind_speed_and_direction",
+        "mslp_10m_winds",
+        "total_qpf"
+      ]
+    },
+    {
+      "id": "hurricane",
+      "label": "Hurricane / tropical",
+      "description": "Model pressure, wind, moisture and rainfall; selecting these plots does not create a hurricane or provide official track guidance.",
+      "products": [
+        "mslp_10m_winds",
+        "10m_wind_speed_and_direction",
+        "10m_wind_run_max",
+        "composite_reflectivity",
+        "1km_reflectivity",
+        "total_qpf",
+        "qpf_1h",
+        "qpf_6h",
+        "precipitable_water",
+        "2m_temperature",
+        "2m_dewpoint",
+        "2m_relative_humidity",
+        "850mb_height_winds",
+        "850mb_absolute_vorticity_height_winds",
+        "700mb_rh_height_winds",
+        "500mb_height_winds",
+        "200mb_height_winds",
+        "bulk_shear_0_6km",
+        "sbcape",
+        "cloud_cover_levels"
+      ]
+    },
+    {
+      "id": "snow",
+      "label": "Snow / winter",
+      "description": "Cold-air profiles, precipitation, snow depth and snow water equivalent when stored; no precipitation-type category is drawn.",
+      "products": [
+        "2m_temperature",
+        "2m_dewpoint",
+        "2m_relative_humidity",
+        "10m_wind_speed_and_direction",
+        "mslp_10m_winds",
+        "composite_reflectivity",
+        "total_qpf",
+        "qpf_1h",
+        "850mb_temperature_height_winds",
+        "700mb_temperature_height_winds",
+        "700mb_rh_height_winds",
+        "500mb_height_winds",
+        "var:wrf_snowh",
+        "var:wrf_snow"
+      ]
+    },
+    {
+      "id": "rain",
+      "label": "Rain / flooding",
+      "description": "Rainfall, moisture and forcing; QPF is precipitation, not a flood-depth forecast.",
+      "products": [
+        "composite_reflectivity",
+        "1km_reflectivity",
+        "total_qpf",
+        "qpf_1h",
+        "qpf_6h",
+        "qpf_12h",
+        "qpf_24h",
+        "precipitable_water",
+        "2m_dewpoint",
+        "2m_relative_humidity",
+        "mslp_10m_winds",
+        "10m_wind_speed_and_direction",
+        "850mb_height_winds",
+        "700mb_rh_height_winds",
+        "500mb_height_winds",
+        "sbcape",
+        "mlcape",
+        "cloud_cover_levels"
+      ]
+    },
+    {
+      "id": "wind",
+      "label": "Wind",
+      "description": "Surface wind and its maxima, pressure patterns, upper-air flow and wind-related diagnostics.",
+      "products": [
+        "10m_wind_speed_and_direction",
+        "10m_wind_run_max",
+        "10m_wind_1h_max",
+        "mslp_10m_winds",
+        "850mb_height_winds",
+        "700mb_height_winds",
+        "500mb_height_winds",
+        "300mb_height_winds",
+        "250mb_height_winds",
+        "200mb_height_winds",
+        "bulk_shear_0_1km",
+        "bulk_shear_0_6km",
+        "2m_temperature_10m_winds",
+        "2m_dewpoint_10m_winds",
+        "composite_reflectivity",
+        "sbcape"
+      ]
+    },
+    {
+      "id": "fire",
+      "label": "Fire weather",
+      "description": "Atmospheric dryness, wind and precipitation; these are weather plots, not wildfire ignition, fuel or fire-spread modelling.",
+      "products": [
+        "2m_relative_humidity_10m_winds",
+        "10m_wind_1h_max",
+        "2m_temperature",
+        "2m_dewpoint",
+        "total_qpf",
+        "qpf_24h",
+        "850mb_height_winds",
+        "terrain_height"
+      ]
+    },
+    {
+      "id": "temperature",
+      "label": "Heat / cold",
+      "description": "Temperature, moisture and daily range; daily plots need a full 24 h window.",
+      "products": [
+        "2m_temperature",
+        "2m_dewpoint",
+        "2m_relative_humidity",
+        "10m_wind_speed_and_direction",
+        "2m_temp_0_24h_max",
+        "2m_temp_0_24h_min",
+        "2m_temp_0_24h_range",
+        "cloud_cover_levels",
+        "total_qpf",
+        "850mb_temperature_height_winds"
+      ]
+    },
+    {
+      "id": "aviation",
+      "label": "Fog / aviation weather",
+      "description": "Low cloud, moisture, wind and storm context; these plots show no visibility, do not determine flight categories and do not provide a flight briefing.",
+      "products": [
+        "low_cloud_cover",
+        "cloud_cover_levels",
+        "2m_relative_humidity",
+        "2m_temperature",
+        "2m_dewpoint",
+        "10m_wind_speed_and_direction",
+        "mslp_10m_winds",
+        "composite_reflectivity",
+        "bulk_shear_0_1km"
+      ]
+    },
+    {
+      "id": "terrain",
+      "label": "Mountain / terrain weather",
+      "description": "Terrain, surface weather and flow above the ground; local slopes and valleys are represented only at the selected model resolution.",
+      "products": [
+        "terrain_height",
+        "10m_wind_speed_and_direction",
+        "2m_temperature",
+        "2m_dewpoint",
+        "2m_relative_humidity",
+        "mslp_10m_winds",
+        "850mb_height_winds",
+        "700mb_height_winds",
+        "700mb_rh_height_winds",
+        "total_qpf"
+      ]
+    },
+    {
+      "id": "coastal",
+      "label": "Coastal weather",
+      "description": "Coastal wind, pressure, cloud and rain; this atmospheric model does not calculate waves, tides, storm surge or inundation.",
+      "products": [
+        "terrain_height",
+        "mslp_10m_winds",
+        "10m_wind_speed_and_direction",
+        "2m_temperature_10m_winds",
+        "2m_dewpoint_10m_winds",
+        "2m_relative_humidity_10m_winds",
+        "low_cloud_cover",
+        "total_qpf",
+        "qpf_1h",
+        "composite_reflectivity",
+        "precipitable_water",
+        "850mb_height_winds"
+      ]
+    }
+  ]
+}

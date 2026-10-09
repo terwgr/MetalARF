@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout 299529bbf464958352e46fd29d74c745bbf8204215a9f4e5570ebdfd9f1dcc26.
+struct UrbanBemRoofRadiationFragmentResources {
+    device const float *albedo [[id(0)]];
+    device const float *rs [[id(1)]];
+    device const float *emissivity [[id(2)]];
+    device const float *rl [[id(3)]];
+    device const float *surface_temp [[id(4)]];
+    device const float *pv_fraction [[id(5)]];
+    device const float *panel_temp [[id(6)]];
+    device float *radflux [[id(7)]];
+    device int *error [[id(8)]];
+};
+struct UrbanBemRoofRadiationFragmentParams {
+    int nitem;
+    int has_pv;
+    int level;
+    int nz;
+    float sigma;
+};
+static_assert(sizeof(UrbanBemRoofRadiationFragmentParams) == 20, "urban_bem_roof_radiation_fragment parameter ABI size changed");

@@ -1,0 +1,4 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "hex_cell_ke_finish_fragment_bindings.metalh"
+#include "hex_cell_kinematics_fragment_bindings.metalh"
+#include "hex_vertex_kinematics_fragment_bindings.metalh"

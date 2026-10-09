@@ -1,0 +1,29 @@
+// Generated from kernel_signatures.json; layout 9f82c5670abc48b1dfdabd761c839cbf0146f387bf0d646de19b5fcd0c537983.
+struct Diff6Resources {
+    device const float *f [[id(0)]];
+    device float *tend [[id(1)]];
+    device const float *mut [[id(2)]];
+    device const float *c1 [[id(3)]];
+    device const float *c2 [[id(4)]];
+    device const float *phb [[id(5)]];
+    device const float *msfu [[id(6)]];
+    device const float *msfv [[id(7)]];
+    device const float *msft [[id(8)]];
+};
+struct Diff6Params {
+    float coef;
+    int mono;
+    int slopeopt;
+    float dzthr_x;
+    float dzthr_y;
+    int nlev;
+    int ny;
+    int nys;
+    int nx;
+    int nxs;
+    int variant;
+    int wstag;
+    int boundary_x;
+    int boundary_y;
+};
+static_assert(sizeof(Diff6Params) == 56, "diff6 parameter ABI size changed");

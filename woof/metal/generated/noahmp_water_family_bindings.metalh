@@ -1,0 +1,2 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "noahmp_water_batch_bindings.metalh"

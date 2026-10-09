@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_aer3_sw_optics",
+      "module": "rrtmg_aer3_sw_optics",
+      "source": "woof/metal/shaders/rrtmg_aer3_sw_optics.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_aer3.cu",
+      "cuda_symbol": "rrtmg_aer3_sw_optics",
+      "resources": [
+        ["p3d", "float", "read"], ["t3d", "float", "read"],
+        ["qv3d", "float", "read"], ["dz8w", "float", "read"],
+        ["nwfa", "float", "read"], ["nifa", "float", "read"],
+        ["smoke_aod", "float", "read"],
+        ["ztaua", "float", "read_write"], ["zasya", "float", "read_write"],
+        ["zomga", "float", "read_write"], ["taod", "float", "read_write"]
+      ],
+      "shapes": {
+        "p3d": [["nc", "nz"]], "t3d": [["nc", "nz"]],
+        "qv3d": [["nc", "nz"]], "dz8w": [["nc", "nz"]],
+        "nwfa": [["nc", "nz"]], "nifa": [["nc", "nz"]],
+        "smoke_aod": [["nc", "nz"]],
+        "ztaua": [["nc", "14", "nlayers"]],
+        "zasya": [["nc", "14", "nlayers"]],
+        "zomga": [["nc", "14", "nlayers"]],
+        "taod": [["nc", "nz"]]
+      },
+      "parameters": [["nc", "int32"], ["nz", "int32"],
+                      ["nlayers", "int32"], ["smoke_feedback", "int32"]],
+      "threads_per_group": 128, "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

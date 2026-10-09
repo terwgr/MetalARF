@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout 801ded0e050cfa3b409d667af52f8dfe79146a324f08e719483242d4ac5e0c23.
+struct UrbanBepBemGreenRoofFluxMergeFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const int *nzurban [[id(1)]];
+    device const int *utype [[id(2)]];
+    device const float *class_float [[id(3)]];
+    device const float *ss [[id(4)]];
+    device const float *sf [[id(5)]];
+    device const float *lf [[id(6)]];
+    device float *sfrv [[id(7)]];
+    device float *lfrv [[id(8)]];
+};
+struct UrbanBepBemGreenRoofFluxMergeFragmentParams {
+    int nitem;
+    int ncol;
+    int green_roof;
+};
+static_assert(sizeof(UrbanBepBemGreenRoofFluxMergeFragmentParams) == 12, "urban_bep_bem_green_roof_flux_merge_fragment parameter ABI size changed");

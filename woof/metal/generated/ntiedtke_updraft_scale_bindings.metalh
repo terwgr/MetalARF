@@ -1,0 +1,36 @@
+// Generated from kernel_signatures.json; layout 27294b9b6076630a7bfc0bae1765e488396520ab72f6233e8caa16ddaffe9473.
+struct NtiedtkeUpdraftScaleResources {
+    device const int *loddraf [[id(0)]];
+    device const int *kcbot [[id(1)]];
+    device const int *kctop [[id(2)]];
+    device const float *zmfub1 [[id(3)]];
+    device const float *zmfub [[id(4)]];
+    device const float *paph [[id(5)]];
+    device int *ldcum [[id(6)]];
+    device int *ktype [[id(7)]];
+    device int *idtop [[id(8)]];
+    device float *pmfu [[id(9)]];
+    device float *pmfus [[id(10)]];
+    device float *pmfuq [[id(11)]];
+    device float *pmful [[id(12)]];
+    device float *pdmfup [[id(13)]];
+    device float *plude [[id(14)]];
+    device float *pmfude_rate [[id(15)]];
+    device float *pmfd [[id(16)]];
+    device float *pmfds [[id(17)]];
+    device float *pmfdq [[id(18)]];
+    device float *pdmfdp [[id(19)]];
+    device float *pmfdde_rate [[id(20)]];
+};
+struct NtiedtkeUpdraftScaleParams {
+    int ncol;
+    int klev;
+    float ztmst;
+    float cp;
+    float rd;
+    float rv;
+    float xlv;
+    float xlf;
+    float grav;
+};
+static_assert(sizeof(NtiedtkeUpdraftScaleParams) == 36, "ntiedtke_updraft_scale parameter ABI size changed");

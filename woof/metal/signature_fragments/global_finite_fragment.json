@@ -1,0 +1,46 @@
+{
+  "kernels": [
+    {
+      "name": "global_finite_fragment",
+      "module": "global_finite_fragment",
+      "source": "woof/metal/shaders/global_finite_fragment.metal",
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._metal_all_finite",
+      "resources": [
+        ["values", "float64_bits", "read"],
+        ["partial_nonfinite", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "values": [["any_1d"]],
+        "partial_nonfinite": [["any_1d"]]
+      },
+      "parameters": [
+        ["count", "int32"],
+        ["chunk_size", "int32"],
+        ["partial_count", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "global_finite_finalize_fragment",
+      "module": "global_finite_finalize_fragment",
+      "source": "woof/metal/shaders/global_finite_fragment.metal",
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._metal_all_finite",
+      "resources": [
+        ["partial_nonfinite", "uint32", "read"],
+        ["finite", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "partial_nonfinite": [["any_1d"]],
+        "finite": [["any_1d"]]
+      },
+      "parameters": [["partial_count", "int32"]],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

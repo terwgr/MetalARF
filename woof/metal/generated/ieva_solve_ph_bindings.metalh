@@ -1,0 +1,24 @@
+// Generated from kernel_signatures.json; layout f6a5fc7db1c30016bd226da2e2d58b9ac1c9fe3c0f5c477105701ae0d3242ec5.
+struct IevaSolvePhResources {
+    device float *tend [[id(0)]];
+    device const float *ph_old [[id(1)]];
+    device const float *phb [[id(2)]];
+    device const float *rom [[id(3)]];
+    device const float *c1f [[id(4)]];
+    device const float *c2f [[id(5)]];
+    device const float *mut [[id(6)]];
+    device const float *rdnw [[id(7)]];
+    device const float *msft [[id(8)]];
+};
+struct IevaSolvePhParams {
+    int base3d;
+    float dt;
+    float one;
+    float zero;
+    float half_val;
+    int has_msf;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(IevaSolvePhParams) == 36, "ieva_solve_ph parameter ABI size changed");

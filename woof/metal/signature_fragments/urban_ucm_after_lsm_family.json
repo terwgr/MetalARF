@@ -1,0 +1,741 @@
+{
+  "kernels": [
+    {
+      "name": "ucm_noahmp_after_lsm",
+      "module": "urban_ucm",
+      "source": "woof/metal/shaders/urban_ucm_noahmp_after_lsm_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_ucm.cu",
+      "cuda_symbol": "ucm_noahmp_after_lsm",
+      "resources": [
+        [
+          "urban",
+          "int32",
+          "read"
+        ],
+        [
+          "utype",
+          "int32",
+          "read"
+        ],
+        [
+          "float_bundle",
+          "float",
+          "read"
+        ],
+        [
+          "field_albedo",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_hfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_qfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_lh",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_grdflx",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_tsk",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_qsfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_ust",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_chs",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_chs2",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_cqs2",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_glw",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_znt",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_swdown",
+          "float",
+          "read_write"
+        ],
+        [
+          "field_rainbl",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_tr_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_tb_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_tg_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_tc_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_qc_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_uc_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_trl_urb3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_tbl_urb3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_tgl_urb3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_xxxr_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_xxxb_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_xxxg_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_xxxc_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_cmr_sfcdif",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_chr_sfcdif",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_cmc_sfcdif",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_chc_sfcdif",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_cmgr_sfcdif",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_chgr_sfcdif",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_cmcr_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_tgr_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_tgrl_urb3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_smr_urb3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_drelr_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_drelb_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_drelg_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_flxhumr_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_flxhumb_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_flxhumg_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_ts_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_sh_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_lh_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_g_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_rn_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_psim_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_psih_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_gz1oz0_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_u10_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_v10_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_th2_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_q2_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_ust_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "state_akms_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "switches",
+          "int32",
+          "read"
+        ],
+        [
+          "status",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "urban": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "utype": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_albedo": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_hfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_qfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_lh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_grdflx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_tsk": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_qsfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_ust": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_chs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_chs2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_cqs2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_glw": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_znt": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_swdown": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "field_rainbl": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_tr_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_tb_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_tg_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_tc_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_qc_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_uc_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_trl_urb3d": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_tbl_urb3d": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_tgl_urb3d": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_xxxr_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_xxxb_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_xxxg_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_xxxc_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_cmr_sfcdif": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_chr_sfcdif": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_cmc_sfcdif": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_chc_sfcdif": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_cmgr_sfcdif": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_chgr_sfcdif": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_cmcr_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_tgr_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_tgrl_urb3d": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_smr_urb3d": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_drelr_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_drelb_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_drelg_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_flxhumr_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_flxhumb_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_flxhumg_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_ts_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_sh_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_lh_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_g_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_rn_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_psim_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_psih_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_gz1oz0_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_u10_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_v10_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_th2_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_q2_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_ust_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "state_akms_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "switches": [
+          [
+            11
+          ]
+        ],
+        "status": [
+          [
+            1
+          ]
+        ],
+        "float_bundle": [
+          [
+            "float_bundle_size"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "n_utype",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "jmonth",
+          "int32"
+        ],
+        [
+          "float_bundle_size",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "needs-integration"
+      ]
+    }
+  ]
+}

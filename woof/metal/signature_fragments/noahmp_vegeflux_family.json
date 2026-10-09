@@ -1,0 +1,103 @@
+{
+  "kernels": [
+    {
+      "name": "noahmp_vegeflux_flux",
+      "module": "noahmp_vegeflux_family",
+      "source": "woof/metal/shaders/noahmp_vegeflux_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_vegeflux.cu",
+      "cuda_symbol": "dev_vege_flux",
+      "resources": [
+        [
+          "in",
+          "float",
+          "read"
+        ],
+        [
+          "pin",
+          "float",
+          "read"
+        ],
+        [
+          "isnow",
+          "int32",
+          "read"
+        ],
+        [
+          "dzsnso",
+          "float",
+          "read"
+        ],
+        [
+          "stc",
+          "float",
+          "read"
+        ],
+        [
+          "df",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "in": [
+          [
+            "n",
+            50
+          ]
+        ],
+        "pin": [
+          [
+            "n",
+            14
+          ]
+        ],
+        "isnow": [
+          [
+            "n"
+          ]
+        ],
+        "dzsnso": [
+          [
+            "n",
+            7
+          ]
+        ],
+        "stc": [
+          [
+            "n",
+            7
+          ]
+        ],
+        "df": [
+          [
+            "n",
+            7
+          ]
+        ],
+        "out": [
+          [
+            "n",
+            30
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "fp32-precise-native-metal-math",
+        "cuda-libm-identity-unverified"
+      ]
+    }
+  ]
+}

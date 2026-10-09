@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 396d215c499bb2cd50409f1c51c3f5e763e336cf7b1ff3a36f5c9d474b4d6a9d.
+struct SurfaceCapLandQ2Resources {
+    device float *q2 [[id(0)]];
+    device const float *qv1 [[id(1)]];
+    device const float *xland [[id(2)]];
+};
+struct SurfaceCapLandQ2Params {
+    int nx;
+    int ny;
+    int n;
+};
+static_assert(sizeof(SurfaceCapLandQ2Params) == 12, "surface_cap_land_q2 parameter ABI size changed");
