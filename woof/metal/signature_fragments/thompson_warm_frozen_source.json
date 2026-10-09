@@ -1,0 +1,2096 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_warm_frozen_source_network",
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "collision_rates",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cloud_state",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "collision_rates": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ]
+    },
+    {
+      "name": "thompson_warm_frozen_source_network_melt",
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "collision_rates",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "collision_rates": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ]
+    },
+    {
+      "name": "thompson_warm_frozen_source_network_vapor",
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "collision_rates",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "collision_rates": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ]
+    },
+    {
+      "name": "thompson_warm_frozen_source_network_limits",
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "collision_rates",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "collision_rates": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ]
+    },
+    {
+      "name": "thompson_warm_frozen_source_network_apply",
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "collision_rates",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "collision_rates": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ]
+    },
+    {
+      "name": "thompson_warm_frozen_source_network_finalize",
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow_melt_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "collision_rates",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "snow_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "collision_rates": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ]
+    },
+    {
+      "name": "thompson_warm_source_wet_bulb",
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_melt_marker",
+          "float",
+          "read"
+        ],
+        [
+          "wet_bulb",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wet_bulb": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "precise-fp32-libm-unverified"
+      ]
+    },
+    {
+      "name": "thompson_warm_source_collision_rates",
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "nr",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_melt_marker",
+          "float",
+          "read"
+        ],
+        [
+          "wet_bulb",
+          "float",
+          "read"
+        ],
+        [
+          "tcs_racs1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tmr_racs1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcs_racs2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tmr_racs2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcr_sacr1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tms_sacr1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcr_sacr2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tms_sacr2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_racs1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_racs2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_sacr1",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_sacr2",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcg_racg",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tmr_racg",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tcr_gacr",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_racg",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tnr_gacr",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "collision_rates",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wet_bulb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tcs_racs1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tmr_racs1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tcs_racs2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tmr_racs2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tcr_sacr1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tms_sacr1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tcr_sacr2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tms_sacr2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tnr_racs1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tnr_racs2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tnr_sacr1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tnr_sacr2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tcg_racg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tmr_racg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tcr_gacr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tnr_racg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tnr_gacr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "collision_rates": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ]
+    },
+    {
+      "name": "thompson_warm_source_cloud_rates",
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "nr",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_melt_marker",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "rain_cloud_efficiency",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "wet_bulb",
+          "float",
+          "read"
+        ],
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "graupel_melt_marker": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rain_cloud_efficiency": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wet_bulb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ]
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "snow_cloud_efficiency",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "snow_cloud_efficiency": [
+          [
+            10000
+          ]
+        ],
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_snow_cloud_rate"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-log-exp-pow",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_cloud_rate_base"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_multiply"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_exp_t"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_exp_u"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_exp_v"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_exp_z"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_exp_w"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_exp_poly"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_exp_rational"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_exp_scale"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_square"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_log_reduce"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_log_poly"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_log_compensate_product"
+    },
+    {
+      "module": "thompson_warm_frozen_source",
+      "source": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_frozen_source_network",
+      "resources": [
+        [
+          "cloud_state",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cloud_state": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "soft-libm64-plm-pow-positive-fixed-y",
+        "precise-fp32-libm-unverified"
+      ],
+      "name": "thompson_warm_source_graupel_pow_log_compensate_sum"
+    }
+  ]
+}

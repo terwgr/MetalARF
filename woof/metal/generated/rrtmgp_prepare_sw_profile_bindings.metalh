@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout bfe64122112c63e1677cb729ad09a879059d0f06fdd3e143c9a7e952d11e604c.
+struct RrtmgpPrepareSwProfileResources {
+    device const float *play [[id(0)]];
+    device const float *plev [[id(1)]];
+    device const float *tlay [[id(2)]];
+    device const float *tlev [[id(3)]];
+    device const float *qv [[id(4)]];
+    device float *out_play [[id(5)]];
+    device float *out_plev [[id(6)]];
+    device float *out_tlay [[id(7)]];
+    device float *out_tlev [[id(8)]];
+    device float *out_qv [[id(9)]];
+};
+struct RrtmgpPrepareSwProfileParams {
+    int ncol;
+    int model_nlay;
+    int upper_nlay;
+    int total_nlay;
+    float pressure_floor;
+};
+static_assert(sizeof(RrtmgpPrepareSwProfileParams) == 20, "rrtmgp_prepare_sw_profile parameter ABI size changed");

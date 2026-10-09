@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout a009ce76e8c877db017950c78d0188b23a4a5f5b810a1bbfa6c3bc49a8b2a900.
+struct SolarAlbedoValidateResources {
+    device const float *xland [[id(0)]];
+    device const float *snow [[id(1)]];
+    device const float *xice [[id(2)]];
+    device const int *ivgtyp [[id(3)]];
+    device const float *coszen [[id(4)]];
+    device uint *status [[id(5)]];
+};
+struct SolarAlbedoValidateParams {
+    int count;
+};
+static_assert(sizeof(SolarAlbedoValidateParams) == 4, "solar_albedo_validate parameter ABI size changed");

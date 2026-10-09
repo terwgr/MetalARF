@@ -1,0 +1,27 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._turbulence",
+      "layout_version": 1,
+      "module": "global_turbulence_geometry_fragment",
+      "name": "global_turbulence_geometry_fragment",
+      "parameters": [["nlevel", "int32"], ["ncolumn", "int32"]],
+      "resources": [
+        ["geopotential", "float64_bits", "read"],
+        ["constants", "float64_bits", "read"],
+        ["height", "float64_bits", "read_write"],
+        ["diffusivity", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "geopotential": [["any_1d"]],
+        "constants": [[4]],
+        "height": [["any_1d"]],
+        "diffusivity": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_turbulence_geometry_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

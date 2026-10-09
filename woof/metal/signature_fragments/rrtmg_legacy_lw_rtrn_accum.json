@@ -1,0 +1,180 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_legacy_lw_rtrn_accum",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_rtrn_accum",
+      "resources": [
+        [
+          "radld_p",
+          "float",
+          "read"
+        ],
+        [
+          "radclrd_p",
+          "float",
+          "read"
+        ],
+        [
+          "radlu_p",
+          "float",
+          "read"
+        ],
+        [
+          "radclru_p",
+          "float",
+          "read"
+        ],
+        [
+          "iclddn_p",
+          "int32",
+          "read"
+        ],
+        [
+          "radlu_sfc",
+          "float",
+          "read"
+        ],
+        [
+          "radclru_sfc",
+          "float",
+          "read"
+        ],
+        [
+          "ngs",
+          "int32",
+          "read"
+        ],
+        [
+          "delwave",
+          "float",
+          "read"
+        ],
+        [
+          "totuflux",
+          "float",
+          "read_write"
+        ],
+        [
+          "totdflux",
+          "float",
+          "read_write"
+        ],
+        [
+          "totuclfl",
+          "float",
+          "read_write"
+        ],
+        [
+          "totdclfl",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "radld_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "radclrd_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "radlu_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "radclru_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "iclddn_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "radlu_sfc": [
+          [
+            "ncol",
+            "140"
+          ]
+        ],
+        "radclru_sfc": [
+          [
+            "ncol",
+            "140"
+          ]
+        ],
+        "ngs": [
+          [
+            "16"
+          ]
+        ],
+        "delwave": [
+          [
+            "16"
+          ]
+        ],
+        "totuflux": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "totdflux": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "totuclfl": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "totdclfl": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "wtdiff",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

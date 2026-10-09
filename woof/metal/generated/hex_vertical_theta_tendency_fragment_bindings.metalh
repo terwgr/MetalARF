@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout c98bf8122a3e9c89f6bf3fed8487ca468c7314d8de77832623e4c9442ffb2017.
+struct HexVerticalThetaTendencyFragmentResources {
+    device const float *horizontal [[id(0)]];
+    device const float *theta [[id(1)]];
+    device const float *theta_saved [[id(2)]];
+    device const float *rho_w [[id(3)]];
+    device const float *rho_w_saved [[id(4)]];
+    device const float *fzm [[id(5)]];
+    device const float *fzp [[id(6)]];
+    device const float *rdzw [[id(7)]];
+    device float *tendency [[id(8)]];
+};
+struct HexVerticalThetaTendencyFragmentParams {
+    int nlev;
+    int ncells;
+    float coefficient;
+};
+static_assert(sizeof(HexVerticalThetaTendencyFragmentParams) == 12, "hex_vertical_theta_tendency_fragment parameter ABI size changed");

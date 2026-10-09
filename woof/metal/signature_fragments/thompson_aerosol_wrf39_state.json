@@ -1,0 +1,89 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_aa_wrf39_graupel_finalize",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_wrf39_graupel_finalize",
+      "resources": [["qg", "float", "read_write"]],
+      "shapes": {"qg": [["n"]]},
+      "parameters": [["r1", "float32"], ["n", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    },
+    {
+      "name": "thompson_aa_wrf39_start_emission",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_wrf39_start_emission",
+      "resources": [
+        ["nwfa", "float", "read"], ["nwfa2d", "float", "read_write"]
+      ],
+      "shapes": {"nwfa": [["nz", "ny", "nx"]], "nwfa2d": [["ny", "nx"]]},
+      "parameters": [
+        ["dx", "float32"], ["dy", "float32"], ["ncolumns", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact", "soft64-rn-bit-ops"]
+    },
+    {
+      "name": "thompson_aa_wrf39_effective_radius",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_effective_radius",
+      "resources": [
+        ["temperature", "float", "read"], ["pressure", "float", "read"],
+        ["qv", "float", "read"], ["qc", "float", "read"],
+        ["nc", "float", "read"], ["qi", "float", "read"],
+        ["ni", "float", "read"], ["qs", "float", "read"],
+        ["effc", "float", "read_write"], ["effi", "float", "read_write"],
+        ["effs", "float", "read_write"]
+      ],
+      "shapes": {
+        "temperature": [["n"]], "pressure": [["n"]], "qv": [["n"]],
+        "qc": [["n"]], "nc": [["n"]], "qi": [["n"]], "ni": [["n"]],
+        "qs": [["n"]], "effc": [["n"]], "effi": [["n"]], "effs": [["n"]]
+      },
+      "parameters": [["n", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact", "soft64-rn-bit-ops"]
+    },
+    {
+      "name": "thompson_aa_wrf39_graupel_intercept",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_wrf39_graupel_intercept",
+      "resources": [
+        ["qg", "float", "read"], ["qr", "float", "read"],
+        ["nr", "float", "read"], ["temperature", "float", "read"],
+        ["pressure", "float", "read"], ["qv", "float", "read"],
+        ["n0_out", "float", "read_write"]
+      ],
+      "shapes": {
+        "qg": [["nz", "ny", "nx"]], "qr": [["nz", "ny", "nx"]],
+        "nr": [["nz", "ny", "nx"]], "temperature": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]], "qv": [["nz", "ny", "nx"]],
+        "n0_out": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["r1", "float32"], ["r2", "float32"], ["d0r", "float32"],
+        ["am_r", "float32"], ["obmr", "float32"],
+        ["gonv_min", "float32"], ["gonv_max", "float32"],
+        ["pi", "float32"], ["rho_g", "float32"],
+        ["mvd_numerator", "float32"], ["qv_floor", "float32"],
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["mode", "int32"]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact", "soft64-rn-bit-ops"]
+    }
+  ]
+}

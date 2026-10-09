@@ -1,0 +1,262 @@
+{
+  "kernels": [
+    {
+      "name": "slow_buoyancy",
+      "module": "dycore",
+      "source": "woof/metal/shaders/slow_buoyancy.metal",
+      "cuda_source": "woof/core/kernels/dycore.cu",
+      "cuda_symbol": "slow_buoyancy",
+      "resources": [
+        [
+          "rw_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "pb",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "qh",
+          "float",
+          "read"
+        ],
+        [
+          "rdn",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "rw_t": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rdn": [
+          [
+            "nz"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "c1f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "moist_mode",
+          "int32"
+        ],
+        [
+          "has_qi",
+          "int32"
+        ],
+        [
+          "has_qs",
+          "int32"
+        ],
+        [
+          "has_qg",
+          "int32"
+        ],
+        [
+          "has_qh",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

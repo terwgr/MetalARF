@@ -1,0 +1,266 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_surface_flux_preparation",
+      "layout_version": 1,
+      "module": "global_surface_flux_prep_resident_fragment",
+      "name": "global_surface_flux_prep_resident_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "theta",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "exner_bottom",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qv",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "p_full_bottom",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "p_surface",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "u",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "v",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "surface_temperature",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "roughness",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "soil_water_fraction",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "land_fraction",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "dry_air_gas_constant",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "epsilon",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "bulk_exchange_coefficient",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "soil_wetness_capacity",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "air_temperature",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "rho_bottom",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "wind",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "cd",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "saturation_mixing_ratio",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "beta",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "surface_water",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "dt",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "available_water_rate",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner_bottom": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p_full_bottom": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p_surface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface_temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "roughness": [
+          [
+            "any_1d"
+          ]
+        ],
+        "soil_water_fraction": [
+          [
+            "any_1d"
+          ]
+        ],
+        "land_fraction": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dry_air_gas_constant": [
+          [
+            1
+          ]
+        ],
+        "epsilon": [
+          [
+            1
+          ]
+        ],
+        "bulk_exchange_coefficient": [
+          [
+            1
+          ]
+        ],
+        "soil_wetness_capacity": [
+          [
+            1
+          ]
+        ],
+        "air_temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_bottom": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wind": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "saturation_mixing_ratio": [
+          [
+            "any_1d"
+          ]
+        ],
+        "beta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface_water": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "available_water_rate": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_surface_flux_prep_resident_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

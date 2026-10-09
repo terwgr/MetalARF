@@ -1,0 +1,34 @@
+// Generated from kernel_signatures.json; layout 842c147b189e9f1889421c32474f33a4bce85736996bed462d458d1f060770ba.
+struct RrtmgpAppendProfileFp32Resources {
+    device const float *model_play [[id(0)]];
+    device const float *model_plev [[id(1)]];
+    device const float *model_tlay [[id(2)]];
+    device const float *model_tlev [[id(3)]];
+    device const float *model_qv [[id(4)]];
+    device const float *upper_play [[id(5)]];
+    device const float *upper_plev [[id(6)]];
+    device const float *upper_tlay [[id(7)]];
+    device const float *upper_tlev [[id(8)]];
+    device const float *upper_qv [[id(9)]];
+    device float *out_play [[id(10)]];
+    device float *out_plev [[id(11)]];
+    device float *out_tlay [[id(12)]];
+    device float *out_tlev [[id(13)]];
+    device float *out_qv [[id(14)]];
+};
+struct RrtmgpAppendProfileFp32Params {
+    int ncol;
+    int model_nlay;
+    int upper_nlay;
+    int spc;
+    int spl;
+    int sec;
+    int sel;
+    int stc;
+    int stl;
+    int sic;
+    int sil;
+    int sqc;
+    int sql;
+};
+static_assert(sizeof(RrtmgpAppendProfileFp32Params) == 52, "rrtmgp_append_profile_fp32 parameter ABI size changed");

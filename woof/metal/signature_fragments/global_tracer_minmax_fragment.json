@@ -1,0 +1,52 @@
+{
+  "kernels": [
+    {
+      "name": "global_tracer_minmax_fragment",
+      "module": "global_tracer_minmax_fragment",
+      "source": "woof/metal/shaders/global_tracer_minmax_fragment.metal",
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._floor_tracer_bands",
+      "resources": [
+        ["values", "float64_bits", "read"],
+        ["partial_min", "float64_bits", "read_write"],
+        ["partial_max", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "values": [["any_1d"]],
+        "partial_min": [["partial_count"]],
+        "partial_max": [["partial_count"]]
+      },
+      "parameters": [
+        ["count", "int32"],
+        ["chunk_size", "int32"],
+        ["partial_count", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "global_tracer_minmax_finalize_fragment",
+      "module": "global_tracer_minmax_fragment",
+      "source": "woof/metal/shaders/global_tracer_minmax_finalize_fragment.metal",
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._floor_tracer_bands",
+      "resources": [
+        ["partial_min", "float64_bits", "read"],
+        ["partial_max", "float64_bits", "read"],
+        ["minimum", "float64_bits", "read_write"],
+        ["maximum", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "partial_min": [["partial_count"]],
+        "partial_max": [["partial_count"]],
+        "minimum": [[1]],
+        "maximum": [[1]]
+      },
+      "parameters": [["partial_count", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

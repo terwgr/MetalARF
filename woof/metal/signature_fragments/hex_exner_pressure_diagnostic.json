@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "name": "hex_exner_pressure_diagnostic",
+      "module": "hex_diagnostics",
+      "source": "woof/metal/shaders/hex_exner_pressure_diagnostic_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_pressure_exner",
+      "resources": [
+        ["exner", "float", "write"],
+        ["pressure", "float", "write"],
+        ["zz", "float", "read"],
+        ["rho_theta", "float", "read"]
+      ],
+      "shapes": {
+        "exner": [["nlev", "ncells"]],
+        "pressure": [["nlev", "ncells"]],
+        "zz": [["nlev"]],
+        "rho_theta": [["nlev", "ncells"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["rgas_over_reference_pressure", "float32"],
+        ["exner_exponent", "float32"],
+        ["rgas", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

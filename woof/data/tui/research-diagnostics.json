@@ -1,0 +1,291 @@
+{
+  "schema": "arwen.research.diagnostics.v1",
+  "scope": "A reviewed subset of products supported by the WOOF WRF-history import path. Product membership is source-capability metadata, not forecast-skill or GPU qualification. The renderer still checks actual saved fields and complete time windows.",
+  "authority": {
+    "tools/rustwx/crates/rw-wrfbatch/src/wrf_process.rs": "2234eece89c3e9a3527ea3fb8adef974bfb694cb4451306d0b48b6226775d178",
+    "tools/rustwx/crates/rw-wrfbatch/src/local_import.rs": "61293b157bd62094f9a4692f34bf9f5c967fc65f2ba130c2ac3ca5fe1c2cda6e",
+    "tools/rustwx/crates/rustwx-products/src/windowed.rs": "a43b3f4850c55e48cd7afa386e9fe960e259b3e73cd8d973cd2033f77c2fafb8"
+  },
+  "products": {
+    "10m_wind_1h_max": {
+      "kind": "windowed",
+      "minimum_hours": 1,
+      "input_note": "the top-of-hour 10 m wind speed, hypot(u_10m, v_10m), at F003 (the history stores no sub-hourly 10 m wind maximum there (neither wind_speed_10m_max_1h nor WRF WSPD10MAX), so the wind between its hourly writes is not seen: a lower bound on the window's maximum, not the maximum)"
+    },
+    "10m_wind_run_max": {
+      "kind": "windowed",
+      "minimum_hours": 1,
+      "input_note": "the largest top-of-hour 10 m wind speed, hypot(u_10m, v_10m), over the run at F001, F002, F003 (the history stores no sub-hourly 10 m wind maximum there (neither wind_speed_10m_max_1h nor WRF WSPD10MAX), so the wind between its hourly writes is not seen: a lower bound on the window's maximum, not the maximum)"
+    },
+    "10m_wind_speed_and_direction": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "10m AGL Wind Speed and Direction [fill: wind_speed_10m_agl]"
+    },
+    "1km_reflectivity": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "1km AGL Reflectivity [fill: radar_reflectivity_1000m_agl]"
+    },
+    "200mb_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "200mb Height / Winds [fill: geopotential_height_200hpa]"
+    },
+    "200mb_rh_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "200mb_temperature_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "250mb_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "250mb_temperature_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "2m_dewpoint": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "2m AGL Dewpoint [fill: dewpoint_2m_agl]"
+    },
+    "2m_dewpoint_10m_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "2m AGL Dewpoint / 10m Winds [fill: dewpoint_2m_agl]"
+    },
+    "2m_relative_humidity": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "2m AGL Relative Humidity [fill: relative_humidity_2m_agl]"
+    },
+    "2m_relative_humidity_10m_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "2m AGL Relative Humidity / 10m Winds [fill: relative_humidity_2m_agl]"
+    },
+    "2m_temp_0_24h_max": {
+      "kind": "windowed",
+      "minimum_hours": 24,
+      "input_note": "A complete hourly history window through the stated duration is required."
+    },
+    "2m_temp_0_24h_min": {
+      "kind": "windowed",
+      "minimum_hours": 24,
+      "input_note": "A complete hourly history window through the stated duration is required."
+    },
+    "2m_temperature": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "2m AGL Temperature [fill: temperature_2m_agl]"
+    },
+    "2m_temperature_10m_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "2m AGL Temperature / 10m Winds [fill: temperature_2m_agl]"
+    },
+    "300mb_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "300mb_rh_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "300mb_temperature_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "500mb_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "500mb Height / Winds [fill: geopotential_height_500hpa]"
+    },
+    "500mb_rh_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "500mb_temperature_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "700mb_dewpoint_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "700mb_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "700mb Height / Winds [fill: geopotential_height_700hpa]"
+    },
+    "700mb_rh_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "700mb RH / Height / Winds [fill: relative_humidity_700hpa]"
+    },
+    "700mb_temperature_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "700mb Temperature / Height / Winds [fill: temperature_700hpa]"
+    },
+    "850mb_dewpoint_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "850mb_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "850mb Height / Winds [fill: geopotential_height_850hpa]"
+    },
+    "850mb_rh_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "isobaric chart cut from the stored isobaric volumes; no window requirement recorded, so it is priced at the most conservative recorded basis of zero hours"
+    },
+    "850mb_temperature_height_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "850mb Temperature / Height / Winds [fill: temperature_850hpa]"
+    },
+    "bulk_shear_0_1km": {
+      "kind": "derived",
+      "minimum_hours": 0,
+      "input_note": "0-1 km Bulk Shear"
+    },
+    "bulk_shear_0_6km": {
+      "kind": "derived",
+      "minimum_hours": 0,
+      "input_note": "0-6 km Bulk Shear"
+    },
+    "cloud_cover_levels": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "Cloud Cover, Levels [fill: low_cloud_cover_entire_atmosphere]"
+    },
+    "composite_reflectivity": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "Composite Reflectivity [fill: composite_reflectivity_entire_atmosphere]"
+    },
+    "composite_reflectivity_uh": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "Composite Reflectivity / UH [fill: composite_reflectivity_entire_atmosphere]"
+    },
+    "low_cloud_cover": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "Low Cloud Cover [fill: low_cloud_cover_entire_atmosphere]"
+    },
+    "mlcape": {
+      "kind": "derived",
+      "minimum_hours": 0,
+      "input_note": "MLCAPE"
+    },
+    "mlcin": {
+      "kind": "derived",
+      "minimum_hours": 0,
+      "input_note": "MLCIN"
+    },
+    "mslp_10m_winds": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "MSLP / 10m Winds [fill: pressure_reduced_to_mean_sea_level_mean_sea_level]"
+    },
+    "mucape": {
+      "kind": "derived",
+      "minimum_hours": 0,
+      "input_note": "MUCAPE"
+    },
+    "precipitable_water": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "Precipitable Water [fill: precipitable_water_entire_atmosphere]"
+    },
+    "qpf_1h": {
+      "kind": "windowed",
+      "minimum_hours": 1,
+      "input_note": "1 h APCP differenced from stored run-total accumulations (F003 minus F002); this store carries no native apcp_1h plane"
+    },
+    "qpf_6h": {
+      "kind": "windowed",
+      "minimum_hours": 6,
+      "input_note": "A complete hourly history window through the stated duration is required."
+    },
+    "sbcape": {
+      "kind": "derived",
+      "minimum_hours": 0,
+      "input_note": "SBCAPE"
+    },
+    "srh_0_1km": {
+      "kind": "derived",
+      "minimum_hours": 0,
+      "input_note": "0-1 km SRH"
+    },
+    "terrain_height": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "Terrain Height [fill: geopotential_height_surface]"
+    },
+    "total_qpf": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "Total QPF [fill: total_precipitation_surface]"
+    },
+    "uh_2to5km": {
+      "kind": "direct",
+      "minimum_hours": 0,
+      "input_note": "Updraft Helicity 2-5 km [fill: updraft_helicity_2000m_to_5000m_agl]"
+    },
+    "uh_2to5km_run_max": {
+      "kind": "windowed",
+      "minimum_hours": 1,
+      "input_note": "run max of stored sub-hourly 1 h max 2-5 km UH planes (WRF UP_HELI_MAX per-history-interval max at F001, F002, F003: reset at each history write, so this is the exact trailing 1 h max when history is written hourly; a run with sub-hourly history is exact only when rendered with its frames between the hours)"
+    },
+    "var:wrf_lapse_rate_0_3km": {
+      "kind": "generic",
+      "minimum_hours": 0,
+      "input_note": "stored 2-D variable 'wrf_lapse_rate_0_3km' [degC/km]"
+    },
+    "var:wrf_lapse_rate_700_500": {
+      "kind": "generic",
+      "minimum_hours": 0,
+      "input_note": "stored 2-D variable 'wrf_lapse_rate_700_500' [degC/km]"
+    }
+  },
+  "unavailable": {
+    "10m_wind_gusts": "The wind maximum uses stored 10 m wind snapshots. It is not a gust diagnostic; gust magnitude or a gust swath requires separate analysis or observations.",
+    "categorical_freezing_rain": "Precipitation-type categories are not supplied by the current WOOF history renderer. Temperature and moisture plots provide environmental context; rain/snow/freezing-rain/ice-pellet classification requires separate analysis or observations.",
+    "categorical_ice_pellets": "Precipitation-type categories are not supplied by the current WOOF history renderer. Temperature and moisture plots provide environmental context; rain/snow/freezing-rain/ice-pellet classification requires separate analysis or observations.",
+    "categorical_snow": "Precipitation-type categories are not supplied by the current WOOF history renderer. Temperature and moisture plots provide environmental context; rain/snow/freezing-rain/ice-pellet classification requires separate analysis or observations.",
+    "cloud_cover": "The requested cloud panel shows low, middle and high layer cloud cover. It does not calculate total cloud fraction.",
+    "dcape": "The current WOOF history renderer does not produce DCAPE. Moisture and temperature context cannot establish downdraft energy; that parcel calculation requires separate analysis.",
+    "dewpoint_depression_2m": "Air temperature and dewpoint are shown separately. Dewpoint depression is not calculated by this history-rendering path and requires separate analysis.",
+    "heat_index_2m": "Air temperature and relative humidity are shown separately. Heat index is not calculated by this history-rendering path and requires separate analysis.",
+    "lapse_rate_0_3km": "The stored 0-3 km lapse-rate plot uses plain temperature. It is not the virtual-temperature lapse rate; the virtual-temperature quantity requires separate analysis.",
+    "lapse_rate_700_500": "The stored 700-500 hPa lapse-rate plot uses plain temperature. It is not the virtual-temperature lapse rate; the virtual-temperature quantity requires separate analysis.",
+    "precipitation_type": "Precipitation-type categories are not supplied by the current WOOF history renderer. Temperature and moisture plots provide environmental context; rain/snow/freezing-rain/ice-pellet classification requires separate analysis or observations.",
+    "simulated_ir_satellite": "Simulated infrared brightness temperature needs a forward radiative-transfer operator, and no such operator exists on the history-import lane; this product is served only from a fetched GRIB store. The nearest stored quantity on this lane is top-of-atmosphere outgoing longwave radiation, drawn with --products var:wrf_olr, which is a flux in W m-2 and NOT a brightness temperature: the two are different quantities and one must not be read as the other.",
+    "theta_e_2m_10m_winds": "The plots show temperature, dewpoint and winds separately. The current WOOF history renderer does not calculate 2 m equivalent potential temperature; that quantity requires separate analysis.",
+    "visibility": "Low cloud cover and near-surface humidity describe the fog environment, not visibility distance. Visibility and verified fog boundaries require separate analysis or observations.",
+    "vpd_2m": "Air temperature and relative humidity are context only. Vapour-pressure deficit is not calculated by this history-rendering path and requires separate analysis.",
+    "wetbulb_2m": "The current WOOF history renderer does not produce 2 m wet-bulb temperature. Air temperature and humidity are context only; wet-bulb temperature requires a separate calculation.",
+    "wind_chill_2m": "Air temperature and 10 m wind are shown separately. Wind chill is not calculated by this history-rendering path and requires separate analysis."
+  },
+  "authority_normalization": "UTF-8 with LF line endings"
+}

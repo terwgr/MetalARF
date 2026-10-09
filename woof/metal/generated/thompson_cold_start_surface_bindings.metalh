@@ -1,0 +1,2 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "cold_start_surface_bindings.metalh"

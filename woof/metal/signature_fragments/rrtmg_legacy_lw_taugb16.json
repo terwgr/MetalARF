@@ -1,0 +1,162 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_legacy_lw_taugb16",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_taugb13_16.cu",
+      "cuda_symbol": "rlw_taugb16",
+      "resources": [
+        [
+          "laytrop",
+          "int32",
+          "read"
+        ],
+        [
+          "fs",
+          "float",
+          "read"
+        ],
+        [
+          "isv",
+          "int32",
+          "read"
+        ],
+        [
+          "chi_mls",
+          "float",
+          "read"
+        ],
+        [
+          "absa",
+          "float",
+          "read"
+        ],
+        [
+          "absb",
+          "float",
+          "read"
+        ],
+        [
+          "selfref",
+          "float",
+          "read"
+        ],
+        [
+          "forref",
+          "float",
+          "read"
+        ],
+        [
+          "fracrefa",
+          "float",
+          "read"
+        ],
+        [
+          "fracrefb",
+          "float",
+          "read"
+        ],
+        [
+          "taug",
+          "float",
+          "read_write"
+        ],
+        [
+          "fracs",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "laytrop": [
+          [
+            "ncol"
+          ]
+        ],
+        "fs": [
+          [
+            "33",
+            "ncol",
+            "nl"
+          ]
+        ],
+        "isv": [
+          [
+            "6",
+            "ncol",
+            "nl"
+          ]
+        ],
+        "chi_mls": [
+          [
+            "413"
+          ]
+        ],
+        "absa": [
+          [
+            "1170"
+          ]
+        ],
+        "absb": [
+          [
+            "470"
+          ]
+        ],
+        "selfref": [
+          [
+            "20"
+          ]
+        ],
+        "forref": [
+          [
+            "8"
+          ]
+        ],
+        "fracrefa": [
+          [
+            "18"
+          ]
+        ],
+        "fracrefb": [
+          [
+            "2"
+          ]
+        ],
+        "taug": [
+          [
+            "ncol",
+            "nl",
+            "140"
+          ]
+        ],
+        "fracs": [
+          [
+            "ncol",
+            "nl",
+            "140"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "oneminus",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

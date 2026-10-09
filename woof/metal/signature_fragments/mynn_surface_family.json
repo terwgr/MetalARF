@@ -1,0 +1,651 @@
+{
+  "kernels": [
+    {
+      "name": "mynn_surface_seed",
+      "module": "mynn_surface_family",
+      "source": "woof/metal/shaders/mynn_surface_family.metal",
+      "cuda_source": "woof/core/kernels/mynn_surface.cu",
+      "cuda_symbol": "SFCLAY_mynn.first_step_seed",
+      "resources": [
+        ["u1", "float", "read"],
+        ["v1", "float", "read"],
+        ["qv1", "float", "read"],
+        ["ust", "float", "read_write"],
+        ["mol", "float", "read_write"],
+        ["qsfc", "float", "read_write"],
+        ["qstar", "float", "read_write"]
+      ],
+      "shapes": {
+        "u1": [["n"]],
+        "v1": [["n"]],
+        "qv1": [["n"]],
+        "ust": [["n"]],
+        "mol": [["n"]],
+        "qsfc": [["n"]],
+        "qstar": [["n"]]
+      },
+      "parameters": [["n", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "mynn_surface_column",
+      "module": "mynn_surface_family",
+      "source": "woof/metal/shaders/mynn_surface_family.metal",
+      "cuda_source": "woof/core/kernels/mynn_surface.cu",
+      "cuda_symbol": "mynn_surface_column",
+      "resources": [
+        [
+          "input_u1",
+          "float",
+          "read"
+        ],
+        [
+          "input_v1",
+          "float",
+          "read"
+        ],
+        [
+          "input_t1",
+          "float",
+          "read"
+        ],
+        [
+          "input_qv1",
+          "float",
+          "read"
+        ],
+        [
+          "input_p1",
+          "float",
+          "read"
+        ],
+        [
+          "input_rho1",
+          "float",
+          "read"
+        ],
+        [
+          "input_dz1",
+          "float",
+          "read"
+        ],
+        [
+          "input_u2",
+          "float",
+          "read"
+        ],
+        [
+          "input_v2",
+          "float",
+          "read"
+        ],
+        [
+          "input_dz2",
+          "float",
+          "read"
+        ],
+        [
+          "input_psfc",
+          "float",
+          "read"
+        ],
+        [
+          "input_tsk",
+          "float",
+          "read"
+        ],
+        [
+          "input_pblh",
+          "float",
+          "read"
+        ],
+        [
+          "input_mavail",
+          "float",
+          "read"
+        ],
+        [
+          "input_hfx",
+          "float",
+          "read"
+        ],
+        [
+          "input_qfx",
+          "float",
+          "read"
+        ],
+        [
+          "input_znt",
+          "float",
+          "read"
+        ],
+        [
+          "input_qsfc",
+          "float",
+          "read"
+        ],
+        [
+          "input_ust",
+          "float",
+          "read"
+        ],
+        [
+          "input_xland",
+          "float",
+          "read"
+        ],
+        [
+          "input_snowh",
+          "float",
+          "read"
+        ],
+        [
+          "input_mol",
+          "float",
+          "read"
+        ],
+        [
+          "input_ustm",
+          "float",
+          "read"
+        ],
+        [
+          "output_regime",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_zol",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_rmol",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_ust",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_ustm",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_mol",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_psim",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_psih",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_chs",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_chs2",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_cqs2",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_ch",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_flhc",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_flqc",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_qgh",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_qsfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_hfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_qfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_lh",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_u10",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_v10",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_th2",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_t2",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_q2",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_gz1oz0",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_wspd",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_br",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_ck",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_cka",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_cd",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_cda",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_wstar",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_qstar",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_cpm",
+          "float",
+          "read_write"
+        ],
+        [
+          "output_znt",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "input_u1": [
+          [
+            "n"
+          ]
+        ],
+        "input_v1": [
+          [
+            "n"
+          ]
+        ],
+        "input_t1": [
+          [
+            "n"
+          ]
+        ],
+        "input_qv1": [
+          [
+            "n"
+          ]
+        ],
+        "input_p1": [
+          [
+            "n"
+          ]
+        ],
+        "input_rho1": [
+          [
+            "n"
+          ]
+        ],
+        "input_dz1": [
+          [
+            "n"
+          ]
+        ],
+        "input_u2": [
+          [
+            "n"
+          ]
+        ],
+        "input_v2": [
+          [
+            "n"
+          ]
+        ],
+        "input_dz2": [
+          [
+            "n"
+          ]
+        ],
+        "input_psfc": [
+          [
+            "n"
+          ]
+        ],
+        "input_tsk": [
+          [
+            "n"
+          ]
+        ],
+        "input_pblh": [
+          [
+            "n"
+          ]
+        ],
+        "input_mavail": [
+          [
+            "n"
+          ]
+        ],
+        "input_hfx": [
+          [
+            "n"
+          ]
+        ],
+        "input_qfx": [
+          [
+            "n"
+          ]
+        ],
+        "input_znt": [
+          [
+            "n"
+          ]
+        ],
+        "input_qsfc": [
+          [
+            "n"
+          ]
+        ],
+        "input_ust": [
+          [
+            "n"
+          ]
+        ],
+        "input_xland": [
+          [
+            "n"
+          ]
+        ],
+        "input_snowh": [
+          [
+            "n"
+          ]
+        ],
+        "input_mol": [
+          [
+            "n"
+          ]
+        ],
+        "input_ustm": [
+          [
+            "n"
+          ]
+        ],
+        "output_regime": [
+          [
+            "n"
+          ]
+        ],
+        "output_zol": [
+          [
+            "n"
+          ]
+        ],
+        "output_rmol": [
+          [
+            "n"
+          ]
+        ],
+        "output_ust": [
+          [
+            "n"
+          ]
+        ],
+        "output_ustm": [
+          [
+            "n"
+          ]
+        ],
+        "output_mol": [
+          [
+            "n"
+          ]
+        ],
+        "output_psim": [
+          [
+            "n"
+          ]
+        ],
+        "output_psih": [
+          [
+            "n"
+          ]
+        ],
+        "output_chs": [
+          [
+            "n"
+          ]
+        ],
+        "output_chs2": [
+          [
+            "n"
+          ]
+        ],
+        "output_cqs2": [
+          [
+            "n"
+          ]
+        ],
+        "output_ch": [
+          [
+            "n"
+          ]
+        ],
+        "output_flhc": [
+          [
+            "n"
+          ]
+        ],
+        "output_flqc": [
+          [
+            "n"
+          ]
+        ],
+        "output_qgh": [
+          [
+            "n"
+          ]
+        ],
+        "output_qsfc": [
+          [
+            "n"
+          ]
+        ],
+        "output_hfx": [
+          [
+            "n"
+          ]
+        ],
+        "output_qfx": [
+          [
+            "n"
+          ]
+        ],
+        "output_lh": [
+          [
+            "n"
+          ]
+        ],
+        "output_u10": [
+          [
+            "n"
+          ]
+        ],
+        "output_v10": [
+          [
+            "n"
+          ]
+        ],
+        "output_th2": [
+          [
+            "n"
+          ]
+        ],
+        "output_t2": [
+          [
+            "n"
+          ]
+        ],
+        "output_q2": [
+          [
+            "n"
+          ]
+        ],
+        "output_gz1oz0": [
+          [
+            "n"
+          ]
+        ],
+        "output_wspd": [
+          [
+            "n"
+          ]
+        ],
+        "output_br": [
+          [
+            "n"
+          ]
+        ],
+        "output_ck": [
+          [
+            "n"
+          ]
+        ],
+        "output_cka": [
+          [
+            "n"
+          ]
+        ],
+        "output_cd": [
+          [
+            "n"
+          ]
+        ],
+        "output_cda": [
+          [
+            "n"
+          ]
+        ],
+        "output_wstar": [
+          [
+            "n"
+          ]
+        ],
+        "output_qstar": [
+          [
+            "n"
+          ]
+        ],
+        "output_cpm": [
+          [
+            "n"
+          ]
+        ],
+        "output_znt": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "itimestep",
+          "int32"
+        ],
+        [
+          "isfflx",
+          "int32"
+        ],
+        [
+          "isftcflx",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

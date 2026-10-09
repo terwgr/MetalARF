@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 40a4f5abf49043971e9c8edf16014115cb7abc4aa0de10e4579a1b110070834c.
+struct UrbanBepBemClassProfilePackFragmentResources {
+    device const float *ss_profile [[id(0)]];
+    device const float *pb_profile [[id(1)]];
+    device const float *z_u [[id(2)]];
+    device const int *nz_profile [[id(3)]];
+    device const int *profile_error [[id(4)]];
+    device float *class_float [[id(5)]];
+    device int *class_int [[id(6)]];
+};
+struct UrbanBepBemClassProfilePackFragmentParams {
+    int nurbm;
+};
+static_assert(sizeof(UrbanBepBemClassProfilePackFragmentParams) == 4, "urban_bep_bem_class_profile_pack_fragment parameter ABI size changed");

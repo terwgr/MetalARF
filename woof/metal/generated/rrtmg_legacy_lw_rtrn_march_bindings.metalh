@@ -1,0 +1,31 @@
+// Generated from kernel_signatures.json; layout a199ac356a0bcfdb6e152de90c4465d400b47f5f800f4ecded65720ce5dbadf3.
+struct RrtmgLegacyLwRtrnMarchResources {
+    device const float *cldfmc [[id(0)]];
+    device const float *odcld [[id(1)]];
+    device const float *efclfrac [[id(2)]];
+    device const int *icldlyr [[id(3)]];
+    device const float *secdiff [[id(4)]];
+    device const float *semiss [[id(5)]];
+    device const float *planklay [[id(6)]];
+    device const float *planklev [[id(7)]];
+    device const float *plankbnd [[id(8)]];
+    device const float *fracs [[id(9)]];
+    device const float *taut [[id(10)]];
+    device const float *tau_tbl [[id(11)]];
+    device const float *exp_tbl [[id(12)]];
+    device const float *tfn_tbl [[id(13)]];
+    device const int *ngb [[id(14)]];
+    device float *radld_p [[id(15)]];
+    device float *radclrd_p [[id(16)]];
+    device float *radlu_p [[id(17)]];
+    device float *radclru_p [[id(18)]];
+    device int *iclddn_p [[id(19)]];
+    device float *radlu_sfc [[id(20)]];
+    device float *radclru_sfc [[id(21)]];
+};
+struct RrtmgLegacyLwRtrnMarchParams {
+    int ncol;
+    int nl;
+    float bpade;
+};
+static_assert(sizeof(RrtmgLegacyLwRtrnMarchParams) == 12, "rrtmg_legacy_lw_rtrn_march parameter ABI size changed");

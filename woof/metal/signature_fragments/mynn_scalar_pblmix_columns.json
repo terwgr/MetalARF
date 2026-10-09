@@ -1,0 +1,31 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/core/kernels/mynn_scalar_mix.cu",
+      "cuda_symbol": "scalar_pblmix_columns",
+      "layout_version": 1,
+      "module": "mynn_pbl_family",
+      "name": "mynn_scalar_pblmix_columns",
+      "parameters": [["dt", "float32"], ["nz", "int32"], ["ncol", "int32"]],
+      "resources": [
+        ["qn", "float", "read"],
+        ["dz", "float", "read"],
+        ["rho", "float", "read"],
+        ["exch_h", "float", "read"],
+        ["rate", "float", "read_write"],
+        ["scratch", "float", "read_write"]
+      ],
+      "shapes": {
+        "qn": [["nz", "ncol"]],
+        "dz": [["nz", "ncol"]],
+        "rho": [["nz", "ncol"]],
+        "exch_h": [["nz", "ncol"]],
+        "rate": [["nz", "ncol"]],
+        "scratch": [[4, "nz", "ncol"]]
+      },
+      "source": "woof/metal/shaders/mynn_pbl_family.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

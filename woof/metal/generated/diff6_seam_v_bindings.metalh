@@ -1,0 +1,26 @@
+// Generated from kernel_signatures.json; layout 0c5cea3f1e23d0ea490f5c71b30b79a571409ffcd5a63a0814acb1ed71845d07.
+struct Diff6SeamVResources {
+    device const float *f [[id(0)]];
+    device float *tend [[id(1)]];
+    device const float *mut [[id(2)]];
+    device const float *c1 [[id(3)]];
+    device const float *c2 [[id(4)]];
+    device const float *phb [[id(5)]];
+    device const float *msfu [[id(6)]];
+    device const float *msfv [[id(7)]];
+    device const float *msft [[id(8)]];
+};
+struct Diff6SeamVParams {
+    float coef;
+    int mono;
+    int slopeopt;
+    float dzthr_x;
+    float dzthr_y;
+    int nlev;
+    int ny;
+    int nx;
+    int h0;
+    int h1;
+    int boundary_cross;
+};
+static_assert(sizeof(Diff6SeamVParams) == 44, "diff6_seam_v parameter ABI size changed");

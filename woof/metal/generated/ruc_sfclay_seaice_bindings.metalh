@@ -1,0 +1,5 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "mynn_seaice_blend_bindings.metalh"
+#include "mynn_seaice_prepare_bindings.metalh"
+#include "ruc_sfclay_prepare_bindings.metalh"
+#include "ruc_sfclay_scatter_bindings.metalh"

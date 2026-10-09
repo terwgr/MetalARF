@@ -1,0 +1,304 @@
+{
+  "kernels": [
+    {
+      "name": "slow_geopotential",
+      "module": "dycore",
+      "source": "woof/metal/shaders/slow_geopotential.metal",
+      "cuda_source": "woof/core/kernels/dycore.cu",
+      "cuda_symbol": "slow_geopotential",
+      "resources": [
+        [
+          "rph_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "ww",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "mux",
+          "float",
+          "read"
+        ],
+        [
+          "muy",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "rph_t": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ww": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "c1f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mux": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "muy": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "order",
+          "int32"
+        ],
+        [
+          "add_vertical",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "specified",
+          "int32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "quarter_rdx",
+          "float32"
+        ],
+        [
+          "quarter_rdy",
+          "float32"
+        ],
+        [
+          "cfn",
+          "float32"
+        ],
+        [
+          "cfn1",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

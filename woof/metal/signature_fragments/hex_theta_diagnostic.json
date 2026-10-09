@@ -1,0 +1,28 @@
+{
+  "kernels": [
+    {
+      "name": "hex_theta_diagnostic",
+      "module": "hex_diagnostics",
+      "source": "woof/metal/shaders/hex_theta_diagnostic_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_pressure_exner",
+      "resources": [
+        ["theta_m", "float", "write"],
+        ["rho_theta", "float", "read"],
+        ["rho", "float", "read"]
+      ],
+      "shapes": {
+        "theta_m": [["nlev", "ncells"]],
+        "rho_theta": [["nlev", "ncells"]],
+        "rho": [["nlev", "ncells"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

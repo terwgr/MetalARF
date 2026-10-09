@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout d615516a37d0416fea148ede367525a0a18df24b34f6ee835a52f0d716ff84cb.
+struct SaseScalarHfluxResources {
+    device const float *s [[id(0)]];
+    device const float *e [[id(1)]];
+    device float *fx [[id(2)]];
+    device float *fy [[id(3)]];
+};
+struct SaseScalarHfluxParams {
+    float two_dx;
+    float two_dy;
+    float kh_coef;
+    float e_min;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseScalarHfluxParams) == 28, "sase_scalar_hflux parameter ABI size changed");

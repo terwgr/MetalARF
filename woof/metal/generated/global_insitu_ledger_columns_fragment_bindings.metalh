@@ -1,0 +1,34 @@
+// Generated from kernel_signatures.json; layout c29f82565554254c8e90052404cbf4dbe122154e4fec832b747647db7e527ab3.
+struct GlobalInsituLedgerColumnsFragmentResources {
+    device const ulong *dp [[id(0)]];
+    device const ulong *temperature [[id(1)]];
+    device const ulong *u [[id(2)]];
+    device const ulong *v [[id(3)]];
+    device const ulong *geopotential [[id(4)]];
+    device const ulong *ps [[id(5)]];
+    device const ulong *qv [[id(6)]];
+    device const ulong *qc [[id(7)]];
+    device const ulong *qr [[id(8)]];
+    device const ulong *qi [[id(9)]];
+    device const ulong *qs [[id(10)]];
+    device const ulong *qg [[id(11)]];
+    device const ulong *surface_water [[id(12)]];
+    device const ulong *soil_fraction [[id(13)]];
+    device const ulong *land_fraction [[id(14)]];
+    device const ulong *native_canopy [[id(15)]];
+    device const ulong *native_snow [[id(16)]];
+    device const ulong *outflow [[id(17)]];
+    device const ulong *surface_geopotential [[id(18)]];
+    device const ulong *a_coslat [[id(19)]];
+    device const ulong *planetary [[id(20)]];
+    device const ulong *weights [[id(21)]];
+    device const ulong *soil_thickness [[id(22)]];
+    device ulong *columns [[id(23)]];
+};
+struct GlobalInsituLedgerColumnsFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+    int nsoil;
+};
+static_assert(sizeof(GlobalInsituLedgerColumnsFragmentParams) == 16, "global_insitu_ledger_columns_fragment parameter ABI size changed");

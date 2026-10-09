@@ -1,0 +1,22 @@
+// Generated from kernel_signatures.json; layout 58ead844c25174c92c95a9cdabfa04dcae134abfc904e8f8c9fa79d5dab8e69d.
+struct GlobalSemilagTendenciesFragmentResources {
+    device const ulong *coriolis [[id(0)]];
+    device const ulong *u [[id(1)]];
+    device const ulong *v [[id(2)]];
+    device const ulong *grad_phi_east [[id(3)]];
+    device const ulong *grad_phi_north [[id(4)]];
+    device const ulong *force [[id(5)]];
+    device const ulong *grad_lnps_east [[id(6)]];
+    device const ulong *grad_lnps_north [[id(7)]];
+    device const ulong *ps_t [[id(8)]];
+    device const ulong *ps [[id(9)]];
+    device ulong *a_u [[id(10)]];
+    device ulong *a_v [[id(11)]];
+    device ulong *a_lnps [[id(12)]];
+};
+struct GlobalSemilagTendenciesFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalSemilagTendenciesFragmentParams) == 12, "global_semilag_tendencies_fragment parameter ABI size changed");

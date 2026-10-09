@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout 6e2d3363e0b88f7486e8f54f25ddd564869532c5d3bcedbbc60bb53665ebb065.
+struct GlobalReductionsFragmentResources {
+    device const ulong *values [[id(0)]];
+    device ulong *partial_sums [[id(1)]];
+};
+struct GlobalReductionsFragmentParams {
+    int count;
+    int chunk_size;
+};
+static_assert(sizeof(GlobalReductionsFragmentParams) == 8, "global_reductions_fragment parameter ABI size changed");

@@ -1,0 +1,8 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "open_u_radiative_bindings.metalh"
+#include "open_v_radiative_bindings.metalh"
+#include "open_zero_gradient_scalar_x_bindings.metalh"
+#include "open_zero_gradient_scalar_y_bindings.metalh"
+#include "open_zero_gradient_x_bindings.metalh"
+#include "open_zero_gradient_y_bindings.metalh"
+#include "w_damp_bindings.metalh"

@@ -1,0 +1,26 @@
+// Generated from kernel_signatures.json; layout 9bb7003ccf302c4c71d21b5d6a0886b217ede49b1658fb7c905cf8127b7107b0.
+struct CoupledBoundaryFieldResources {
+    device const float *target [[id(0)]];
+    device const float *mub2d [[id(1)]];
+    device const float *mup [[id(2)]];
+    device const float *thb [[id(3)]];
+    device const float *c1h [[id(4)]];
+    device const float *c2h [[id(5)]];
+    device const float *c1f [[id(6)]];
+    device const float *c2f [[id(7)]];
+    device const float *msft [[id(8)]];
+    device const float *msfu [[id(9)]];
+    device const float *msfv [[id(10)]];
+    device float *out [[id(11)]];
+};
+struct CoupledBoundaryFieldParams {
+    int kind;
+    int has_msf;
+    int thb_3d;
+    int nz;
+    int ny;
+    int nx;
+    int mny;
+    int mnx;
+};
+static_assert(sizeof(CoupledBoundaryFieldParams) == 32, "coupled_boundary_field parameter ABI size changed");

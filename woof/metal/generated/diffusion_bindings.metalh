@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "add_diff2_bindings.metalh"
+#include "add_diff2_raw_bindings.metalh"

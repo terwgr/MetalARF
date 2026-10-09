@@ -1,0 +1,425 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_material_solve_green_roof_fragment",
+      "module": "urban_bem_material_solve_fragment",
+      "source": "woof/metal/shaders/urban_bem_material_solve_green_roof_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_bem material wall/window/floor/ground/roof solves (module_sf_bem.F:645-743)",
+      "resources": [
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "building_nlev",
+          "int32",
+          "read"
+        ],
+        [
+          "dzw",
+          "float",
+          "read"
+        ],
+        [
+          "csw",
+          "float",
+          "read"
+        ],
+        [
+          "alaw",
+          "float",
+          "read"
+        ],
+        [
+          "dzf",
+          "float",
+          "read"
+        ],
+        [
+          "csf",
+          "float",
+          "read"
+        ],
+        [
+          "alaf",
+          "float",
+          "read"
+        ],
+        [
+          "dzgb",
+          "float",
+          "read"
+        ],
+        [
+          "csgb",
+          "float",
+          "read"
+        ],
+        [
+          "alagb",
+          "float",
+          "read"
+        ],
+        [
+          "dzr",
+          "float",
+          "read"
+        ],
+        [
+          "csr",
+          "float",
+          "read"
+        ],
+        [
+          "alar",
+          "float",
+          "read"
+        ],
+        [
+          "hswalins",
+          "float",
+          "read"
+        ],
+        [
+          "hrwalins",
+          "float",
+          "read"
+        ],
+        [
+          "hswalout",
+          "float",
+          "read"
+        ],
+        [
+          "hrwalout",
+          "float",
+          "read"
+        ],
+        [
+          "hswinins",
+          "float",
+          "read"
+        ],
+        [
+          "hrwinins",
+          "float",
+          "read"
+        ],
+        [
+          "hswinout",
+          "float",
+          "read"
+        ],
+        [
+          "hrwinout",
+          "float",
+          "read"
+        ],
+        [
+          "hsrof",
+          "float",
+          "read"
+        ],
+        [
+          "hrrof",
+          "float",
+          "read"
+        ],
+        [
+          "lsrof",
+          "float",
+          "read"
+        ],
+        [
+          "tw",
+          "float",
+          "read_write"
+        ],
+        [
+          "twlev",
+          "float",
+          "read_write"
+        ],
+        [
+          "tflev",
+          "float",
+          "read_write"
+        ],
+        [
+          "tglev",
+          "float",
+          "read_write"
+        ],
+        [
+          "tr",
+          "float",
+          "read_write"
+        ],
+        [
+          "gswal",
+          "float",
+          "read_write"
+        ],
+        [
+          "gsrof",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "building_nlev": [
+          [
+            "ncol",
+            15
+          ]
+        ],
+        "dzw": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "csw": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "alaw": [
+          [
+            "ncol",
+            11
+          ]
+        ],
+        "dzf": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "csf": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "alaf": [
+          [
+            "ncol",
+            11
+          ]
+        ],
+        "dzgb": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "csgb": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "alagb": [
+          [
+            "ncol",
+            11
+          ]
+        ],
+        "dzr": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "csr": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "alar": [
+          [
+            "ncol",
+            11
+          ]
+        ],
+        "hswalins": [
+          [
+            "ncol",
+            15,
+            18,
+            6
+          ]
+        ],
+        "hrwalins": [
+          [
+            "ncol",
+            15,
+            18,
+            6
+          ]
+        ],
+        "hswalout": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "hrwalout": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "hswinins": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "hrwinins": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "hswinout": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "hrwinout": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "hsrof": [
+          [
+            "ncol",
+            15
+          ]
+        ],
+        "hrrof": [
+          [
+            "ncol",
+            15
+          ]
+        ],
+        "lsrof": [
+          [
+            "ncol",
+            15
+          ]
+        ],
+        "tw": [
+          [
+            "ncol",
+            15,
+            10,
+            18,
+            4
+          ]
+        ],
+        "twlev": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "tflev": [
+          [
+            "ncol",
+            15,
+            10,
+            17,
+            2
+          ]
+        ],
+        "tglev": [
+          [
+            "ncol",
+            15,
+            10,
+            2
+          ]
+        ],
+        "tr": [
+          [
+            "ncol",
+            10,
+            18,
+            2
+          ]
+        ],
+        "gswal": [
+          [
+            "ncol",
+            15,
+            18,
+            4
+          ]
+        ],
+        "gsrof": [
+          [
+            "ncol",
+            15
+          ]
+        ],
+        "error": [
+          [
+            "nitem"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nitem",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32"
+      ]
+    }
+  ]
+}

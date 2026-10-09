@@ -1,0 +1,9 @@
+// Generated from kernel_signatures.json; layout 819592ce8c1dc5c167ac5b04c8d08a0be5023c11e97a944ab58a18a0847e84f1.
+struct HealthFinalResources {
+    device const float *partial [[id(0)]];
+    device float *result [[id(1)]];
+};
+struct HealthFinalParams {
+    int nblocks;
+};
+static_assert(sizeof(HealthFinalParams) == 4, "health_final parameter ABI size changed");

@@ -1,0 +1,1292 @@
+#ifndef WOOF_RRTMG_LEGACY_SW_BODIES_METALH
+#define WOOF_RRTMG_LEGACY_SW_BODIES_METALH
+// Mechanical MSL transcription of the __device__ bodies of
+// woof/core/kernels/rrtmg_sw.cu (statement order, operands and the
+// AD/SU/MU/DV rounding sites unchanged; pointers gain address spaces,
+// cldprmc's atomicOr abort word becomes a per-thread error slab).
+
+// shared helpers
+// ---------------------------------------------------------------------------
+
+// The exp_tbl lookup idiom of reftra_sw / spcvmc_sw.
+static inline real rsw_etbl(device const real* exp_tbl, real ze1)
+{
+    if (ze1 <= RSW_C_OD_LO)
+        return AD(SU(1.0f, ze1), MU(MU(0.5f, ze1), ze1));
+    real tblind = DV(ze1, AD(RSW_C_BPADE, ze1));
+    int itind = (int)AD(MU(RSW_C_TBLINT, tblind), 0.5f);
+    return exp_tbl[itind];
+}
+
+// ---------------------------------------------------------------------------
+// setcoef_sw: one thread per layer.  laytrop/laylow flags summed on host.
+// ---------------------------------------------------------------------------
+
+static inline void rsw_setcoef_body(int lay, int nlayers,
+                 device const real* tab,   // packed table buffer
+                 device const real* pavel,
+                 device const real* tavel,
+                 device const real* coldry,
+                 device const real* wkl,   // (MXMOL, nlayers) F-order
+                 device int* jp, device int* jt, device int* jt1, device int* indself, device int* indfor,
+                 device int* trop_flag, device int* low_flag,
+                 device real* colh2o, device real* colco2, device real* colo3, device real* coln2o,
+                 device real* colch4, device real* colo2, device real* colmol, device real* co2mult,
+                 device real* selffac, device real* selffrac, device real* forfac, device real* forfrac,
+                 device real* fac00, device real* fac01, device real* fac10, device real* fac11)
+{
+    device const real* preflog = tab + RSW_T_REF_PREFLOG;
+    device const real* tref = tab + RSW_T_REF_TREF;
+    const real stpfac = DV(296.0f, 1013.0f);
+
+    real plog = rsw_log(pavel[lay]);
+    int jpv = (int)SU(36.0f, MU(5.0f, AD(plog, 0.04f)));
+    if (jpv < 1) jpv = 1; else if (jpv > 58) jpv = 58;
+    jp[lay] = jpv;
+    int jp1 = jpv + 1;
+    real fp = MU(5.0f, SU(preflog[jpv - 1], plog));
+
+    int jtv = (int)AD(3.0f, DV(SU(tavel[lay], tref[jpv - 1]), 15.0f));
+    if (jtv < 1) jtv = 1; else if (jtv > 4) jtv = 4;
+    jt[lay] = jtv;
+    real ft = SU(DV(SU(tavel[lay], tref[jpv - 1]), 15.0f),
+                 (real)(jtv - 3));
+    int jt1v = (int)AD(3.0f, DV(SU(tavel[lay], tref[jp1 - 1]), 15.0f));
+    if (jt1v < 1) jt1v = 1; else if (jt1v > 4) jt1v = 4;
+    jt1[lay] = jt1v;
+    real ft1 = SU(DV(SU(tavel[lay], tref[jp1 - 1]), 15.0f),
+                  (real)(jt1v - 3));
+
+    real water = DV(wkl[0 + RSW_MXMOL * lay], coldry[lay]);
+    real scalefac = DV(MU(pavel[lay], stpfac), tavel[lay]);
+
+    bool trop = !(plog <= 4.56f);
+    trop_flag[lay] = trop ? 1 : 0;
+    low_flag[lay] = (trop && plog >= 6.62f) ? 1 : 0;
+
+    if (!trop) {
+        forfac[lay] = DV(scalefac, AD(1.0f, water));
+        real factor = DV(SU(tavel[lay], 188.0f), 36.0f);
+        indfor[lay] = 3;
+        forfrac[lay] = SU(factor, 1.0f);
+        selffac[lay] = 0.0f;
+        selffrac[lay] = 0.0f;
+        indself[lay] = 0;
+    } else {
+        forfac[lay] = DV(scalefac, AD(1.0f, water));
+        real factor = DV(SU(332.0f, tavel[lay]), 36.0f);
+        int idf = (int)factor;
+        idf = idf < 1 ? 1 : idf; idf = idf > 2 ? 2 : idf;
+        indfor[lay] = idf;
+        forfrac[lay] = SU(factor, (real)idf);
+
+        selffac[lay] = MU(water, forfac[lay]);
+        factor = DV(SU(tavel[lay], 188.0f), 7.2f);
+        int ids = (int)factor - 7;
+        ids = ids < 1 ? 1 : ids; ids = ids > 9 ? 9 : ids;
+        indself[lay] = ids;
+        selffrac[lay] = SU(factor, (real)(ids + 7));
+    }
+
+    colh2o[lay] = MU(1.0e-20f, wkl[0 + RSW_MXMOL * lay]);
+    colco2[lay] = MU(1.0e-20f, wkl[1 + RSW_MXMOL * lay]);
+    colo3[lay] = MU(1.0e-20f, wkl[2 + RSW_MXMOL * lay]);
+    coln2o[lay] = MU(1.0e-20f, wkl[3 + RSW_MXMOL * lay]);
+    colch4[lay] = MU(1.0e-20f, wkl[5 + RSW_MXMOL * lay]);
+    colo2[lay] = MU(1.0e-20f, wkl[6 + RSW_MXMOL * lay]);
+    colmol[lay] = AD(MU(1.0e-20f, coldry[lay]), colh2o[lay]);
+    if (EQ0(colco2[lay])) colco2[lay] = MU(1.0e-32f, coldry[lay]);
+    if (EQ0(coln2o[lay])) coln2o[lay] = MU(1.0e-32f, coldry[lay]);
+    if (EQ0(colch4[lay])) colch4[lay] = MU(1.0e-32f, coldry[lay]);
+    if (EQ0(colo2[lay])) colo2[lay] = MU(1.0e-32f, coldry[lay]);
+    real co2reg = MU(3.55e-24f, coldry[lay]);
+    co2mult[lay] = DV(MU(MU(SU(colco2[lay], co2reg), 272.63f),
+                         rsw_exp(DV(-1919.4f, tavel[lay]))),
+                      MU(8.7604e-4f, tavel[lay]));
+
+    real compfp = SU(1.0f, fp);
+    fac10[lay] = MU(compfp, ft);
+    fac00[lay] = MU(compfp, SU(1.0f, ft));
+    fac11[lay] = MU(fp, ft1);
+    fac01[lay] = MU(fp, SU(1.0f, ft1));
+}
+// taumol_sw: one thread per (lay, iw).  laysolfr handled by rsw_sfluxzen.
+// ---------------------------------------------------------------------------
+
+struct RswSpec {
+    real speccomb, fs;
+    int js;
+    real f000, f010, f100, f110, f001, f011, f101, f111;
+};
+
+static inline RswSpec rsw_spec(real colA, real colB, real strrat, real mult,
+                            real fac00, real fac01, real fac10, real fac11)
+{
+    RswSpec s;
+    s.speccomb = AD(colA, MU(strrat, colB));
+    real specparm = DV(colA, s.speccomb);
+    if (specparm >= RSW_C_ONEMINUS) specparm = RSW_C_ONEMINUS;
+    real specmult = MU(mult, specparm);
+    s.js = 1 + (int)specmult;
+    s.fs = SU(specmult, trunc(specmult));
+    s.f000 = MU(SU(1.0f, s.fs), fac00);
+    s.f010 = MU(SU(1.0f, s.fs), fac10);
+    s.f100 = MU(s.fs, fac00);
+    s.f110 = MU(s.fs, fac10);
+    s.f001 = MU(SU(1.0f, s.fs), fac01);
+    s.f011 = MU(SU(1.0f, s.fs), fac11);
+    s.f101 = MU(s.fs, fac01);
+    s.f111 = MU(s.fs, fac11);
+    return s;
+}
+
+// Fortran left-to-right 8-term interpolation sum; a is column ig of absa/absb
+// (stride = rows in the table), ind0/ind1 are Fortran row indices.
+static inline real rsw_acc8(device const real* a, int rows, int ig,
+                         int ind0, int ind1, int dind, thread const RswSpec& s)
+{
+    device const real* c = a + (ulong)rows * ig;
+    real acc = MU(s.f000, c[ind0 - 1]);
+    acc = AD(acc, MU(s.f100, c[ind0]));
+    acc = AD(acc, MU(s.f010, c[ind0 - 1 + dind]));
+    acc = AD(acc, MU(s.f110, c[ind0 + dind]));
+    acc = AD(acc, MU(s.f001, c[ind1 - 1]));
+    acc = AD(acc, MU(s.f101, c[ind1]));
+    acc = AD(acc, MU(s.f011, c[ind1 - 1 + dind]));
+    acc = AD(acc, MU(s.f111, c[ind1 + dind]));
+    return acc;
+}
+
+static inline real rsw_acc4(device const real* a, int rows, int ig,
+                         int ind0, int ind1,
+                         real f00, real f10, real f01, real f11)
+{
+    device const real* c = a + (ulong)rows * ig;
+    real acc = MU(f00, c[ind0 - 1]);
+    acc = AD(acc, MU(f10, c[ind0]));
+    acc = AD(acc, MU(f01, c[ind1 - 1]));
+    acc = AD(acc, MU(f11, c[ind1]));
+    return acc;
+}
+
+// colh2o*(selffac*(selfref...) + forfac*(forref...)); tables are (rows, ng)
+static inline real rsw_selffor(device const real* selfref, int srows,
+                            device const real* forref, int frows,
+                            int ig, real colh2o, real selffac, real selffrac,
+                            int inds, real forfac, real forfrac, int indf)
+{
+    device const real* sc = selfref + (ulong)srows * ig;
+    device const real* fc = forref + (ulong)frows * ig;
+    real sr = AD(sc[inds - 1], MU(selffrac, SU(sc[inds], sc[inds - 1])));
+    real fr = AD(fc[indf - 1], MU(forfrac, SU(fc[indf], fc[indf - 1])));
+    return MU(colh2o, AD(MU(selffac, sr), MU(forfac, fr)));
+}
+
+// colh2o * forfac * (forref...) with WRF's ((colh2o*forfac)*fr) association
+static inline real rsw_forr(device const real* forref, int frows, int ig,
+                         real colh2o, real forfac, real forfrac, int indf)
+{
+    device const real* fc = forref + (ulong)frows * ig;
+    real fr = AD(fc[indf - 1], MU(forfrac, SU(fc[indf], fc[indf - 1])));
+    return MU(MU(colh2o, forfac), fr);
+}
+
+static inline void rsw_taumol_body(int L, int iw, int nlayers, int laytrop,
+                device const real* tab,
+                device const int* ngb,       // 112, Fortran band ids
+                device const int* jp, device const int* jt,
+                device const int* jt1,
+                device const real* colh2o, device const real* colco2,
+                device const real* colch4, device const real* colo2,
+                device const real* colo3, device const real* colmol,
+                device const real* fac00, device const real* fac01,
+                device const real* fac10, device const real* fac11,
+                device const real* selffac, device const real* selffrac,
+                device const int* indself,
+                device const real* forfac, device const real* forfrac,
+                device const int* indfor,
+                device real* taug, device real* taur, bool interleaved = false)   // output layout
+{
+    int jb = ngb[iw];               // 16..29
+    int lay = L + 1;
+    bool lower = (lay <= laytrop);
+    ulong out = interleaved ? (ulong)L * RSW_NGPT + iw
+                             : (ulong)L + (ulong)nlayers * iw;
+
+    real tg = 0.0f, tr = 0.0f;
+
+    switch (jb) {
+    case 16: {
+        int ig = iw - 0;
+        tr = MU(colmol[L], RSW_C_KG16_RAYL);
+        if (lower) {
+            RswSpec s = rsw_spec(colh2o[L], colch4[L], RSW_C_KG16_STRRAT1,
+                                 8.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 9 + s.js;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 9 + s.js;
+            tg = AD(MU(s.speccomb,
+                       rsw_acc8(tab + RSW_T_KG16_ABSA, 585, ig, ind0, ind1, 9, s)),
+                    rsw_selffor(tab + RSW_T_KG16_SELFREF, 10,
+                                tab + RSW_T_KG16_FORREF, 3, ig, colh2o[L],
+                                selffac[L], selffrac[L], indself[L],
+                                forfac[L], forfrac[L], indfor[L]));
+        } else {
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 1 + 1;
+            tg = MU(colch4[L], rsw_acc4(tab + RSW_T_KG16_ABSB, 235, ig,
+                                        ind0, ind1, fac00[L], fac10[L],
+                                        fac01[L], fac11[L]));
+        }
+        break;
+    }
+    case 17: {
+        int ig = iw - 6;
+        tr = MU(colmol[L], RSW_C_KG17_RAYL);
+        if (lower) {
+            RswSpec s = rsw_spec(colh2o[L], colco2[L], RSW_C_KG17_STRRAT,
+                                 8.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 9 + s.js;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 9 + s.js;
+            tg = AD(MU(s.speccomb,
+                       rsw_acc8(tab + RSW_T_KG17_ABSA, 585, ig, ind0, ind1, 9, s)),
+                    rsw_selffor(tab + RSW_T_KG17_SELFREF, 10,
+                                tab + RSW_T_KG17_FORREF, 4, ig, colh2o[L],
+                                selffac[L], selffrac[L], indself[L],
+                                forfac[L], forfrac[L], indfor[L]));
+        } else {
+            RswSpec s = rsw_spec(colh2o[L], colco2[L], RSW_C_KG17_STRRAT,
+                                 4.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 5 + s.js;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 5 + s.js;
+            tg = AD(MU(s.speccomb,
+                       rsw_acc8(tab + RSW_T_KG17_ABSB, 1175, ig, ind0, ind1, 5, s)),
+                    rsw_forr(tab + RSW_T_KG17_FORREF, 4, ig, colh2o[L],
+                             forfac[L], forfrac[L], indfor[L]));
+        }
+        break;
+    }
+    case 18: {
+        int ig = iw - 18;
+        tr = MU(colmol[L], RSW_C_KG18_RAYL);
+        if (lower) {
+            RswSpec s = rsw_spec(colh2o[L], colch4[L], RSW_C_KG18_STRRAT,
+                                 8.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 9 + s.js;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 9 + s.js;
+            tg = AD(MU(s.speccomb,
+                       rsw_acc8(tab + RSW_T_KG18_ABSA, 585, ig, ind0, ind1, 9, s)),
+                    rsw_selffor(tab + RSW_T_KG18_SELFREF, 10,
+                                tab + RSW_T_KG18_FORREF, 3, ig, colh2o[L],
+                                selffac[L], selffrac[L], indself[L],
+                                forfac[L], forfrac[L], indfor[L]));
+        } else {
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 1 + 1;
+            tg = MU(colch4[L], rsw_acc4(tab + RSW_T_KG18_ABSB, 235, ig,
+                                        ind0, ind1, fac00[L], fac10[L],
+                                        fac01[L], fac11[L]));
+        }
+        break;
+    }
+    case 19: {
+        int ig = iw - 26;
+        tr = MU(colmol[L], RSW_C_KG19_RAYL);
+        if (lower) {
+            RswSpec s = rsw_spec(colh2o[L], colco2[L], RSW_C_KG19_STRRAT,
+                                 8.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 9 + s.js;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 9 + s.js;
+            tg = AD(MU(s.speccomb,
+                       rsw_acc8(tab + RSW_T_KG19_ABSA, 585, ig, ind0, ind1, 9, s)),
+                    rsw_selffor(tab + RSW_T_KG19_SELFREF, 10,
+                                tab + RSW_T_KG19_FORREF, 3, ig, colh2o[L],
+                                selffac[L], selffrac[L], indself[L],
+                                forfac[L], forfrac[L], indfor[L]));
+        } else {
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 1 + 1;
+            tg = MU(colco2[L], rsw_acc4(tab + RSW_T_KG19_ABSB, 235, ig,
+                                        ind0, ind1, fac00[L], fac10[L],
+                                        fac01[L], fac11[L]));
+        }
+        break;
+    }
+    case 20: {
+        int ig = iw - 34;
+        tr = MU(colmol[L], RSW_C_KG20_RAYL);
+        device const real* absch4 = tab + RSW_T_KG20_ABSCH4;
+        if (lower) {
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 1 + 1;
+            device const real* sc = tab + RSW_T_KG20_SELFREF + (ulong)10 * ig;
+            device const real* fc = tab + RSW_T_KG20_FORREF + (ulong)4 * ig;
+            int inds = indself[L], indf = indfor[L];
+            real core = rsw_acc4(tab + RSW_T_KG20_ABSA, 65, ig, ind0, ind1,
+                                 fac00[L], fac10[L], fac01[L], fac11[L]);
+            real sr = AD(sc[inds - 1], MU(selffrac[L], SU(sc[inds], sc[inds - 1])));
+            real fr = AD(fc[indf - 1], MU(forfrac[L], SU(fc[indf], fc[indf - 1])));
+            real inner = AD(AD(core, MU(selffac[L], sr)), MU(forfac[L], fr));
+            tg = AD(MU(colh2o[L], inner), MU(colch4[L], absch4[ig]));
+        } else {
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 1 + 1;
+            device const real* fc = tab + RSW_T_KG20_FORREF + (ulong)4 * ig;
+            int indf = indfor[L];
+            real core = rsw_acc4(tab + RSW_T_KG20_ABSB, 235, ig, ind0, ind1,
+                                 fac00[L], fac10[L], fac01[L], fac11[L]);
+            real fr = AD(fc[indf - 1], MU(forfrac[L], SU(fc[indf], fc[indf - 1])));
+            real inner = AD(core, MU(forfac[L], fr));
+            tg = AD(MU(colh2o[L], inner), MU(colch4[L], absch4[ig]));
+        }
+        break;
+    }
+    case 21: {
+        int ig = iw - 44;
+        tr = MU(colmol[L], RSW_C_KG21_RAYL);
+        if (lower) {
+            RswSpec s = rsw_spec(colh2o[L], colco2[L], RSW_C_KG21_STRRAT,
+                                 8.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 9 + s.js;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 9 + s.js;
+            tg = AD(MU(s.speccomb,
+                       rsw_acc8(tab + RSW_T_KG21_ABSA, 585, ig, ind0, ind1, 9, s)),
+                    rsw_selffor(tab + RSW_T_KG21_SELFREF, 10,
+                                tab + RSW_T_KG21_FORREF, 4, ig, colh2o[L],
+                                selffac[L], selffrac[L], indself[L],
+                                forfac[L], forfrac[L], indfor[L]));
+        } else {
+            RswSpec s = rsw_spec(colh2o[L], colco2[L], RSW_C_KG21_STRRAT,
+                                 4.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 5 + s.js;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 5 + s.js;
+            tg = AD(MU(s.speccomb,
+                       rsw_acc8(tab + RSW_T_KG21_ABSB, 1175, ig, ind0, ind1, 5, s)),
+                    rsw_forr(tab + RSW_T_KG21_FORREF, 4, ig, colh2o[L],
+                             forfac[L], forfrac[L], indfor[L]));
+        }
+        break;
+    }
+    case 22: {
+        int ig = iw - 54;
+        tr = MU(colmol[L], RSW_C_KG22_RAYL);
+        real o2adj = 1.6f;
+        real o2cont = DV(MU(4.35e-4f, colo2[L]), MU(350.0f, 2.0f));
+        if (lower) {
+            RswSpec s = rsw_spec(colh2o[L], colo2[L],
+                                 MU(o2adj, RSW_C_KG22_STRRAT),
+                                 8.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 9 + s.js;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 9 + s.js;
+            tg = AD(AD(MU(s.speccomb,
+                          rsw_acc8(tab + RSW_T_KG22_ABSA, 585, ig, ind0, ind1, 9, s)),
+                       rsw_selffor(tab + RSW_T_KG22_SELFREF, 10,
+                                   tab + RSW_T_KG22_FORREF, 3, ig, colh2o[L],
+                                   selffac[L], selffrac[L], indself[L],
+                                   forfac[L], forfrac[L], indfor[L])),
+                    o2cont);
+        } else {
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 1 + 1;
+            tg = AD(MU(MU(colo2[L], o2adj),
+                       rsw_acc4(tab + RSW_T_KG22_ABSB, 235, ig, ind0, ind1,
+                                fac00[L], fac10[L], fac01[L], fac11[L])),
+                    o2cont);
+        }
+        break;
+    }
+    case 23: {
+        int ig = iw - 56;
+        tr = MU(colmol[L], (tab + RSW_T_KG23_RAYL)[ig]);
+        if (lower) {
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 1 + 1;
+            device const real* sc = tab + RSW_T_KG23_SELFREF + (ulong)10 * ig;
+            device const real* fc = tab + RSW_T_KG23_FORREF + (ulong)3 * ig;
+            int inds = indself[L], indf = indfor[L];
+            real core = rsw_acc4(tab + RSW_T_KG23_ABSA, 65, ig, ind0, ind1,
+                                 fac00[L], fac10[L], fac01[L], fac11[L]);
+            real sr = AD(sc[inds - 1], MU(selffrac[L], SU(sc[inds], sc[inds - 1])));
+            real fr = AD(fc[indf - 1], MU(forfrac[L], SU(fc[indf], fc[indf - 1])));
+            real inner = AD(AD(MU(RSW_C_KG23_GIVFAC, core),
+                               MU(selffac[L], sr)), MU(forfac[L], fr));
+            tg = MU(colh2o[L], inner);
+        } else {
+            tg = 0.0f;
+        }
+        break;
+    }
+    case 24: {
+        int ig = iw - 66;
+        if (lower) {
+            RswSpec s = rsw_spec(colh2o[L], colo2[L], RSW_C_KG24_STRRAT,
+                                 8.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            device const real* ra = tab + RSW_T_KG24_RAYLA;   // (8, 9) F-order
+            real r0 = ra[ig + 8 * (s.js - 1)];
+            real r1 = ra[ig + 8 * s.js];
+            tr = MU(colmol[L], AD(r0, MU(s.fs, SU(r1, r0))));
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 9 + s.js;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 9 + s.js;
+            tg = AD(AD(MU(s.speccomb,
+                          rsw_acc8(tab + RSW_T_KG24_ABSA, 585, ig, ind0, ind1, 9, s)),
+                       MU(colo3[L], (tab + RSW_T_KG24_ABSO3A)[ig])),
+                    rsw_selffor(tab + RSW_T_KG24_SELFREF, 10,
+                                tab + RSW_T_KG24_FORREF, 3, ig, colh2o[L],
+                                selffac[L], selffrac[L], indself[L],
+                                forfac[L], forfrac[L], indfor[L]));
+        } else {
+            tr = MU(colmol[L], (tab + RSW_T_KG24_RAYLB)[ig]);
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 1 + 1;
+            tg = AD(MU(colo2[L],
+                       rsw_acc4(tab + RSW_T_KG24_ABSB, 235, ig, ind0, ind1,
+                                fac00[L], fac10[L], fac01[L], fac11[L])),
+                    MU(colo3[L], (tab + RSW_T_KG24_ABSO3B)[ig]));
+        }
+        break;
+    }
+    case 25: {
+        int ig = iw - 74;
+        tr = MU(colmol[L], (tab + RSW_T_KG25_RAYL)[ig]);
+        if (lower) {
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 1 + 1;
+            tg = AD(MU(colh2o[L],
+                       rsw_acc4(tab + RSW_T_KG25_ABSA, 65, ig, ind0, ind1,
+                                fac00[L], fac10[L], fac01[L], fac11[L])),
+                    MU(colo3[L], (tab + RSW_T_KG25_ABSO3A)[ig]));
+        } else {
+            tg = MU(colo3[L], (tab + RSW_T_KG25_ABSO3B)[ig]);
+        }
+        break;
+    }
+    case 26: {
+        int ig = iw - 80;
+        tg = 0.0f;
+        tr = MU(colmol[L], (tab + RSW_T_KG26_RAYL)[ig]);
+        break;
+    }
+    case 27: {
+        int ig = iw - 86;
+        tr = MU(colmol[L], (tab + RSW_T_KG27_RAYL)[ig]);
+        if (lower) {
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 1 + 1;
+            tg = MU(colo3[L], rsw_acc4(tab + RSW_T_KG27_ABSA, 65, ig,
+                                       ind0, ind1, fac00[L], fac10[L],
+                                       fac01[L], fac11[L]));
+        } else {
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 1 + 1;
+            tg = MU(colo3[L], rsw_acc4(tab + RSW_T_KG27_ABSB, 235, ig,
+                                       ind0, ind1, fac00[L], fac10[L],
+                                       fac01[L], fac11[L]));
+        }
+        break;
+    }
+    case 28: {
+        int ig = iw - 94;
+        tr = MU(colmol[L], RSW_C_KG28_RAYL);
+        if (lower) {
+            RswSpec s = rsw_spec(colo3[L], colo2[L], RSW_C_KG28_STRRAT,
+                                 8.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 9 + s.js;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 9 + s.js;
+            tg = MU(s.speccomb,
+                    rsw_acc8(tab + RSW_T_KG28_ABSA, 585, ig, ind0, ind1, 9, s));
+        } else {
+            RswSpec s = rsw_spec(colo3[L], colo2[L], RSW_C_KG28_STRRAT,
+                                 4.0f, fac00[L], fac01[L], fac10[L], fac11[L]);
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 5 + s.js;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 5 + s.js;
+            tg = MU(s.speccomb,
+                    rsw_acc8(tab + RSW_T_KG28_ABSB, 1175, ig, ind0, ind1, 5, s));
+        }
+        break;
+    }
+    default: {   // 29
+        int ig = iw - 100;
+        tr = MU(colmol[L], RSW_C_KG29_RAYL);
+        if (lower) {
+            int ind0 = ((jp[L] - 1) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = (jp[L] * 5 + (jt1[L] - 1)) * 1 + 1;
+            device const real* sc = tab + RSW_T_KG29_SELFREF + (ulong)10 * ig;
+            device const real* fc = tab + RSW_T_KG29_FORREF + (ulong)4 * ig;
+            int inds = indself[L], indf = indfor[L];
+            real core = rsw_acc4(tab + RSW_T_KG29_ABSA, 65, ig, ind0, ind1,
+                                 fac00[L], fac10[L], fac01[L], fac11[L]);
+            real sr = AD(sc[inds - 1], MU(selffrac[L], SU(sc[inds], sc[inds - 1])));
+            real fr = AD(fc[indf - 1], MU(forfrac[L], SU(fc[indf], fc[indf - 1])));
+            real inner = AD(AD(core, MU(selffac[L], sr)), MU(forfac[L], fr));
+            tg = AD(MU(colh2o[L], inner),
+                    MU(colco2[L], (tab + RSW_T_KG29_ABSCO2)[ig]));
+        } else {
+            int ind0 = ((jp[L] - 13) * 5 + (jt[L] - 1)) * 1 + 1;
+            int ind1 = ((jp[L] - 12) * 5 + (jt1[L] - 1)) * 1 + 1;
+            tg = AD(MU(colco2[L],
+                       rsw_acc4(tab + RSW_T_KG29_ABSB, 235, ig, ind0, ind1,
+                                fac00[L], fac10[L], fac01[L], fac11[L])),
+                    MU(colh2o[L], (tab + RSW_T_KG29_ABSH2O)[ig]));
+        }
+        break;
+    }
+    }
+
+    taug[out] = tg;
+    taur[out] = tr;
+}
+// sfluxzen: one thread per g-point; laysolfr per band precomputed on host
+// (pure integer scans of jp, identical to the gated NumPy port).
+static inline void rsw_sfluxzen_body(int iw, int nlayers, int laytrop,
+                  device const real* tab,
+                  device const int* ngb,
+                  device const int* laysolfr,   // 14, Fortran layer idx
+                  device const int* jp, device const int* jt,
+                  device const int* jt1,
+                  device const real* colh2o,
+                  device const real* colco2,
+                  device const real* colch4,
+                  device const real* colo2,
+                  device const real* colo3,
+                  device const real* fac00, device const real* fac01,
+                  device const real* fac10, device const real* fac11,
+                  device real* sfluxzen)
+{
+    int jb = ngb[iw];
+    int lsf = laysolfr[jb - 16];
+    int L = lsf - 1;
+    real v = 0.0f;
+
+    switch (jb) {
+    case 16: {
+        if (lsf > laytrop)   // set only when the upper loop runs
+            v = (tab + RSW_T_KG16_SFLUXREF)[iw - 0];
+        else
+            return;          // sfluxzen stays 0 (pre-zeroed)
+        break;
+    }
+    case 17: {
+        int ig = iw - 6;
+        RswSpec s = rsw_spec(colh2o[L], colco2[L], RSW_C_KG17_STRRAT, 4.0f,
+                             fac00[L], fac01[L], fac10[L], fac11[L]);
+        device const real* sf = tab + RSW_T_KG17_SFLUXREF;    // (12, 5)
+        real a = sf[ig + 12 * (s.js - 1)], b = sf[ig + 12 * s.js];
+        v = AD(a, MU(s.fs, SU(b, a)));
+        break;
+    }
+    case 18: {
+        int ig = iw - 18;
+        RswSpec s = rsw_spec(colh2o[L], colch4[L], RSW_C_KG18_STRRAT, 8.0f,
+                             fac00[L], fac01[L], fac10[L], fac11[L]);
+        device const real* sf = tab + RSW_T_KG18_SFLUXREF;    // (8, 9)
+        real a = sf[ig + 8 * (s.js - 1)], b = sf[ig + 8 * s.js];
+        v = AD(a, MU(s.fs, SU(b, a)));
+        break;
+    }
+    case 19: {
+        int ig = iw - 26;
+        RswSpec s = rsw_spec(colh2o[L], colco2[L], RSW_C_KG19_STRRAT, 8.0f,
+                             fac00[L], fac01[L], fac10[L], fac11[L]);
+        device const real* sf = tab + RSW_T_KG19_SFLUXREF;
+        real a = sf[ig + 8 * (s.js - 1)], b = sf[ig + 8 * s.js];
+        v = AD(a, MU(s.fs, SU(b, a)));
+        break;
+    }
+    case 20:
+        v = (tab + RSW_T_KG20_SFLUXREF)[iw - 34];
+        break;
+    case 21: {
+        int ig = iw - 44;
+        RswSpec s = rsw_spec(colh2o[L], colco2[L], RSW_C_KG21_STRRAT, 8.0f,
+                             fac00[L], fac01[L], fac10[L], fac11[L]);
+        device const real* sf = tab + RSW_T_KG21_SFLUXREF;    // (10, 9)
+        real a = sf[ig + 10 * (s.js - 1)], b = sf[ig + 10 * s.js];
+        v = AD(a, MU(s.fs, SU(b, a)));
+        break;
+    }
+    case 22: {
+        int ig = iw - 54;
+        RswSpec s = rsw_spec(colh2o[L], colo2[L],
+                             MU(1.6f, RSW_C_KG22_STRRAT), 8.0f,
+                             fac00[L], fac01[L], fac10[L], fac11[L]);
+        device const real* sf = tab + RSW_T_KG22_SFLUXREF;    // (2, 9)
+        real a = sf[ig + 2 * (s.js - 1)], b = sf[ig + 2 * s.js];
+        v = AD(a, MU(s.fs, SU(b, a)));
+        break;
+    }
+    case 23:
+        v = (tab + RSW_T_KG23_SFLUXREF)[iw - 56];
+        break;
+    case 24: {
+        int ig = iw - 66;
+        RswSpec s = rsw_spec(colh2o[L], colo2[L], RSW_C_KG24_STRRAT, 8.0f,
+                             fac00[L], fac01[L], fac10[L], fac11[L]);
+        device const real* sf = tab + RSW_T_KG24_SFLUXREF;    // (8, 9)
+        real a = sf[ig + 8 * (s.js - 1)], b = sf[ig + 8 * s.js];
+        v = AD(a, MU(s.fs, SU(b, a)));
+        break;
+    }
+    case 25:
+        v = (tab + RSW_T_KG25_SFLUXREF)[iw - 74];
+        break;
+    case 26:
+        v = (tab + RSW_T_KG26_SFLUXREF)[iw - 80];
+        break;
+    case 27:
+        if (lsf > laytrop)
+            v = MU(RSW_C_KG27_SCALEKUR, (tab + RSW_T_KG27_SFLUXREF)[iw - 86]);
+        else
+            return;
+        break;
+    case 28: {
+        int ig = iw - 94;
+        RswSpec s = rsw_spec(colo3[L], colo2[L], RSW_C_KG28_STRRAT, 4.0f,
+                             fac00[L], fac01[L], fac10[L], fac11[L]);
+        device const real* sf = tab + RSW_T_KG28_SFLUXREF;    // (6, 5)
+        real a = sf[ig + 6 * (s.js - 1)], b = sf[ig + 6 * s.js];
+        v = AD(a, MU(s.fs, SU(b, a)));
+        break;
+    }
+    default:   // 29
+        v = (tab + RSW_T_KG29_SFLUXREF)[iw - 100];
+        break;
+    }
+    sfluxzen[iw] = v;
+}
+// ---------------------------------------------------------------------------
+// cldprmc_sw: one thread per (ig, lay).  Fatal Fortran STOPs set err_flag.
+// ---------------------------------------------------------------------------
+
+static inline void rsw_cldprmc_body(int ig, int lay,
+                 int nlayers, int inflag, int iceflag, int liqflag,
+                 device const real* tab,
+                 device const int* ngb,
+                 device const real* cldfmc,
+                 device const real* ciwpmc,
+                 device const real* clwpmc,
+                 device const real* cswpmc,
+                 device const real* reicmc,
+                 device const real* relqmc,
+                 device const real* resnmc,
+                 device real* taormc, device real* taucmc, device real* ssacmc, device real* asmcmc,
+                 device const real* fsfcmc,
+                 device int* err_flag)
+{
+    ulong p = (ulong)ig + (ulong)RSW_NGPT * lay;
+
+    taormc[p] = taucmc[p];
+
+    real cwp = AD(AD(ciwpmc[p], clwpmc[p]), cswpmc[p]);
+    const real cldmin = 1.0e-20f;
+    if (!(cldfmc[p] >= cldmin && (cwp >= cldmin || taucmc[p] >= cldmin)))
+        return;
+
+    if (inflag == 0) {
+        real taucldorig_a = taucmc[p];
+        real ffp = fsfcmc[p];
+        real ffp1 = SU(1.0f, ffp);
+        real ffpssa = SU(1.0f, MU(ffp, ssacmc[p]));
+        real ssacloud_a = DV(MU(ffp1, ssacmc[p]), ffpssa);
+        real taucloud_a = MU(ffpssa, taucldorig_a);
+        taormc[p] = taucldorig_a;
+        ssacmc[p] = ssacloud_a;
+        taucmc[p] = taucloud_a;
+        asmcmc[p] = DV(SU(asmcmc[p], ffp), ffp1);
+        return;
+    }
+    if (inflag == 1 || liqflag != 1 || iceflag < 2 || iceflag > 5) {
+        // inflag=1 is a Fortran STOP; iceflag 1 needs wavenum bounds the
+        // WRF option-4 driver cannot produce; fail closed.
+        err_flag[p] |= 1;
+        return;
+    }
+
+    real radice = reicmc[lay];
+    real extcoice = 0.0f, ssacoice = 0.0f, gice = 0.0f, forwice = 0.0f;
+    real extcosno = 0.0f, ssacosno = 0.0f, gsno = 0.0f, forwsno = 0.0f;
+    int c = ngb[ig] - 16;
+
+    if (EQ0(AD(ciwpmc[p], cswpmc[p]))) {
+        // all four ice coefficients stay zero
+    } else if (iceflag == 2) {
+        if (radice < 5.0f || radice > 131.0f) { err_flag[p] |= 2; return; }
+        real factor = DV(SU(radice, 2.0f), 3.0f);
+        int index = (int)factor;
+        if (index == 43) index = 42;
+        real fint = SU(factor, (real)index);
+        device const real* e2 = tab + RSW_T_CLD_EXTICE2 + (ulong)43 * c;
+        device const real* s2 = tab + RSW_T_CLD_SSAICE2 + (ulong)43 * c;
+        device const real* a2 = tab + RSW_T_CLD_ASYICE2 + (ulong)43 * c;
+        extcoice = AD(e2[index - 1], MU(fint, SU(e2[index], e2[index - 1])));
+        ssacoice = AD(s2[index - 1], MU(fint, SU(s2[index], s2[index - 1])));
+        gice = AD(a2[index - 1], MU(fint, SU(a2[index], a2[index - 1])));
+        forwice = MU(gice, gice);
+        if (extcoice < 0.0f || ssacoice > 1.0f || ssacoice < 0.0f ||
+            gice > 1.0f || gice < 0.0f) { err_flag[p] |= 2; return; }
+    } else {   // iceflag >= 3
+        if (radice < 5.0f || radice > 140.0f) { err_flag[p] |= 2; return; }
+        real factor = DV(SU(radice, 2.0f), 3.0f);
+        int index = (int)factor;
+        if (index == 46) index = 45;
+        real fint = SU(factor, (real)index);
+        device const real* e3 = tab + RSW_T_CLD_EXTICE3 + (ulong)46 * c;
+        device const real* s3 = tab + RSW_T_CLD_SSAICE3 + (ulong)46 * c;
+        device const real* a3 = tab + RSW_T_CLD_ASYICE3 + (ulong)46 * c;
+        device const real* f3 = tab + RSW_T_CLD_FDLICE3 + (ulong)46 * c;
+        extcoice = AD(e3[index - 1], MU(fint, SU(e3[index], e3[index - 1])));
+        ssacoice = AD(s3[index - 1], MU(fint, SU(s3[index], s3[index - 1])));
+        gice = AD(a3[index - 1], MU(fint, SU(a3[index], a3[index - 1])));
+        real fdelta = AD(f3[index - 1], MU(fint, SU(f3[index], f3[index - 1])));
+        if (fdelta < 0.0f || fdelta > 1.0f) { err_flag[p] |= 2; return; }
+        forwice = AD(fdelta, DV(0.5f, ssacoice));
+        if (forwice > gice) forwice = gice;
+        if (extcoice < 0.0f || ssacoice > 1.0f || ssacoice < 0.0f ||
+            gice > 1.0f || gice < 0.0f) { err_flag[p] |= 2; return; }
+    }
+
+    if (cswpmc[p] > 0.0f && iceflag == 5) {
+        real radsno = resnmc[lay];
+        if (radsno < 5.0f || radsno > 140.0f) { err_flag[p] |= 4; return; }
+        real factor = DV(SU(radsno, 2.0f), 3.0f);
+        int index = (int)factor;
+        if (index == 46) index = 45;
+        real fint = SU(factor, (real)index);
+        device const real* e3 = tab + RSW_T_CLD_EXTICE3 + (ulong)46 * c;
+        device const real* s3 = tab + RSW_T_CLD_SSAICE3 + (ulong)46 * c;
+        device const real* a3 = tab + RSW_T_CLD_ASYICE3 + (ulong)46 * c;
+        device const real* f3 = tab + RSW_T_CLD_FDLICE3 + (ulong)46 * c;
+        extcosno = AD(e3[index - 1], MU(fint, SU(e3[index], e3[index - 1])));
+        ssacosno = AD(s3[index - 1], MU(fint, SU(s3[index], s3[index - 1])));
+        gsno = AD(a3[index - 1], MU(fint, SU(a3[index], a3[index - 1])));
+        real fdelta = AD(f3[index - 1], MU(fint, SU(f3[index], f3[index - 1])));
+        if (fdelta < 0.0f || fdelta > 1.0f) { err_flag[p] |= 4; return; }
+        forwsno = AD(fdelta, DV(0.5f, ssacosno));
+        if (forwsno > gsno) forwsno = gsno;
+        if (extcosno < 0.0f || ssacosno > 1.0f || ssacosno < 0.0f ||
+            gsno > 1.0f || gsno < 0.0f) { err_flag[p] |= 4; return; }
+    }
+
+    real extcoliq = 0.0f, ssacoliq = 0.0f, gliq = 0.0f, forwliq = 0.0f;
+    if (!EQ0(clwpmc[p])) {   // liqflag == 1
+        real radliq = relqmc[lay];
+        if (radliq < 1.5f || radliq > 60.0f) { err_flag[p] |= 8; return; }
+        int index = (int)SU(radliq, 1.5f);
+        if (index == 0) index = 1;
+        if (index == 58) index = 57;
+        real fint = SU(SU(radliq, 1.5f), (real)index);
+        device const real* el = tab + RSW_T_CLD_EXTLIQ1 + (ulong)58 * c;
+        device const real* sl = tab + RSW_T_CLD_SSALIQ1 + (ulong)58 * c;
+        device const real* al = tab + RSW_T_CLD_ASYLIQ1 + (ulong)58 * c;
+        extcoliq = AD(el[index - 1], MU(fint, SU(el[index], el[index - 1])));
+        ssacoliq = AD(sl[index - 1], MU(fint, SU(sl[index], sl[index - 1])));
+        if (fint < 0.0f && ssacoliq > 1.0f) ssacoliq = sl[index - 1];
+        gliq = AD(al[index - 1], MU(fint, SU(al[index], al[index - 1])));
+        forwliq = MU(gliq, gliq);
+        if (extcoliq < 0.0f || ssacoliq > 1.0f || ssacoliq < 0.0f ||
+            gliq > 1.0f || gliq < 0.0f) { err_flag[p] |= 8; return; }
+    }
+
+    real scatliq, scatice, scatsno;
+    if (iceflag < 5) {
+        real tauliqorig = MU(clwpmc[p], extcoliq);
+        real tauiceorig = MU(ciwpmc[p], extcoice);
+        taormc[p] = AD(tauliqorig, tauiceorig);
+        real ssaliq = DV(MU(ssacoliq, SU(1.0f, forwliq)),
+                         SU(1.0f, MU(forwliq, ssacoliq)));
+        real tauliq = MU(SU(1.0f, MU(forwliq, ssacoliq)), tauliqorig);
+        real ssaice = DV(MU(ssacoice, SU(1.0f, forwice)),
+                         SU(1.0f, MU(forwice, ssacoice)));
+        real tauice = MU(SU(1.0f, MU(forwice, ssacoice)), tauiceorig);
+        scatliq = MU(ssaliq, tauliq);
+        scatice = MU(ssaice, tauice);
+        scatsno = 0.0f;
+        taucmc[p] = AD(tauliq, tauice);
+    } else {
+        real tauliqorig = MU(clwpmc[p], extcoliq);
+        real tauiceorig = MU(ciwpmc[p], extcoice);
+        real tausnoorig = MU(cswpmc[p], extcosno);
+        taormc[p] = AD(AD(tauliqorig, tauiceorig), tausnoorig);
+        real ssaliq = DV(MU(ssacoliq, SU(1.0f, forwliq)),
+                         SU(1.0f, MU(forwliq, ssacoliq)));
+        real tauliq = MU(SU(1.0f, MU(forwliq, ssacoliq)), tauliqorig);
+        real ssaice = DV(MU(ssacoice, SU(1.0f, forwice)),
+                         SU(1.0f, MU(forwice, ssacoice)));
+        real tauice = MU(SU(1.0f, MU(forwice, ssacoice)), tauiceorig);
+        real ssasno = DV(MU(ssacosno, SU(1.0f, forwsno)),
+                         SU(1.0f, MU(forwsno, ssacosno)));
+        real tausno = MU(SU(1.0f, MU(forwsno, ssacosno)), tausnoorig);
+        scatliq = MU(ssaliq, tauliq);
+        scatice = MU(ssaice, tauice);
+        scatsno = MU(ssasno, tausno);
+        taucmc[p] = AD(AD(tauliq, tauice), tausno);
+    }
+
+    if (EQ0(taucmc[p])) taucmc[p] = cldmin;
+    if (EQ0(scatice)) scatice = cldmin;
+    if (EQ0(scatsno)) scatsno = cldmin;
+
+    if (iceflag < 5)
+        ssacmc[p] = DV(AD(scatliq, scatice), taucmc[p]);
+    else
+        ssacmc[p] = DV(AD(AD(scatliq, scatice), scatsno), taucmc[p]);
+
+    if (iceflag == 3 || iceflag == 4) {
+        asmcmc[p] = MU(DV(1.0f, AD(scatliq, scatice)),
+            AD(DV(MU(scatliq, SU(gliq, forwliq)), SU(1.0f, forwliq)),
+               MU(scatice, DV(SU(gice, forwice), SU(1.0f, forwice)))));
+    } else if (iceflag == 5) {
+        asmcmc[p] = MU(DV(1.0f, AD(AD(scatliq, scatice), scatsno)),
+            AD(AD(DV(MU(scatliq, SU(gliq, forwliq)), SU(1.0f, forwliq)),
+                  MU(scatice, DV(SU(gice, forwice), SU(1.0f, forwice)))),
+               MU(scatsno, DV(SU(gsno, forwsno), SU(1.0f, forwsno)))));
+    } else {
+        asmcmc[p] = DV(
+            AD(DV(MU(scatliq, SU(gliq, forwliq)), SU(1.0f, forwliq)),
+               DV(MU(scatice, SU(gice, forwice)), SU(1.0f, forwice))),
+            AD(scatliq, scatice));
+    }
+}
+// ---------------------------------------------------------------------------
+// Interleaved spcvmc workspace.  Entry j of workspace array a for thread t
+// lives at wk[(a * n1 + j) * nthr + t]: a warp's 32 threads touch 32
+// consecutive words for the same (a, j), so every workspace load and store
+// is one coalesced transaction instead of 32 scattered ones (the previous
+// layout gave each thread its own contiguous RSW_SPCVMC_WK x n1 slab, 8.7
+// KB apart).  RswStrided only changes addresses: every value stored and
+// loaded, and every arithmetic statement, is the same as before.
+// ---------------------------------------------------------------------------
+template <typename T>
+struct RswStrided {
+    device T* p;
+    ulong s;
+    device T& operator[](int j) const thread
+    { return p[(ulong)j * s]; }
+};
+typedef RswStrided<real> rsw_wk_t;
+
+// ---------------------------------------------------------------------------
+// reftra_sw as a device function over thread-local arrays (kmodts = 2).
+// ---------------------------------------------------------------------------
+
+// Layer storage is the caller-owned workspace sized from nlayers + 1.
+
+// The former rsw_reftra loop body, one layer at a time. Each array[jk]
+// operand is the corresponding scalar argument/reference; every arithmetic
+// statement, branch, sqrt and table lookup is retained in its original order.
+static inline void rsw_reftra_layer(bool lrtchk,
+                           real pgg, real prmuz, real ptau,
+                           real pw, device const real* exp_tbl,
+                           thread real& pref, thread real& prefd, thread real& ptra, thread real& ptrad)
+{
+    const real eps = 1.0e-08f;
+    const real zwcrit = 0.9999995f;
+    if (!lrtchk) {
+        pref = 0.0f;
+        ptra = 1.0f;
+        prefd = 0.0f;
+        ptrad = 1.0f;
+        return;
+    }
+    real zto1 = ptau;
+    real zw = pw;
+    real zg = pgg;
+
+    real zg3 = MU(3.0f, zg);
+    real zgamma1 = MU(SU(8.0f, MU(zw, AD(5.0f, zg3))), 0.25f);
+    real zgamma2 = MU(MU(3.0f, MU(zw, SU(1.0f, zg))), 0.25f);
+    real zgamma3 = MU(SU(2.0f, MU(zg3, prmuz)), 0.25f);
+    real zgamma4 = SU(1.0f, zgamma3);
+
+    real zwo = 0.0f;
+    real denom = 1.0f;
+    if (zg != 1.0f) {
+        real q = DV(zg, SU(1.0f, zg));
+        denom = SU(1.0f, MU(SU(1.0f, zw), MU(q, q)));
+    }
+    if (zw > 0.0f && denom != 0.0f) zwo = DV(zw, denom);
+
+    if (zwo >= zwcrit) {
+        real za = MU(zgamma1, prmuz);
+        real za1 = SU(za, zgamma3);
+        real zgt = MU(zgamma1, zto1);
+        real ze1 = DV(zto1, prmuz);
+        if (!(ze1 < 500.0f)) ze1 = 500.0f;   // min(x, 500)
+        real ze2 = rsw_etbl(exp_tbl, ze1);
+        pref = DV(SU(zgt, MU(za1, SU(1.0f, ze2))), AD(1.0f, zgt));
+        ptra = SU(1.0f, pref);
+        prefd = DV(zgt, AD(1.0f, zgt));
+        ptrad = SU(1.0f, prefd);
+        if (ze2 == 1.0f) {
+            pref = 0.0f;
+            ptra = 1.0f;
+            prefd = 0.0f;
+            ptrad = 1.0f;
+        }
+    } else {
+        real za1 = AD(MU(zgamma1, zgamma4), MU(zgamma2, zgamma3));
+        real za2 = AD(MU(zgamma1, zgamma3), MU(zgamma2, zgamma4));
+        real zrk = SQ(SU(MU(zgamma1, zgamma1),
+                                 MU(zgamma2, zgamma2)));
+        real zrp = MU(zrk, prmuz);
+        real zrp1 = AD(1.0f, zrp);
+        real zrm1 = SU(1.0f, zrp);
+        real zrk2 = MU(2.0f, zrk);
+        real zrpp = SU(1.0f, MU(zrp, zrp));
+        real zrkg = AD(zrk, zgamma1);
+        real zr1 = MU(zrm1, AD(za2, MU(zrk, zgamma3)));
+        real zr2 = MU(zrp1, SU(za2, MU(zrk, zgamma3)));
+        real zr3 = MU(zrk2, SU(zgamma3, MU(za2, prmuz)));
+        real zr4 = MU(zrpp, zrkg);
+        real zr5 = MU(zrpp, SU(zrk, zgamma1));
+        real zt1 = MU(zrp1, AD(za1, MU(zrk, zgamma4)));
+        real zt2 = MU(zrm1, SU(za1, MU(zrk, zgamma4)));
+        real zt3 = MU(zrk2, AD(zgamma4, MU(za1, prmuz)));
+        real zt4 = zr4;
+        real zt5 = zr5;
+        real zbeta = DV(SU(zgamma1, zrk), zrkg);
+
+        real ze1 = MU(zrk, zto1);
+        if (!(ze1 < 500.0f)) ze1 = 500.0f;
+        real ze2 = DV(zto1, prmuz);
+        if (!(ze2 < 500.0f)) ze2 = 500.0f;
+        real zem1, zep1, zem2, zep2;
+        if (ze1 <= RSW_C_OD_LO) {
+            zem1 = AD(SU(1.0f, ze1), MU(MU(0.5f, ze1), ze1));
+            zep1 = DV(1.0f, zem1);
+        } else {
+            real tblind = DV(ze1, AD(RSW_C_BPADE, ze1));
+            int itind = (int)AD(MU(RSW_C_TBLINT, tblind), 0.5f);
+            zem1 = exp_tbl[itind];
+            zep1 = DV(1.0f, zem1);
+        }
+        if (ze2 <= RSW_C_OD_LO) {
+            zem2 = AD(SU(1.0f, ze2), MU(MU(0.5f, ze2), ze2));
+            zep2 = DV(1.0f, zem2);
+        } else {
+            real tblind = DV(ze2, AD(RSW_C_BPADE, ze2));
+            int itind = (int)AD(MU(RSW_C_TBLINT, tblind), 0.5f);
+            zem2 = exp_tbl[itind];
+            zep2 = DV(1.0f, zem2);
+        }
+
+        real zdenr = AD(MU(zr4, zep1), MU(zr5, zem1));
+        real zdent = AD(MU(zt4, zep1), MU(zt5, zem1));
+        if (zdenr >= -eps && zdenr <= eps) {
+            pref = eps;
+            ptra = zem2;
+        } else {
+            pref = DV(MU(zw, SU(SU(MU(zr1, zep1), MU(zr2, zem1)),
+                                    MU(zr3, zem2))), zdenr);
+            ptra = SU(zem2,
+                DV(MU(MU(zem2, zw), SU(SU(MU(zt1, zep1), MU(zt2, zem1)),
+                                       MU(zt3, zep2))), zdent));
+        }
+
+        real zemm = MU(zem1, zem1);
+        real zdend = DV(1.0f, MU(SU(1.0f, MU(zbeta, zemm)), zrkg));
+        prefd = MU(MU(zgamma2, SU(1.0f, zemm)), zdend);
+        ptrad = MU(MU(zrk2, zem1), zdend);
+    }
+}
+
+// ztdn is caller-provided scratch (>= klev+1 entries): it was a
+// thread-local array until the batched work moved every per-thread array
+// of this pipeline into an explicit workspace (see rsw_spcvmc_body);
+// loads/stores only, no arithmetic difference.
+template <class PA>
+static inline void rsw_vrtqdr(int klev, PA pref, PA prefd,
+                           PA ptra, PA ptrad,
+                           PA pdbt, PA prdnd, PA prup,
+                           PA prupd, PA ptdbt,
+                           PA pfd_col, PA pfu_col, PA ztdn)
+{
+    real zreflect = DV(1.0f, SU(1.0f, MU(prefd[klev], prefd[klev - 1])));
+    prup[klev - 1] = AD(pref[klev - 1],
+        MU(MU(ptrad[klev - 1],
+              AD(MU(SU(ptra[klev - 1], pdbt[klev - 1]), prefd[klev]),
+                 MU(pdbt[klev - 1], pref[klev]))), zreflect));
+    prupd[klev - 1] = AD(prefd[klev - 1],
+        MU(MU(MU(ptrad[klev - 1], ptrad[klev - 1]), prefd[klev]), zreflect));
+
+    for (int jk = 1; jk < klev; ++jk) {
+        int ikp = klev + 1 - jk;
+        int ikx = ikp - 1;
+        zreflect = DV(1.0f, SU(1.0f, MU(prupd[ikp - 1], prefd[ikx - 1])));
+        prup[ikx - 1] = AD(pref[ikx - 1],
+            MU(MU(ptrad[ikx - 1],
+                  AD(MU(SU(ptra[ikx - 1], pdbt[ikx - 1]), prupd[ikp - 1]),
+                     MU(pdbt[ikx - 1], prup[ikp - 1]))), zreflect));
+        prupd[ikx - 1] = AD(prefd[ikx - 1],
+            MU(MU(MU(ptrad[ikx - 1], ptrad[ikx - 1]), prupd[ikp - 1]),
+               zreflect));
+    }
+
+    ztdn[0] = 1.0f;
+    prdnd[0] = 0.0f;
+    ztdn[1] = ptra[0];
+    prdnd[1] = prefd[0];
+
+    for (int jk = 2; jk <= klev; ++jk) {
+        int ikp = jk + 1;
+        zreflect = DV(1.0f, SU(1.0f, MU(prefd[jk - 1], prdnd[jk - 1])));
+        ztdn[ikp - 1] = AD(MU(ptdbt[jk - 1], ptra[jk - 1]),
+            MU(MU(ptrad[jk - 1],
+                  AD(SU(ztdn[jk - 1], ptdbt[jk - 1]),
+                     MU(MU(ptdbt[jk - 1], pref[jk - 1]), prdnd[jk - 1]))),
+               zreflect));
+        prdnd[ikp - 1] = AD(prefd[jk - 1],
+            MU(MU(MU(ptrad[jk - 1], ptrad[jk - 1]), prdnd[jk - 1]),
+               zreflect));
+    }
+
+    for (int jk = 0; jk <= klev; ++jk) {
+        zreflect = DV(1.0f, SU(1.0f, MU(prdnd[jk], prupd[jk])));
+        pfu_col[jk] = MU(AD(MU(ptdbt[jk], prup[jk]),
+                            MU(SU(ztdn[jk], ptdbt[jk]), prupd[jk])),
+                         zreflect);
+        pfd_col[jk] = AD(ptdbt[jk],
+            MU(AD(SU(ztdn[jk], ptdbt[jk]),
+                  MU(MU(ptdbt[jk], prup[jk]), prdnd[jk])), zreflect));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// spcvmc_sw per-g-point pipeline: one thread per g-point.
+// Inputs are the same arrays the NumPy port takes.  Per-thread state
+// lived in ~9 KiB of thread-local arrays; on this device a local frame
+// of F bytes reserves ~F x 1536 threads x 170 SMs machine-wide at first
+// launch (~2.3 GiB here), so the arrays now live in a caller-provided
+// workspace: wk carries RSW_SPCVMC_WK real arrays and wkc RSW_SPCVMC_WKC
+// flag arrays of (nlayers + 1) entries per thread, carved below in a
+// fixed order and interleaved across the launch's threads (RswStrided,
+// stride wks = threads in the launch) so a warp's accesses coalesce.
+// The fused pass keeps former per-layer intermediates in registers and
+// shares vrtqdr scratch between clear and total sweeps. Arithmetic statements
+// retain their operands, order and rounding within each dependency chain.
+// The layer-to-scalar correspondence is recorded beside the fused pass.
+// ---------------------------------------------------------------------------
+
+#define RSW_SPCVMC_WK 16    // real arrays carved from wk, in this order
+#define RSW_SPCVMC_WKC 0    // retained ABI slot; flags are scalar registers
+
+static inline void rsw_spcvmc_body(int iw1, int nlayers,
+                    device const real* tab,
+                    device const int* ngb,
+                    device const real* palbd,    // (14)
+                    device const real* palbp,
+                    device const real* pcldfmc,  // (nlayers, 112) F
+                    device const real* ptaucmc,
+                    device const real* pasycmc,
+                    device const real* pomgcmc,
+                    device const real* ptaormc,
+                    device const real* ptaua,    // (nlayers, 14) F
+                    device const real* pasya,
+                    device const real* pomga,
+                    real prmu0,
+                    device const real* adjflux,  // (14)
+                    device const real* sfluxzen, // (112)
+                    device const real* taug,     // (nlayers, 112) F
+                    device const real* taur,
+                    device real* zincflx,                     // (112)
+                    device real* zcd, device real* zcu,              // (nlayers+1, 112) F
+                    device real* zfd, device real* zfu,
+                    device real* ztdbt_nodel_out,             // (nlayers+1, 112) F
+                    device real* ztdbtc_nodel_out,
+                    device real* wk,                          // RSW_SPCVMC_WK x n1
+                    ulong wks, bool interleaved = false) // workspace and slab layouts
+{
+    int klev = nlayers;
+    int ibm = ngb[iw1] - 15;                            // 1..14
+    device const real* exp_tbl = tab + RSW_T_EXP_TBL;
+    const real repclc = 1.0e-12f;
+
+    const int n1 = nlayers + 1;
+    // Sixteen profiles survive the fused layer pass. Flags use registers.
+    const rsw_wk_t zrefc{wk + (ulong)0 * n1 * wks, wks};
+    const rsw_wk_t zrefdc{wk + (ulong)1 * n1 * wks, wks};
+    const rsw_wk_t ztrac{wk + (ulong)2 * n1 * wks, wks};
+    const rsw_wk_t ztradc{wk + (ulong)3 * n1 * wks, wks};
+    const rsw_wk_t zref{wk + (ulong)4 * n1 * wks, wks};
+    const rsw_wk_t zrefd{wk + (ulong)5 * n1 * wks, wks};
+    const rsw_wk_t ztra{wk + (ulong)6 * n1 * wks, wks};
+    const rsw_wk_t ztrad{wk + (ulong)7 * n1 * wks, wks};
+    const rsw_wk_t zdbtc{wk + (ulong)8 * n1 * wks, wks};
+    const rsw_wk_t ztdbtc{wk + (ulong)9 * n1 * wks, wks};
+    const rsw_wk_t zdbt{wk + (ulong)10 * n1 * wks, wks};
+    const rsw_wk_t ztdbt{wk + (ulong)11 * n1 * wks, wks};
+    const rsw_wk_t zrdnd{wk + (ulong)12 * n1 * wks, wks};
+    const rsw_wk_t zrup{wk + (ulong)13 * n1 * wks, wks};
+    const rsw_wk_t zrupd{wk + (ulong)14 * n1 * wks, wks};
+    const rsw_wk_t ztdn{wk + (ulong)15 * n1 * wks, wks};
+    // vrtqdr writes fluxes directly to the existing output slabs, using the
+    // same final arithmetic statements. The scalar nodel products likewise
+    // write their output levels as the ascending recurrence completes.
+    const ulong os = interleaved ? RSW_NGPT : 1;
+    const ulong ob = interleaved ? iw1 : (ulong)iw1 * n1;
+    const rsw_wk_t clear_fd{zcd + ob, os}, clear_fu{zcu + ob, os};
+    const rsw_wk_t total_fd{zfd + ob, os}, total_fu{zfu + ob, os};
+    const rsw_wk_t nodel_c{ztdbtc_nodel_out + ob, os};
+    const rsw_wk_t nodel_t{ztdbt_nodel_out + ob, os};
+    real ztdbtc_nodel = 1.0f;
+    real ztdbt_nodel = 1.0f;
+    nodel_c[0] = ztdbtc_nodel;
+    nodel_t[0] = ztdbt_nodel;
+    zincflx[iw1] = MU(MU(adjflux[ibm - 1], sfluxzen[iw1]), prmu0);
+
+    ztdbtc[0] = 1.0f;
+    zdbtc[klev] = 0.0f;
+    ztrac[klev] = 0.0f;
+    ztradc[klev] = 0.0f;
+    zrefc[klev] = palbp[ibm - 1];
+    zrefdc[klev] = palbd[ibm - 1];
+    ztdbt[0] = 1.0f;
+    zdbt[klev] = 0.0f;
+    ztra[klev] = 0.0f;
+    ztrad[klev] = 0.0f;
+    zref[klev] = palbp[ibm - 1];
+    zrefd[klev] = palbd[ibm - 1];
+    zrup[klev] = palbp[ibm - 1];
+    zrupd[klev] = palbd[ibm - 1];
+
+    // Statement correspondence to the former passes, for the same J/K:
+    // (1) first-loop optics and both nodel products; (2) delta scaling;
+    // (3) cloudy optics; (4) clear and cloudy reftra layer bodies;
+    // (5) combination and both scaled products. Former intermediates[J]
+    // are scalars with the same names. Independent statements move across
+    // layer boundaries; all four cumulative products retain ascending J,
+    // operand order and rounding. Only the profiles consumed by vrtqdr stay
+    // in RswStrided workspace. Output stores round nothing.
+    for (int J = 0; J < klev; ++J) {
+        int jk = J + 1;
+        int ikl = klev + 1 - jk;
+        int K = ikl - 1;
+        ulong pKw = interleaved ? (ulong)K * RSW_NGPT + iw1
+                                : (ulong)K + (ulong)nlayers * iw1;
+        ulong pKb = (ulong)K + (ulong)nlayers * (ibm - 1);
+        bool lrtchkclr = 1;
+        bool lrtchkcld = (pcldfmc[pKw] > repclc) ? 1 : 0;
+        real ztauc, zomcc, zgcc, ztauo, zomco, zgco;
+        real zdbtc_nodel, zdbt_nodel;
+        {
+            ztauc = AD(AD(taur[pKw], taug[pKw]), ptaua[pKb]);
+            zomcc = AD(MU(taur[pKw], 1.0f), MU(ptaua[pKb], pomga[pKb]));
+            zgcc = DV(MU(MU(pasya[pKb], pomga[pKb]), ptaua[pKb]), zomcc);
+            zomcc = DV(zomcc, ztauc);
+
+            real zclear = SU(1.0f, pcldfmc[pKw]);
+            real zcloud = pcldfmc[pKw];
+
+            real ze1 = DV(ztauc, prmu0);
+            real zdbtmc = rsw_etbl(exp_tbl, ze1);
+            zdbtc_nodel = zdbtmc;
+            ztdbtc_nodel = MU(zdbtc_nodel, ztdbtc_nodel);
+
+            real tauorig = AD(ztauc, ptaormc[pKw]);
+            ze1 = DV(tauorig, prmu0);
+            real zdbtmo = rsw_etbl(exp_tbl, ze1);
+            zdbt_nodel = AD(MU(zclear, zdbtmc), MU(zcloud, zdbtmo));
+            ztdbt_nodel = MU(zdbt_nodel, ztdbt_nodel);
+        }
+        nodel_c[J + 1] = ztdbtc_nodel;
+        nodel_t[J + 1] = ztdbt_nodel;
+        real zf = MU(zgcc, zgcc);
+        real zwf = MU(zomcc, zf);
+        ztauc = MU(SU(1.0f, zwf), ztauc);
+        zomcc = DV(SU(zomcc, zwf), SU(1.0f, zwf));
+        zgcc = DV(SU(zgcc, zf), SU(1.0f, zf));
+        ztauo = AD(ztauc, ptaucmc[pKw]);
+        zomco = AD(MU(ztauc, zomcc), MU(ptaucmc[pKw], pomgcmc[pKw]));
+        zgco = DV(AD(MU(MU(ptaucmc[pKw], pomgcmc[pKw]), pasycmc[pKw]),
+                        MU(MU(ztauc, zomcc), zgcc)), zomco);
+        zomco = DV(zomco, ztauo);
+        real zrefc_layer, zrefdc_layer, ztrac_layer, ztradc_layer;
+        real zrefo, zrefdo, ztrao, ztrado;
+        rsw_reftra_layer(lrtchkclr, zgcc, prmu0, ztauc, zomcc, exp_tbl,
+                         zrefc_layer, zrefdc_layer, ztrac_layer, ztradc_layer);
+        rsw_reftra_layer(lrtchkcld, zgco, prmu0, ztauo, zomco, exp_tbl,
+                         zrefo, zrefdo, ztrao, ztrado);
+        zrefc[J] = zrefc_layer;
+        zrefdc[J] = zrefdc_layer;
+        ztrac[J] = ztrac_layer;
+        ztradc[J] = ztradc_layer;
+        {
+            real zclear = SU(1.0f, pcldfmc[pKw]);
+            real zcloud = pcldfmc[pKw];
+            zref[J] = AD(MU(zclear, zrefc_layer), MU(zcloud, zrefo));
+            zrefd[J] = AD(MU(zclear, zrefdc_layer), MU(zcloud, zrefdo));
+            ztra[J] = AD(MU(zclear, ztrac_layer), MU(zcloud, ztrao));
+            ztrad[J] = AD(MU(zclear, ztradc_layer), MU(zcloud, ztrado));
+
+            real ze1 = DV(ztauc, prmu0);
+            real zdbtmc = rsw_etbl(exp_tbl, ze1);
+            zdbtc[J] = zdbtmc;
+            ztdbtc[J + 1] = MU(zdbtc[J], ztdbtc[J]);
+
+            ze1 = DV(ztauo, prmu0);
+            real zdbtmo = rsw_etbl(exp_tbl, ze1);
+            zdbt[J] = AD(MU(zclear, zdbtmc), MU(zcloud, zdbtmo));
+            ztdbt[J + 1] = MU(zdbt[J], ztdbt[J]);
+        }
+    }
+
+
+    rsw_vrtqdr(klev, zrefc, zrefdc, ztrac, ztradc, zdbtc, zrdnd, zrup,
+               zrupd, ztdbtc, clear_fd, clear_fu, ztdn);
+    // The two vrtqdr calls share scratch, fully written before each read.
+    // Restore the total surface values formerly held in separate clear scratch.
+    zrup[klev] = palbp[ibm - 1];
+    zrupd[klev] = palbd[ibm - 1];
+    rsw_vrtqdr(klev, zref, zrefd, ztra, ztrad, zdbt, zrdnd, zrup,
+               zrupd, ztdbt, total_fd, total_fu, ztdn);
+}
+// inatm coldry/wkl arithmetic: one thread per layer.
+// ---------------------------------------------------------------------------
+
+static inline void rsw_inatm_layers_body(int L, int nlayers, real grav,
+                      real avogad,
+                      device const real* plev,     // (nlayers+1)
+                      device const real* h2ovmr,
+                      device const real* co2vmr,
+                      device const real* o3vmr,
+                      device const real* n2ovmr,
+                      device const real* ch4vmr,
+                      device const real* o2vmr,
+                      device real* pdp, device real* coldry, device real* wkl)  // wkl (MXMOL, nl) F
+{
+    const real amd = 28.9660f;
+    const real amw = 18.0160f;
+    real w1 = h2ovmr[L];
+    pdp[L] = SU(plev[L], plev[L + 1]);
+    wkl[0 + RSW_MXMOL * L] = w1;
+    wkl[1 + RSW_MXMOL * L] = co2vmr[L];
+    wkl[2 + RSW_MXMOL * L] = o3vmr[L];
+    wkl[3 + RSW_MXMOL * L] = n2ovmr[L];
+    wkl[5 + RSW_MXMOL * L] = ch4vmr[L];
+    wkl[6 + RSW_MXMOL * L] = o2vmr[L];
+    real amm = AD(MU(SU(1.0f, w1), amd), MU(w1, amw));
+    coldry[L] = DV(MU(MU(SU(plev[L], plev[L + 1]), 1.0e3f), avogad),
+                   MU(MU(MU(1.0e2f, grav), amm), AD(1.0f, w1)));
+    for (int imol = 0; imol < RSW_NMOL; ++imol)
+        wkl[imol + RSW_MXMOL * L] = MU(coldry[L], wkl[imol + RSW_MXMOL * L]);
+}
+// Final flux/heating assembly of rrtmg_sw: single block, thread per level.
+static inline void rsw_post_body(int i, int nlayers, real heatfac,
+              device const real* pdp,
+              device const real* pbbfu, device const real* pbbfd,
+              device const real* pbbcu, device const real* pbbcd,
+              device real* swhr, device real* swhrc)
+{
+    if (i == nlayers - 1) {
+        swhr[i] = 0.0f;
+        swhrc[i] = 0.0f;
+        return;
+    }
+    real swnflxc0 = SU(pbbcd[i], pbbcu[i]);
+    real swnflxc1 = SU(pbbcd[i + 1], pbbcu[i + 1]);
+    real swnflx0 = SU(pbbfd[i], pbbfu[i]);
+    real swnflx1 = SU(pbbfd[i + 1], pbbfu[i + 1]);
+    real zdpgcp = DV(heatfac, pdp[i]);
+    swhrc[i] = MU(SU(swnflxc1, swnflxc0), zdpgcp);
+    swhr[i] = MU(SU(swnflx1, swnflx0), zdpgcp);
+}
+
+#endif

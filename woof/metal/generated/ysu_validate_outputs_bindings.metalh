@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout 1d9fa1c67f18ae94a1e44c0744d10b8993d66f3e98540af4e9aec0b379755482.
+struct YsuValidateOutputsResources {
+    device const float *du [[id(0)]];
+    device const float *dv [[id(1)]];
+    device const float *dtheta [[id(2)]];
+    device const float *dqv [[id(3)]];
+    device const float *dqc [[id(4)]];
+    device const float *dqi [[id(5)]];
+    device const float *exch_h [[id(6)]];
+    device const float *exch_m [[id(7)]];
+    device const float *hpbl [[id(8)]];
+    device const float *wstar [[id(9)]];
+    device const float *delta [[id(10)]];
+    device const float *topdown_radsum [[id(11)]];
+    device const float *wstar3_2 [[id(12)]];
+    device uint *status [[id(13)]];
+};
+struct YsuValidateOutputsParams {
+    int nfloat;
+    int ny;
+    int nx;
+    int ncol;
+    int nz;
+};
+static_assert(sizeof(YsuValidateOutputsParams) == 20, "ysu_validate_outputs parameter ABI size changed");

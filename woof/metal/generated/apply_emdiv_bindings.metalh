@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout 74fdb7efaca314afa2180a45c075cf148014de688b253f17a0a9b4a234626af7.
+struct ApplyEmdivResources {
+    device float *u_pp [[id(0)]];
+    device float *v_pp [[id(1)]];
+    device const float *mudf [[id(2)]];
+    device const float *mu_pp [[id(3)]];
+    device float *mu_prev [[id(4)]];
+    device const float *c1h [[id(5)]];
+    device const float *msfu [[id(6)]];
+    device const float *msfv [[id(7)]];
+};
+struct ApplyEmdivParams {
+    float xscale;
+    float yscale;
+    int has_msf;
+    int boundary_x;
+    int boundary_y;
+    int specified;
+    int spec_zone;
+    int save_mu;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ApplyEmdivParams) == 44, "apply_emdiv parameter ABI size changed");

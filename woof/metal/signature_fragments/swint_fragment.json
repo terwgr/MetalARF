@@ -1,0 +1,370 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/swint.cu",
+      "cuda_symbol": "swint_coszen_loc",
+      "layout_version": 1,
+      "module": "swint_fragment",
+      "name": "swint_coszen_loc_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "julian",
+          "float32"
+        ],
+        [
+          "xtime",
+          "float32"
+        ],
+        [
+          "gmt",
+          "float32"
+        ],
+        [
+          "degrad",
+          "float32"
+        ],
+        [
+          "dpd",
+          "float32"
+        ]
+      ],
+      "resources": [
+        [
+          "latitude",
+          "float32",
+          "read"
+        ],
+        [
+          "longitude",
+          "float32",
+          "read"
+        ],
+        [
+          "coszen_loc",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "latitude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "longitude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coszen_loc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/swint_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/swint.cu",
+      "cuda_symbol": "swint_update",
+      "layout_version": 1,
+      "module": "swint_fragment",
+      "name": "swint_update_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "coszen",
+          "float32",
+          "read"
+        ],
+        [
+          "coszen_loc",
+          "float32",
+          "read"
+        ],
+        [
+          "swddir",
+          "float32",
+          "read"
+        ],
+        [
+          "swdown",
+          "float32",
+          "read"
+        ],
+        [
+          "swddir_ref",
+          "float32",
+          "read_write"
+        ],
+        [
+          "bb",
+          "float32",
+          "read_write"
+        ],
+        [
+          "bx",
+          "float32",
+          "read_write"
+        ],
+        [
+          "swdown_ref",
+          "float32",
+          "read_write"
+        ],
+        [
+          "gg",
+          "float32",
+          "read_write"
+        ],
+        [
+          "gx",
+          "float32",
+          "read_write"
+        ],
+        [
+          "coszen_ref",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "coszen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coszen_loc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swddir": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swdown": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swddir_ref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swdown_ref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coszen_ref": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/swint_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/swint.cu",
+      "cuda_symbol": "swint_interp",
+      "layout_version": 1,
+      "module": "swint_fragment",
+      "name": "swint_interp_fragment",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "coszen_ref",
+          "float32",
+          "read"
+        ],
+        [
+          "coszen_loc",
+          "float32",
+          "read"
+        ],
+        [
+          "swddir_ref",
+          "float32",
+          "read"
+        ],
+        [
+          "bb",
+          "float32",
+          "read"
+        ],
+        [
+          "bx",
+          "float32",
+          "read"
+        ],
+        [
+          "swdown_ref",
+          "float32",
+          "read"
+        ],
+        [
+          "gg",
+          "float32",
+          "read"
+        ],
+        [
+          "gx",
+          "float32",
+          "read"
+        ],
+        [
+          "albedo",
+          "float32",
+          "read"
+        ],
+        [
+          "swdown",
+          "float32",
+          "read_write"
+        ],
+        [
+          "swddir",
+          "float32",
+          "read_write"
+        ],
+        [
+          "swddni",
+          "float32",
+          "read_write"
+        ],
+        [
+          "swddif",
+          "float32",
+          "read_write"
+        ],
+        [
+          "gsw",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "coszen_ref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coszen_loc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swddir_ref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swdown_ref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "albedo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swdown": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swddir": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swddni": [
+          [
+            "any_1d"
+          ]
+        ],
+        "swddif": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gsw": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/swint_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

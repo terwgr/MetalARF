@@ -1,0 +1,8 @@
+{
+  "active_signature_fragment": "ysu_column.json",
+  "kernels": [],
+  "blocked_exports": {
+    "ysu_column_bep": "BEP/BEM forcing fields and its distinct momentum solve are not implemented.",
+    "ysu_column_topo": "The topo-wind arm and its binary64 tanh conversion are not implemented."
+  }
+}

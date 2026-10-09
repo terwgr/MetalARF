@@ -1,0 +1,378 @@
+{
+  "kernels": [
+    {
+      "name": "global_insitu_ledger_columns_fragment",
+      "module": "global_insitu_ledger_fragment",
+      "source": "woof/metal/shaders/global_insitu_ledger_fragment.metal",
+      "cuda_source": "woof/globe/insitu/budgets.py",
+      "cuda_symbol": "ledger_row columns",
+      "resources": [
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "temperature",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "u",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "v",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "geopotential",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ps",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qv",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qc",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qr",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qi",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qs",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "qg",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "surface_water",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "soil_fraction",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "land_fraction",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "native_canopy",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "native_snow",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "outflow",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "surface_geopotential",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "a_coslat",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "planetary",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "weights",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "soil_thickness",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "columns",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "geopotential": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ps": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface_water": [
+          [
+            "any_1d"
+          ]
+        ],
+        "soil_fraction": [
+          [
+            "any_1d"
+          ]
+        ],
+        "land_fraction": [
+          [
+            "any_1d"
+          ]
+        ],
+        "native_canopy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "native_snow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "outflow": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface_geopotential": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_coslat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "planetary": [
+          [
+            "any_1d"
+          ]
+        ],
+        "weights": [
+          [
+            "any_1d"
+          ]
+        ],
+        "soil_thickness": [
+          [
+            "any_1d"
+          ]
+        ],
+        "columns": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nlat",
+          "int32"
+        ],
+        [
+          "nlon",
+          "int32"
+        ],
+        [
+          "nsoil",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_insitu_ledger_reduce_fragment",
+      "module": "global_insitu_ledger_fragment",
+      "source": "woof/metal/shaders/global_insitu_ledger_fragment.metal",
+      "cuda_source": "woof/globe/insitu/budgets.py",
+      "cuda_symbol": "ledger_row reduce",
+      "resources": [
+        [
+          "columns",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "partial",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "columns": [
+          [
+            "any_1d"
+          ]
+        ],
+        "partial": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "nterm",
+          "int32"
+        ],
+        [
+          "nchunk",
+          "int32"
+        ],
+        [
+          "chunk_size",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_insitu_ledger_finalize_fragment",
+      "module": "global_insitu_ledger_fragment",
+      "source": "woof/metal/shaders/global_insitu_ledger_fragment.metal",
+      "cuda_source": "woof/globe/insitu/budgets.py",
+      "cuda_symbol": "ledger_row finalize",
+      "resources": [
+        [
+          "partial",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "row",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "partial": [
+          [
+            "any_1d"
+          ]
+        ],
+        "row": [
+          [
+            35
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nterm",
+          "int32"
+        ],
+        [
+          "nchunk",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

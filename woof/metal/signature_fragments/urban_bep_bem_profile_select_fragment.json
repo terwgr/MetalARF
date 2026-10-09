@@ -1,0 +1,29 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_bem_profile_select_fragment",
+      "module": "urban_bep_bem_profile_select_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_profile_select_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_column: ss_urb class selection by utype_urb2d",
+      "resources": [
+        ["active_cols", "int32", "read"],
+        ["utype", "int32", "read"],
+        ["ss_u", "float", "read"],
+        ["ss_urb", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]],
+        "utype": [["ncol"]],
+        "ss_u": [["nurbm", 19]],
+        "ss_urb": [["ncol", 18]],
+        "error": [["ncol"]]
+      },
+      "parameters": [["ncol", "int32"], ["nurbm", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout ba99fd6b9f59ca3e5e1513fd8d218464d47ab8d235efb3c18a1f63e84e06b301.
+struct GlobalVerticalContinuityFragmentResources {
+    device const ulong *pressure_tendency [[id(0)]];
+    device const ulong *divergence_mass [[id(1)]];
+    device ulong *omega [[id(2)]];
+    device ulong *residual [[id(3)]];
+};
+struct GlobalVerticalContinuityFragmentParams {
+    int count;
+    int nlevel;
+};
+static_assert(sizeof(GlobalVerticalContinuityFragmentParams) == 8, "global_vertical_continuity_fragment parameter ABI size changed");

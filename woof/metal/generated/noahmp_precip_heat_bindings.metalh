@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout 275b4543621c65939a0c4dab6c19315fe1fac1b343385bc2f8946042898edea7.
+struct NoahmpPrecipHeatResources {
+    device const float *x [[id(0)]];
+    device const int *ix [[id(1)]];
+    device float *y [[id(2)]];
+};
+struct NoahmpPrecipHeatParams {
+    int ncase;
+};
+static_assert(sizeof(NoahmpPrecipHeatParams) == 4, "noahmp_precip_heat parameter ABI size changed");

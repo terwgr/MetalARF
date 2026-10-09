@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout 9203ec54ffffe4a9f95fca1bf31c82993ea191ce4d41278a4882b20b2bf98181.
+struct GlobalSurfacePressureTendencyFragmentResources {
+    device const ulong *delta_b [[id(0)]];
+    device const ulong *surface_tendency [[id(1)]];
+    device const ulong *surface_pressure [[id(2)]];
+    device ulong *layer_tendency [[id(3)]];
+    device ulong *log_surface_tendency [[id(4)]];
+};
+struct GlobalSurfacePressureTendencyFragmentParams {
+    int count;
+    int nlevel;
+};
+static_assert(sizeof(GlobalSurfacePressureTendencyFragmentParams) == 8, "global_surface_pressure_tendency_fragment parameter ABI size changed");

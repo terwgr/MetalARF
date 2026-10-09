@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 4d0de60170e6b3bb56a08174cdfa80e03ad7d21f70d7520b385e289e5acf8f8e.
+struct NoahmpVegefluxFluxResources {
+    device const float *in [[id(0)]];
+    device const float *pin [[id(1)]];
+    device const int *isnow [[id(2)]];
+    device const float *dzsnso [[id(3)]];
+    device const float *stc [[id(4)]];
+    device const float *df [[id(5)]];
+    device float *out [[id(6)]];
+};
+struct NoahmpVegefluxFluxParams {
+    int n;
+};
+static_assert(sizeof(NoahmpVegefluxFluxParams) == 4, "noahmp_vegeflux_flux parameter ABI size changed");

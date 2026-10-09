@@ -1,0 +1,61 @@
+{
+  "kernels": [
+    {
+      "name": "hex_vertical_velocity_tendency_fragment",
+      "module": "hex_vertical_velocity_tendency_fragment",
+      "source": "woof/metal/shaders/hex_vertical_velocity_tendency_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_vertical_momentum_transport",
+      "resources": [
+        ["normal_velocity", "float", "read"],
+        ["rho_w", "float", "read"],
+        ["rho_u", "float", "read"],
+        ["edges_on_cell", "int32", "read"],
+        ["n_edges_on_cell", "int32", "read"],
+        ["edge_signs", "float", "read"],
+        ["adv_coefs", "float", "read"],
+        ["adv_coefs_3rd", "float", "read"],
+        ["adv_cells_for_edge", "int32", "read"],
+        ["n_adv_cells_for_edge", "int32", "read"],
+        ["fzm", "float", "read"],
+        ["fzp", "float", "read"],
+        ["rdzu", "float", "read"],
+        ["area_cell", "float", "read"],
+        ["inv_area_cell", "float", "read"],
+        ["skip_cell", "int32", "read"],
+        ["tendency", "float", "read_write"]
+      ],
+      "shapes": {
+        "normal_velocity": [["any_1d"]],
+        "rho_w": [["any_1d"]],
+        "rho_u": [["any_1d"]],
+        "edges_on_cell": [["any_1d"]],
+        "n_edges_on_cell": [["any_1d"]],
+        "edge_signs": [["any_1d"]],
+        "adv_coefs": [["any_1d"]],
+        "adv_coefs_3rd": [["any_1d"]],
+        "adv_cells_for_edge": [["any_1d"]],
+        "n_adv_cells_for_edge": [["any_1d"]],
+        "fzm": [["any_1d"]],
+        "fzp": [["any_1d"]],
+        "rdzu": [["any_1d"]],
+        "area_cell": [["any_1d"]],
+        "inv_area_cell": [["any_1d"]],
+        "skip_cell": [["any_1d"]],
+        "tendency": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["nedges", "int32"],
+        ["max_edges", "int32"],
+        ["max_adv", "int32"],
+        ["coefficient", "float32"],
+        ["use_inverse_area", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

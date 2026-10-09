@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout e9489fee430e9bc9afbfc50bea2d1b1da254436e816b821bf886be676d7fbe7c.
+struct HexMassFluxDivergenceResources {
+    device const float *rho_u [[id(0)]];
+    device const int *edge_indices [[id(1)]];
+    device const int *edge_counts [[id(2)]];
+    device const float *edge_signs [[id(3)]];
+    device const float *dv_edge [[id(4)]];
+    device const float *area_cell [[id(5)]];
+    device const float *inv_area_cell [[id(6)]];
+    device float *divergence [[id(7)]];
+};
+struct HexMassFluxDivergenceParams {
+    int nlev;
+    int ncells;
+    int nedges;
+    int max_edges;
+    int use_inverse;
+};
+static_assert(sizeof(HexMassFluxDivergenceParams) == 20, "hex_mass_flux_divergence parameter ABI size changed");

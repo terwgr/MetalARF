@@ -1,0 +1,38 @@
+{
+  "kernels": [
+    {
+      "name": "held_heating",
+      "module": "held_heating",
+      "source": "woof/metal/shaders/held_heating.metal",
+      "cuda_source": "woof/core/kernels/held_heating.cu",
+      "cuda_symbol": "add_held_heating",
+      "resources": [
+        ["rth", "float", "read_write"],
+        ["hd", "float", "read"],
+        ["mub", "float", "read"],
+        ["mup", "float", "read"],
+        ["c1", "float", "read"],
+        ["c2", "float", "read"],
+        ["msft", "float", "read"]
+      ],
+      "shapes": {
+        "rth": [["nz", "ny", "nx"]],
+        "hd": [["nz", "ny", "nx"]],
+        "mub": [["ny", "nx"]],
+        "mup": [["ny", "nx"]],
+        "c1": [["nz"]],
+        "c2": [["nz"]],
+        "msft": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["has_msf", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

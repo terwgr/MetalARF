@@ -1,0 +1,28 @@
+// Generated from kernel_signatures.json; layout 2f401159630992d1361f3a6e1931f19259915e509668b4082b4abad64a911fda.
+struct PdRenormApplyResources {
+    device const float *q0 [[id(0)]];
+    device const float *mu_old [[id(1)]];
+    device const float *fxl [[id(2)]];
+    device const float *fxc [[id(3)]];
+    device const float *fyl [[id(4)]];
+    device const float *fyc [[id(5)]];
+    device const float *fzl [[id(6)]];
+    device const float *fzc [[id(7)]];
+    device const float *c1h [[id(8)]];
+    device const float *c2h [[id(9)]];
+    device const float *rdnw [[id(10)]];
+    device const float *msft [[id(11)]];
+    device float *tend [[id(12)]];
+};
+struct PdRenormApplyParams {
+    float dx_inv;
+    float dy_inv;
+    float dt;
+    int has_msf;
+    int open_x;
+    int open_y;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(PdRenormApplyParams) == 36, "pd_renorm_apply parameter ABI size changed");

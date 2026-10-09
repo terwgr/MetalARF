@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 32aa80459a0515726e3e5bdeee403549fdf59021fce446eba05568993853129e.
+struct ThompsonEffectiveRadiusResources {
+    device const float *temperature [[id(0)]];
+    device const float *pressure [[id(1)]];
+    device const float *qv [[id(2)]];
+    device const float *qc [[id(3)]];
+    device const float *qi [[id(4)]];
+    device const float *ni [[id(5)]];
+    device const float *qs [[id(6)]];
+    device float *effc [[id(7)]];
+    device float *effi [[id(8)]];
+    device float *effs [[id(9)]];
+};
+struct ThompsonEffectiveRadiusParams {
+    int n;
+};
+static_assert(sizeof(ThompsonEffectiveRadiusParams) == 4, "thompson_effective_radius parameter ABI size changed");

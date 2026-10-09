@@ -1,0 +1,1110 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_bem_green_roof_fragment",
+      "module": "urban_bep_bem_green_roof_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_green_roof_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_roof_temp_veg (2519-2591), bb_soil_temp_veg (3866-3958), bb_soil_moist (3779-3867)",
+      "resources": [
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "utype",
+          "int32",
+          "read"
+        ],
+        [
+          "nzurban",
+          "int32",
+          "read"
+        ],
+        [
+          "class_float",
+          "float",
+          "read"
+        ],
+        [
+          "class_int",
+          "int32",
+          "read"
+        ],
+        [
+          "hour_angle",
+          "float",
+          "read"
+        ],
+        [
+          "interp",
+          "float",
+          "read"
+        ],
+        [
+          "alar",
+          "float",
+          "read"
+        ],
+        [
+          "csr",
+          "float",
+          "read"
+        ],
+        [
+          "dzr",
+          "float",
+          "read"
+        ],
+        [
+          "tr",
+          "float",
+          "read"
+        ],
+        [
+          "trv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "drain",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfrv",
+          "float",
+          "read"
+        ],
+        [
+          "lfrv",
+          "float",
+          "read"
+        ],
+        [
+          "gfr",
+          "float",
+          "read_write"
+        ],
+        [
+          "tpv",
+          "float",
+          "read"
+        ],
+        [
+          "rainbl",
+          "float",
+          "read"
+        ],
+        [
+          "swdown",
+          "float",
+          "read"
+        ],
+        [
+          "glw",
+          "float",
+          "read"
+        ],
+        [
+          "ptrv",
+          "float",
+          "read_write"
+        ],
+        [
+          "hfgroof",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "utype": [
+          [
+            "ncol"
+          ]
+        ],
+        "nzurban": [
+          [
+            "ncol"
+          ]
+        ],
+        "class_float": [
+          [
+            "any_1d"
+          ]
+        ],
+        "class_int": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hour_angle": [
+          [
+            "ncol"
+          ]
+        ],
+        "interp": [
+          [
+            "ncol",
+            7,
+            18
+          ]
+        ],
+        "alar": [
+          [
+            "ncol",
+            11
+          ]
+        ],
+        "csr": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "dzr": [
+          [
+            "ncol",
+            10
+          ]
+        ],
+        "tr": [
+          [
+            "ncol",
+            10,
+            18,
+            2
+          ]
+        ],
+        "trv": [
+          [
+            "ncol",
+            10,
+            18,
+            2
+          ]
+        ],
+        "qr": [
+          [
+            "ncol",
+            10,
+            18,
+            2
+          ]
+        ],
+        "drain": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "sfrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "lfrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "gfr": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "tpv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "rainbl": [
+          [
+            "ncol"
+          ]
+        ],
+        "swdown": [
+          [
+            "ncol"
+          ]
+        ],
+        "glw": [
+          [
+            "ncol"
+          ]
+        ],
+        "ptrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "hfgroof": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "error": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "green_roof",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32"
+      ]
+    },
+    {
+      "name": "urban_bep_bem_green_roof_flux_pack_fragment",
+      "module": "urban_bep_bem_green_roof_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_green_roof_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_buildings (2796-2809), per-column roof input packing",
+      "resources": [
+        [
+          "utype",
+          "int32",
+          "read"
+        ],
+        [
+          "class_float",
+          "float",
+          "read"
+        ],
+        [
+          "class_int",
+          "int32",
+          "read"
+        ],
+        [
+          "interp",
+          "float",
+          "read"
+        ],
+        [
+          "ptrv",
+          "float",
+          "read"
+        ],
+        [
+          "swdown",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "sfrv",
+          "float",
+          "read"
+        ],
+        [
+          "lfrv",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read_write"
+        ],
+        [
+          "z0",
+          "float",
+          "read_write"
+        ],
+        [
+          "ua",
+          "float",
+          "read_write"
+        ],
+        [
+          "va",
+          "float",
+          "read_write"
+        ],
+        [
+          "pt",
+          "float",
+          "read_write"
+        ],
+        [
+          "pt0",
+          "float",
+          "read_write"
+        ],
+        [
+          "ptg",
+          "float",
+          "read_write"
+        ],
+        [
+          "da",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "pr",
+          "float",
+          "read_write"
+        ],
+        [
+          "rsg",
+          "float",
+          "read_write"
+        ],
+        [
+          "pv_frac_roof",
+          "float",
+          "read_write"
+        ],
+        [
+          "gr_type",
+          "int32",
+          "read_write"
+        ],
+        [
+          "qr_rows",
+          "float",
+          "read_write"
+        ],
+        [
+          "sf",
+          "float",
+          "read_write"
+        ],
+        [
+          "lf",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "utype": [
+          [
+            "ncol"
+          ]
+        ],
+        "class_float": [
+          [
+            "any_1d"
+          ]
+        ],
+        "class_int": [
+          [
+            "any_1d"
+          ]
+        ],
+        "interp": [
+          [
+            "ncol",
+            7,
+            18
+          ]
+        ],
+        "ptrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "swdown": [
+          [
+            "ncol"
+          ]
+        ],
+        "qr": [
+          [
+            "ncol",
+            10,
+            18,
+            2
+          ]
+        ],
+        "sfrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "lfrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "dz": [
+          [
+            "nitem"
+          ]
+        ],
+        "z0": [
+          [
+            "nitem"
+          ]
+        ],
+        "ua": [
+          [
+            "nitem"
+          ]
+        ],
+        "va": [
+          [
+            "nitem"
+          ]
+        ],
+        "pt": [
+          [
+            "nitem"
+          ]
+        ],
+        "pt0": [
+          [
+            "nitem"
+          ]
+        ],
+        "ptg": [
+          [
+            "nitem"
+          ]
+        ],
+        "da": [
+          [
+            "nitem"
+          ]
+        ],
+        "qv": [
+          [
+            "nitem"
+          ]
+        ],
+        "pr": [
+          [
+            "nitem"
+          ]
+        ],
+        "rsg": [
+          [
+            "nitem"
+          ]
+        ],
+        "pv_frac_roof": [
+          [
+            "nitem"
+          ]
+        ],
+        "gr_type": [
+          [
+            "nitem"
+          ]
+        ],
+        "qr_rows": [
+          [
+            "nitem",
+            10
+          ]
+        ],
+        "sf": [
+          [
+            "nitem"
+          ]
+        ],
+        "lf": [
+          [
+            "nitem"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nitem",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "dz_u",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32"
+      ]
+    },
+    {
+      "name": "urban_bep_bem_green_roof_flux_merge_fragment",
+      "module": "urban_bep_bem_green_roof_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_green_roof_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_buildings (2796-2809), merge active roof levels only",
+      "resources": [
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "nzurban",
+          "int32",
+          "read"
+        ],
+        [
+          "utype",
+          "int32",
+          "read"
+        ],
+        [
+          "class_float",
+          "float",
+          "read"
+        ],
+        [
+          "ss",
+          "float",
+          "read"
+        ],
+        [
+          "sf",
+          "float",
+          "read"
+        ],
+        [
+          "lf",
+          "float",
+          "read"
+        ],
+        [
+          "sfrv",
+          "float",
+          "read_write"
+        ],
+        [
+          "lfrv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "nzurban": [
+          [
+            "ncol"
+          ]
+        ],
+        "utype": [
+          [
+            "ncol"
+          ]
+        ],
+        "class_float": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ss": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "sf": [
+          [
+            "nitem"
+          ]
+        ],
+        "lf": [
+          [
+            "nitem"
+          ]
+        ],
+        "sfrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "lfrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nitem",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "green_roof",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32"
+      ]
+    },
+    {
+      "name": "urban_bep_bem_green_roof_pv_map_fragment",
+      "module": "urban_bep_bem_green_roof_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_green_roof_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_hsfluxpv (823-903), bb_bep1d sfrpv level mapping (1801)",
+      "resources": [
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "utype",
+          "int32",
+          "read"
+        ],
+        [
+          "building_nlev",
+          "int32",
+          "read"
+        ],
+        [
+          "class_float",
+          "float",
+          "read"
+        ],
+        [
+          "interp",
+          "float",
+          "read"
+        ],
+        [
+          "pv_hspv",
+          "float",
+          "read"
+        ],
+        [
+          "flat_thb",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfrpv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "utype": [
+          [
+            "ncol"
+          ]
+        ],
+        "building_nlev": [
+          [
+            "ncol",
+            15
+          ]
+        ],
+        "class_float": [
+          [
+            "any_1d"
+          ]
+        ],
+        "interp": [
+          [
+            "ncol",
+            7,
+            18
+          ]
+        ],
+        "pv_hspv": [
+          [
+            "ncol",
+            15
+          ]
+        ],
+        "flat_thb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "sfrpv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "cp_u",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32"
+      ]
+    },
+    {
+      "name": "urban_bep_bem_green_roof_tendency_fragment",
+      "module": "urban_bep_bem_green_roof_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_green_roof_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_buildings (2796-2809), green-roof/PV flux blend",
+      "resources": [
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "utype",
+          "int32",
+          "read"
+        ],
+        [
+          "class_float",
+          "float",
+          "read"
+        ],
+        [
+          "ss",
+          "float",
+          "read"
+        ],
+        [
+          "interp",
+          "float",
+          "read"
+        ],
+        [
+          "sfrv",
+          "float",
+          "read"
+        ],
+        [
+          "lfrv",
+          "float",
+          "read"
+        ],
+        [
+          "sfrpv",
+          "float",
+          "read"
+        ],
+        [
+          "flat_uhb",
+          "float",
+          "read"
+        ],
+        [
+          "flat_vhb",
+          "float",
+          "read"
+        ],
+        [
+          "flat_thb",
+          "float",
+          "read"
+        ],
+        [
+          "flat_ehb",
+          "float",
+          "read"
+        ],
+        [
+          "flat_qhb",
+          "float",
+          "read"
+        ],
+        [
+          "roof_uhb",
+          "float",
+          "read"
+        ],
+        [
+          "roof_vhb",
+          "float",
+          "read"
+        ],
+        [
+          "roof_ehb",
+          "float",
+          "read"
+        ],
+        [
+          "uhb",
+          "float",
+          "read_write"
+        ],
+        [
+          "vhb",
+          "float",
+          "read_write"
+        ],
+        [
+          "thb",
+          "float",
+          "read_write"
+        ],
+        [
+          "ehb",
+          "float",
+          "read_write"
+        ],
+        [
+          "qhb_flat",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "utype": [
+          [
+            "ncol"
+          ]
+        ],
+        "class_float": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ss": [
+          [
+            "ncol",
+            19
+          ]
+        ],
+        "interp": [
+          [
+            "ncol",
+            7,
+            18
+          ]
+        ],
+        "sfrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "lfrv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "sfrpv": [
+          [
+            "ncol",
+            18,
+            2
+          ]
+        ],
+        "flat_uhb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "flat_vhb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "flat_thb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "flat_ehb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "flat_qhb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "roof_uhb": [
+          [
+            "nitem"
+          ]
+        ],
+        "roof_vhb": [
+          [
+            "nitem"
+          ]
+        ],
+        "roof_ehb": [
+          [
+            "nitem"
+          ]
+        ],
+        "uhb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "vhb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "thb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "ehb": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ],
+        "qhb_flat": [
+          [
+            "ncol",
+            2,
+            18
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nitem",
+          "int32"
+        ],
+        [
+          "green_roof",
+          "int32"
+        ],
+        [
+          "cp_u",
+          "float32"
+        ],
+        [
+          "latent",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft32"
+      ]
+    }
+  ]
+}

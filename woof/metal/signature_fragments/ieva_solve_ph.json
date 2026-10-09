@@ -1,0 +1,36 @@
+{
+  "kernels": [
+    {
+      "name": "ieva_solve_ph",
+      "module": "ieva_solve_family",
+      "source": "woof/metal/shaders/ieva_solve_family.metal",
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_ph",
+      "resources": [
+        ["tend", "float", "read_write"], ["ph_old", "float", "read"],
+        ["phb", "float", "read"], ["rom", "float", "read"],
+        ["c1f", "float", "read"], ["c2f", "float", "read"],
+        ["mut", "float", "read"], ["rdnw", "float", "read"],
+        ["msft", "float", "read"]
+      ],
+      "shapes": {
+        "tend": [["nz", "ny", "nx"]],
+        "ph_old": [["nz+1", "ny", "nx"]],
+        "phb": [["nz+1"], ["nz+1", "ny", "nx"]],
+        "rom": [["nz+1", "ny", "nx"]],
+        "c1f": [["nz"]], "c2f": [["nz"]],
+        "mut": [["ny", "nx"]], "rdnw": [["nz"]],
+        "msft": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["base3d", "int32"], ["dt", "float32"],
+        ["one", "float32"], ["zero", "float32"],
+        ["half_val", "float32"], ["has_msf", "int32"],
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft64-rn-bit-ops", "wrf-exact"]
+    }
+  ]
+}

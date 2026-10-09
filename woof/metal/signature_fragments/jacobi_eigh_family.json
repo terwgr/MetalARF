@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "name": "jacobi_eigh_batched",
+      "module": "jacobi_eigh_family",
+      "source": "woof/metal/shaders/jacobi_eigh_family.metal",
+      "cuda_source": "woof/core/kernels/jacobi_eigh.cu",
+      "cuda_symbol": "jacobi_eigh_batched",
+      "resources": [
+        ["a_in", "float", "read"],
+        ["w_out", "float", "read_write"],
+        ["v_out", "float", "read_write"],
+        ["status_out", "float", "read_write"]
+      ],
+      "shapes": {
+        "a_in": [["n_matrices", "k", "k"]],
+        "w_out": [["n_matrices", "k"]],
+        "v_out": [["n_matrices", "k", "k"]],
+        "status_out": [["n_matrices"]]
+      },
+      "parameters": [
+        ["n_matrices", "int32"],
+        ["k", "int32"],
+        ["m", "int32"],
+        ["tpb", "int32"],
+        ["sweep_cap", "int32"]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

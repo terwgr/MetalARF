@@ -1,0 +1,23 @@
+// Generated from kernel_signatures.json; layout f2bd9835870679c5f1381ffb5f50836829408ea371e2bf98365d5468847d8e9f.
+struct IevaSolveSResources {
+    device float *tend [[id(0)]];
+    device const float *pert [[id(1)]];
+    device const float *base [[id(2)]];
+    device const float *rom [[id(3)]];
+    device const float *c1h [[id(4)]];
+    device const float *c2h [[id(5)]];
+    device const float *mut_old [[id(6)]];
+    device const float *mut_new [[id(7)]];
+    device const float *rdnw [[id(8)]];
+};
+struct IevaSolveSParams {
+    int base_mode;
+    float shift;
+    float dt;
+    float one;
+    float zero;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(IevaSolveSParams) == 32, "ieva_solve_s parameter ABI size changed");

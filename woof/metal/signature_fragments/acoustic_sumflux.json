@@ -1,0 +1,104 @@
+{
+  "kernels": [
+    {
+      "name": "zero_sumflux",
+      "module": "acoustic",
+      "source": "woof/metal/shaders/acoustic_sumflux.metal",
+      "cuda_source": "woof/core/kernels/acoustic.cu",
+      "cuda_symbol": "zero_sumflux",
+      "resources": [
+        ["ru_m", "float", "read_write"],
+        ["rv_m", "float", "read_write"],
+        ["ww_m", "float", "read_write"]
+      ],
+      "shapes": {
+        "ru_m": [["nz", "ny", "nx+1"]],
+        "rv_m": [["nz", "ny+1", "nx"]],
+        "ww_m": [["nz+1", "ny", "nx"]]
+      },
+      "parameters": [
+        ["nx", "int32"],
+        ["ny", "int32"],
+        ["nz", "int32"],
+        ["nu", "int32"],
+        ["nv", "int32"],
+        ["nw", "int32"],
+        ["nmax", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "accumulate_sumflux",
+      "module": "acoustic",
+      "source": "woof/metal/shaders/acoustic_sumflux.metal",
+      "cuda_source": "woof/core/kernels/acoustic.cu",
+      "cuda_symbol": "accumulate_sumflux",
+      "resources": [
+        ["ru_m", "float", "read_write"],
+        ["rv_m", "float", "read_write"],
+        ["ww_m", "float", "read_write"],
+        ["ru", "float", "read"],
+        ["rv", "float", "read"],
+        ["ww", "float", "read"]
+      ],
+      "shapes": {
+        "ru_m": [["nz", "ny", "nx+1"]],
+        "rv_m": [["nz", "ny+1", "nx"]],
+        "ww_m": [["nz+1", "ny", "nx"]],
+        "ru": [["nz", "ny", "nx+1"]],
+        "rv": [["nz", "ny+1", "nx"]],
+        "ww": [["nz+1", "ny", "nx"]]
+      },
+      "parameters": [
+        ["nx", "int32"],
+        ["ny", "int32"],
+        ["nz", "int32"],
+        ["nu", "int32"],
+        ["nv", "int32"],
+        ["nw", "int32"],
+        ["nmax", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "finish_sumflux",
+      "module": "acoustic",
+      "source": "woof/metal/shaders/acoustic_sumflux.metal",
+      "cuda_source": "woof/core/kernels/acoustic.cu",
+      "cuda_symbol": "finish_sumflux",
+      "resources": [
+        ["ru_m", "float", "read_write"],
+        ["rv_m", "float", "read_write"],
+        ["ww_m", "float", "read_write"],
+        ["ru", "float", "read"],
+        ["rv", "float", "read"],
+        ["ww", "float", "read"]
+      ],
+      "shapes": {
+        "ru_m": [["nz", "ny", "nx+1"]],
+        "rv_m": [["nz", "ny+1", "nx"]],
+        "ww_m": [["nz+1", "ny", "nx"]],
+        "ru": [["nz", "ny", "nx+1"]],
+        "rv": [["nz", "ny+1", "nx"]],
+        "ww": [["nz+1", "ny", "nx"]]
+      },
+      "parameters": [
+        ["nsub", "float32"],
+        ["nx", "int32"],
+        ["ny", "int32"],
+        ["nz", "int32"],
+        ["nu", "int32"],
+        ["nv", "int32"],
+        ["nw", "int32"],
+        ["nmax", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    }
+  ]
+}

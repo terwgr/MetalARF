@@ -1,0 +1,22 @@
+// Generated from kernel_signatures.json; layout 62ecc4a889fe2291d6eafa2daf8a75101e6d096c0025970ce679300dfcc2c23c.
+struct UrbanBemShortwaveFragmentResources {
+    device const float *pb [[id(0)]];
+    device const int *utype [[id(1)]];
+    device const int *class_int [[id(2)]];
+    device const float *class_float [[id(3)]];
+    device const int *nzu_class [[id(4)]];
+    device const float *fwg [[id(5)]];
+    device const float *fww [[id(6)]];
+    device const float *fgw [[id(7)]];
+    device const float *fsw [[id(8)]];
+    device const float *fsg [[id(9)]];
+    device float *rsw [[id(10)]];
+    device float *rsg [[id(11)]];
+    device const float *rsdif [[id(12)]];
+    device int *error [[id(13)]];
+};
+struct UrbanBemShortwaveFragmentParams {
+    int ncol;
+    int nurbm;
+};
+static_assert(sizeof(UrbanBemShortwaveFragmentParams) == 8, "urban_bem_shortwave_fragment parameter ABI size changed");

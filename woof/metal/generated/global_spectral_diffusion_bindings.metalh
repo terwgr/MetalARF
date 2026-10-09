@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout d0cdc58d9b32e010b2b078670d295bf161867a645b2cea04c9bab584c25ce2e9.
+struct GlobalSpectralDiffusionResources {
+    device const ulong *coefficients [[id(0)]];
+    device const ulong *factors [[id(1)]];
+    device ulong *output [[id(2)]];
+};
+struct GlobalSpectralDiffusionParams {
+    int truncation;
+    int coefficient_count;
+};
+static_assert(sizeof(GlobalSpectralDiffusionParams) == 8, "global_spectral_diffusion parameter ABI size changed");

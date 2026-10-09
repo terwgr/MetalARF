@@ -1,0 +1,559 @@
+"""Physics continuation state across a discrete nest relocation.
+
+THE DEFECT THIS PINS (user report, 2026-08-16: "when using kf it makes
+really weird artifacts" on moving domains): a relocation carries the
+restart layer's serialised STATE (:func:`relocatable_attrs`) and the
+land-surface continuation fields, but every driver-held per-column
+physics CONTINUATION array -- the KF NCA hold timers, the held cumulus
+rates, PRATEC/RAINCV, the RAINC/RAINNC precipitation accumulators, the
+W0AVG trigger history -- was re-initialised from cold on the whole
+child at every accepted move.  Convection died domain-wide at each
+move, every column became simultaneously re-eligible, and the
+accumulated-precipitation products reset to zero mid-run.
+
+The contract under test: the same registry that makes this state
+restart-serialised (``woof.io.restart.SERIALIZED_SCRATCH_SLOTS`` and
+``CUMULUS_CALLABLE_ARRAYS``) drives the relocation carry, so a slot
+added to the restart registry tomorrow moves across relocations the
+day it is added.  The overlap shifts in index space exactly like the
+serialised state; the freshly exposed strip takes each slot's
+documented COLD value (cu_nca = -100 so strip columns are eligible,
+everything else 0), because new ground has no convection memory.
+
+Instrument rule: every shift assertion is paired with a control that
+fails under a wrong (or missing) shift.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+from woof.core.nest_relocation import Placement, plan_relocation
+
+F32 = np.float32
+RATIO = 3
+NX = NY = 12
+NZ = 4
+
+
+def _plan(di=2, dj=1):
+    return plan_relocation(
+        placement_from=Placement(grid_id=2, i_parent_start=10,
+                                 j_parent_start=10),
+        placement_to=Placement(grid_id=2, i_parent_start=10 + di,
+                               j_parent_start=10 + dj, generation=1),
+        parent_grid_ratio=RATIO, child_nx=NX, child_ny=NY)
+
+
+def _distinct(shape, seed):
+    rng = np.random.default_rng(seed)
+    return rng.standard_normal(shape).astype(F32)
+
+
+class _ScratchState:
+    """A DomainState stand-in exposing the scratch-slot surface."""
+
+    def __init__(self, arrays=None):
+        self._scratch = dict(arrays or {})
+
+    def existing_scratch(self, slot):
+        return self._scratch.get(slot)
+
+    def scratch(self, shape, slot, dtype=None):
+        shape = tuple(shape)
+        buf = self._scratch.get(slot)
+        if buf is None:
+            buf = np.zeros(shape, dtype=np.dtype(dtype or np.float32))
+            self._scratch[slot] = buf
+        assert buf.shape == shape
+        return buf
+
+
+# ---------------------------------------------------------------------------
+# The inventory is the restart registry, not a hand list
+# ---------------------------------------------------------------------------
+
+def test_continuation_inventory_is_the_restart_registry():
+    from woof.core.physics_continuation import continuation_slots
+    from woof.io.restart import SERIALIZED_SCRATCH_SLOTS
+
+    assert set(continuation_slots()) == set(SERIALIZED_SCRATCH_SLOTS)
+
+
+def test_cold_values_cover_only_registered_slots():
+    from woof.core.physics_continuation import (
+        PHYSICS_CONTINUATION_COLD_VALUES, continuation_slots)
+
+    unknown = set(PHYSICS_CONTINUATION_COLD_VALUES) - set(
+        continuation_slots())
+    assert not unknown, unknown
+    # The one non-zero cold value is the KF eligibility sentinel.
+    assert PHYSICS_CONTINUATION_COLD_VALUES["cu_nca"] == -100.0
+
+
+# ---------------------------------------------------------------------------
+# Capture -> shift -> restore, both directions
+# ---------------------------------------------------------------------------
+
+def _outgoing():
+    state = _ScratchState({
+        "cu_nca": _distinct((NY, NX), 1),
+        "cu_pratec": _distinct((NY, NX), 2),
+        "cu_rainc": _distinct((NY, NX), 3),
+        "cu_rthcuten": _distinct((NZ, NY, NX), 4),
+        "mp_rainnc": _distinct((NY, NX), 5),
+        "up_heli_max": _distinct((NY, NX), 6),
+    })
+    w0avg = _distinct((NZ, NY, NX), 7)
+    driver = SimpleNamespace(cumulus_callable=SimpleNamespace(
+        w0avg=w0avg, _history_state=state, _history_time=123.0))
+    return state, driver
+
+
+def test_capture_shift_restore_moves_the_overlap_bitwise():
+    from woof.core.physics_continuation import (
+        capture_continuation, restore_continuation, shift_continuation)
+
+    state, driver = _outgoing()
+    plan = _plan(di=2, dj=1)
+    shift_i, shift_j = plan.shift_i, plan.shift_j
+
+    captured = capture_continuation(state, driver)
+    shifted = shift_continuation(captured, plan)
+
+    new_state = _ScratchState()
+    new_adapter = SimpleNamespace(w0avg=None, _history_state=None,
+                                  _history_time=None)
+    new_driver = SimpleNamespace(cumulus_callable=new_adapter)
+    receipt = restore_continuation(new_state, new_driver, shifted)
+
+    for slot in ("cu_nca", "cu_pratec", "cu_rainc", "cu_rthcuten",
+                 "mp_rainnc", "up_heli_max"):
+        old = state.existing_scratch(slot)
+        new = new_state.existing_scratch(slot)
+        assert new is not None, slot
+        window = plan.window(old.shape)
+        (dst_j, src_j), (dst_i, src_i) = window
+        # Overlap: bitwise the shifted outgoing values.
+        assert np.array_equal(new[..., dst_j, dst_i],
+                              old[..., src_j, src_i]), slot
+        # Control -- an unshifted copy must NOT satisfy the check
+        # (the outgoing arrays are dense random, so any wrong shift
+        # differs somewhere).
+        assert not np.array_equal(new, old), slot
+    assert sorted(receipt["slots_moved"]) == sorted(
+        ("cu_nca", "cu_pratec", "cu_rainc", "cu_rthcuten",
+         "mp_rainnc", "up_heli_max"))
+
+    # W0AVG rides along and binds to the NEW state so the adapter's
+    # identity check does not re-zero it on the next due call.
+    old_w = driver.cumulus_callable.w0avg
+    window = plan.window(old_w.shape)
+    (dst_j, src_j), (dst_i, src_i) = window
+    assert np.array_equal(new_adapter.w0avg[..., dst_j, dst_i],
+                          old_w[..., src_j, src_i])
+    assert new_adapter._history_state is new_state
+    assert receipt["w0avg_moved"] is True
+
+
+def test_strip_takes_the_cold_value_not_zero_garbage():
+    from woof.core.physics_continuation import (
+        capture_continuation, restore_continuation, shift_continuation)
+
+    state, driver = _outgoing()
+    plan = _plan(di=2, dj=1)
+    shifted = shift_continuation(capture_continuation(state, driver), plan)
+    new_state = _ScratchState()
+    restore_continuation(
+        new_state,
+        SimpleNamespace(cumulus_callable=SimpleNamespace(
+            w0avg=None, _history_state=None, _history_time=None)),
+        shifted)
+
+    nca = new_state.existing_scratch("cu_nca")
+    window = plan.window(nca.shape)
+    (dst_j, _), (dst_i, _) = window
+    strip = np.ones(nca.shape, dtype=bool)
+    strip[..., dst_j, dst_i] = False
+    # Fresh ground has no convection memory: eligible immediately, like
+    # a cold start (physics.py seeds NCA = -100), and zero accumulation.
+    assert np.all(nca[strip] == F32(-100.0))
+    assert np.all(new_state.existing_scratch("cu_rainc")[strip] == 0.0)
+    assert np.all(new_state.existing_scratch("mp_rainnc")[strip] == 0.0)
+    rth = new_state.existing_scratch("cu_rthcuten")
+    strip3 = np.broadcast_to(strip, rth.shape) if strip.ndim == rth.ndim \
+        else np.broadcast_to(strip[None], rth.shape)
+    assert np.all(rth[strip3] == 0.0)
+
+
+def test_strip_accumulations_start_from_the_parent_not_zero():
+    """THE DEFECT: fresh ground's accumulated rain started at zero, so every
+    move left a band of too little total rain on the nest's leading edge
+    (8 moves in a 12 h tropical storm run).  WRF interpolates RAINC and
+    RAINNC from the parent onto the exposed cells; the strip now takes the
+    parent's accumulation there, and the overlap keeps the nest's own."""
+    from woof.core.nest_interp import sint
+    from woof.core.physics_continuation import (
+        STRIP_ACCUMULATION_RULE, capture_continuation,
+        parent_strip_accumulations, restore_continuation, shift_continuation)
+
+    # A nest with no cumulus scheme (no cu_rainc) under a KF parent.
+    state = _ScratchState({"mp_rainnc": _distinct((NY, NX), 8)})
+    driver = SimpleNamespace(cumulus_callable=None)
+    captured = capture_continuation(state, driver)
+    plan = _plan(di=2, dj=1)
+    pny, pnx = 16, 16
+    parent = SimpleNamespace(
+        cfg=SimpleNamespace(run=SimpleNamespace(nx=pnx, ny=pny)),
+        state=_ScratchState({
+            "mp_rainnc": np.abs(_distinct((pny, pnx), 9)) * F32(10.0),
+            "cu_rainc": np.abs(_distinct((pny, pnx), 10)) * F32(5.0)}))
+    child_dc = SimpleNamespace(
+        grid_id=2, i_parent_start=plan.placement_to.i_parent_start - 5,
+        j_parent_start=plan.placement_to.j_parent_start - 5,
+        parent_grid_ratio=RATIO, run=SimpleNamespace(nx=NX, ny=NY))
+    strip, receipt = parent_strip_accumulations(parent, child_dc, captured)
+    assert receipt["rule"] == STRIP_ACCUMULATION_RULE
+    assert receipt["seeded"] == ["mp_rainnc"] and receipt["convective_in_rainnc"]
+    reg = _mass_registration(child_dc, parent)
+    expected = (sint(parent.state.existing_scratch("mp_rainnc"), reg)
+                + sint(parent.state.existing_scratch("cu_rainc"), reg))
+    np.testing.assert_array_equal(strip["mp_rainnc"], expected)
+
+    shifted = shift_continuation(captured, plan, strip=strip)
+    new_state = _ScratchState()
+    restore_continuation(new_state, SimpleNamespace(cumulus_callable=None),
+                         shifted)
+    rainnc = new_state.existing_scratch("mp_rainnc")
+    (dst_j, src_j), (dst_i, src_i) = plan.window(rainnc.shape)
+    fresh = np.ones(rainnc.shape, dtype=bool)
+    fresh[dst_j, dst_i] = False
+    old = state.existing_scratch("mp_rainnc")
+    assert np.array_equal(rainnc[dst_j, dst_i], old[src_j, src_i])
+    assert np.array_equal(rainnc[fresh], expected[fresh])
+    # Control: without the parent's values the strip is the cold zero.
+    cold = shift_continuation(captured, plan)["mp_rainnc"]
+    assert np.all(cold[fresh] == 0.0) and np.all(expected[fresh] > 0.0)
+
+    # The old footprint's specified ring never accumulated (the nest's
+    # microphysics skips it); where it lands inside the new footprint it
+    # takes the parent's value too, and the rest of the overlap keeps the
+    # nest's own.
+    ringed = shift_continuation(captured, plan, strip=strip, ring=1)["mp_rainnc"]
+    old_ring = np.zeros((NY, NX), dtype=bool)
+    old_ring[[0, -1], :] = True
+    old_ring[:, [0, -1]] = True
+    stale = np.zeros((NY, NX), dtype=bool)
+    stale[dst_j, dst_i] = old_ring[src_j, src_i]
+    # A (+6, +3) nest-cell move keeps 9 cells of the old east column and 6
+    # of the old north row inside, one shared.
+    assert int(stale.sum()) == 14
+    assert np.array_equal(ringed[stale], expected[stale])
+    keep = ~fresh & ~stale
+    assert np.array_equal(ringed[keep], rainnc[keep])
+    assert np.array_equal(ringed[fresh], expected[fresh])
+
+    # A parent with no accumulators (a test double, an idealized tree)
+    # seeds nothing and says why.
+    none, why = parent_strip_accumulations(SimpleNamespace(), child_dc, captured)
+    assert none == {} and "no scratch" in why["reason"]
+
+
+def _mass_registration(child_dc, parent):
+    """WRF's mass-point SINT registration of ``child_dc`` in ``parent``,
+    built as :func:`woof.ingest.nest_init._mass_registration` builds it."""
+    from woof.core.nest_interp import register_nest
+
+    return register_nest(
+        nri=child_dc.parent_grid_ratio, nrj=child_dc.parent_grid_ratio,
+        i_parent_start=child_dc.i_parent_start,
+        j_parent_start=child_dc.j_parent_start,
+        child_nx=child_dc.run.nx, child_ny=child_dc.run.ny,
+        parent_nx=parent.cfg.run.nx, parent_ny=parent.cfg.run.ny,
+        stagger="", wrapper="interp")
+
+
+def test_the_host_registration_is_the_nest_init_one():
+    """The strip's registration equals the one the child initializer uses
+    (so moving it off woof.ingest.nest_init changed no cell)."""
+    nest_init = pytest.importorskip("woof.ingest.nest_init")
+    parent = SimpleNamespace(cfg=SimpleNamespace(run=SimpleNamespace(nx=16, ny=16)))
+    child_dc = SimpleNamespace(i_parent_start=5, j_parent_start=4,
+                               parent_grid_ratio=RATIO,
+                               run=SimpleNamespace(nx=NX, ny=NY))
+    ours = _mass_registration(child_dc, parent)
+    theirs = nest_init._mass_registration(child_dc, parent)
+    for name in ("ci", "cj", "ip", "jp", "xig", "xjg"):
+        assert np.array_equal(getattr(ours, name), getattr(theirs, name)), name
+    assert (ours.nxp, ours.nyp, ours.nxc, ours.nyc) == (
+        theirs.nxp, theirs.nyp, theirs.nxc, theirs.nyc)
+
+
+def test_a_spawned_nest_starts_from_the_parents_rain_so_a_move_leaves_no_band():
+    """THE DEFECT (second repair): a nest spawned mid-run started its
+    accumulators at zero, and each later move seeded its new ground with
+    the parent's rain since the run began.  Held ground counted from the
+    birth, new ground from the start: a band of too much rain on every
+    leading edge.  Now the birth takes the parent's accumulation too, so a
+    nest that rains exactly what its parent does shows no seam at all
+    after a move."""
+    from woof.core.nest_interp import sint
+    from woof.core.physics_continuation import (
+        STRIP_ACCUMULATION_RULE, capture_continuation,
+        parent_strip_accumulations, seed_birth_accumulations,
+        shift_continuation)
+
+    pny, pnx = 16, 16
+    before_birth_nc = np.abs(_distinct((pny, pnx), 21)) * F32(10.0)
+    before_birth_c = np.abs(_distinct((pny, pnx), 22)) * F32(5.0)
+    parent = SimpleNamespace(
+        cfg=SimpleNamespace(run=SimpleNamespace(nx=pnx, ny=pny)),
+        state=_ScratchState({"mp_rainnc": before_birth_nc.copy(),
+                             "cu_rainc": before_birth_c.copy()}))
+    plan = _plan(di=2, dj=1)
+    born_dc = SimpleNamespace(
+        grid_id=2, i_parent_start=plan.placement_from.i_parent_start - 5,
+        j_parent_start=plan.placement_from.j_parent_start - 5,
+        parent_grid_ratio=RATIO, run=SimpleNamespace(nx=NX, ny=NY))
+    moved_dc = SimpleNamespace(
+        grid_id=2, i_parent_start=plan.placement_to.i_parent_start - 5,
+        j_parent_start=plan.placement_to.j_parent_start - 5,
+        parent_grid_ratio=RATIO, run=SimpleNamespace(nx=NX, ny=NY))
+
+    # Born with no cumulus scheme: its driver allocated RAINNC only.
+    child = _ScratchState({"mp_rainnc": np.zeros((NY, NX), F32)})
+    receipt = seed_birth_accumulations(child, parent, born_dc)
+    assert receipt["event"] == "birth" and receipt["rule"] == STRIP_ACCUMULATION_RULE
+    assert receipt["seeded"] == ["mp_rainnc"] and receipt["convective_in_rainnc"]
+    born_reg = _mass_registration(born_dc, parent)
+    at_birth = sint(before_birth_nc, born_reg) + sint(before_birth_c, born_reg)
+    np.testing.assert_array_equal(child.existing_scratch("mp_rainnc"), at_birth)
+    assert "cu_rainc" not in child._scratch      # nothing the child lacks
+
+    # The move, on rain that is the same everywhere: the parent's
+    # interpolation is then exact at both placements, so what is left
+    # between held and new ground is only where each starts counting.
+    # 12 mm before the birth (8 grid-scale, 4 convective), 3 mm after it on
+    # the parent and on the nest alike.
+    parent.state._scratch["mp_rainnc"] = np.full((pny, pnx), 8.0, F32)
+    parent.state._scratch["cu_rainc"] = np.full((pny, pnx), 4.0, F32)
+    born = _ScratchState({"mp_rainnc": np.zeros((NY, NX), F32)})
+    seed_birth_accumulations(born, parent, born_dc)
+    np.testing.assert_allclose(born.existing_scratch("mp_rainnc"), 12.0, rtol=1e-6)
+    parent.state._scratch["mp_rainnc"] += F32(3.0)
+    born._scratch["mp_rainnc"] += F32(3.0)
+
+    def moved_total(child_state):
+        captured = capture_continuation(
+            child_state, SimpleNamespace(cumulus_callable=None))
+        strip, _ = parent_strip_accumulations(parent, moved_dc, captured)
+        return shift_continuation(captured, plan, strip=strip)["mp_rainnc"]
+
+    moved = moved_total(born)
+    (dst_j, _src_j), (dst_i, _src_i) = plan.window(moved.shape)
+    held = np.zeros(moved.shape, dtype=bool)
+    held[dst_j, dst_i] = True
+    assert held.any() and (~held).any()
+    # New ground and held ground both hold the 15 mm since the run began:
+    # one field, no band between them.
+    np.testing.assert_allclose(moved[~held], 15.0, rtol=1e-6)
+    np.testing.assert_allclose(moved[held], 15.0, rtol=1e-6)
+
+    # Control (the defect): born at zero, the ground held since birth holds
+    # 3 mm beside the new ground's 15, a band 12 mm deep on every move.
+    cold = _ScratchState({"mp_rainnc": np.full((NY, NX), 3.0, F32)})
+    band = moved_total(cold)
+    np.testing.assert_allclose(band[~held], 15.0, rtol=1e-6)
+    np.testing.assert_allclose(band[held], 3.0, rtol=1e-6)
+
+
+def test_a_parent_array_that_is_not_the_parents_grid_seeds_nothing():
+    """A streamed parent's slab template is not the parent's rain: the
+    strip takes nothing from it and the receipt names it."""
+    from woof.core.physics_continuation import parent_strip_accumulations
+
+    parent = SimpleNamespace(
+        cfg=SimpleNamespace(run=SimpleNamespace(nx=16, ny=16)),
+        state=_ScratchState({"mp_rainnc": np.ones((8, 16), F32)}))
+    child_dc = SimpleNamespace(grid_id=2, i_parent_start=5, j_parent_start=5,
+                               parent_grid_ratio=RATIO,
+                               run=SimpleNamespace(nx=NX, ny=NY))
+    strip, receipt = parent_strip_accumulations(parent, child_dc, ["mp_rainnc"])
+    assert strip == {} and receipt["seeded"] == []
+    assert receipt["not_parent_extent"] == {"mp_rainnc": [8, 16]}
+
+
+def test_a_null_move_is_the_identity():
+    from woof.core.physics_continuation import (
+        capture_continuation, restore_continuation, shift_continuation)
+
+    state, driver = _outgoing()
+    plan = _plan(di=0, dj=0)
+    shifted = shift_continuation(capture_continuation(state, driver), plan)
+    new_state = _ScratchState()
+    restore_continuation(
+        new_state,
+        SimpleNamespace(cumulus_callable=SimpleNamespace(
+            w0avg=None, _history_state=None, _history_time=None)),
+        shifted)
+    for slot in ("cu_nca", "cu_rainc", "cu_rthcuten"):
+        assert np.array_equal(new_state.existing_scratch(slot),
+                              state.existing_scratch(slot)), slot
+
+
+def test_absent_slots_and_absent_cumulus_do_not_invent_state():
+    """A KF-off outgoing child (no cu_* slots, no w0avg) restores nothing."""
+    from woof.core.physics_continuation import (
+        capture_continuation, restore_continuation, shift_continuation)
+
+    state = _ScratchState({"mp_rainnc": _distinct((NY, NX), 8)})
+    driver = SimpleNamespace(cumulus_callable=None)
+    shifted = shift_continuation(capture_continuation(state, driver),
+                                 _plan())
+    new_state = _ScratchState()
+    receipt = restore_continuation(
+        new_state, SimpleNamespace(cumulus_callable=None), shifted)
+    assert receipt["slots_moved"] == ["mp_rainnc"]
+    assert receipt["w0avg_moved"] is False
+    assert new_state.existing_scratch("cu_nca") is None
+
+
+# ---------------------------------------------------------------------------
+# The preparer wires the mechanism (the front-door routes get it)
+# ---------------------------------------------------------------------------
+
+def _child_dc(i0, j0):
+    return SimpleNamespace(
+        grid_id=2, i_parent_start=i0, j_parent_start=j0,
+        parent_grid_ratio=1, run=SimpleNamespace(nx=6, ny=6))
+
+
+def _preparer_fixture(monkeypatch):
+    from woof.runtime import RealRelocationChildPreparer
+
+    ny = nx = 6
+    child_dc = _child_dc(4, 4)
+    ground = np.arange(20 * 20, dtype=np.float64).reshape(20, 20)
+
+    def statics_for(dc):
+        i0, j0 = int(dc.i_parent_start), int(dc.j_parent_start)
+        return {"HGT_M": ground[j0:j0 + ny, i0:i0 + nx].copy(),
+                "LANDMASK": np.ones((ny, nx))}
+
+    old_case = SimpleNamespace(static_fields=statics_for(child_dc))
+    model = SimpleNamespace(_prepared_by_grid_id={2: old_case},
+                            _activation_context={})
+    preparer = RealRelocationChildPreparer(
+        exp=SimpleNamespace(), data=SimpleNamespace(), model=model)
+    monkeypatch.setattr(preparer, "_rebuild_driver", lambda *args: 0.125)
+
+    out_state = _ScratchState({
+        "cu_nca": _distinct((ny, nx), 11),
+        "cu_rainc": _distinct((ny, nx), 12),
+    })
+    out_adapter = SimpleNamespace(w0avg=_distinct((3, ny, nx), 13),
+                                  _history_state=out_state,
+                                  _history_time=60.0)
+    out_state.physics = SimpleNamespace(
+        fields={"tsk": np.arange(ny * nx, dtype=F32).reshape(ny, nx)},
+        cumulus_callable=out_adapter, call_counts={"microphysics": 9},
+        ysu_nan_guard_fires=2, microphysics_updates=9)
+    out_state.elapsed_seconds = 60.
+    node = SimpleNamespace(cfg=child_dc, state=out_state)
+
+    new_dc = SimpleNamespace(**{**vars(child_dc), "i_parent_start": 6,
+                                "j_parent_start": 4})
+    new_state = _ScratchState()
+    new_state.elapsed_seconds = 0.
+    new_state.physics = SimpleNamespace(
+        fields={}, call_counts={}, ysu_nan_guard_fires=0, microphysics_updates=0,
+        cumulus_callable=SimpleNamespace(
+            w0avg=None, _history_state=None, _history_time=None))
+    initialized = SimpleNamespace(static_fields=statics_for(new_dc),
+                                  grid="new-grid", state=new_state)
+    return preparer, node, new_dc, initialized, out_state, new_state
+
+
+def test_relocation_preserves_scalar_restart_identity_with_omission_control(monkeypatch):
+    from tilestream.physics_inventory import carrier_scalars
+    preparer, node, new_dc, initialized, outgoing, incoming = _preparer_fixture(monkeypatch)
+    expected = carrier_scalars(outgoing)
+    preparer.capture_outgoing(node)
+    preparer(initialized, new_dc, None)
+    assert carrier_scalars(incoming) == expected
+    assert incoming.physics.microphysics_updates == 9
+
+    # The retired omission resets the NSSL first-call authority to zero and
+    # changes the same scalar header used by streamed/restart continuation.
+    preparer, node, new_dc, initialized, outgoing, incoming = _preparer_fixture(monkeypatch)
+    preparer.capture_outgoing(node)
+    preparer._captured.pop("scalar_carriers")
+    preparer(initialized, new_dc, None)
+    assert incoming.physics.microphysics_updates == 0
+    assert carrier_scalars(incoming) != expected
+
+
+def test_preparer_moves_physics_continuation_and_reports_it(monkeypatch):
+    preparer, node, new_dc, initialized, out_state, new_state = (
+        _preparer_fixture(monkeypatch))
+    preparer.capture_outgoing(node)
+    preparer(initialized, new_dc, SimpleNamespace())
+    receipt = preparer.last_receipt["physics_continuation"]
+    assert sorted(receipt["slots_moved"]) == ["cu_nca", "cu_rainc"]
+    assert receipt["w0avg_moved"] is True
+
+    # di = +2 parent cells at ratio 1: the overlap of the incoming child
+    # equals the outgoing child's shifted in index space.
+    old = out_state.existing_scratch("cu_rainc")
+    new = new_state.existing_scratch("cu_rainc")
+    assert np.array_equal(new[:, :4], old[:, 2:])
+    # And the accumulators are NOT reported as re-initialised any more.
+    assert preparer.last_receipt["accumulators_reinitialized"] is False
+
+
+def test_preparer_still_accurate_when_the_rebuilt_child_has_no_driver(
+        monkeypatch):
+    preparer, node, new_dc, initialized, _out, new_state = (
+        _preparer_fixture(monkeypatch))
+    del new_state.physics
+    preparer.capture_outgoing(node)
+    preparer(initialized, new_dc, SimpleNamespace())
+    receipt = preparer.last_receipt["physics_continuation"]
+    assert receipt["restored"] is False
+
+
+@pytest.mark.parametrize("di,dj", [(2, 1), (-1, -2), (0, 0), (10, 10)])
+def test_raw_pbl_forcing_moves_from_the_restart_registry_in_place(di, dj):
+    from woof.core.physics_continuation import (
+        capture_continuation, restore_continuation, shift_continuation)
+    from woof.io.restart import DRIVER_HELD_FORCING_ATTRS
+
+    state = _ScratchState()
+    outgoing = SimpleNamespace(**{
+        name: _distinct((NZ, NY, NX), index)
+        for index, name in enumerate(sorted(DRIVER_HELD_FORCING_ATTRS), 21)})
+    captured = capture_continuation(state, outgoing)
+    assert set(captured) == {f"held/{name}" for name in DRIVER_HELD_FORCING_ATTRS}
+    plan = _plan(di=di, dj=dj)
+    shifted = shift_continuation(captured, plan)
+    targets = {name: np.full((NZ, NY, NX), np.nan, F32)
+               for name in DRIVER_HELD_FORCING_ATTRS}
+    incoming = SimpleNamespace(**targets)
+    receipt = restore_continuation(_ScratchState(), incoming, shifted)
+    assert set(receipt["slots_moved"]) == set(captured)
+    for name, target in targets.items():
+        old = getattr(outgoing, name)
+        assert target is getattr(incoming, name)
+        expected = np.zeros_like(old)
+        window = plan.window(old.shape)
+        if window is not None:
+            (dst_j, src_j), (dst_i, src_i) = window
+            expected[..., dst_j, dst_i] = old[..., src_j, src_i]
+        np.testing.assert_array_equal(target, expected)
+        if di or dj:
+            assert not np.array_equal(target, old), "unshifted control is vacuous"
+        else:
+            np.testing.assert_array_equal(target, old)

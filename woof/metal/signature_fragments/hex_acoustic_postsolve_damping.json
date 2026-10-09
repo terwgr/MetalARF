@@ -1,0 +1,41 @@
+{
+  "kernels": [
+    {
+      "name": "hex_acoustic_postsolve_damping",
+      "module": "hex_acoustic",
+      "source": "woof/metal/shaders/hex_acoustic_postsolve_damping_fragment.metal",
+      "cuda_source": "woof/hex/acoustic.py",
+      "cuda_symbol": "advance_acoustic_step",
+      "resources": [
+        ["rw_p", "float", "read_write"],
+        ["rw_save", "float", "read"],
+        ["rw", "float", "read"],
+        ["dss", "float", "read"],
+        ["w", "float", "read"],
+        ["rho_zz", "float", "read"],
+        ["zz", "float", "read"],
+        ["fzm", "float", "read"],
+        ["fzp", "float", "read"]
+      ],
+      "shapes": {
+        "rw_p": [["nlev+1", "ncells"]],
+        "rw_save": [["nlev+1", "ncells"]],
+        "rw": [["nlev+1", "ncells"]],
+        "dss": [["nlev+1", "ncells"]],
+        "w": [["nlev+1", "ncells"]],
+        "rho_zz": [["nlev", "ncells"]],
+        "zz": [["nlev", "ncells"]],
+        "fzm": [["nlev+1"]],
+        "fzp": [["nlev+1"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["dts", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

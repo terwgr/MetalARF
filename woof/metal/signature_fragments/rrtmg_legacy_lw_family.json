@@ -1,0 +1,2487 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_legacy_lw_inatm",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_inatm",
+      "resources": [
+        ["plev", "float", "read"], ["wkl", "float", "read_write"],
+        ["wx", "float", "read_write"], ["coldry", "float", "read_write"],
+        ["wbrodl", "float", "read_write"], ["pwvcm", "float", "read_write"]
+      ],
+      "shapes": {
+        "plev": [["ncol", "nl+1"]], "wkl": [["ncol", "35", "nl"]],
+        "wx": [["ncol", "4", "nl"]], "coldry": [["ncol", "nl"]],
+        "wbrodl": [["ncol", "nl"]], "pwvcm": [["ncol"]]
+      },
+      "parameters": [["ncol", "int32"], ["nl", "int32"],
+                      ["grav", "float32"], ["avogad", "float32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmg_legacy_lw_planck",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw.cu",
+      "cuda_symbol": "rlw_setcoef",
+      "resources": [
+        ["tavel", "float", "read"], ["tz", "float", "read"],
+        ["tbound", "float", "read"], ["sem", "float", "read"],
+        ["totplnk", "float", "read"], ["totplk16", "float", "read"],
+        ["planklay", "float", "read_write"],
+        ["planklev", "float", "read_write"],
+        ["plankbnd", "float", "read_write"]
+      ],
+      "shapes": {
+        "tavel": [["ncol", "nl"]], "tz": [["ncol", "nl+1"]],
+        "tbound": [["ncol"]], "sem": [["ncol", "16"]],
+        "totplnk": [["2896"]], "totplk16": [["181"]],
+        "planklay": [["ncol", "nl", "16"]],
+        "planklev": [["ncol", "nl+1", "16"]],
+        "plankbnd": [["ncol", "16"]]
+      },
+      "parameters": [["ncol", "int32"], ["nl", "int32"],
+                      ["istart", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmg_legacy_lw_taut",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_taut",
+      "resources": [
+        ["taug", "float", "read"], ["taua", "float", "read"],
+        ["ngb", "int32", "read"], ["taut", "float", "read_write"]
+      ],
+      "shapes": {
+        "taug": [["ncol", "nl", "ngpt"]],
+        "taua": [["ncol", "nl", "nbnd"]], "ngb": [["ngpt"]],
+        "taut": [["ncol", "nl", "ngpt"]]
+      },
+      "parameters": [["ncol", "int32"], ["nl", "int32"],
+                      ["ngpt", "int32"], ["nbnd", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmg_legacy_lw_setcoef_indices",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw.cu",
+      "cuda_symbol": "rlw_setcoef",
+      "resources": [
+        ["pavel", "float", "read"], ["tavel", "float", "read"],
+        ["preflog", "float", "read"], ["tref", "float", "read"],
+        ["jp", "int32", "read_write"], ["jt", "int32", "read_write"],
+        ["jt1", "int32", "read_write"], ["fp", "float", "read_write"],
+        ["ft", "float", "read_write"], ["ft1", "float", "read_write"],
+        ["laytrop", "int32", "read_write"]
+      ],
+      "shapes": {
+        "pavel": [["ncol", "nl"]], "tavel": [["ncol", "nl"]],
+        "preflog": [["59"]], "tref": [["59"]],
+        "jp": [["ncol", "nl"]], "jt": [["ncol", "nl"]],
+        "jt1": [["ncol", "nl"]], "fp": [["ncol", "nl"]],
+        "ft": [["ncol", "nl"]], "ft1": [["ncol", "nl"]],
+        "laytrop": [["ncol"]]
+      },
+      "parameters": [["ncol", "int32"], ["nl", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmg_legacy_lw_setcoef_gas",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw.cu",
+      "cuda_symbol": "rlw_setcoef",
+      "resources": [
+        ["pavel", "float", "read"], ["tavel", "float", "read"],
+        ["coldry", "float", "read"], ["wkl", "float", "read"],
+        ["wbrodl", "float", "read"], ["chi_mls", "float", "read"],
+        ["jp", "int32", "read"], ["jt", "int32", "read"],
+        ["jt1", "int32", "read"], ["fp", "float", "read"],
+        ["ft", "float", "read"], ["ft1", "float", "read"],
+        ["fs", "float", "read_write"],
+        ["isv", "int32", "read_write"]
+      ],
+      "shapes": {
+        "pavel": [["ncol", "nl"]], "tavel": [["ncol", "nl"]],
+        "coldry": [["ncol", "nl"]], "wkl": [["ncol", "35", "nl"]],
+        "wbrodl": [["ncol", "nl"]], "chi_mls": [["413"]],
+        "jp": [["ncol", "nl"]], "jt": [["ncol", "nl"]],
+        "jt1": [["ncol", "nl"]], "fp": [["ncol", "nl"]],
+        "ft": [["ncol", "nl"]], "ft1": [["ncol", "nl"]],
+        "fs": [["33", "ncol", "nl"]],
+        "isv": [["6", "ncol", "nl"]]
+      },
+      "parameters": [["ncol", "int32"], ["nl", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb2",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb02_10_11_12.cu",
+    "cuda_symbol": "rlw_taugb2",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "absa": [
+        [
+          "780"
+        ]
+      ],
+      "absb": [
+        [
+          "2820"
+        ]
+      ],
+      "selfref": [
+        [
+          "120"
+        ]
+      ],
+      "forref": [
+        [
+          "48"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "12"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "12"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb10",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb02_10_11_12.cu",
+    "cuda_symbol": "rlw_taugb10",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "absa": [
+        [
+          "390"
+        ]
+      ],
+      "absb": [
+        [
+          "1410"
+        ]
+      ],
+      "selfref": [
+        [
+          "60"
+        ]
+      ],
+      "forref": [
+        [
+          "24"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "6"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "6"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb11",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb02_10_11_12.cu",
+    "cuda_symbol": "rlw_taugb11",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mo2",
+        "float",
+        "read"
+      ],
+      [
+        "kb_mo2",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "absa": [
+        [
+          "520"
+        ]
+      ],
+      "absb": [
+        [
+          "1880"
+        ]
+      ],
+      "selfref": [
+        [
+          "80"
+        ]
+      ],
+      "forref": [
+        [
+          "32"
+        ]
+      ],
+      "ka_mo2": [
+        [
+          "152"
+        ]
+      ],
+      "kb_mo2": [
+        [
+          "152"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "8"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "8"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb12",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb02_10_11_12.cu",
+    "cuda_symbol": "rlw_taugb12",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "chi_mls",
+        "float",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "chi_mls": [
+        [
+          "413"
+        ]
+      ],
+      "absa": [
+        [
+          "4680"
+        ]
+      ],
+      "selfref": [
+        [
+          "80"
+        ]
+      ],
+      "forref": [
+        [
+          "32"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "72"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ],
+      [
+        "oneminus",
+        "float32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb1",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw.cu",
+    "cuda_symbol": "rlw_taugb1",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mn2",
+        "float",
+        "read"
+      ],
+      [
+        "kb_mn2",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "absa": [
+        [
+          "650"
+        ]
+      ],
+      "absb": [
+        [
+          "2350"
+        ]
+      ],
+      "selfref": [
+        [
+          "100"
+        ]
+      ],
+      "forref": [
+        [
+          "40"
+        ]
+      ],
+      "ka_mn2": [
+        [
+          "190"
+        ]
+      ],
+      "kb_mn2": [
+        [
+          "190"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "10"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "10"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb4",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb03_05.cu",
+    "cuda_symbol": "rlw_taugb4",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "chi_mls",
+        "float",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "chi_mls": [
+        [
+          "413"
+        ]
+      ],
+      "absa": [
+        [
+          "8190"
+        ]
+      ],
+      "absb": [
+        [
+          "16450"
+        ]
+      ],
+      "selfref": [
+        [
+          "140"
+        ]
+      ],
+      "forref": [
+        [
+          "56"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "126"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "70"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ],
+      [
+        "oneminus",
+        "float32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb3",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb03_05.cu",
+    "cuda_symbol": "rlw_taugb3",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "chi_mls",
+        "float",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mn2o",
+        "float",
+        "read"
+      ],
+      [
+        "kb_mn2o",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "chi_mls": [
+        [
+          "413"
+        ]
+      ],
+      "absa": [
+        [
+          "9360"
+        ]
+      ],
+      "absb": [
+        [
+          "18800"
+        ]
+      ],
+      "selfref": [
+        [
+          "160"
+        ]
+      ],
+      "forref": [
+        [
+          "64"
+        ]
+      ],
+      "ka_mn2o": [
+        [
+          "2736"
+        ]
+      ],
+      "kb_mn2o": [
+        [
+          "1520"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "144"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "80"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ],
+      [
+        "oneminus",
+        "float32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb5",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb03_05.cu",
+    "cuda_symbol": "rlw_taugb5",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "wx",
+        "float",
+        "read"
+      ],
+      [
+        "chi_mls",
+        "float",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mo3",
+        "float",
+        "read"
+      ],
+      [
+        "ccl4",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "wx": [
+        [
+          "ncol",
+          "4",
+          "nl"
+        ]
+      ],
+      "chi_mls": [
+        [
+          "413"
+        ]
+      ],
+      "absa": [
+        [
+          "9360"
+        ]
+      ],
+      "absb": [
+        [
+          "18800"
+        ]
+      ],
+      "selfref": [
+        [
+          "160"
+        ]
+      ],
+      "forref": [
+        [
+          "64"
+        ]
+      ],
+      "ka_mo3": [
+        [
+          "2736"
+        ]
+      ],
+      "ccl4": [
+        [
+          "16"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "144"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "80"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ],
+      [
+        "oneminus",
+        "float32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb6",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb06_09.cu",
+    "cuda_symbol": "rlw_taugb6",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "wx",
+        "float",
+        "read"
+      ],
+      [
+        "chi_mls",
+        "float",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mco2",
+        "float",
+        "read"
+      ],
+      [
+        "cfc11adj",
+        "float",
+        "read"
+      ],
+      [
+        "cfc12",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "wx": [
+        [
+          "ncol",
+          "4",
+          "nl"
+        ]
+      ],
+      "chi_mls": [
+        [
+          "413"
+        ]
+      ],
+      "absa": [
+        [
+          "520"
+        ]
+      ],
+      "selfref": [
+        [
+          "80"
+        ]
+      ],
+      "forref": [
+        [
+          "32"
+        ]
+      ],
+      "ka_mco2": [
+        [
+          "152"
+        ]
+      ],
+      "cfc11adj": [
+        [
+          "8"
+        ]
+      ],
+      "cfc12": [
+        [
+          "8"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "8"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb7",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb06_09.cu",
+    "cuda_symbol": "rlw_taugb7",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "chi_mls",
+        "float",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mco2",
+        "float",
+        "read"
+      ],
+      [
+        "kb_mco2",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "chi_mls": [
+        [
+          "413"
+        ]
+      ],
+      "absa": [
+        [
+          "7020"
+        ]
+      ],
+      "absb": [
+        [
+          "2820"
+        ]
+      ],
+      "selfref": [
+        [
+          "120"
+        ]
+      ],
+      "forref": [
+        [
+          "48"
+        ]
+      ],
+      "ka_mco2": [
+        [
+          "2052"
+        ]
+      ],
+      "kb_mco2": [
+        [
+          "228"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "108"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "12"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ],
+      [
+        "oneminus",
+        "float32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb8",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb06_09.cu",
+    "cuda_symbol": "rlw_taugb8",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "wx",
+        "float",
+        "read"
+      ],
+      [
+        "chi_mls",
+        "float",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mco2",
+        "float",
+        "read"
+      ],
+      [
+        "kb_mco2",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mn2o",
+        "float",
+        "read"
+      ],
+      [
+        "kb_mn2o",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mo3",
+        "float",
+        "read"
+      ],
+      [
+        "cfc12",
+        "float",
+        "read"
+      ],
+      [
+        "cfc22adj",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "wx": [
+        [
+          "ncol",
+          "4",
+          "nl"
+        ]
+      ],
+      "chi_mls": [
+        [
+          "413"
+        ]
+      ],
+      "absa": [
+        [
+          "520"
+        ]
+      ],
+      "absb": [
+        [
+          "1880"
+        ]
+      ],
+      "selfref": [
+        [
+          "80"
+        ]
+      ],
+      "forref": [
+        [
+          "32"
+        ]
+      ],
+      "ka_mco2": [
+        [
+          "152"
+        ]
+      ],
+      "kb_mco2": [
+        [
+          "152"
+        ]
+      ],
+      "ka_mn2o": [
+        [
+          "152"
+        ]
+      ],
+      "kb_mn2o": [
+        [
+          "152"
+        ]
+      ],
+      "ka_mo3": [
+        [
+          "152"
+        ]
+      ],
+      "cfc12": [
+        [
+          "8"
+        ]
+      ],
+      "cfc22adj": [
+        [
+          "8"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "8"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "8"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb9",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb06_09.cu",
+    "cuda_symbol": "rlw_taugb9",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "chi_mls",
+        "float",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mn2o",
+        "float",
+        "read"
+      ],
+      [
+        "kb_mn2o",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "chi_mls": [
+        [
+          "413"
+        ]
+      ],
+      "absa": [
+        [
+          "7020"
+        ]
+      ],
+      "absb": [
+        [
+          "2820"
+        ]
+      ],
+      "selfref": [
+        [
+          "120"
+        ]
+      ],
+      "forref": [
+        [
+          "48"
+        ]
+      ],
+      "ka_mn2o": [
+        [
+          "2052"
+        ]
+      ],
+      "kb_mn2o": [
+        [
+          "228"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "108"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "12"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ],
+      [
+        "oneminus",
+        "float32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb14",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb13_16.cu",
+    "cuda_symbol": "rlw_taugb14",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "absb",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefb",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "absa": [
+        [
+          "130"
+        ]
+      ],
+      "absb": [
+        [
+          "470"
+        ]
+      ],
+      "selfref": [
+        [
+          "20"
+        ]
+      ],
+      "forref": [
+        [
+          "8"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "2"
+        ]
+      ],
+      "fracrefb": [
+        [
+          "2"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ,
+  {
+    "name": "rrtmg_legacy_lw_taugb15",
+    "module": "rrtmg_legacy_lw_family",
+    "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+    "cuda_source": "woof/core/kernels/rrtmg_lw_taugb13_16.cu",
+    "cuda_symbol": "rlw_taugb15",
+    "resources": [
+      [
+        "laytrop",
+        "int32",
+        "read"
+      ],
+      [
+        "fs",
+        "float",
+        "read"
+      ],
+      [
+        "isv",
+        "int32",
+        "read"
+      ],
+      [
+        "chi_mls",
+        "float",
+        "read"
+      ],
+      [
+        "absa",
+        "float",
+        "read"
+      ],
+      [
+        "selfref",
+        "float",
+        "read"
+      ],
+      [
+        "forref",
+        "float",
+        "read"
+      ],
+      [
+        "ka_mn2",
+        "float",
+        "read"
+      ],
+      [
+        "fracrefa",
+        "float",
+        "read"
+      ],
+      [
+        "taug",
+        "float",
+        "read_write"
+      ],
+      [
+        "fracs",
+        "float",
+        "read_write"
+      ]
+    ],
+    "shapes": {
+      "laytrop": [
+        [
+          "ncol"
+        ]
+      ],
+      "fs": [
+        [
+          "33",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "isv": [
+        [
+          "6",
+          "ncol",
+          "nl"
+        ]
+      ],
+      "chi_mls": [
+        [
+          "413"
+        ]
+      ],
+      "absa": [
+        [
+          "1170"
+        ]
+      ],
+      "selfref": [
+        [
+          "20"
+        ]
+      ],
+      "forref": [
+        [
+          "8"
+        ]
+      ],
+      "ka_mn2": [
+        [
+          "342"
+        ]
+      ],
+      "fracrefa": [
+        [
+          "18"
+        ]
+      ],
+      "taug": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ],
+      "fracs": [
+        [
+          "ncol",
+          "nl",
+          "140"
+        ]
+      ]
+    },
+    "parameters": [
+      [
+        "ncol",
+        "int32"
+      ],
+      [
+        "nl",
+        "int32"
+      ],
+      [
+        "oneminus",
+        "float32"
+      ]
+    ],
+    "threads_per_group": 128,
+    "layout_version": 1,
+    "arithmetic_policies": [
+      "default"
+    ]
+  }
+  ]
+}

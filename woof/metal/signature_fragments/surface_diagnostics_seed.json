@@ -1,0 +1,37 @@
+{
+  "kernels": [
+    {
+      "name": "surface_diagnostics_seed",
+      "module": "surface_diagnostics_seed",
+      "source": "woof/metal/shaders/surface_diagnostics_seed.metal",
+      "cuda_source": "woof/core/kernels/surface_diagnostics_seed.cu",
+      "cuda_symbol": "surface_diagnostics_seed",
+      "resources": [
+        ["t2", "float", "read"],
+        ["psfc", "float", "read"],
+        ["u10_staggered", "float", "read"],
+        ["v10_staggered", "float", "read"],
+        ["th2", "float", "read_write"],
+        ["u10", "float", "read_write"],
+        ["v10", "float", "read_write"]
+      ],
+      "shapes": {
+        "t2": [["ny", "nx"]],
+        "psfc": [["ny", "nx"]],
+        "u10_staggered": [["ny", "nx+1"]],
+        "v10_staggered": [["ny+1", "nx"]],
+        "th2": [["ny", "nx"]],
+        "u10": [["ny", "nx"]],
+        "v10": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["nx", "int32"],
+        ["ny", "int32"],
+        ["n", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

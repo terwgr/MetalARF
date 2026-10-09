@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout d0ff6498e82f53cc0a004765c4bfbfdd78fc002f8e8121d298361fa62863b167.
+struct NoahSrFromTemperatureResources {
+    device const float *temperature_a [[id(0)]];
+    device float *sr_a [[id(1)]];
+};
+struct NoahSrFromTemperatureParams {
+    float freezing;
+    int ncol;
+};
+static_assert(sizeof(NoahSrFromTemperatureParams) == 8, "noah_sr_from_temperature parameter ABI size changed");

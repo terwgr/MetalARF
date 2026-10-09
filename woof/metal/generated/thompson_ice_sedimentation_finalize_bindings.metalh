@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout 16fcf29d9b7cf56e711a5fe2b7f42f9dd0ef9a596089f7e5c36b7d97b9969b5e.
+struct ThompsonIceSedimentationFinalizeResources {
+    device float *qi [[id(0)]];
+    device float *ni [[id(1)]];
+    device const float *density [[id(2)]];
+    device const float *qi_tendency [[id(3)]];
+    device const float *ni_tendency [[id(4)]];
+    device const float *exported [[id(5)]];
+    device float *rainnc [[id(6)]];
+    device float *rainncv [[id(7)]];
+    device float *snownc [[id(8)]];
+    device float *snowncv [[id(9)]];
+};
+struct ThompsonIceSedimentationFinalizeParams {
+    float dt;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonIceSedimentationFinalizeParams) == 16, "thompson_ice_sedimentation_finalize parameter ABI size changed");

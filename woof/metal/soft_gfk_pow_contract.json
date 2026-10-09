@@ -1,0 +1,47 @@
+{
+  "schema": "woof-metal-soft-gfk-pow-contract-v1",
+  "status": "dependency-blocked-source-proposal",
+  "source": {
+    "file": "woof/core/kernels/glibc_flt32.cuh",
+    "upstream": "glibc 2.39 sysdeps/ieee754/flt-32/e_powf.c",
+    "symbols": [
+      "gfk_powf_log2",
+      "gfk_checkint",
+      "gfk_zeroinfnan",
+      "gfk_pow"
+    ],
+    "related_exp_symbol": "gfk_exp2_core"
+  },
+  "owned_files": [
+    "woof/metal/shaders/soft_gfk_pow.metalh",
+    "woof/metal/soft_gfk_pow_contract.json",
+    "woof/metal/handoffs/62_pinned_pow.md"
+  ],
+  "representation": "binary64 values are ulong IEEE-754 bit patterns; binary32 inputs/outputs are uint encodings",
+  "rounding_target": "source CUDA round-to-nearest, ties-to-even operation boundaries",
+  "translation": {
+    "log2": "Pinned 16-entry POWF_INVC and POWF_LOGC tables, five POWF_A coefficients, and the exact scalar operation order are transcribed into integer-bit binary64 operations.",
+    "pow": "Pinned unsigned-bit special-case branches, checkint classification, sign-bias selection, subnormal normalization, overflow/underflow thresholds, binary64 product, and final RN binary32 conversion are transcribed.",
+    "exp2": "Called through the exp-owned soft_gfk_exp2_core_bits interface; this packet contains no exp2/log API or implementation."
+  },
+  "base_dependency": {
+    "header": "woof/metal/shaders/soft_binary64.metalh",
+    "required_interfaces": [
+      "soft64_from_f32_bits(uint) -> ulong",
+      "soft64_to_f32_bits(ulong) -> uint",
+      "soft64_add(ulong, ulong) -> ulong",
+      "soft64_sub(ulong, ulong) -> ulong",
+      "soft64_mul(ulong, ulong) -> ulong",
+      "soft64_greater(ulong, ulong) -> bool",
+      "soft64_less_equal(ulong, ulong) -> bool"
+    ],
+    "state": "The base header and its declared behavior are not centrally cleared or verified. This proposal must not be consumed until central review clears the base."
+  },
+  "missing_interfaces": [],
+  "constraints": [
+    "No native float or double arithmetic, approximation, generic libm replacement, or duplicated log/exp API is used.",
+    "The pow-owned log2 polynomial is kept inline with its source constants and ordered operations.",
+    "The included soft binary32, soft binary64 and exp interfaces are present in the checked-in source. Keep this proposal dependency-blocked until those shared implementations and this translation are compiled and numerically verified; no production consumer may admit it yet."
+  ],
+  "verification": "MetalToolchain 27.1 compiled all four helpers together with the shared binary32/binary64 headers and executed the temporary kernel on Apple M2. Each of logf, expf, powf, and atanf matched the in-tree glibc 2.39 CPU transcription in woof/core/noahmp_libm.py exactly on 4,826 rows (zero bit mismatches each). Inputs covered special values, subnormals, thresholds and adjacent encodings, plus seeded random bit patterns/pairs. This is bounded evidence, not exhaustive certification; production consumption remains blocked by the shared primitive and consumer-level contracts."
+}

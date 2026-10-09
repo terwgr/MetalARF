@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 6a0a4c32f7a6ab70350c945568a614366d2066feac5cb20897e701368d960a6e.
+struct RrtmgpMcicaPrepareSeedResources {
+    device const float *play [[id(0)]];
+    device uint *seed [[id(1)]];
+};
+struct RrtmgpMcicaPrepareSeedParams {
+    int ncol;
+    int nlay;
+    int permuteseed;
+};
+static_assert(sizeof(RrtmgpMcicaPrepareSeedParams) == 12, "rrtmgp_mcica_prepare_seed parameter ABI size changed");

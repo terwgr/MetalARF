@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout 77eca7bf8fc3c4869246d373891ebbc8c0b6339b1b265fe2c0d283b1d4d7067e.
+struct GlobalSemilagAddScaledFragmentResources {
+    device const ulong *base [[id(0)]];
+    device const ulong *increment [[id(1)]];
+    device const ulong *previous [[id(2)]];
+    device const ulong *current_scale [[id(3)]];
+    device const ulong *previous_scale [[id(4)]];
+    device ulong *destination [[id(5)]];
+};
+struct GlobalSemilagAddScaledFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalSemilagAddScaledFragmentParams) == 4, "global_semilag_add_scaled_fragment parameter ABI size changed");

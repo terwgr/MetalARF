@@ -1,0 +1,69 @@
+{
+  "kernels": [
+    {
+      "name": "global_insitu_capture_partial_fragment",
+      "module": "global_insitu_capture_fragment",
+      "source": "woof/metal/shaders/global_insitu_capture_fragment.metal",
+      "cuda_source": "woof/globe/insitu/capture.py",
+      "cuda_symbol": "ComponentCapture.mark",
+      "resources": [
+        ["current", "float64_bits", "read"],
+        ["previous", "float64_bits", "read"],
+        ["quadrature_weights", "float64_bits", "read"],
+        ["partial_stats", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "current": [["any_1d"]],
+        "previous": [["any_1d"]],
+        "quadrature_weights": [["any_1d"]],
+        "partial_stats": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlevel", "int32"], ["nlat", "int32"], ["nlon", "int32"],
+        ["row_start", "int32"], ["chunk_size", "int32"],
+        ["partial_count", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "global_insitu_capture_finalize_fragment",
+      "module": "global_insitu_capture_fragment",
+      "source": "woof/metal/shaders/global_insitu_capture_fragment.metal",
+      "cuda_source": "woof/globe/insitu/capture.py",
+      "cuda_symbol": "ComponentCapture.mark",
+      "resources": [
+        ["partial_stats", "float64_bits", "read"],
+        ["statistics", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "partial_stats": [["any_1d"]],
+        "statistics": [[8]]
+      },
+      "parameters": [["partial_count", "int32"], ["nlevel", "int32"], ["nlon", "int32"]],
+      "threads_per_group": 4,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "global_insitu_capture_merge_fragment",
+      "module": "global_insitu_capture_fragment",
+      "source": "woof/metal/shaders/global_insitu_capture_fragment.metal",
+      "cuda_source": "woof/globe/insitu/capture.py",
+      "cuda_symbol": "ComponentCapture.close_call",
+      "resources": [
+        ["accumulator", "float64_bits", "read_write"],
+        ["band_statistics", "float64_bits", "read"]
+      ],
+      "shapes": {
+        "accumulator": [[8]],
+        "band_statistics": [[8]]
+      },
+      "parameters": [["nfield", "int32"]],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

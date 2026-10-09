@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout b69950dbd560d600bc9ef433b59f9f68cf183f5e9a2361e9a4a2cd16cc8d4c55.
+struct HexTangentialVelocityFragmentResources {
+    device const float *normal_velocity [[id(0)]];
+    device const int *edges_on_edge [[id(1)]];
+    device const int *n_edges_on_edge [[id(2)]];
+    device const float *weights_on_edge [[id(3)]];
+    device float *tangential_velocity [[id(4)]];
+};
+struct HexTangentialVelocityFragmentParams {
+    int nlev;
+    int nedges;
+    int max_edges;
+};
+static_assert(sizeof(HexTangentialVelocityFragmentParams) == 12, "hex_tangential_velocity_fragment parameter ABI size changed");

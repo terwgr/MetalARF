@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout 5683db4cc95d938e58babb007a150ca0cf0c324dbfa761d4dc29c26b81e94e30.
+struct GlobalSemilagLevelRateExtrapolateFragmentResources {
+    device const ulong *current [[id(0)]];
+    device const ulong *previous [[id(1)]];
+    device ulong *extrapolated [[id(2)]];
+};
+struct GlobalSemilagLevelRateExtrapolateFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalSemilagLevelRateExtrapolateFragmentParams) == 4, "global_semilag_level_rate_extrapolate_fragment parameter ABI size changed");

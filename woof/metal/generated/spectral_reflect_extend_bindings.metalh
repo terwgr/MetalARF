@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 0494ca919895f832a8a0265d34411b7bdaeb552ae43f31e1f347c4f9142e60e4.
+struct SpectralReflectExtendResources {
+    device const float *input [[id(0)]];
+    device float *output [[id(1)]];
+};
+struct SpectralReflectExtendParams {
+    int count;
+    int batches;
+    int ny;
+    int nx;
+    int ey;
+    int ex;
+};
+static_assert(sizeof(SpectralReflectExtendParams) == 24, "spectral_reflect_extend parameter ABI size changed");

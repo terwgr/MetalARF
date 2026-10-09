@@ -1,0 +1,886 @@
+{
+  "kernels": [
+    {
+      "name": "noah_column",
+      "module": "noah_family",
+      "source": "woof/metal/shaders/noah_family.metal",
+      "cuda_source": "woof/core/kernels/noah.cu",
+      "cuda_symbol": "noah_column",
+      "resources": [
+        [
+          "ivgtyp",
+          "int32",
+          "read"
+        ],
+        [
+          "isltyp",
+          "int32",
+          "read"
+        ],
+        [
+          "psfc",
+          "float",
+          "read"
+        ],
+        [
+          "sfcprs",
+          "float",
+          "read"
+        ],
+        [
+          "sfctmp",
+          "float",
+          "read"
+        ],
+        [
+          "qv1",
+          "float",
+          "read"
+        ],
+        [
+          "qgh",
+          "float",
+          "read"
+        ],
+        [
+          "dz8w1",
+          "float",
+          "read"
+        ],
+        [
+          "glw",
+          "float",
+          "read"
+        ],
+        [
+          "swdown",
+          "float",
+          "read"
+        ],
+        [
+          "rainbl",
+          "float",
+          "read"
+        ],
+        [
+          "sr",
+          "float",
+          "read"
+        ],
+        [
+          "chs",
+          "float",
+          "read"
+        ],
+        [
+          "cqs2",
+          "float",
+          "read"
+        ],
+        [
+          "chs2",
+          "float",
+          "read_write"
+        ],
+        [
+          "rib",
+          "float",
+          "read"
+        ],
+        [
+          "vegfra",
+          "float",
+          "read"
+        ],
+        [
+          "shdmin",
+          "float",
+          "read"
+        ],
+        [
+          "shdmax",
+          "float",
+          "read"
+        ],
+        [
+          "tmn",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "xice",
+          "float",
+          "read"
+        ],
+        [
+          "snoalb",
+          "float",
+          "read"
+        ],
+        [
+          "embck",
+          "float",
+          "read"
+        ],
+        [
+          "tsk",
+          "float",
+          "read_write"
+        ],
+        [
+          "hfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "lh",
+          "float",
+          "read_write"
+        ],
+        [
+          "grdflx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "canwat",
+          "float",
+          "read_write"
+        ],
+        [
+          "snow",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowh",
+          "float",
+          "read_write"
+        ],
+        [
+          "albedo",
+          "float",
+          "read_write"
+        ],
+        [
+          "albbck",
+          "float",
+          "read_write"
+        ],
+        [
+          "emiss",
+          "float",
+          "read_write"
+        ],
+        [
+          "znt",
+          "float",
+          "read_write"
+        ],
+        [
+          "z0",
+          "float",
+          "read_write"
+        ],
+        [
+          "snotime",
+          "float",
+          "read_write"
+        ],
+        [
+          "lai",
+          "float",
+          "read_write"
+        ],
+        [
+          "smstav",
+          "float",
+          "read_write"
+        ],
+        [
+          "smstot",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfcrunoff",
+          "float",
+          "read_write"
+        ],
+        [
+          "udrunoff",
+          "float",
+          "read_write"
+        ],
+        [
+          "acsnow",
+          "float",
+          "read_write"
+        ],
+        [
+          "acsnom",
+          "float",
+          "read_write"
+        ],
+        [
+          "snopcx",
+          "float",
+          "read_write"
+        ],
+        [
+          "potevp",
+          "float",
+          "read_write"
+        ],
+        [
+          "noahres",
+          "float",
+          "read_write"
+        ],
+        [
+          "reslin",
+          "float",
+          "read_write"
+        ],
+        [
+          "chklowq",
+          "float",
+          "read_write"
+        ],
+        [
+          "smois",
+          "float",
+          "read_write"
+        ],
+        [
+          "tslb",
+          "float",
+          "read_write"
+        ],
+        [
+          "sh2o",
+          "float",
+          "read_write"
+        ],
+        [
+          "smcrel",
+          "float",
+          "read_write"
+        ],
+        [
+          "ebal",
+          "int32",
+          "read_write"
+        ],
+        [
+          "vegtbl",
+          "float",
+          "read"
+        ],
+        [
+          "soiltbl",
+          "float",
+          "read"
+        ],
+        [
+          "genp",
+          "float",
+          "read"
+        ],
+        [
+          "dzs",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ivgtyp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "isltyp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "psfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfcprs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfctmp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qgh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz8w1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "glw": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "swdown": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainbl": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chs": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "cqs2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chs2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rib": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "vegfra": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "shdmin": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "shdmax": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tmn": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xland": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xice": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snoalb": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "embck": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tsk": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "grdflx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qsfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "canwat": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "albedo": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "albbck": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "emiss": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "znt": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "z0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snotime": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lai": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smstav": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smstot": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfcrunoff": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "udrunoff": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "acsnow": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "acsnom": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snopcx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "potevp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "noahres": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "reslin": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chklowq": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smois": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "tslb": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "sh2o": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "smcrel": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "ebal": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "vegtbl": [
+          [
+            "lucats",
+            15
+          ]
+        ],
+        "soiltbl": [
+          [
+            "slcats",
+            10
+          ]
+        ],
+        "genp": [
+          [
+            16
+          ]
+        ],
+        "dzs": [
+          [
+            4
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "lucats",
+          "int32"
+        ],
+        [
+          "slcats",
+          "int32"
+        ],
+        [
+          "isurban",
+          "int32"
+        ],
+        [
+          "isice",
+          "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
+        ],
+        [
+          "itimestep",
+          "int32"
+        ],
+        [
+          "frpcpn",
+          "int32"
+        ],
+        [
+          "usemonalb",
+          "int32"
+        ],
+        [
+          "rdlai2d",
+          "int32"
+        ],
+        [
+          "opt_thcnd",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "noah_check_soil_categories",
+      "module": "noah_family",
+      "source": "woof/metal/shaders/noah_family.metal",
+      "cuda_source": "woof/core/kernels/noah_init.cu",
+      "cuda_symbol": "noah_initialize_sh2o",
+      "resources": [
+        [
+          "isltyp",
+          "int32",
+          "read"
+        ],
+        [
+          "status",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "isltyp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "status": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "slcats",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "noah_initialize_sh2o",
+      "module": "noah_family",
+      "source": "woof/metal/shaders/noah_family.metal",
+      "cuda_source": "woof/core/kernels/noah_init.cu",
+      "cuda_symbol": "noah_initialize_sh2o",
+      "resources": [
+        [
+          "isltyp",
+          "int32",
+          "read"
+        ],
+        [
+          "smois",
+          "float",
+          "read"
+        ],
+        [
+          "tslb",
+          "float",
+          "read"
+        ],
+        [
+          "sh2o",
+          "float",
+          "read_write"
+        ],
+        [
+          "soiltbl",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "isltyp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "smois": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "tslb": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "sh2o": [
+          [
+            4,
+            "ny",
+            "nx"
+          ]
+        ],
+        "soiltbl": [
+          [
+            "slcats",
+            10
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "slcats",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

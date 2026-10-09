@@ -1,0 +1,6 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "thompson_ice_sedimentation_active_ice_bindings.metalh"
+#include "thompson_ice_sedimentation_finalize_bindings.metalh"
+#include "thompson_ice_sedimentation_seed_bindings.metalh"
+#include "thompson_ice_sedimentation_select_timestep_bindings.metalh"
+#include "thompson_ice_sedimentation_subcycling_bindings.metalh"

@@ -1,0 +1,47 @@
+// Generated from kernel_signatures.json; layout dd6016176ac02e5f7c7d0817bb7ad28ef64ead477261aba429c79f88fae8787a.
+struct UrbanBepCoupleResources {
+    device const float *frc_urb2d [[id(0)]];
+    device const float *glw [[id(1)]];
+    device const float *swdown [[id(2)]];
+    device const float *rl_up_urb [[id(3)]];
+    device const float *rs_abs_urb [[id(4)]];
+    device const float *emiss_urb [[id(5)]];
+    device const float *grdflx_urb [[id(6)]];
+    device float *ust [[id(7)]];
+    device float *tsk [[id(8)]];
+    device float *hfx [[id(9)]];
+    device float *qfx [[id(10)]];
+    device float *lh [[id(11)]];
+    device float *grdflx [[id(12)]];
+    device float *albedo [[id(13)]];
+    device float *emiss [[id(14)]];
+    device float *ts_urb2d [[id(15)]];
+    device float *sh_urb2d [[id(16)]];
+    device float *lh_urb2d [[id(17)]];
+    device float *g_urb2d [[id(18)]];
+    device float *rn_urb2d [[id(19)]];
+    device const float *dz8w [[id(20)]];
+    device const float *rho [[id(21)]];
+    device const float *u_phy [[id(22)]];
+    device const float *v_phy [[id(23)]];
+    device float *a_u_bep [[id(24)]];
+    device float *a_v_bep [[id(25)]];
+    device float *a_t_bep [[id(26)]];
+    device float *a_q_bep [[id(27)]];
+    device float *a_e_bep [[id(28)]];
+    device float *b_u_bep [[id(29)]];
+    device float *b_v_bep [[id(30)]];
+    device float *b_t_bep [[id(31)]];
+    device float *b_q_bep [[id(32)]];
+    device float *b_e_bep [[id(33)]];
+    device float *sf_bep [[id(34)]];
+    device float *vl_bep [[id(35)]];
+};
+struct UrbanBepCoupleParams {
+    int lsm;
+    int nz;
+    int ny;
+    int nx;
+    int ncol;
+};
+static_assert(sizeof(UrbanBepCoupleParams) == 20, "urban_bep_couple parameter ABI size changed");

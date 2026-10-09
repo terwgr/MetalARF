@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout e4c8775c01e47e25403786239764aae0859f3fd72ba4d2135290844ccf6de586.
+struct NestBdyInterp1FragmentResources {
+    device const float *parent_a [[id(0)]];
+    device const float *child_a [[id(1)]];
+    device float *value_a [[id(2)]];
+    device float *tendency_a [[id(3)]];
+    device const int *ci_map_a [[id(4)]];
+    device const int *ip_map_a [[id(5)]];
+    device const int *cj_map_a [[id(6)]];
+    device const int *jp_map_a [[id(7)]];
+    device const float *xig_a [[id(8)]];
+    device const float *xjg_a [[id(9)]];
+};
+struct NestBdyInterp1FragmentParams {
+    float cdt;
+    int side;
+    int sz;
+    int nz;
+    int nyc;
+    int nxc;
+    int nyp;
+    int nxp;
+    int nlong;
+};
+static_assert(sizeof(NestBdyInterp1FragmentParams) == 36, "nest_bdy_interp1_fragment parameter ABI size changed");

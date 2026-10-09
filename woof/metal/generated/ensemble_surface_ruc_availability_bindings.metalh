@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout 21059f24c900539d56506ba33d2310ee87ebeab4b72fd69c5252e46fc83df422.
+struct EnsembleSurfaceRucAvailabilityResources {
+    device const float *total [[id(0)]];
+    device const int *soil_type [[id(1)]];
+    device const float *dry [[id(2)]];
+    device const float *reference [[id(3)]];
+    device float *availability [[id(4)]];
+    device const float *land [[id(5)]];
+    device const float *ice [[id(6)]];
+    device const float *parameters [[id(7)]];
+    device uint *bad [[id(8)]];
+};
+struct EnsembleSurfaceRucAvailabilityParams {
+    int columns;
+    int categories;
+    int apply;
+    float availability_floor;
+    float availability_ceiling;
+};
+static_assert(sizeof(EnsembleSurfaceRucAvailabilityParams) == 20, "ensemble_surface_ruc_availability parameter ABI size changed");

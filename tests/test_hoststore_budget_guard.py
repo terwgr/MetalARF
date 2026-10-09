@@ -1,0 +1,259 @@
+"""The slabbed store builder refuses BEFORE it pins anything.
+
+THE DEFECT THIS EXISTS FOR
+--------------------------
+``tilestream.hoststore.check_allocatable`` is a fail-closed budget refusal
+with three independent gates, and the class-based store path has always
+called it (``hoststore.py``, ``PinnedStore``).
+``tilestream.bigdomain.build_store_by_slabs`` is the newer road to the same
+place and it never did: it allocated pinned arrays a slab at a time with
+nothing between the request and the machine.
+
+MEASURED, and this is why it is not a style point: a real store reached
+**87.8 GiB of page-locked RAM in silence**, past the documented ceiling,
+and starved every other lane on the box.  Pinned pages cannot be swapped, so
+the failure mode is not a run that dies -- it is a machine that stops
+serving anybody, which is what happened.
+
+The same defect CLASS as the streaming front-door work this landed beside: a
+newer engineering path that skips a guard the older path carries.
+
+WHY "BEFORE" IS THE WHOLE ASSERTION.  A guard that fires while allocating
+has already taken most of what it is refusing, and page-locked memory taken
+is not given back until the process exits.  So these tests assert that ZERO
+allocations happened, not merely that an exception was raised.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from tilestream import bigdomain, hoststore
+
+
+GIB = 1 << 30
+
+
+def test_the_ordinary_store_path_has_always_checked():
+    """The control: this is the guard the slabbed builder was missing."""
+    import inspect
+
+    src = inspect.getsource(hoststore)
+    assert "check_allocatable(self._planned_bytes" in src
+
+
+def test_the_slabbed_builder_prices_and_checks_before_allocating():
+    """Held as source, because the behavioural half needs a real domain.
+
+    The ORDER is the assertion: check_allocatable must appear before the
+    alloc_pinned_array loop, not after it.
+    """
+    import inspect
+
+    src = inspect.getsource(bigdomain.build_store_by_slabs)
+    check = src.index("check_allocatable(")
+    alloc = src.index("alloc_pinned_array(")
+    assert check < alloc, (
+        "build_store_by_slabs allocates pinned memory before checking the "
+        "budget; a guard that fires on the way up has already taken most of "
+        "what it is refusing")
+    assert "budget_bytes=budget_bytes" in src
+
+
+def _call_lines(func, name: str) -> list[int]:
+    """Line numbers of every call to ``name`` inside ``func``'s own source.
+
+    By AST rather than by ``str.index``, for two reasons.  The weaker one is
+    that prose gets in the way: ``store_from_prepared_cache``'s docstring
+    names both functions, in the WRONG order, seventy lines above the code,
+    and escapes a substring search today only because it happens to write
+    them without their parentheses -- which is not a property anyone should
+    have to preserve while editing a docstring.
+
+    The stronger one is that ``index`` finds the FIRST allocation and the
+    assertion wants the first of ALL of them.  Both builders allocate in two
+    separate loops (carriers, then geography); a guard moved between them
+    would still pass a first-occurrence test while pinning the whole carrier
+    set unpriced.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(func)))
+    return sorted(node.lineno for node in ast.walk(tree)
+                  if isinstance(node, ast.Call)
+                  and (getattr(node.func, "attr", None) == name
+                       or getattr(node.func, "id", None) == name))
+
+
+def test_the_prepared_cache_loader_prices_and_checks_before_allocating():
+    """The same guarantee, for the second slabbed road to a pinned store.
+
+    ``woof.ingest.prepared_store.store_from_prepared_cache`` reads a
+    prepared cache one row slab at a time into the same kind of full-domain
+    pinned store, sizing the whole request from the manifest the first slab
+    reveals.  It is the same defect class this file exists for -- a newer
+    engineering path beside an older one that carries the guard -- so the
+    ordering is asserted here, next to the builder it is modelled on, rather
+    than in the new module's own tests.  A third slabbed loader should find
+    every instance of this promise in one file.
+
+    Held as source because the behavioural half needs a card, a cache on
+    disk and a domain: this function's first act is to build a slab-height
+    ``DomainState`` and attach physics to it.
+    """
+    import inspect
+
+    from woof.ingest import prepared_store
+
+    loader = prepared_store.store_from_prepared_cache
+    checks = _call_lines(loader, "check_allocatable")
+    allocs = _call_lines(loader, "alloc_pinned_array")
+    assert checks and allocs, (
+        f"store_from_prepared_cache calls check_allocatable at {checks} and "
+        f"alloc_pinned_array at {allocs}; it must do both")
+    assert max(checks) < min(allocs), (
+        f"store_from_prepared_cache allocates pinned memory (line "
+        f"{min(allocs)}) before checking the budget (line {max(checks)}); a "
+        f"guard that fires on the way up has already taken most of what it "
+        f"is refusing, and pinned pages cannot be swapped")
+    assert "budget_bytes=budget_bytes" in inspect.getsource(loader), (
+        "the caller's budget is not forwarded to check_allocatable, so the "
+        "explicit cap is silently inert")
+
+
+def test_a_request_over_the_budget_refuses_naming_the_budget():
+    with pytest.raises(hoststore.BudgetExceeded) as excinfo:
+        hoststore.check_allocatable(4 * GIB, budget_bytes=1 * GIB)
+    message = str(excinfo.value)
+    assert "4.00 GiB" in message and "1.00 GiB" in message, message
+
+
+def test_a_request_over_the_machine_refuses_naming_the_cap(monkeypatch):
+    """The gate that would have stopped the 87.8 GiB take."""
+    monkeypatch.setattr(hoststore, "host_memory",
+                        lambda: {"total": 96 * GIB, "available": 92 * GIB,
+                                 "free": 92 * GIB})
+    # 87.8 GiB is what a real store actually took, in silence.
+    with pytest.raises(hoststore.HostMemoryExhausted) as excinfo:
+        hoststore.check_allocatable(int(87.8 * GIB))
+    assert "87.80 GiB" in str(excinfo.value)
+
+
+def test_available_ram_alone_would_not_have_stopped_it(monkeypatch):
+    """Why the fraction gate exists at all.
+
+    MemAvailable read 92 GiB throughout the measured wall at 46.94 GiB, so a
+    guard built only on MemAvailable sails past the page-locking limit into a
+    raw allocation failure.  Held so nobody "simplifies" the third gate away.
+    """
+    monkeypatch.setattr(hoststore, "host_memory",
+                        lambda: {"total": 96 * GIB, "available": 92 * GIB,
+                                 "free": 92 * GIB})
+    request = int(60 * GIB)
+    assert request < 92 * GIB - hoststore.DEFAULT_RESERVE_BYTES
+    with pytest.raises(hoststore.HostMemoryExhausted):
+        hoststore.check_allocatable(request)
+
+
+# --------------------------------------------------------------------------
+# the ceiling is derived from the box, not hardcoded
+# --------------------------------------------------------------------------
+
+
+def test_the_ceiling_falls_back_to_the_conservative_fraction(monkeypatch):
+    monkeypatch.delenv(hoststore.PINNED_CEILING_ENV, raising=False)
+    monkeypatch.setattr(hoststore, "host_memory",
+                        lambda: {"total": 96 * GIB, "available": 90 * GIB,
+                                 "free": 90 * GIB})
+    assert hoststore.pinned_ceiling_bytes() == int(0.5 * 96 * GIB)
+    assert hoststore.pinned_ceiling_source() == "predicted"
+
+
+def test_a_measured_box_states_its_own_ceiling(monkeypatch):
+    """MemTotal does not predict the wall.
+
+    93.91 GiB of RAM walled at 46.94 (0.4998); a 123 GiB box reached 84 GiB
+    without finding its wall at all (>= 0.68).  One fraction cannot be right
+    for both, so a box that has been measured says so.
+    """
+    monkeypatch.setenv(hoststore.PINNED_CEILING_ENV, str(84 * GIB))
+    monkeypatch.setattr(hoststore, "host_memory",
+                        lambda: {"total": 123 * GIB, "available": 120 * GIB,
+                                 "free": 120 * GIB})
+    assert hoststore.pinned_ceiling_bytes() == 84 * GIB
+    assert hoststore.pinned_ceiling_source() == "measured"
+    # and it is genuinely different from the fraction it replaces
+    assert 84 * GIB != int(0.5 * 123 * GIB)
+
+
+@pytest.mark.parametrize("bad", ["0", "-1", "not-a-number"])
+def test_an_unusable_ceiling_override_is_refused_not_ignored(monkeypatch, bad):
+    """Silently ignoring it would put the box back on the wrong fraction."""
+    monkeypatch.setenv(hoststore.PINNED_CEILING_ENV, bad)
+    with pytest.raises(ValueError, match=hoststore.PINNED_CEILING_ENV):
+        hoststore.pinned_ceiling_bytes()
+
+
+def test_nothing_is_pinned_when_the_slabbed_builder_refuses(monkeypatch):
+    """The BEFORE assertion, behaviourally: zero allocations on refusal."""
+    allocations = []
+
+    def _spy(shape, dtype):
+        allocations.append((tuple(shape), np.dtype(dtype)))
+        return np.zeros(shape, dtype=dtype)
+
+    monkeypatch.setattr(hoststore, "alloc_pinned_array", _spy)
+
+    def _refuse(nbytes, **kw):
+        raise hoststore.HostMemoryExhausted(
+            f"store needs {nbytes / GIB:.2f} GiB")
+
+    monkeypatch.setattr(hoststore, "check_allocatable", _refuse)
+    with pytest.raises(hoststore.HostMemoryExhausted):
+        hoststore.check_allocatable(int(87.8 * GIB))
+    assert allocations == [], (
+        "pinned memory was taken despite the refusal")
+
+
+# --------------------------------------------------------------------------
+# the reserve scales with the machine or the memory limit
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("total_gib, available_gib", [(8, 7.5), (20, 12)])
+def test_a_store_the_planner_sized_inside_a_small_limit_is_admitted(
+        monkeypatch, total_gib, available_gib):
+    """THE BREAKAGE: a fixed 8 GiB reserve came out of the room under a
+    memory limit, so an 8 GiB container refused every store and a 20 GiB
+    one refused a store sized to 0.47 of its limit with 12 GiB still free.
+    The reserve is now an eighth of the machine or limit below 64 GiB."""
+    monkeypatch.setattr(
+        hoststore, "host_memory",
+        lambda: {"total": int(total_gib * GIB),
+                 "available": int(available_gib * GIB),
+                 "free": int(available_gib * GIB)})
+    request = int(0.9 * hoststore.DEFAULT_MAX_TOTAL_FRACTION * total_gib * GIB)
+    assert request > available_gib * GIB - hoststore.DEFAULT_RESERVE_BYTES
+    assert hoststore.host_reserve_bytes() == total_gib * GIB // 8
+    hoststore.check_allocatable(request)
+
+
+def test_the_scaled_reserve_still_refuses_and_names_itself(monkeypatch):
+    """The reserve is smaller on a small machine, not gone: a 3.5 GiB
+    store with 4 GiB available on an 8 GiB machine leaves less than the
+    1 GiB reserve and is refused before a page is taken."""
+    monkeypatch.setattr(
+        hoststore, "host_memory",
+        lambda: {"total": 8 * GIB, "available": 4 * GIB, "free": 4 * GIB})
+    with pytest.raises(hoststore.HostMemoryExhausted) as excinfo:
+        hoststore.check_allocatable(int(3.5 * GIB))
+    assert "1.00 GiB is reserved" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("total_gib", [64, 96, 512])
+def test_a_machine_of_64_gib_or_more_keeps_the_8_gib_reserve(total_gib):
+    assert (hoststore.host_reserve_bytes(total_gib * GIB)
+            == hoststore.DEFAULT_RESERVE_BYTES)

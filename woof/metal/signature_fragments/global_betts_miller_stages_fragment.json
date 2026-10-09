@@ -1,0 +1,54 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._betts_miller_adjust resident stages",
+      "layout_version": 1,
+      "module": "global_betts_miller_temperature_fragment",
+      "name": "global_betts_miller_temperature_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["theta", "float64_bits", "read"],
+        ["exner", "float64_bits", "read"],
+        ["temperature", "float64_bits", "read_write"]
+      ],
+      "shapes": {"theta": [["any_1d"]], "exner": [["any_1d"]], "temperature": [["any_1d"]]},
+      "source": "woof/metal/shaders/global_betts_miller_temperature_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._betts_miller_adjust resident stages",
+      "layout_version": 1,
+      "module": "global_betts_miller_theta_fragment",
+      "name": "global_betts_miller_theta_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["temperature", "float64_bits", "read"],
+        ["exner", "float64_bits", "read"],
+        ["theta", "float64_bits", "read_write"]
+      ],
+      "shapes": {"temperature": [["any_1d"]], "exner": [["any_1d"]], "theta": [["any_1d"]]},
+      "source": "woof/metal/shaders/global_betts_miller_theta_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._betts_miller_adjust resident stages",
+      "layout_version": 1,
+      "module": "global_betts_miller_deep_finalize_fragment",
+      "name": "global_betts_miller_deep_finalize_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["deep", "uint32", "read"],
+        ["deep_count", "uint32", "read_write"]
+      ],
+      "shapes": {"deep": [["any_1d"]], "deep_count": [[1]]},
+      "source": "woof/metal/shaders/global_betts_miller_deep_finalize_fragment.metal",
+      "threads_per_group": 1
+    }
+  ]
+}

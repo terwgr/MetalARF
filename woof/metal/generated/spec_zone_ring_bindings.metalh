@@ -1,0 +1,2 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "spec_zone_ring_copy_bindings.metalh"

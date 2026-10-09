@@ -1,0 +1,30 @@
+// Generated from kernel_signatures.json; layout 3bb1de6d5060ea0b1bc9dd10abcae725fd6b3f3da628a063470bc049bad7967e.
+struct RrtmgLegacySwAccumResources {
+    device const int *ngb [[id(0)]];
+    device const float *zincflx [[id(1)]];
+    device const float *zcd [[id(2)]];
+    device const float *zcu [[id(3)]];
+    device const float *zfd [[id(4)]];
+    device const float *zfu [[id(5)]];
+    device const float *ztdbt_nodel [[id(6)]];
+    device const float *ztdbtc_nodel [[id(7)]];
+    device float *pbbfd [[id(8)]];
+    device float *pbbfu [[id(9)]];
+    device float *pbbcd [[id(10)]];
+    device float *pbbcu [[id(11)]];
+    device float *pbbfddir [[id(12)]];
+    device float *pbbcddir [[id(13)]];
+    device float *puvfd [[id(14)]];
+    device float *puvcd [[id(15)]];
+    device float *puvfddir [[id(16)]];
+    device float *puvcddir [[id(17)]];
+    device float *pnifd [[id(18)]];
+    device float *pnicd [[id(19)]];
+    device float *pnifddir [[id(20)]];
+    device float *pnicddir [[id(21)]];
+};
+struct RrtmgLegacySwAccumParams {
+    int ncol;
+    int nl;
+};
+static_assert(sizeof(RrtmgLegacySwAccumParams) == 8, "rrtmg_legacy_sw_accum parameter ABI size changed");

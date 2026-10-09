@@ -1,0 +1,4 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "swint_coszen_loc_fragment_bindings.metalh"
+#include "swint_update_fragment_bindings.metalh"
+#include "swint_interp_fragment_bindings.metalh"

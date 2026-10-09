@@ -1,0 +1,26 @@
+// Generated from kernel_signatures.json; layout 997839eed54f3345c04f25b7af9364dcee6c748a850e6952bd35f8c45cf3378b.
+struct NoahForcingResources {
+    device const float *p_if0_a [[id(0)]];
+    device const float *p_if1_a [[id(1)]];
+    device const float *temperature0_a [[id(2)]];
+    device const float *qv0_a [[id(3)]];
+    device const float *dz0_a [[id(4)]];
+    device const float *br_a [[id(5)]];
+    device const float *sr_scheme_a [[id(6)]];
+    device const float *pending_a [[id(7)]];
+    device float *sfcprs_a [[id(8)]];
+    device float *sfctmp_a [[id(9)]];
+    device float *qv1_a [[id(10)]];
+    device float *dz8w1_a [[id(11)]];
+    device float *rib_a [[id(12)]];
+    device float *sr_a [[id(13)]];
+    device float *rainbl_a [[id(14)]];
+};
+struct NoahForcingParams {
+    float freezing;
+    int use_scheme_sr;
+    int ny;
+    int nx;
+    int ncol;
+};
+static_assert(sizeof(NoahForcingParams) == 20, "noah_forcing parameter ABI size changed");

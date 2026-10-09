@@ -1,0 +1,35 @@
+// Generated from kernel_signatures.json; layout b3180d259e493023a63502843e8377e1651cea38126bffb4bdd1060cf6dd5521.
+struct MorrisonFinalizeLevelsResources {
+    device float *theta [[id(0)]];
+    device float *qv [[id(1)]];
+    device float *qc [[id(2)]];
+    device float *qr [[id(3)]];
+    device float *qi [[id(4)]];
+    device float *qs [[id(5)]];
+    device float *qg [[id(6)]];
+    device float *nc [[id(7)]];
+    device float *nr [[id(8)]];
+    device float *ni [[id(9)]];
+    device float *ns [[id(10)]];
+    device float *ng [[id(11)]];
+    device const float *rho_in [[id(12)]];
+    device const float *pii [[id(13)]];
+    device const float *pressure [[id(14)]];
+    device const float *ice_to_snow_scratch [[id(15)]];
+    device float *effc [[id(16)]];
+    device float *effi [[id(17)]];
+    device float *effs [[id(18)]];
+    device float *effr [[id(19)]];
+};
+struct MorrisonFinalizeLevelsParams {
+    float morr_rhog;
+    int nz;
+    int ncell;
+    int ny;
+    int nx;
+    int j_start;
+    int j_stop;
+    int i_start;
+    int i_stop;
+};
+static_assert(sizeof(MorrisonFinalizeLevelsParams) == 36, "morrison_finalize_levels parameter ABI size changed");

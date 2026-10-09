@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 9cf6b5a437131cf5db997d060322414b2fdd93b1ee206869899e6d64fbe03fc1.
+struct RrtmgpPrepareSolverTemperaturesResources {
+    device const ulong *tlay [[id(0)]];
+    device const ulong *tlev [[id(1)]];
+    device float *out_tlay [[id(2)]];
+    device float *out_tlev [[id(3)]];
+};
+struct RrtmgpPrepareSolverTemperaturesParams {
+    int ncol;
+    int nlay;
+};
+static_assert(sizeof(RrtmgpPrepareSolverTemperaturesParams) == 8, "rrtmgp_prepare_solver_temperatures parameter ABI size changed");

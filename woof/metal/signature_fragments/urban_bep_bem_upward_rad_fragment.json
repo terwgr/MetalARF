@@ -1,0 +1,57 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_bem_upward_rad_fragment",
+      "module": "urban_bep_bem_upward_rad_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_upward_rad_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_upward_rad",
+      "resources": [
+        ["active_cols", "int32", "read"], ["ws", "float", "read"],
+        ["bs", "float", "read"],
+        ["pb", "float", "read"], ["ss", "float", "read"],
+        ["tg_av", "float", "read"], ["rlg", "float", "read"],
+        ["rsg", "float", "read"], ["sfg", "float", "read"],
+        ["lfg", "float", "read"], ["tw", "float", "read"],
+        ["rlw", "float", "read"], ["rsw", "float", "read"],
+        ["sfw", "float", "read"], ["tr_av", "float", "read"],
+        ["twlev", "float", "read"], ["sfwind", "float", "read"],
+        ["tpvlev", "float", "read"], ["sfr", "float", "read"],
+        ["sfrv", "float", "read"], ["lfr", "float", "read"],
+        ["lfrv", "float", "read"], ["rld", "float", "read"],
+        ["rs", "float", "read"], ["utype", "int32", "read"],
+        ["class_int", "int32", "read"], ["class_float", "float", "read"],
+        ["nzu_class", "int32", "read"],
+        ["rs_abs", "float", "read_write"], ["rl_up", "float", "read_write"],
+        ["emiss", "float", "read_write"], ["grdflx_urb", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["nitem"]], "ws": [["nitem", 2]],
+        "bs": [["nitem", 2]],
+        "pb": [["nitem", 19]], "ss": [["nitem", 19]],
+        "tg_av": [["nitem", 2]], "rlg": [["nitem", 2]],
+        "rsg": [["nitem", 2]], "sfg": [["nitem", 2]],
+        "lfg": [["nitem", 2]], "tw": [["nitem", 4, 18]],
+        "rlw": [["nitem", 4, 18]], "rsw": [["nitem", 4, 18]],
+        "sfw": [["nitem", 4, 18]], "tr_av": [["nitem", 18, 2]],
+        "twlev": [["nitem", 4, 18]], "sfwind": [["nitem", 4, 18]],
+        "tpvlev": [["nitem", 18, 2]], "sfr": [["nitem", 18, 2]],
+        "sfrv": [["nitem", 18, 2]], "lfr": [["nitem", 18, 2]],
+        "lfrv": [["nitem", 18, 2]], "rld": [["nitem"]],
+        "rs": [["nitem"]], "utype": [["nitem"]],
+        "class_int": [[37]], "class_float": [[1320]],
+        "nzu_class": [["nurbm"]], "rs_abs": [["nitem"]],
+        "rl_up": [["nitem"]], "emiss": [["nitem"]],
+        "grdflx_urb": [["nitem"]], "error": [["nitem"]]
+      },
+      "parameters": [
+        ["nitem", "int32"], ["nurbm", "int32"],
+        ["sigma", "float32"], ["dz_u", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout ed8298923e83c40d3ae1f5e4ea23ba5edaf75993e3af72d865bf213f41b0226b.
+struct CalcCqResources {
+    device const float *qv [[id(0)]];
+    device const float *qc [[id(1)]];
+    device const float *qr [[id(2)]];
+    device const float *qi [[id(3)]];
+    device const float *qs [[id(4)]];
+    device const float *qg [[id(5)]];
+    device const float *qh [[id(6)]];
+    device float *cqu [[id(7)]];
+    device float *cqv [[id(8)]];
+    device float *cqw [[id(9)]];
+};
+struct CalcCqParams {
+    int n_mass;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(CalcCqParams) == 16, "calc_cq parameter ABI size changed");

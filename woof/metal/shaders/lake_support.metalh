@@ -1,0 +1,172 @@
+#ifndef WOOF_LAKE_SUPPORT_METALH
+#define WOOF_LAKE_SUPPORT_METALH
+
+#include "soft_binary64.metalh"
+#include "soft_libm64.metalh"
+using namespace metal;
+
+// WRF's CLM lake code declares its work arrays and intermediates as real*8.
+// Metal has no hardware FP64, so keep the same operator-shaped transcription
+// and route every operation through the project's integer-only binary64.
+struct LakeR8 {
+    ulong bits;
+    LakeR8() : bits(0ul) {}
+    LakeR8(ulong value) : bits(value) {}
+    LakeR8(int value) : bits(soft64_from_i32(value)) {}
+    LakeR8(float value) : bits(soft64_from_f32_bits(as_type<uint>(value))) {}
+    operator float() const { return as_type<float>(soft64_to_f32_bits(bits)); }
+};
+
+static inline LakeR8 operator+(LakeR8 a, LakeR8 b)
+{ return LakeR8(soft64_add(a.bits, b.bits)); }
+static inline LakeR8 operator-(LakeR8 a, LakeR8 b)
+{ return LakeR8(soft64_sub(a.bits, b.bits)); }
+static inline LakeR8 operator*(LakeR8 a, LakeR8 b)
+{ return LakeR8(soft64_mul(a.bits, b.bits)); }
+static inline LakeR8 operator/(LakeR8 a, LakeR8 b)
+{ return LakeR8(soft64_div(a.bits, b.bits)); }
+#define LAKE_R8_MIXED_OP(OP) \
+static inline LakeR8 operator OP(LakeR8 a, float b) { return a OP LakeR8(b); } \
+static inline LakeR8 operator OP(float a, LakeR8 b) { return LakeR8(a) OP b; } \
+static inline LakeR8 operator OP(LakeR8 a, int b) { return a OP LakeR8(b); } \
+static inline LakeR8 operator OP(int a, LakeR8 b) { return LakeR8(a) OP b; }
+LAKE_R8_MIXED_OP(+)
+LAKE_R8_MIXED_OP(-)
+LAKE_R8_MIXED_OP(*)
+LAKE_R8_MIXED_OP(/)
+#undef LAKE_R8_MIXED_OP
+static inline LakeR8 operator-(LakeR8 a)
+{ return LakeR8(soft64_negate_bits(a.bits)); }
+static inline bool operator<(LakeR8 a, LakeR8 b)
+{ return soft64_less(a.bits, b.bits); }
+static inline bool operator>(LakeR8 a, LakeR8 b)
+{ return soft64_greater(a.bits, b.bits); }
+static inline bool operator<=(LakeR8 a, LakeR8 b)
+{ return soft64_less_equal(a.bits, b.bits); }
+static inline bool operator>=(LakeR8 a, LakeR8 b)
+{ return soft64_greater_equal(a.bits, b.bits); }
+static inline bool operator==(LakeR8 a, LakeR8 b)
+{ return soft64_equal(a.bits, b.bits); }
+static inline bool operator!=(LakeR8 a, LakeR8 b)
+{ return !soft64_equal(a.bits, b.bits); }
+#define LAKE_R8_MIXED_CMP(OP) \
+static inline bool operator OP(LakeR8 a, float b) { return a OP LakeR8(b); } \
+static inline bool operator OP(float a, LakeR8 b) { return LakeR8(a) OP b; } \
+static inline bool operator OP(LakeR8 a, int b) { return a OP LakeR8(b); } \
+static inline bool operator OP(int a, LakeR8 b) { return LakeR8(a) OP b; }
+LAKE_R8_MIXED_CMP(<)
+LAKE_R8_MIXED_CMP(>)
+LAKE_R8_MIXED_CMP(<=)
+LAKE_R8_MIXED_CMP(>=)
+LAKE_R8_MIXED_CMP(==)
+LAKE_R8_MIXED_CMP(!=)
+#undef LAKE_R8_MIXED_CMP
+static inline thread LakeR8& operator+=(thread LakeR8& a, LakeR8 b)
+{ a = a + b; return a; }
+static inline thread LakeR8& operator-=(thread LakeR8& a, LakeR8 b)
+{ a = a - b; return a; }
+static inline thread LakeR8& operator*=(thread LakeR8& a, LakeR8 b)
+{ a = a * b; return a; }
+static inline thread LakeR8& operator/=(thread LakeR8& a, LakeR8 b)
+{ a = a / b; return a; }
+static inline LakeR8 lake_r8_constant(ulong bits) { return LakeR8(bits); }
+static inline LakeR8 lake_abs(LakeR8 a)
+{ return LakeR8(soft64_abs_bits(a.bits)); }
+static inline LakeR8 lake_sqrt(LakeR8 a)
+{ return LakeR8(soft64_sqrt(a.bits)); }
+static inline LakeR8 lake_exp(LakeR8 a)
+{ return LakeR8(soft64_plm_exp(a.bits)); }
+static inline LakeR8 lake_log(LakeR8 a)
+{ return LakeR8(soft64_plm_log(a.bits)); }
+static inline LakeR8 lake_log10(LakeR8 a)
+{ return LakeR8(soft64_div(soft64_plm_log(a.bits), 0x40026bb1bbb55516ul)); }
+static inline LakeR8 lake_pow(LakeR8 a, LakeR8 b)
+{ return LakeR8(soft64_plm_pow(a.bits, b.bits)); }
+static inline LakeR8 lake_atan_small(LakeR8 x)
+{
+    const LakeR8 one(1), xx = x * x;
+    LakeR8 term = x, sum = x;
+    for (int k = 1; k < 36; ++k) {
+        term = -(term * xx);
+        sum += term / LakeR8(2 * k + 1);
+    }
+    return sum;
+}
+static inline LakeR8 lake_atan(LakeR8 x)
+{
+    const LakeR8 pi(0x400921fb54442d18ul);
+    const LakeR8 half_pi(0x3ff921fb54442d18ul);
+    const LakeR8 one(1);
+    const bool negative = x < LakeR8(0);
+    LakeR8 ax = negative ? -x : x;
+    LakeR8 y;
+    if (ax > one) {
+        y = half_pi - lake_atan(ax == LakeR8(0x7ff0000000000000ul)
+                                    ? LakeR8(0) : one / ax);
+    } else {
+        const LakeR8 reduced = ax / (one + lake_sqrt(one + ax * ax));
+        y = LakeR8(2) * lake_atan_small(reduced);
+    }
+    return negative ? -y : y;
+}
+static inline LakeR8 sqrt(LakeR8 a) { return lake_sqrt(a); }
+static inline LakeR8 exp(LakeR8 a) { return lake_exp(a); }
+static inline LakeR8 log(LakeR8 a) { return lake_log(a); }
+static inline LakeR8 log10(LakeR8 a) { return lake_log10(a); }
+static inline LakeR8 atan(LakeR8 a) { return lake_atan(a); }
+static inline LakeR8 pow(LakeR8 a, LakeR8 b) { return lake_pow(a, b); }
+static inline LakeR8 round(LakeR8 a)
+{
+    const LakeR8 half_value(0.5f), zero(0);
+    return LakeR8(soft64_from_i32(soft64_to_i32_rz(
+        (a + (a < zero ? -half_value : half_value)).bits).value));
+}
+static inline LakeR8 copysign(LakeR8 a, LakeR8 b)
+{ return LakeR8((a.bits & 0x7ffffffffffffffful) | (b.bits & 0x8000000000000000ul)); }
+static inline LakeR8 fabs(LakeR8 a) { return lake_abs(a); }
+
+template<class T> struct LakeArray {
+    thread T* data;
+    int lo1, lo2, lo3, n1, n2, n3;
+    LakeArray(thread T* p, int a, int b, int c=1, int d=1, int e=1, int f=1)
+      : data(p), lo1(a), lo2(c), lo3(e), n1(b-a+1), n2(d-c+1), n3(f-e+1) {}
+    thread T& operator()(int a) { return data[a-lo1]; }
+    thread const T& operator()(int a) const { return data[a-lo1]; }
+    thread T& operator()(int a, int b) { return data[a-lo1+n1*(b-lo2)]; }
+    thread const T& operator()(int a, int b) const { return data[a-lo1+n1*(b-lo2)]; }
+    thread T& operator()(int a, int b, int c) { return data[a-lo1+n1*(b-lo2+n2*(c-lo3))]; }
+    thread const T& operator()(int a, int b, int c) const { return data[a-lo1+n1*(b-lo2+n2*(c-lo3))]; }
+    void fill(T value) { for (int j=0; j<n1*n2*n3; ++j) data[j]=value; }
+};
+template<class T, int N> struct LakeStorage {
+    thread T* data;
+    int lo1, lo2, lo3, n1, n2, n3;
+    T values[N];
+    LakeStorage(int a, int b, int c=1, int d=1, int e=1, int f=1)
+      : data(static_cast<thread T*>(&values[0])), lo1(a), lo2(c), lo3(e), n1(b-a+1),
+        n2(d-c+1), n3(f-e+1) {}
+    operator LakeArray<T>() { return LakeArray<T>(static_cast<thread T*>(&values[0]),lo1,lo1+n1-1,lo2,lo2+n2-1,lo3,lo3+n3-1); }
+    thread T& operator()(int a) { return data[a-lo1]; }
+    thread const T& operator()(int a) const { return data[a-lo1]; }
+    thread T& operator()(int a, int b) { return data[a-lo1+n1*(b-lo2)]; }
+    thread const T& operator()(int a, int b) const { return data[a-lo1+n1*(b-lo2)]; }
+    thread T& operator()(int a, int b, int c) { return data[a-lo1+n1*(b-lo2+n2*(c-lo3))]; }
+    thread const T& operator()(int a, int b, int c) const { return data[a-lo1+n1*(b-lo2+n2*(c-lo3))]; }
+    void fill(T value) { for (int j=0; j<n1*n2*n3; ++j) data[j]=value; }
+};
+template<class A,class B> static inline auto lake_min(A a,B b)->decltype(a+b) { return a<b?a:b; }
+template<class A,class B,class C> static inline auto lake_min(A a,B b,C c)->decltype(a+b+c) { return lake_min(lake_min(a,b),c); }
+template<class A,class B> static inline auto lake_max(A a,B b)->decltype(a+b) { return a>b?a:b; }
+template<class A,class B,class C> static inline auto lake_max(A a,B b,C c)->decltype(a+b+c) { return lake_max(lake_max(a,b),c); }
+static inline int lake_abs(int x) { return x<0?-x:x; }
+static inline float lake_abs(float x) { return fabs(x); }
+static inline int lake_div(int a,int b) { return a/b; }
+static inline float lake_div(float a,float b) { return a/b; }
+static inline LakeR8 lake_div(LakeR8 a,LakeR8 b) { return a/b; }
+template<class A,class B> static inline auto lake_div(A a,B b)->decltype(a+b) { using T=decltype(a+b); return lake_div(T(a),T(b)); }
+template<class T> static inline T lake_pow(T a,int b) { bool neg=b<0; if(neg)b=-b; T r=1; while(b){if(b&1)r=r*a;b>>=1;if(b)a=a*a;}return neg?T(1)/r:r; }
+static inline LakeR8 lake_pow(LakeR8 a,float b) { return LakeR8(soft64_plm_pow(a.bits, LakeR8(b).bits)); }
+template<class A,class B> static inline auto lake_pow(A a,B b)->decltype(a+b) { using T=decltype(a+b); return pow(T(a),T(b)); }
+template<class T> static inline T lake_sum(LakeArray<T> a) { T r=0; for(int i=0;i<a.n1*a.n2*a.n3;++i)r=r+a.data[i]; return r; }
+
+#endif

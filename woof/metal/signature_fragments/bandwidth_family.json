@@ -1,0 +1,165 @@
+{
+  "kernels": [
+    {
+      "name": "glue_add",
+      "module": "bandwidth_glue",
+      "source": "woof/metal/shaders/bandwidth_family.metal",
+      "cuda_source": "woof/core/kernels/bandwidth_glue.cu",
+      "cuda_symbol": "glue_add",
+      "resources": [
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "n"
+          ]
+        ],
+        "dst": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "glue_capture_theta_forcing",
+      "module": "bandwidth_glue",
+      "source": "woof/metal/shaders/bandwidth_family.metal",
+      "cuda_source": "woof/core/kernels/bandwidth_glue.cu",
+      "cuda_symbol": "glue_capture_theta_forcing",
+      "resources": [
+        [
+          "rth",
+          "float",
+          "read"
+        ],
+        [
+          "mub",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "c1",
+          "float",
+          "read"
+        ],
+        [
+          "c2",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rth": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mub": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mup": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1": [
+          [
+            "nz"
+          ]
+        ],
+        "c2": [
+          [
+            "nz"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dst": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "mapped",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

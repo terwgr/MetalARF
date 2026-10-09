@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout e364e97093907b514cfa007179738ae22ac29ab2776d8019fe3fbe95979df341.
+struct Milbrandt2GeometryResources {
+    device const float *pres [[id(0)]];
+    device const float *psfc [[id(1)]];
+    device const float *DE [[id(2)]];
+    device float *DZ [[id(3)]];
+    device float *iDZ [[id(4)]];
+};
+struct Milbrandt2GeometryParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Milbrandt2GeometryParams) == 12, "milbrandt2_geometry parameter ABI size changed");

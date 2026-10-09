@@ -1,0 +1,60 @@
+{
+  "kernels": [
+    {
+      "name": "noahmp_bare_flux",
+      "module": "noahmp_bareflux_family",
+      "source": "woof/metal/shaders/noahmp_bareflux_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_bareflux.cu",
+      "cuda_symbol": "noahmp_bare_flux",
+      "resources": [
+        [
+          "in",
+          "float",
+          "read"
+        ],
+        [
+          "ii",
+          "int32",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "in": [
+          [
+            "n",
+            53
+          ]
+        ],
+        "ii": [
+          [
+            "n",
+            5
+          ]
+        ],
+        "out": [
+          [
+            "n",
+            13
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "fp32-precise-native-metal-math",
+        "cuda-libm-identity-unverified"
+      ]
+    }
+  ]
+}

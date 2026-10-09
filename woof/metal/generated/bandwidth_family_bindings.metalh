@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "glue_add_bindings.metalh"
+#include "glue_capture_theta_forcing_bindings.metalh"

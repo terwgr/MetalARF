@@ -1,0 +1,500 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+import woof.era5_direct as era5_direct
+from woof.era5_direct import (
+    INPUT_MANIFEST_SCHEMA,
+    _STATIC_REQUIRED,
+    _domain_source_orography,
+    _load_static,
+    _verify_input_manifest,
+    _write_geometry_receipt,
+)
+
+
+def _sha256(path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _complete_static_fields(ny: int = 2, nx: int = 3):
+    mass = (ny, nx)
+    fields = {
+        "HGT_M": np.ones(mass, dtype=np.float64),
+        "LANDMASK": np.ones(mass, dtype=np.float64),
+        "LU_INDEX": np.ones(mass, dtype=np.float64),
+        "SCT_DOM": np.ones(mass, dtype=np.float64),
+        "SCB_DOM": np.ones(mass, dtype=np.float64),
+        "SNOALB": np.zeros(mass, dtype=np.float64),
+        "SOILTEMP": np.full(mass, 285.0, dtype=np.float64),
+        "TMN": np.full(mass, 285.0, dtype=np.float64),
+        "GREENFRAC": np.full((12, *mass), 0.5, dtype=np.float64),
+        "LAI12M": np.full((12, *mass), 2.0, dtype=np.float64),
+        "ALBEDO12M": np.full((12, *mass), 20.0, dtype=np.float64),
+        "LANDUSEF": np.zeros((21, *mass), dtype=np.float64),
+        "SOILCTOP": np.zeros((16, *mass), dtype=np.float64),
+        "SOILCBOT": np.zeros((16, *mass), dtype=np.float64),
+    }
+    for name in ("LANDUSEF", "SOILCTOP", "SOILCBOT"):
+        fields[name][0] = 1.0
+    assert set(fields) == set(_STATIC_REQUIRED)
+    return fields
+
+
+def test_era5_domain_orography_bindings_are_exact_and_ordered(tmp_path):
+    declaration = _domain_source_orography([
+        f"d06={tmp_path / 'd06.nc'}",
+        f"d01={tmp_path / 'd01.nc'}",
+        f"d03={tmp_path / 'd03.nc'}",
+        f"d02={tmp_path / 'd02.nc'}",
+        f"d05={tmp_path / 'd05.nc'}",
+        f"d04={tmp_path / 'd04.nc'}",
+    ], "SOILHGT")
+    assert tuple(domain_id for domain_id, _ in declaration.by_domain) == (
+        1, 2, 3, 4, 5, 6)
+    with pytest.raises(ValueError, match="duplicate"):
+        _domain_source_orography([
+            f"d01={tmp_path / 'first.nc'}",
+            f"d01={tmp_path / 'second.nc'}",
+        ], "SOILHGT")
+    with pytest.raises(ValueError, match="dNN=PATH"):
+        _domain_source_orography(["one=/tmp/d01.nc"], "SOILHGT")
+
+
+def test_root_static_can_be_built_directly_from_wps_geog(
+        tmp_path, monkeypatch):
+    catalog = object()
+    receipt = {"schema": "verified-static", "status": "PASS"}
+    observed = {}
+    monkeypatch.setattr(
+        era5_direct,
+        "verified_static_catalog",
+        lambda wps, geog, ids: (
+            observed.update(wps=wps, geog=geog, ids=tuple(ids)) or catalog,
+            receipt,
+        ),
+    )
+    fields = _complete_static_fields()
+    monkeypatch.setattr(
+        era5_direct,
+        "build_static_for_domain",
+        lambda grid, actual_catalog, domain_id: (
+            observed.update(
+                grid=grid, catalog=actual_catalog, domain_id=domain_id)
+            or fields
+        ),
+    )
+    # The land-use attributes come from the SAME catalog the statics were
+    # built from, so the water-temperature assembly and the statics cannot
+    # disagree about which category is a lake.
+    attrs = {"MMINLU": "MODIFIED_IGBP_MODIS_NOAH", "ISWATER": 17,
+             "ISLAKE": 21, "ISICE": 15, "ISURBAN": 13}
+    monkeypatch.setattr(
+        era5_direct,
+        "geog_selection_from_catalog",
+        lambda actual_catalog, domain_id: (
+            observed.update(
+                selection_catalog=actual_catalog,
+                selection_domain_id=domain_id)
+            or SimpleNamespace(landuse_global_attrs=lambda: attrs)
+        ),
+    )
+    plane = np.ones((2, 3), dtype=np.float64)
+    grid = SimpleNamespace(
+        mapfac_m=lambda: plane,
+        mapfac_u=lambda: np.ones((2, 4)),
+        mapfac_v=lambda: np.ones((3, 3)),
+        coriolis_m=lambda: (plane * 2, plane * 3),
+        rotation_m=lambda: (plane * 4, plane * 5),
+    )
+    cfg = SimpleNamespace(ny=2, nx=3)
+
+    static, actual_receipt, landuse_attrs = era5_direct._static_from_geog(
+        tmp_path / "namelist.wps", tmp_path / "WPS_GEOG", grid, cfg)
+    assert actual_receipt is receipt
+    assert observed["ids"] == (1,)
+    assert observed["catalog"] is catalog
+    assert observed["domain_id"] == 1
+    assert static["MAPFAC_U"].shape == (2, 4)
+    assert landuse_attrs is attrs
+    assert observed["selection_catalog"] is catalog
+    assert observed["selection_domain_id"] == 1
+
+
+def test_static_validation_rejects_zero_terrain_over_land_before_export():
+    # Three rows by four columns, all land: the two middle cells have land
+    # on all four sides, which ground at sea level cannot.
+    fields = _complete_static_fields(3, 4)
+    fields["HGT_M"][:] = 0.0
+    fields["LANDMASK"][:] = 1.0
+    plane = np.ones((3, 4), dtype=np.float64)
+    grid = SimpleNamespace(
+        mapfac_m=lambda: plane,
+        mapfac_u=lambda: np.ones((3, 5)),
+        mapfac_v=lambda: np.ones((4, 4)),
+        coriolis_m=lambda: (plane, plane),
+        rotation_m=lambda: (plane, plane),
+    )
+
+    with pytest.raises(ValueError, match="identically zero over every land"):
+        era5_direct._validated_static(fields, grid, 3, 4)
+    # A route that lays a declared high-resolution terrain over these
+    # fields defers the check to what the overlay makes of them.
+    era5_direct._validated_static(fields, grid, 3, 4, land_terrain=False)
+
+
+def test_era5_input_manifest_binds_every_role(tmp_path):
+    role_paths = {}
+    files = {}
+    for role in ("grib", "vtable", "static_input"):
+        path = tmp_path / f"{role}.bin"
+        path.write_bytes(role.encode("ascii"))
+        role_paths[role] = path
+        files[role] = {"name": path.name, "sha256": _sha256(path)}
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps({
+        "schema": INPUT_MANIFEST_SCHEMA,
+        "files": files,
+    }))
+
+    actual = _verify_input_manifest(
+        manifest_path, _sha256(manifest_path), role_paths)
+    assert actual["schema"] == INPUT_MANIFEST_SCHEMA
+
+    role_paths["grib"].write_bytes(b"mutated")
+    with pytest.raises(ValueError, match="digest mismatch for grib"):
+        _verify_input_manifest(
+            manifest_path, _sha256(manifest_path), role_paths)
+
+
+def test_era5_static_loader_is_shape_checked_and_source_neutral(tmp_path):
+    values = _complete_static_fields()
+    static_path = tmp_path / "static.npz"
+    np.savez(static_path, **values)
+    plane = np.ones((2, 3), dtype=np.float64)
+
+    class Grid:
+        def mapfac_m(self):
+            return plane
+
+        def mapfac_u(self):
+            return np.ones((2, 4), dtype=np.float64)
+
+        def mapfac_v(self):
+            return np.ones((3, 3), dtype=np.float64)
+
+        def coriolis_m(self):
+            return plane, plane
+
+        def rotation_m(self):
+            return np.zeros_like(plane), plane
+
+    actual = _load_static(static_path, Grid(), 2, 3)
+    assert set(_STATIC_REQUIRED) < set(actual)
+    assert actual["MAPFAC_U"].shape == (2, 4)
+
+    values["TMN"] = np.ones((3, 3), dtype=np.float32)
+    np.savez(static_path, **values)
+    with pytest.raises(ValueError, match="static field TMN"):
+        _load_static(static_path, Grid(), 2, 3)
+
+
+def test_era5_geometry_receipt_has_portable_cache_reference(tmp_path):
+    cache = tmp_path / "native-static.npz"
+    cache.write_bytes(b"static")
+    plane = np.ones((2, 3), dtype=np.float64)
+    grid = SimpleNamespace(
+        ref_lat=39.0,
+        ref_lon=-84.0,
+        truelat1=30.0,
+        truelat2=60.0,
+        stand_lon=-84.0,
+        e_we=4,
+        e_sn=3,
+        dx=12000.0,
+        dy=12000.0,
+        cen_lat=39.0,
+        cen_lon=-84.0,
+        known_x=2.0,
+        known_y=1.5,
+        moad_cen_lat=39.0,
+        moad_cen_lon=-84.0,
+        latlon_mass=lambda: (plane * 39.0, plane * -84.0),
+    )
+    cfg = SimpleNamespace(ny=2, nx=3, nz=49, dx=12000.0, dy=12000.0)
+    receipt_path = tmp_path / "receipt.json"
+    _write_geometry_receipt(receipt_path, grid, cfg, cache)
+    receipt = json.loads(receipt_path.read_text())
+    assert receipt["cache"]["path"] == "native-static.npz"
+    assert receipt["cache"]["sha256"] == _sha256(cache)
+    assert receipt["geometry"]["known_x"] == grid.known_x
+    assert receipt["geometry"]["known_y"] == grid.known_y
+    assert receipt["geometry"]["moad_cen_lat"] == grid.moad_cen_lat
+    assert receipt["geometry"]["moad_cen_lon"] == grid.moad_cen_lon
+
+
+# ---------------------------------------------------------------------------
+# the soil hand-off on the route whose orography rides inside the GRIB
+#
+# The wizard emits a case with no source-orography artifact, because `woof
+# fetch --source era5` writes the invariant geopotential INTO
+# era5-combined.grib.  On that route `source_terrain` is None by
+# construction, and the soil call used to forward that None beside a real
+# HGT_M -- so preprocess_noah_soil's all-or-none guard refused the whole
+# preparation.  initialize_real had resolved the same field for itself one
+# screen earlier; only the soil hand-off had not.
+
+_ERA5_TEMP_NAMES = ("ST000007", "ST007028", "ST028100", "ST100289")
+_ERA5_MOIST_NAMES = ("SM000007", "SM007028", "SM028100", "SM100289")
+
+
+def _era5_land_fields(shape=(3, 4), *, skin=290.0, orography=200.0):
+    """What interpolate_era5_to_lambert emits on the SOILGEO route.
+
+    SOURCE_OROGRAPHY is the renamed, remapped SOILGEO record: ERA5's own
+    terrain on the target mass grid, in metres.
+    """
+    fields = {
+        "LANDSEA": np.ones(shape),
+        "SKINTEMP": np.full(shape, skin),
+    }
+    fields.update({name: np.full(shape, 288.0) for name in _ERA5_TEMP_NAMES})
+    fields.update({name: np.full(shape, 0.30) for name in _ERA5_MOIST_NAMES})
+    fields["SOURCE_OROGRAPHY"] = np.full(shape, orography)
+    return fields
+
+
+def test_the_gribs_own_orography_is_what_the_soil_hand_off_lapses_from():
+    fields = _era5_land_fields(orography=200.0)
+    resolved = era5_direct._soil_source_orography(None, fields)
+    # The SOURCE terrain, not the target HGT_M and not None.
+    assert resolved is fields["SOURCE_OROGRAPHY"]
+    assert float(np.asarray(resolved).flat[0]) == 200.0
+
+
+def test_a_declared_artifact_still_outranks_the_embedded_record():
+    fields = _era5_land_fields(orography=200.0)
+    declared = np.full((3, 4), 640.0)
+    assert era5_direct._soil_source_orography(declared, fields) is declared
+
+
+def test_a_route_carrying_neither_source_orography_is_refused_by_name():
+    fields = _era5_land_fields()
+    del fields["SOURCE_OROGRAPHY"]
+    with pytest.raises(ValueError, match="no source orography"):
+        era5_direct._soil_source_orography(None, fields)
+
+
+def test_the_soilgeo_route_reaches_past_the_all_or_none_soil_guard():
+    """The wall itself: this raised ValueError before the resolver existed.
+
+    Reverting `_soil_source_orography(source_terrain, initial_met.fields)`
+    to a bare `source_terrain` puts this back to
+    "terrain and source_orography must be provided together".
+    """
+    from woof.ingest.soil import preprocess_noah_soil
+
+    shape = (3, 4)
+    fields = _era5_land_fields(shape, skin=290.0, orography=200.0)
+    terrain = np.full(shape, 700.0)
+
+    state = preprocess_noah_soil(
+        fields,
+        soil_type=np.full(shape, 6),
+        deep_soil_temperature=np.full(shape, 285.0),
+        landmask=np.ones(shape),
+        terrain=terrain,
+        source_orography=era5_direct._soil_source_orography(None, fields),
+    )
+
+    # And the adjustment is real, not merely tolerated: WRF's
+    # adjust_soil_temp_new lapse over the 500 m the model grid climbs
+    # above ERA5's own terrain is -0.0065 * 500 = -3.25 K on land skin.
+    assert np.allclose(np.asarray(state.tsk), 290.0 - 3.25)
+    assert np.allclose(np.asarray(state.soil_temperature), 288.0 - 3.25)
+
+
+def _era5_inputs(tmp_path, monkeypatch, *, domains):
+    """The ERA5 door's own inputs, verified, up to its experiment load."""
+    from pathlib import Path
+
+    roles = {}
+    for role, name in (("grib", "era5.grib"), ("vtable", "Vtable.ERA5"),
+                       ("bridge", "bridge.exe"),
+                       ("wps_namelist", "namelist.wps"),
+                       ("experiment_config", "exp.toml")):
+        path = tmp_path / name
+        path.write_bytes(name.encode())
+        path.chmod(0o755)
+        roles[role] = path
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({
+        "schema": era5_direct.INPUT_MANIFEST_SCHEMA,
+        "files": {role: {"name": path.name,
+                         "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                  for role, path in roles.items()},
+    }), encoding="utf-8")
+    monkeypatch.setattr(
+        era5_direct, "resolve_preprocess_backend",
+        lambda *_a, **_k: SimpleNamespace(receipt=lambda: {"backend": "cpu"}))
+    exp = SimpleNamespace(domains=tuple(range(1, domains + 1)))
+    monkeypatch.setattr(era5_direct, "load_era5_adapter_config",
+                        lambda _path: (exp, None))
+    return dict(
+        grib=roles["grib"], vtable=roles["vtable"], bridge=roles["bridge"],
+        wps_namelist=roles["wps_namelist"], static_input=None,
+        static_receipt=None, source_orography=None,
+        source_orography_variable="SOILHGT",
+        experiment_config=roles["experiment_config"],
+        input_manifest=manifest,
+        input_manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        output_root=Path(tmp_path) / "prepared",
+        geog_root=tmp_path)
+
+
+def _era5_door(tmp_path, monkeypatch, *, domains):
+    """``_era5_inputs`` under an output root 277 characters deep."""
+    from pathlib import Path
+
+    from woof import fetch_guard
+
+    arguments = _era5_inputs(tmp_path, monkeypatch, domains=domains)
+    monkeypatch.setattr(fetch_guard, "windows_path_limit", lambda: 259)
+    if len(str(tmp_path)) >= 124:
+        pytest.skip("temporary root already exceeds the 125-character parent")
+    parent = Path(tmp_path) / ("p" * (125 - len(str(tmp_path)) - 1))
+    arguments["output_root"] = parent / ("era5-tree-domain-z80" + "x" * 72)
+    return arguments
+
+
+def test_an_era5_domain_tree_too_deep_for_windows_is_refused_before_decode(
+        tmp_path, monkeypatch):
+    """The ERA5 door publishes the same domain tree the HRRR stage does;
+    under a root that puts its header at 277 characters it is refused
+    as soon as the experiment says it is a tree, before the manifest
+    verification hashes the GRIB and before any decode."""
+    arguments = _era5_door(tmp_path, monkeypatch, domains=2)
+    hashed = []
+    original_sha256 = era5_direct._sha256
+
+    def sha256_spy(path):
+        hashed.append(path)
+        return original_sha256(path)
+
+    monkeypatch.setattr(era5_direct, "_sha256", sha256_spy)
+
+    with pytest.raises(ValueError) as caught:
+        era5_direct.prepare_era5_wrf(**arguments)
+
+    message = str(caught.value)
+    assert message.startswith("refusing output root ")
+    assert "277 characters" in message
+    assert not hashed
+    assert not arguments["output_root"].parent.exists()
+
+
+def test_a_single_era5_domain_is_not_measured_as_a_tree(
+        tmp_path, monkeypatch):
+    """A single domain publishes no tree, so the same root goes on."""
+    import woof.case_data as case_data
+
+    class Reached(Exception):
+        pass
+
+    def reached(*_args, **_kwargs):
+        raise Reached()
+
+    arguments = _era5_door(tmp_path, monkeypatch, domains=1)
+    monkeypatch.setattr(case_data, "preparation_case_policy", reached)
+
+    with pytest.raises(Reached):
+        era5_direct.prepare_era5_wrf(**arguments)
+
+
+@pytest.mark.parametrize("domains", [1, 2])
+def test_an_era5_tree_defers_a_perturbation_block_a_single_domain_refuses(
+        tmp_path, monkeypatch, capsys, domains):
+    """The tree runner applies the bubbles whatever source prepared the
+    tree, so an ERA5 tree takes the block past the gate that used to
+    refuse it; a single domain, whose runner applies no bubble, is still
+    refused by name before any source is read."""
+    import woof.static.highres_production as highres
+    from woof.experiment import BubbleConfig, PerturbationConfig
+
+    class Reached(Exception):
+        pass
+
+    arguments = _era5_inputs(tmp_path, monkeypatch, domains=domains)
+    exp = SimpleNamespace(
+        domains=tuple(range(1, domains + 1)), root=SimpleNamespace(run=None),
+        perturbation=PerturbationConfig(bubbles=(BubbleConfig(
+            center_lat=50.0, center_lon=6.0, center_height_m=1500.0,
+            radius_km=10.0, depth_m=1500.0, amplitude_k=0.01),)))
+    monkeypatch.setattr(era5_direct, "load_era5_adapter_config",
+                        lambda _path: (exp, None))
+    monkeypatch.setattr(highres, "load_static_highres", lambda *_a: None)
+
+    def reached(*_args, **_kwargs):
+        raise Reached()
+
+    monkeypatch.setattr(era5_direct, "validate_native_lambert_contract", reached)
+    monkeypatch.setattr(era5_direct, "validate_native_lambert_contracts", reached)
+
+    if domains == 1:
+        with pytest.raises(
+                ValueError,
+                match=r"single-domain ERA5-direct prepared-cache route does "
+                      r"not apply \[perturbation\]"):
+            era5_direct.prepare_era5_wrf(**arguments)
+    else:
+        with pytest.raises(Reached):
+            era5_direct.prepare_era5_wrf(**arguments)
+        assert "deferred to prepared-tree forecast initialization" in (
+            capsys.readouterr().err)
+    assert not arguments["output_root"].exists()
+
+
+def test_the_era5_tree_asks_for_an_optional_stock_wrf_export():
+    """The companion WRF file set cannot carry a deferred bubble.
+
+    ``initialize_and_export_regular_source_hierarchy`` defaults to a
+    required export, and this route passed nothing, so an ERA5 tree
+    whose experiment carried [perturbation] would be built domain by
+    domain and then thrown away when the unchanged-WRF export refused
+    the bubble.  Asked for as optional, as the GFS, mapped and HRRR tree
+    routes ask, the refusal is recorded in the proof, and the proof
+    states the mode so the reader accepts a REFUSED export manifest.
+    Read from the call site because the orchestration below it needs a
+    decoded ERA5 series to run; each mode's behaviour is pinned in
+    tests/test_native_hierarchy.py.
+    """
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(era5_direct))
+    modes = [
+        keyword.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "initialize_and_export_regular_source_hierarchy"
+        for keyword in node.keywords
+        if keyword.arg == "stock_wrf_export"
+    ]
+    assert modes == ["optional"]
+    stated = [
+        value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Dict)
+        and any(isinstance(key, ast.Constant)
+                and key.value == "gpuwm-era5-native-hierarchy-proof-v1"
+                for key in node.values)
+        for key, value in zip(node.keys, node.values)
+        if isinstance(key, ast.Constant) and key.value == "stock_wrf_export"
+    ]
+    assert stated == ["optional"]

@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 97d79537ea962d701f62f344052af628c94f6b052490e8a35fb494253ce81d6c.
+struct TopoShadowInitResources {
+    device float *ht_loc [[id(0)]];
+    device float *ht_shad [[id(1)]];
+    device int *shadowmask [[id(2)]];
+};
+struct TopoShadowInitParams {
+    int nested;
+    int nx;
+    int ny;
+};
+static_assert(sizeof(TopoShadowInitParams) == 12, "topo_shadow_init parameter ABI size changed");

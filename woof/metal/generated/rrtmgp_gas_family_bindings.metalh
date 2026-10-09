@@ -1,0 +1,7 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "rrtmgp_gas_optics_bindings.metalh"
+#include "rrtmgp_gas_optics_reference_bindings.metalh"
+#include "rrtmgp_gas_vmr_fill_bindings.metalh"
+#include "rrtmgp_interpolation_inline_reference_bindings.metalh"
+#include "rrtmgp_interpolation_prepass_bindings.metalh"
+#include "rrtmgp_planck_sources_bindings.metalh"

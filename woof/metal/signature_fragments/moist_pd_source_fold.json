@@ -1,0 +1,145 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/moist.py",
+      "cuda_symbol": "_pd_fold_sources",
+      "layout_version": 1,
+      "module": "moist_pd_source_fold",
+      "name": "moist_pd_source_fold",
+      "parameters": [
+        [
+          "dt_eff",
+          "float32"
+        ],
+        [
+          "has_physics",
+          "int32"
+        ],
+        [
+          "has_fixed",
+          "int32"
+        ],
+        [
+          "has_lbc",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "q0",
+          "float",
+          "read"
+        ],
+        [
+          "physics",
+          "float",
+          "read"
+        ],
+        [
+          "fixed",
+          "float",
+          "read"
+        ],
+        [
+          "lbc",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "mu0",
+          "float",
+          "read"
+        ],
+        [
+          "q0_eff",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "mu0": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "physics": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fixed": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "lbc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "q0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "q0_eff": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/moist_pd_source_fold.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

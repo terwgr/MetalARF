@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout f63f41f5648561a37119da57140c9580d4c45a2fd909a447b981f80dfb97985a.
+struct RrtmgpFinalizeCloudLwResources {
+    device const float *tau_gas [[id(0)]];
+    device const float *tau_cloud [[id(1)]];
+    device const float *ssa_cloud [[id(2)]];
+    device const float *gpoint_bands [[id(3)]];
+    device const float *cloud_mask [[id(4)]];
+    device float *tau [[id(5)]];
+};
+struct RrtmgpFinalizeCloudLwParams {
+    int n;
+    int ncell;
+    int ngpt;
+    int nband;
+    int have_mask;
+};
+static_assert(sizeof(RrtmgpFinalizeCloudLwParams) == 20, "rrtmgp_finalize_cloud_lw parameter ABI size changed");

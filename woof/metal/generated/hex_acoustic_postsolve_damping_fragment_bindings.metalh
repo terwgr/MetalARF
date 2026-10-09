@@ -1,0 +1,2 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "hex_acoustic_postsolve_damping_bindings.metalh"

@@ -1,0 +1,122 @@
+# T799 L40, the full native suite on the semi-Lagrangian core: one forecast day, wall clock, on a card with nothing else on it.
+#
+# The wall table of the semi-Lagrangian core is four rows of this shape, one
+# per truncation, all from the same case (the GDAS 2026-09-01 00Z analysis),
+# the same suite, the same 40 levels and the same 300 s step.  Only the
+# truncation, the two grid-spacing-dependent physics settings and the
+# radiation bucket move, so the row-to-row difference is resolution and
+# nothing else.
+#
+# output_interval_s is the whole duration: a forecast day at T799 writes
+# 3.8 GiB a checkpoint, and this config exists to measure a wall, not to be
+# scored.  The scored arms are the arwen_global_gdas_t255_native_sl_si_24h
+# family.
+#
+# radiation_interval_s is BUCKETED, so it is the whole multiple of the step
+# nearest this grid's one-minute-per-km convention (16.7 km -> 15 min):
+# 900 s = 3 steps.  land_surface_interval_s is the step.
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-gdas-t799-native-sl-si-wall"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 799
+dealias_factor = 1.5
+
+# The step is NOT bound by the advective Courant number on this core: the
+# semi-Lagrangian advection has no such bound, and the runner's CFL refusal is
+# replaced on this path by the Lipschitz gate (dt times the largest singular
+# value of the flow's own 3x3 Jacobian, refused above 0.75).  The advective
+# Courant number is still measured and written to the receipt every step.
+[time]
+dt_s = 300.0
+duration_s = 86400.0
+output_interval_s = 86400.0
+integrator = "sl_si"
+maximum_lipschitz = 0.75
+
+[semilag]
+quasi_monotone = true
+trajectory_iterations = 3
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+# analysis_mapping is the packaged authority's BARE ID, not a path: the
+# resolver globs rw-wps-<id>-*.mapping.json under gpuwm/authorities and
+# requires exactly one match, so this spelling resolves from an installed
+# wheel as well as from a checkout root.
+[initial]
+mode = "analysis"
+analysis_grib = "cases/baseline-2026090100/gdas.t00z.pgrb2.0p25.f000"
+analysis_mapping = "gdas-global"
+surface_water_kg_m2 = 500.0
+
+# start_time_utc matches the ingested GDAS cycle (2026-09-01 00Z), so the
+# RRTMGP solar geometry runs on the analysis instant.  dx_m feeds sfclay its
+# grid-spacing-dependent branches and Grell-Freitas its scale-aware closure at
+# this grid's equatorial spacing; cumulus = "gf" is the adapter default
+# (shallow arm on), so it is not repeated in the options mapping.
+# radiation_column_chunk is the tree's own sizing for this truncation.
+[physics]
+mode = "arwen-native"
+native_adapter_name = "arwen-cuda-column-suite-v1"
+native_adapter_options = { acknowledgement = "device-pending-arwen-native-physics-v1", start_time_utc = "2026-09-01T00:00:00Z", radiation = "rrtmgp", radiation_interval_s = 900.0, radiation_column_chunk = 5000, radiation_validation_mode = "fused", surface_layer = "sfclay", sfclay_option = 1, land_surface = "noah", land_surface_interval_s = 300.0, pbl = "ysu", ysu_topdown_pblmix = 1, microphysics = "morrison", morr_rimed_ice = 1, dx_m = 16700.0 }
+
+# The semi-Lagrangian core's own drain (config.SEMILAG_DIFFUSION_ORDER,
+# MEASURED 2026-09-07 on the dry T255 ladder): order 16 at 12 min at the
+# truncation on the six-point gather keeps 0.973 / 0.915 / 1.025 / 0.965 of
+# the Eulerian core's 500 hPa vorticity power at n = 61-120 / 121-180 /
+# 181-230 / 231-255, where the cubic gather at order 8 and 36 min kept
+# 0.835 / 0.576 / 0.474 / 0.502.
+[diffusion]
+enabled = true
+order = 16
+e_folding_time_s_at_truncation = 720.0
+preserve_degree = 1
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+off_centring_weight = 0.55
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 1.0e-6
+transform_parseval_relative_error = 5.0e-7
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-3
+# physics_water_repair gate, NATIVE-suite sizing (2026-09-01).  The
+# precision-wide 5e-4 envelope (runner._FIXER_ABSORPTION_LIMITS) was
+# measured on the reference suite, which has no kernel-internal closure
+# channel; the native suite has two -- Morrison's rainncv credited 1:1 to
+# the reservoir vs the actual column debit its fp32 process arithmetic
+# applies, and the post-kernel negative-species clamp (tolerance 1e-7 per
+# level-species; the creation ceiling is order 3e-3 kg/m2 at 20 levels and
+# the same order at 40, the column mass being the same) --
+# both genuine fp32 accumulation, NOT booking routes: the CPU repro
+# (water-repair-262, 2026-09-01, real model.step with verbatim-noah water
+# arithmetic, 217,800 column-calls of drip/melt/partition/evap/dew/qfx
+# forcing) put every booking route at <= 2 x 2^-14 = 1.22e-4 kg/m2, the
+# same ledger-summation floor the reference suite reads (~1e-4).
+# Measurement: day 1 of this config on the RTX 5090 (GDAS 2026-08-30 18Z,
+# 1440 steps) read max repair 0.00262451171875 kg/m2 = exactly 43 x 2^-14,
+# the fp32 quantum of the worst column's [512,1024) kg/m2 ledger total.
+# Sizing: 4 x that measured max = 0.010498046875 = 43 x 2^-12, which
+# admits the same 43-quantum excursion class on column totals up to the
+# 4096 kg/m2 binade (the convicted-era worst columns totalled ~1150,
+# where the class reads 5.25e-3) while staying 100x below the smallest
+# booking-route conviction at run scale (1.0943603515625, precip
+# double-entry, fixed 7d7b528d0) and 1e5 below the runoff-store
+# conviction (1072, fixed 89571245d) -- the unbooked-route breakage this
+# gate exists to catch.  Reference configs keep the 5e-4 envelope.
+physics_water_repair_max_step_kg_m2 = 0.010498046875

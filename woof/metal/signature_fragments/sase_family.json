@@ -1,0 +1,4725 @@
+{
+  "kernels": [
+    {
+      "name": "sase_ddz_coefficients",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_ddz_coefficients",
+      "resources": [
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "cm",
+          "float",
+          "write"
+        ],
+        [
+          "c0",
+          "float",
+          "write"
+        ],
+        [
+          "cp",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cm": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_n2",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_n2",
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "n2",
+          "float",
+          "write"
+        ],
+        [
+          "cm",
+          "float",
+          "read"
+        ],
+        [
+          "c0",
+          "float",
+          "read"
+        ],
+        [
+          "cp",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "n2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cm": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "two_dx",
+          "float32"
+        ],
+        [
+          "two_dy",
+          "float32"
+        ],
+        [
+          "dz",
+          "float32"
+        ],
+        [
+          "two_dz",
+          "float32"
+        ],
+        [
+          "h_lo",
+          "float32"
+        ],
+        [
+          "h_hi",
+          "float32"
+        ],
+        [
+          "z_mode",
+          "int32"
+        ],
+        [
+          "g_accel",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_box_filter",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_box_filter",
+      "resources": [
+        [
+          "f",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "f": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_strain",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_strain",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "sxx",
+          "float",
+          "write"
+        ],
+        [
+          "syy",
+          "float",
+          "write"
+        ],
+        [
+          "szz",
+          "float",
+          "write"
+        ],
+        [
+          "sxy",
+          "float",
+          "write"
+        ],
+        [
+          "sxz",
+          "float",
+          "write"
+        ],
+        [
+          "syz",
+          "float",
+          "write"
+        ],
+        [
+          "cm",
+          "float",
+          "read"
+        ],
+        [
+          "c0",
+          "float",
+          "read"
+        ],
+        [
+          "cp",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sxx": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "syy": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "szz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sxy": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sxz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "syz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cm": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "two_dx",
+          "float32"
+        ],
+        [
+          "two_dy",
+          "float32"
+        ],
+        [
+          "dz",
+          "float32"
+        ],
+        [
+          "two_dz",
+          "float32"
+        ],
+        [
+          "h_lo",
+          "float32"
+        ],
+        [
+          "h_hi",
+          "float32"
+        ],
+        [
+          "z_mode",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_e_hflux",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_e_hflux",
+      "resources": [
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "km",
+          "float",
+          "read"
+        ],
+        [
+          "fx",
+          "float",
+          "write"
+        ],
+        [
+          "fy",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "km": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fx": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fy": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "two_dx",
+          "float32"
+        ],
+        [
+          "two_dy",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_scalar_hflux_km",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_scalar_hflux_km",
+      "resources": [
+        [
+          "s",
+          "float",
+          "read"
+        ],
+        [
+          "km",
+          "float",
+          "read"
+        ],
+        [
+          "fx",
+          "float",
+          "write"
+        ],
+        [
+          "fy",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "s": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "km": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fx": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fy": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "two_dx",
+          "float32"
+        ],
+        [
+          "two_dy",
+          "float32"
+        ],
+        [
+          "kh_fac",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_hflux_div",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_hflux_div",
+      "resources": [
+        [
+          "fx",
+          "float",
+          "read"
+        ],
+        [
+          "fy",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "fx": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fy": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "two_dx",
+          "float32"
+        ],
+        [
+          "two_dy",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_model_stress_gov",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_model_stress_gov",
+      "resources": [
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "s0",
+          "float",
+          "read"
+        ],
+        [
+          "s1",
+          "float",
+          "read"
+        ],
+        [
+          "s2",
+          "float",
+          "read"
+        ],
+        [
+          "s3",
+          "float",
+          "read"
+        ],
+        [
+          "s4",
+          "float",
+          "read"
+        ],
+        [
+          "s5",
+          "float",
+          "read"
+        ],
+        [
+          "t0",
+          "float",
+          "write"
+        ],
+        [
+          "t1",
+          "float",
+          "write"
+        ],
+        [
+          "t2",
+          "float",
+          "write"
+        ],
+        [
+          "t3",
+          "float",
+          "write"
+        ],
+        [
+          "t4",
+          "float",
+          "write"
+        ],
+        [
+          "t5",
+          "float",
+          "write"
+        ],
+        [
+          "km",
+          "float",
+          "write"
+        ],
+        [
+          "r_out",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "km": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "r_out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "c_nu",
+          "float32"
+        ],
+        [
+          "f_blend",
+          "float32"
+        ],
+        [
+          "delta",
+          "float32"
+        ],
+        [
+          "c_s",
+          "float32"
+        ],
+        [
+          "km_cap",
+          "float32"
+        ],
+        [
+          "nu_eps",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_split_tendencies",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_split_tendencies",
+      "resources": [
+        [
+          "t0",
+          "float",
+          "read"
+        ],
+        [
+          "t1",
+          "float",
+          "read"
+        ],
+        [
+          "t3",
+          "float",
+          "read"
+        ],
+        [
+          "t4",
+          "float",
+          "read"
+        ],
+        [
+          "t5",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "r",
+          "float",
+          "read"
+        ],
+        [
+          "du",
+          "float",
+          "write"
+        ],
+        [
+          "dv",
+          "float",
+          "write"
+        ],
+        [
+          "dw",
+          "float",
+          "write"
+        ],
+        [
+          "ph_e",
+          "float",
+          "write"
+        ],
+        [
+          "ph_heat",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "t0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "r": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "du": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dw": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph_e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph_heat": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "two_dx",
+          "float32"
+        ],
+        [
+          "two_dy",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_velocity_products",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_velocity_products",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "uu",
+          "float",
+          "write"
+        ],
+        [
+          "vv",
+          "float",
+          "write"
+        ],
+        [
+          "ww",
+          "float",
+          "write"
+        ],
+        [
+          "uv",
+          "float",
+          "write"
+        ],
+        [
+          "uw",
+          "float",
+          "write"
+        ],
+        [
+          "vw",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "uu": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "vv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ww": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "uv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "uw": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "vw": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_lift_combine",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_lift_combine",
+      "resources": [
+        [
+          "fuu",
+          "float",
+          "read"
+        ],
+        [
+          "fvv",
+          "float",
+          "read"
+        ],
+        [
+          "fww",
+          "float",
+          "read"
+        ],
+        [
+          "fuv",
+          "float",
+          "read"
+        ],
+        [
+          "fuw",
+          "float",
+          "read"
+        ],
+        [
+          "fvw",
+          "float",
+          "read"
+        ],
+        [
+          "fu",
+          "float",
+          "read"
+        ],
+        [
+          "fv",
+          "float",
+          "read"
+        ],
+        [
+          "fw",
+          "float",
+          "read"
+        ],
+        [
+          "l0",
+          "float",
+          "write"
+        ],
+        [
+          "l1",
+          "float",
+          "write"
+        ],
+        [
+          "l2",
+          "float",
+          "write"
+        ],
+        [
+          "l3",
+          "float",
+          "write"
+        ],
+        [
+          "l4",
+          "float",
+          "write"
+        ],
+        [
+          "l5",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "fuu": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fvv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fww": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fuv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fuw": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fvw": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fu": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fw": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_vertical_production",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_vertical_production",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "kv",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "pv",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "kv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_blackadar_length",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_blackadar_length",
+      "resources": [
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "constants",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "lb",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            3
+          ]
+        ],
+        "lb": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_basis_premultiply",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_basis_premultiply",
+      "resources": [
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "s0",
+          "float",
+          "read"
+        ],
+        [
+          "s1",
+          "float",
+          "read"
+        ],
+        [
+          "s2",
+          "float",
+          "read"
+        ],
+        [
+          "s3",
+          "float",
+          "read"
+        ],
+        [
+          "s4",
+          "float",
+          "read"
+        ],
+        [
+          "s5",
+          "float",
+          "read"
+        ],
+        [
+          "p0",
+          "float",
+          "write"
+        ],
+        [
+          "p1",
+          "float",
+          "write"
+        ],
+        [
+          "p2",
+          "float",
+          "write"
+        ],
+        [
+          "p3",
+          "float",
+          "write"
+        ],
+        [
+          "p4",
+          "float",
+          "write"
+        ],
+        [
+          "p5",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "delta",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_solve_partial",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_solve_partial",
+      "resources": [
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "sc0",
+          "float",
+          "read"
+        ],
+        [
+          "sc1",
+          "float",
+          "read"
+        ],
+        [
+          "sc2",
+          "float",
+          "read"
+        ],
+        [
+          "sc3",
+          "float",
+          "read"
+        ],
+        [
+          "sc4",
+          "float",
+          "read"
+        ],
+        [
+          "sc5",
+          "float",
+          "read"
+        ],
+        [
+          "rf0",
+          "float",
+          "read"
+        ],
+        [
+          "rf1",
+          "float",
+          "read"
+        ],
+        [
+          "rf2",
+          "float",
+          "read"
+        ],
+        [
+          "rf3",
+          "float",
+          "read"
+        ],
+        [
+          "rf4",
+          "float",
+          "read"
+        ],
+        [
+          "rf5",
+          "float",
+          "read"
+        ],
+        [
+          "l0",
+          "float",
+          "read"
+        ],
+        [
+          "l1",
+          "float",
+          "read"
+        ],
+        [
+          "l2",
+          "float",
+          "read"
+        ],
+        [
+          "l3",
+          "float",
+          "read"
+        ],
+        [
+          "l4",
+          "float",
+          "read"
+        ],
+        [
+          "l5",
+          "float",
+          "read"
+        ],
+        [
+          "partials",
+          "float64_bits",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sc0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sc1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sc2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sc3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sc4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sc5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rf0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rf1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rf2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rf3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rf4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rf5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "l5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "partials": [
+          [
+            5,
+            "nblocks"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "delta_a",
+          "float32"
+        ],
+        [
+          "delta_b",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "bw",
+          "int32"
+        ],
+        [
+          "nblocks",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_model_stress",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_model_stress",
+      "resources": [
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "s0",
+          "float",
+          "read"
+        ],
+        [
+          "s1",
+          "float",
+          "read"
+        ],
+        [
+          "s2",
+          "float",
+          "read"
+        ],
+        [
+          "s3",
+          "float",
+          "read"
+        ],
+        [
+          "s4",
+          "float",
+          "read"
+        ],
+        [
+          "s5",
+          "float",
+          "read"
+        ],
+        [
+          "t0",
+          "float",
+          "read_write"
+        ],
+        [
+          "t1",
+          "float",
+          "read_write"
+        ],
+        [
+          "t2",
+          "float",
+          "read_write"
+        ],
+        [
+          "t3",
+          "float",
+          "read_write"
+        ],
+        [
+          "t4",
+          "float",
+          "read_write"
+        ],
+        [
+          "t5",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "s5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t3": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t4": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t5": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "c_nu",
+          "float32"
+        ],
+        [
+          "f_blend",
+          "float32"
+        ],
+        [
+          "delta_eddy",
+          "float32"
+        ],
+        [
+          "delta_mom",
+          "float32"
+        ],
+        [
+          "ck_over_prt",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_scalar_hflux",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_scalar_hflux",
+      "resources": [
+        [
+          "s",
+          "float",
+          "read"
+        ],
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "fx",
+          "float",
+          "read_write"
+        ],
+        [
+          "fy",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "s": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fx": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fy": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "two_dx",
+          "float32"
+        ],
+        [
+          "two_dy",
+          "float32"
+        ],
+        [
+          "kh_coef",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_diff_flux_diag",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_diff_flux_diag",
+      "resources": [
+        [
+          "phi",
+          "float",
+          "read"
+        ],
+        [
+          "kv",
+          "float",
+          "read"
+        ],
+        [
+          "rho1",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "constants",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "phi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "kv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dz",
+          "float32"
+        ],
+        [
+          "t_mode",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_destagger_w",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "sase_destagger_w",
+      "resources": [
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_surface_source",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "sase_surface_e_source",
+      "resources": [
+        [
+          "ust",
+          "float",
+          "read"
+        ],
+        [
+          "hfx",
+          "float",
+          "read"
+        ],
+        [
+          "qfx",
+          "float",
+          "read"
+        ],
+        [
+          "theta1",
+          "float",
+          "read"
+        ],
+        [
+          "rho1",
+          "float",
+          "read"
+        ],
+        [
+          "dz1",
+          "float",
+          "read"
+        ],
+        [
+          "e_sgs",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ust": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "e_sgs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ep1",
+          "float32"
+        ],
+        [
+          "cp_air",
+          "float32"
+        ],
+        [
+          "g_accel",
+          "float32"
+        ],
+        [
+          "karman",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_rate",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "sase_rate",
+      "resources": [
+        [
+          "a",
+          "float",
+          "read"
+        ],
+        [
+          "b",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "mode",
+          "int32"
+        ],
+        [
+          "inv_dt",
+          "float32"
+        ],
+        [
+          "heat_scale",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_structure_partial",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_structure_partial",
+      "resources": [
+        [
+          "f",
+          "float",
+          "read"
+        ],
+        [
+          "partials",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "f": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "partials": [
+          [
+            3,
+            "nblocks"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nblocks",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_w_sensor_partial",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_w_sensor_partial",
+      "resources": [
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "n2",
+          "float",
+          "read"
+        ],
+        [
+          "partials",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "w": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "n2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "partials": [
+          [
+            5,
+            "nblocks"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "bw",
+          "int32"
+        ],
+        [
+          "has_n2",
+          "int32"
+        ],
+        [
+          "n2_screen",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "nblocks",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_zi_column",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_zi_column",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "zi": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dz",
+          "float32"
+        ],
+        [
+          "t_mode",
+          "int32"
+        ],
+        [
+          "rib_crit",
+          "float32"
+        ],
+        [
+          "wspd2_floor",
+          "float32"
+        ],
+        [
+          "g_accel",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_thomas_scalar",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_thomas_scalar",
+      "resources": [
+        [
+          "phi",
+          "float",
+          "read_write"
+        ],
+        [
+          "kv",
+          "float",
+          "read"
+        ],
+        [
+          "sfc_flux",
+          "float",
+          "read"
+        ],
+        [
+          "sfc_rho1",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "constants",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "phi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "kv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfc_flux": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sfc_rho1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dz",
+          "float32"
+        ],
+        [
+          "t_mode",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "kfac",
+          "float32"
+        ],
+        [
+          "floor_val",
+          "float32"
+        ],
+        [
+          "has_floor",
+          "int32"
+        ],
+        [
+          "has_sfc",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_thomas_momentum",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_thomas_momentum",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read_write"
+        ],
+        [
+          "v",
+          "float",
+          "read_write"
+        ],
+        [
+          "w",
+          "float",
+          "read_write"
+        ],
+        [
+          "du",
+          "float",
+          "read"
+        ],
+        [
+          "dv",
+          "float",
+          "read"
+        ],
+        [
+          "dw",
+          "float",
+          "read"
+        ],
+        [
+          "kv",
+          "float",
+          "read"
+        ],
+        [
+          "ust",
+          "float",
+          "read"
+        ],
+        [
+          "wspd",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "partials",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "constants",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "du": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dw": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "kv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ust": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wspd": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "partials": [
+          [
+            3,
+            "nblocks"
+          ]
+        ],
+        "constants": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dz",
+          "float32"
+        ],
+        [
+          "t_mode",
+          "int32"
+        ],
+        [
+          "has_drag",
+          "int32"
+        ],
+        [
+          "has_wspd",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nblocks",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_vertical_channel",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_vertical_channel",
+      "resources": [
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "n2",
+          "float",
+          "read"
+        ],
+        [
+          "n2d",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "kv",
+          "float",
+          "read_write"
+        ],
+        [
+          "leps",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "n2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "n2d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "kv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "leps": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "z0",
+          "float32"
+        ],
+        [
+          "karman",
+          "float32"
+        ],
+        [
+          "blk_lambda",
+          "float32"
+        ],
+        [
+          "c_kv",
+          "float32"
+        ],
+        [
+          "ls_coef",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "f_blend",
+          "float32"
+        ],
+        [
+          "g_accel",
+          "float32"
+        ],
+        [
+          "c_ks",
+          "float32"
+        ],
+        [
+          "cks_exp",
+          "float32"
+        ],
+        [
+          "dz",
+          "float32"
+        ],
+        [
+          "t_mode",
+          "int32"
+        ],
+        [
+          "has_n2",
+          "int32"
+        ],
+        [
+          "has_moist",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_split_e_update",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_split_e_update",
+      "resources": [
+        [
+          "e",
+          "float",
+          "read_write"
+        ],
+        [
+          "heat",
+          "float",
+          "read_write"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "n2",
+          "float",
+          "read"
+        ],
+        [
+          "n2d",
+          "float",
+          "read"
+        ],
+        [
+          "kv",
+          "float",
+          "read"
+        ],
+        [
+          "leps",
+          "float",
+          "read"
+        ],
+        [
+          "lb",
+          "float",
+          "read"
+        ],
+        [
+          "ph_e",
+          "float",
+          "read"
+        ],
+        [
+          "ph_heat",
+          "float",
+          "read"
+        ],
+        [
+          "pv",
+          "float",
+          "read"
+        ],
+        [
+          "fx",
+          "float",
+          "read"
+        ],
+        [
+          "fy",
+          "float",
+          "read"
+        ],
+        [
+          "gtap",
+          "float",
+          "read"
+        ],
+        [
+          "partials",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "cm",
+          "float",
+          "read"
+        ],
+        [
+          "c0",
+          "float",
+          "read"
+        ],
+        [
+          "cp",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "heat": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "n2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "n2d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "kv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "leps": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "lb": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph_e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ph_heat": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fx": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fy": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "gtap": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "partials": [
+          [
+            4,
+            "nblocks"
+          ]
+        ],
+        "cm": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "two_dx",
+          "float32"
+        ],
+        [
+          "two_dy",
+          "float32"
+        ],
+        [
+          "dz",
+          "float32"
+        ],
+        [
+          "two_dz",
+          "float32"
+        ],
+        [
+          "h_lo",
+          "float32"
+        ],
+        [
+          "h_hi",
+          "float32"
+        ],
+        [
+          "z_mode",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "f_blend",
+          "float32"
+        ],
+        [
+          "delta",
+          "float32"
+        ],
+        [
+          "pr_t",
+          "float32"
+        ],
+        [
+          "c_e",
+          "float32"
+        ],
+        [
+          "ls_coef",
+          "float32"
+        ],
+        [
+          "c_es",
+          "float32"
+        ],
+        [
+          "cks_exp",
+          "float32"
+        ],
+        [
+          "has_ces",
+          "int32"
+        ],
+        [
+          "c_ed",
+          "float32"
+        ],
+        [
+          "g_accel",
+          "float32"
+        ],
+        [
+          "e_min",
+          "float32"
+        ],
+        [
+          "has_ced",
+          "int32"
+        ],
+        [
+          "has_n2",
+          "int32"
+        ],
+        [
+          "has_moist",
+          "int32"
+        ],
+        [
+          "has_taper",
+          "int32"
+        ],
+        [
+          "nblocks",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_taper_weights",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/sase.py",
+      "cuda_symbol": "_taper_weights",
+      "resources": [
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "zdamp",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_moist_n2",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_moist_n2",
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "n2dry",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "constants",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "n2dry": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            11
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_surface_rho1",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "sase_surface_rho1",
+      "resources": [
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "rho1",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pressure": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "ep1",
+          "float32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "sase_plume_vent_flux",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_plume_vent_flux",
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "e",
+          "float",
+          "read"
+        ],
+        [
+          "n2m",
+          "float",
+          "read"
+        ],
+        [
+          "n2d",
+          "float",
+          "read"
+        ],
+        [
+          "rho1",
+          "float",
+          "read"
+        ],
+        [
+          "fth",
+          "float",
+          "read_write"
+        ],
+        [
+          "fqv",
+          "float",
+          "read_write"
+        ],
+        [
+          "fqc",
+          "float",
+          "read_write"
+        ],
+        [
+          "idx",
+          "int32",
+          "read_write"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "constants",
+          "uint64",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "e": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "n2m": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "n2d": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "fth": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fqv": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fqc": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "idx": [
+          [
+            "7",
+            "ny",
+            "nx"
+          ],
+          [
+            1
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            18
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "min_run_cells",
+          "int32"
+        ],
+        [
+          "sat_iters",
+          "int32"
+        ],
+        [
+          "per_level",
+          "int32"
+        ],
+        [
+          "has_idx",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ],
+      "name": "sase_vent_deposit_scale",
+      "cuda_symbol": "sase_vent_deposit_scale",
+      "resources": [
+        [
+          "fth",
+          "float",
+          "read"
+        ],
+        [
+          "fqv",
+          "float",
+          "read"
+        ],
+        [
+          "fqc",
+          "float",
+          "read"
+        ],
+        [
+          "rho1",
+          "float",
+          "read"
+        ],
+        [
+          "scale",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "constants",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "fth": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fqv": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fqc": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "scale": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            3
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ]
+    },
+    {
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ],
+      "name": "sase_vent_deposit",
+      "cuda_symbol": "sase_vent_deposit",
+      "resources": [
+        [
+          "phi",
+          "float",
+          "read_write"
+        ],
+        [
+          "f",
+          "float",
+          "read"
+        ],
+        [
+          "scale",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "rho1",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "constants",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "phi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "f": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "scale": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho1": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ]
+    },
+    {
+      "name": "sase_couple_w_tendency",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_couple_w_tendency",
+      "resources": [
+        [
+          "dw",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "mut",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dw": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz+1"
+          ]
+        ],
+        "mut": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rw": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "mask_ring",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout ae74b1ae2fffd30e6dae4e997d6cbe6e19d8bfe9b91115b6811504842b23ece5.
+struct NestSmoothIResources {
+    device float *parent [[id(0)]];
+    device const float *scratch [[id(1)]];
+};
+struct NestSmoothIParams {
+    int mode;
+    float xnu;
+    int i0;
+    int j0;
+    int niw;
+    int njw;
+    int nz;
+    int nyp;
+    int nxp;
+};
+static_assert(sizeof(NestSmoothIParams) == 36, "nest_smooth_i parameter ABI size changed");

@@ -1,0 +1,643 @@
+{
+  "kernels": [
+    {
+      "name": "wrf_calc_n2",
+      "module": "smag2d_family",
+      "source": "woof/metal/shaders/smag2d_alternates_fragment.metal",
+      "cuda_source": "woof/core/kernels/smag2d.cu",
+      "cuda_symbol": "wrf_calc_n2",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "dn",
+          "float",
+          "read"
+        ],
+        [
+          "dnw",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "bn2",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "dn": [
+          [
+            "nz"
+          ]
+        ],
+        "dnw": [
+          [
+            "nz"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "bn2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "moist",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "thb3d",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "wrf_smag3d_km",
+      "module": "smag2d_family",
+      "source": "woof/metal/shaders/smag2d_alternates_fragment.metal",
+      "cuda_source": "woof/core/kernels/smag2d.cu",
+      "cuda_symbol": "wrf_smag3d_km",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "dn",
+          "float",
+          "read"
+        ],
+        [
+          "dnw",
+          "float",
+          "read"
+        ],
+        [
+          "d11",
+          "float",
+          "read"
+        ],
+        [
+          "d22",
+          "float",
+          "read"
+        ],
+        [
+          "d12",
+          "float",
+          "read"
+        ],
+        [
+          "bn2",
+          "float",
+          "read"
+        ],
+        [
+          "xkmh",
+          "float",
+          "read_write"
+        ],
+        [
+          "xkhh",
+          "float",
+          "read_write"
+        ],
+        [
+          "xkmv",
+          "float",
+          "read_write"
+        ],
+        [
+          "xkhv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "dn": [
+          [
+            "nz"
+          ]
+        ],
+        "dnw": [
+          [
+            "nz"
+          ]
+        ],
+        "d11": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "d22": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "d12": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "bn2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkmh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkhh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkmv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "xkhv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "moist",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "c_s",
+          "float32"
+        ],
+        [
+          "prandtl",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "mix_upper_bound",
+          "float32"
+        ],
+        [
+          "isotropic",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

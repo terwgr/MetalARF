@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout 805902b2655c46666ea8606a6af751df981c23d0b0485dcf855f50074bfdf829.
+struct RrtmgLegacyLwPlanckResources {
+    device const float *tavel [[id(0)]];
+    device const float *tz [[id(1)]];
+    device const float *tbound [[id(2)]];
+    device const float *sem [[id(3)]];
+    device const float *totplnk [[id(4)]];
+    device const float *totplk16 [[id(5)]];
+    device float *planklay [[id(6)]];
+    device float *planklev [[id(7)]];
+    device float *plankbnd [[id(8)]];
+};
+struct RrtmgLegacyLwPlanckParams {
+    int ncol;
+    int nl;
+    int istart;
+};
+static_assert(sizeof(RrtmgLegacyLwPlanckParams) == 12, "rrtmg_legacy_lw_planck parameter ABI size changed");

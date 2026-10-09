@@ -1,0 +1,28 @@
+{
+  "kernels": [
+    {
+      "name": "real_total_geopotential",
+      "module": "real_total_geopotential",
+      "source": "woof/metal/shaders/real_total_geopotential.metal",
+      "cuda_source": "woof/ingest/real.py",
+      "cuda_symbol": "initialize_real",
+      "resources": [
+        ["phb", "float", "read"],
+        ["php", "float", "read"],
+        ["total_phi", "float", "read_write"]
+      ],
+      "shapes": {
+        "phb": [["nz+1"], ["nz+1", "ny", "nx"]],
+        "php": [["nz+1", "ny", "nx"]],
+        "total_phi": [["nz+1", "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["phb_3d", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

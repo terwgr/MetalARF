@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 52e734d4c4fe65f1988c7bf7b2536986d89ddb225b2bc7fb0131bd7ddd172290.
+struct KfW0AvgUpdateResources {
+    device const float *w [[id(0)]];
+    device float *w0avg [[id(1)]];
+};
+struct KfW0AvgUpdateParams {
+    int nz;
+    int ny;
+    int nx;
+    float tst;
+};
+static_assert(sizeof(KfW0AvgUpdateParams) == 16, "kf_w0avg_update parameter ABI size changed");

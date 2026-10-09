@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 97408e51f0429427640cac6a8683f0bc28765fdf3aa26bdfc218318e2c7bf31e.
+struct GlobalConvectivePackFragmentResources {
+    device const ulong *theta [[id(0)]];
+    device const ulong *qv [[id(1)]];
+    device const ulong *qc [[id(2)]];
+    device const ulong *qr [[id(3)]];
+    device const ulong *qi [[id(4)]];
+    device const ulong *qs [[id(5)]];
+    device const ulong *qg [[id(6)]];
+    device ulong *theta_packed [[id(7)]];
+    device ulong *q_packed [[id(8)]];
+};
+struct GlobalConvectivePackFragmentParams {
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalConvectivePackFragmentParams) == 8, "global_convective_pack_fragment parameter ABI size changed");

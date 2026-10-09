@@ -1,0 +1,23 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semilag/trajectory.py",
+      "cuda_symbol": "Global semi-Lagrangian Lipschitz and convergence maximum",
+      "layout_version": 1,
+      "module": "global_semilag_max_finalize_fragment",
+      "name": "global_semilag_max_finalize_fragment",
+      "parameters": [["partial_count", "int32"]],
+      "resources": [
+        ["partial_max", "float64_bits", "read"],
+        ["maximum", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "maximum": [[1]],
+        "partial_max": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_max_finalize_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

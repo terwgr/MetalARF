@@ -1,0 +1,30 @@
+{
+  "kernels": [
+    {
+      "name": "global_inverse_longitude_transform_fragment",
+      "module": "global_spectral",
+      "source": "woof/metal/shaders/global_inverse_longitude_transform_fragment.metal",
+      "cuda_source": "woof/globe/spectral/transform.py",
+      "cuda_symbol": "SphericalHarmonicTransform._rows_to_grid",
+      "resources": [
+        ["real_spectrum", "float64_bits", "read"],
+        ["imag_spectrum", "float64_bits", "read"],
+        ["twiddles", "float64_bits", "read"],
+        ["grid", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "real_spectrum": [["any_1d"]],
+        "imag_spectrum": [["any_1d"]],
+        "twiddles": [["any_1d"]],
+        "grid": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlat", "int32"], ["nlon", "int32"],
+        ["nfreq", "int32"], ["batch", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

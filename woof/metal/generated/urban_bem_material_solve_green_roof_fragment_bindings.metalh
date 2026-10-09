@@ -1,0 +1,42 @@
+// Generated from kernel_signatures.json; layout 9f70a4262c429169850642dca8d82d6360e007a92791a4df5a6567a1b825b7e6.
+struct UrbanBemMaterialSolveGreenRoofFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const int *building_nlev [[id(1)]];
+    device const float *dzw [[id(2)]];
+    device const float *csw [[id(3)]];
+    device const float *alaw [[id(4)]];
+    device const float *dzf [[id(5)]];
+    device const float *csf [[id(6)]];
+    device const float *alaf [[id(7)]];
+    device const float *dzgb [[id(8)]];
+    device const float *csgb [[id(9)]];
+    device const float *alagb [[id(10)]];
+    device const float *dzr [[id(11)]];
+    device const float *csr [[id(12)]];
+    device const float *alar [[id(13)]];
+    device const float *hswalins [[id(14)]];
+    device const float *hrwalins [[id(15)]];
+    device const float *hswalout [[id(16)]];
+    device const float *hrwalout [[id(17)]];
+    device const float *hswinins [[id(18)]];
+    device const float *hrwinins [[id(19)]];
+    device const float *hswinout [[id(20)]];
+    device const float *hrwinout [[id(21)]];
+    device const float *hsrof [[id(22)]];
+    device const float *hrrof [[id(23)]];
+    device const float *lsrof [[id(24)]];
+    device float *tw [[id(25)]];
+    device float *twlev [[id(26)]];
+    device float *tflev [[id(27)]];
+    device float *tglev [[id(28)]];
+    device float *tr [[id(29)]];
+    device float *gswal [[id(30)]];
+    device float *gsrof [[id(31)]];
+    device int *error [[id(32)]];
+};
+struct UrbanBemMaterialSolveGreenRoofFragmentParams {
+    int ncol;
+    int nitem;
+    float dt;
+};
+static_assert(sizeof(UrbanBemMaterialSolveGreenRoofFragmentParams) == 12, "urban_bem_material_solve_green_roof_fragment parameter ABI size changed");

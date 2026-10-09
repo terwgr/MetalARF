@@ -1,0 +1,62 @@
+{
+  "kernels": [
+    {
+      "name": "hex_vertical_coefficients_v841_fragment",
+      "module": "hex_vertical_coefficients_v841_fragment",
+      "source": "woof/metal/shaders/hex_vertical_coefficients_v841_fragment.metal",
+      "cuda_source": "woof/hex/acoustic_v841.py",
+      "cuda_symbol": "compute_vertical_implicit_coefficients_v841",
+      "resources": [
+        ["zz", "float", "read"],
+        ["cqw", "float", "read"],
+        ["exner", "float", "read"],
+        ["theta", "float", "read"],
+        ["rho_base", "float", "read"],
+        ["rho_theta_base", "float", "read"],
+        ["exner_base", "float", "read"],
+        ["rho_theta_perturbation", "float", "read"],
+        ["qtot", "float", "read"],
+        ["rdzw", "float", "read"],
+        ["fzm", "float", "read"],
+        ["fzp", "float", "read"],
+        ["rdzu", "float", "read"],
+        ["etp", "float", "read"],
+        ["ewp", "float", "read"],
+        ["cofwr", "float", "read_write"],
+        ["cofwz", "float", "read_write"],
+        ["coftz", "float", "read_write"],
+        ["cofwt", "float", "read_write"],
+        ["cofrz", "float", "read_write"],
+        ["a_tri", "float", "read_write"],
+        ["b_tri", "float", "read_write"],
+        ["c_tri", "float", "read_write"],
+        ["alpha_tri", "float", "read_write"],
+        ["gamma_tri", "float", "read_write"],
+        ["errors", "int32", "read_write"]
+      ],
+      "shapes": {
+        "zz": [["any_1d"]], "cqw": [["any_1d"]],
+        "exner": [["any_1d"]], "theta": [["any_1d"]],
+        "rho_base": [["any_1d"]], "rho_theta_base": [["any_1d"]],
+        "exner_base": [["any_1d"]],
+        "rho_theta_perturbation": [["any_1d"]], "qtot": [["any_1d"]],
+        "rdzw": [["any_1d"]], "fzm": [["any_1d"]],
+        "fzp": [["any_1d"]], "rdzu": [["any_1d"]],
+        "etp": [["any_1d"]], "ewp": [["any_1d"]],
+        "cofwr": [["any_1d"]], "cofwz": [["any_1d"]],
+        "coftz": [["any_1d"]], "cofwt": [["any_1d"]],
+        "cofrz": [["any_1d"]], "a_tri": [["any_1d"]],
+        "b_tri": [["any_1d"]], "c_tri": [["any_1d"]],
+        "alpha_tri": [["any_1d"]], "gamma_tri": [["any_1d"]],
+        "errors": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlev", "int32"], ["ncells", "int32"], ["dts", "float32"],
+        ["gravity", "float32"], ["rgas", "float32"], ["cp", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 8067a35a295bd95e811a6e1f8f221b00a1b2157d761023ab3403deb43bc75891.
+struct GlobalInsituEnergyColumnsFragmentResources {
+    device const ulong *temperature [[id(0)]];
+    device const ulong *u [[id(1)]];
+    device const ulong *v [[id(2)]];
+    device const ulong *dp [[id(3)]];
+    device const ulong *ps [[id(4)]];
+    device const ulong *surface_geopotential [[id(5)]];
+    device const ulong *weights [[id(6)]];
+    device ulong *columns [[id(7)]];
+};
+struct GlobalInsituEnergyColumnsFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalInsituEnergyColumnsFragmentParams) == 12, "global_insitu_energy_columns_fragment parameter ABI size changed");

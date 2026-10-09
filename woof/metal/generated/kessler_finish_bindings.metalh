@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 0e55c238cace347946a166e1c3c7d2d57b58099f50977add3113d3b0647ec325.
+struct KesslerFinishResources {
+    device const float *t [[id(0)]];
+    device float *thp [[id(1)]];
+    device float *h_diabatic [[id(2)]];
+};
+struct KesslerFinishParams {
+    float dt;
+    float limit;
+    int no_mp_heating;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(KesslerFinishParams) == 24, "kessler_finish parameter ABI size changed");

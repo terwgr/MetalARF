@@ -1,0 +1,27 @@
+{
+  "kernels": [{
+    "name": "urban_bem_interp_length_fragment",
+    "module": "urban_bem_interp_length_fragment",
+    "source": "woof/metal/shaders/urban_bem_interp_length_fragment.metal",
+    "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+    "cuda_symbol": "bb_interp_length, module_sf_bep_bem.F:3120-3199",
+    "resources": [
+      ["active_cols", "int32", "read"], ["z", "float", "read"],
+      ["z_u", "float", "read"], ["ss", "float", "read"],
+      ["ws", "float", "read"], ["bs", "float", "read"],
+      ["dlg", "float", "read_write"], ["dl_u", "float", "read_write"],
+      ["error", "int32", "read_write"]
+    ],
+    "shapes": {
+      "active_cols": [["ncol"]], "z": [["ncol", "nedge"]],
+      "z_u": [[19]], "ss": [["ncol", 19]],
+      "ws": [["ncol", 2]], "bs": [["ncol", 2]],
+      "dlg": [["ncol", "nz"]], "dl_u": [["ncol", "nz"]],
+      "error": [["ncol"]]
+    },
+    "parameters": [["ncol", "int32"], ["nz", "int32"], ["nedge", "int32"]],
+    "threads_per_group": 64,
+    "layout_version": 1,
+    "arithmetic_policies": ["soft32"]
+  }]
+}

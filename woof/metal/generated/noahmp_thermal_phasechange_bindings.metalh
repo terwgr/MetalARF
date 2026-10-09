@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout 6e7d52fa56e321ea546226ba1b769ad4ba9b271ae98f48c24da2f6855de814a0.
+struct NoahmpThermalPhasechangeResources {
+    device const float *xs [[id(0)]];
+    device const int *ixs [[id(1)]];
+    device float *ys [[id(2)]];
+};
+struct NoahmpThermalPhasechangeParams {
+    int ncase;
+    int n_in;
+    int n_int;
+    int n_out;
+};
+static_assert(sizeof(NoahmpThermalPhasechangeParams) == 16, "noahmp_thermal_phasechange parameter ABI size changed");

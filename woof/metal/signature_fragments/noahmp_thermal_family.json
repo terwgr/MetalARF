@@ -1,0 +1,56 @@
+{
+  "kernels": [
+    {
+      "name": "noahmp_thermal_hrt",
+      "module": "noahmp_thermal",
+      "source": "woof/metal/shaders/noahmp_thermal_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_thermal.cu",
+      "cuda_symbol": "noahmp_thermal_hrt",
+      "resources": [["xs", "float", "read"], ["ixs", "int32", "read"], ["ys", "float", "read_write"]],
+      "shapes": {"xs": [["ncase", "n_in"]], "ixs": [["ncase", "n_int"]], "ys": [["ncase", "n_out"]]},
+      "parameters": [["ncase", "int32"], ["n_in", "int32"], ["n_int", "int32"], ["n_out", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "noahmp_thermal_rosr12_probe",
+      "module": "noahmp_thermal",
+      "source": "woof/metal/shaders/noahmp_thermal_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_thermal.cu",
+      "cuda_symbol": "noahmp_thermal_rosr12_probe",
+      "resources": [["xs", "float", "read"], ["ixs", "int32", "read"], ["ys", "float", "read_write"]],
+      "shapes": {"xs": [["ncase", "n_in"]], "ixs": [["ncase", "n_int"]], "ys": [["ncase", "n_out"]]},
+      "parameters": [["ncase", "int32"], ["n_in", "int32"], ["n_int", "int32"], ["n_out", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "noahmp_thermal_hstep",
+      "module": "noahmp_thermal",
+      "source": "woof/metal/shaders/noahmp_thermal_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_thermal.cu",
+      "cuda_symbol": "noahmp_thermal_hstep",
+      "resources": [["xs", "float", "read"], ["ixs", "int32", "read"], ["ys", "float", "read_write"]],
+      "shapes": {"xs": [["ncase", "n_in"]], "ixs": [["ncase", "n_int"]], "ys": [["ncase", "n_out"]]},
+      "parameters": [["ncase", "int32"], ["n_in", "int32"], ["n_int", "int32"], ["n_out", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "noahmp_thermal_tsnosoi",
+      "module": "noahmp_thermal",
+      "source": "woof/metal/shaders/noahmp_thermal_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_thermal.cu",
+      "cuda_symbol": "noahmp_thermal_tsnosoi",
+      "resources": [["xs", "float", "read"], ["ixs", "int32", "read"], ["ys", "float", "read_write"]],
+      "shapes": {"xs": [["ncase", "n_in"]], "ixs": [["ncase", "n_int"]], "ys": [["ncase", "n_out"]]},
+      "parameters": [["ncase", "int32"], ["n_in", "int32"], ["n_int", "int32"], ["n_out", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

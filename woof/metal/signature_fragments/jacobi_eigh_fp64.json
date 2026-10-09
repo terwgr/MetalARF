@@ -1,0 +1,100 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/jacobi_eigh.cu",
+      "cuda_symbol": "jacobi_eigh_batched",
+      "layout_version": 1,
+      "module": "jacobi_eigh_fp64",
+      "name": "jacobi_eigh_fp64_batched",
+      "parameters": [
+        [
+          "n_matrices",
+          "int32"
+        ],
+        [
+          "k",
+          "int32"
+        ],
+        [
+          "m",
+          "int32"
+        ],
+        [
+          "tpb",
+          "int32"
+        ],
+        [
+          "sweep_cap",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "a_in",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "work",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "w_out",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "v_out",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "status_out",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "a_in": [
+          [
+            "n_matrices",
+            "k",
+            "k"
+          ]
+        ],
+        "status_out": [
+          [
+            "n_matrices"
+          ]
+        ],
+        "v_out": [
+          [
+            "n_matrices",
+            "k",
+            "k"
+          ]
+        ],
+        "w_out": [
+          [
+            "n_matrices",
+            "k"
+          ]
+        ],
+        "work": [
+          [
+            "n_matrices",
+            "m",
+            "m"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/jacobi_eigh_fp64.metal",
+      "threads_per_group": 32
+    }
+  ]
+}

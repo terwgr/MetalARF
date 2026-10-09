@@ -1,0 +1,31 @@
+{
+  "kernels": [
+    {
+      "name": "hex_vertical_theta_tendency_fragment",
+      "module": "hex_vertical_theta_tendency_fragment",
+      "source": "woof/metal/shaders/hex_vertical_theta_tendency_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_rho_theta_tendency vertical flux divergence",
+      "resources": [
+        ["horizontal", "float", "read"], ["theta", "float", "read"],
+        ["theta_saved", "float", "read"], ["rho_w", "float", "read"],
+        ["rho_w_saved", "float", "read"], ["fzm", "float", "read"],
+        ["fzp", "float", "read"], ["rdzw", "float", "read"],
+        ["tendency", "float", "read_write"]
+      ],
+      "shapes": {
+        "horizontal": [["any_1d"]], "theta": [["any_1d"]],
+        "theta_saved": [["any_1d"]], "rho_w": [["any_1d"]],
+        "rho_w_saved": [["any_1d"]], "fzm": [["any_1d"]],
+        "fzp": [["any_1d"]], "rdzw": [["any_1d"]],
+        "tendency": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlev", "int32"], ["ncells", "int32"], ["coefficient", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

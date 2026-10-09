@@ -1,0 +1,70 @@
+{
+  "kernels": [
+    {
+      "name": "topo_slope_geometry",
+      "module": "topo_radiation",
+      "source": "woof/metal/shaders/topo_radiation_family.metal",
+      "cuda_source": "woof/core/kernels/topo_radiation.cu",
+      "cuda_symbol": "topo_slope_geometry",
+      "resources": [["ht", "float", "read"], ["msftx", "float", "read"], ["msfty", "float", "read"], ["sina", "float", "read"], ["cosa", "float", "read"], ["slope", "float", "read_write"], ["slp_azi", "float", "read_write"]],
+      "shapes": {"ht": [["ny", "nx"]], "msftx": [["ny", "nx"]], "msfty": [["ny", "nx"]], "sina": [["ny", "nx"]], "cosa": [["ny", "nx"]], "slope": [["ny", "nx"]], "slp_azi": [["ny", "nx"]]},
+      "parameters": [["rdx", "float32"], ["rdy", "float32"], ["nx", "int32"], ["ny", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "topo_shadow_init",
+      "module": "topo_radiation",
+      "source": "woof/metal/shaders/topo_radiation_family.metal",
+      "cuda_source": "woof/core/kernels/topo_radiation.cu",
+      "cuda_symbol": "topo_shadow_init",
+      "resources": [["ht_loc", "float", "read_write"], ["ht_shad", "float", "read_write"], ["shadowmask", "int32", "read_write"]],
+      "shapes": {"ht_loc": [["ny+4", "nx+4"]], "ht_shad": [["ny", "nx"]], "shadowmask": [["ny", "nx"]]},
+      "parameters": [["nested", "int32"], ["nx", "int32"], ["ny", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "topo_shadow_scan",
+      "module": "topo_radiation",
+      "source": "woof/metal/shaders/topo_radiation_family.metal",
+      "cuda_source": "woof/core/kernels/topo_radiation.cu",
+      "cuda_symbol": "topo_shadow_scan",
+      "resources": [["ht_loc", "float", "read"], ["xlat", "float", "read"], ["xlong", "float", "read"], ["sina", "float", "read"], ["cosa", "float", "read"], ["shadowmask", "int32", "read_write"], ["ht_shad", "float", "read_write"]],
+      "shapes": {"ht_loc": [["ny+4", "nx+4"]], "xlat": [["ny", "nx"]], "xlong": [["ny", "nx"]], "sina": [["ny", "nx"]], "cosa": [["ny", "nx"]], "shadowmask": [["ny", "nx"]], "ht_shad": [["ny", "nx"]]},
+      "parameters": [["xtime", "float32"], ["gmt", "float32"], ["radfrq", "float32"], ["declin", "float32"], ["dx", "float32"], ["dy", "float32"], ["shadlen", "float32"], ["nx", "int32"], ["ny", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "topo_diffuse_frac",
+      "module": "topo_radiation",
+      "source": "woof/metal/shaders/topo_radiation_family.metal",
+      "cuda_source": "woof/core/kernels/topo_radiation.cu",
+      "cuda_symbol": "topo_diffuse_frac",
+      "resources": [["coszen", "float", "read"], ["swdown", "float", "read"], ["ht", "float", "read"], ["swddif", "float", "read_write"], ["diffuse_frac", "float", "read_write"]],
+      "shapes": {"coszen": [["ny", "nx"]], "swdown": [["ny", "nx"]], "ht": [["ny", "nx"]], "swddif": [["ny", "nx"]], "diffuse_frac": [["ny", "nx"]]},
+      "parameters": [["solcon", "float32"], ["ruiz", "int32"], ["n", "int32"], ["nx", "int32"], ["ny", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "topo_rad_adjust",
+      "module": "topo_radiation",
+      "source": "woof/metal/shaders/topo_radiation_family.metal",
+      "cuda_source": "woof/core/kernels/topo_radiation.cu",
+      "cuda_symbol": "topo_rad_adjust",
+      "resources": [["xlat", "float", "read"], ["coszen", "float", "read"], ["shadowmask", "int32", "read"], ["diffuse_frac", "float", "read"], ["hrang", "float", "read"], ["slope", "float", "read"], ["slp_azi", "float", "read"], ["swdown", "float", "read_write"], ["gsw", "float", "read_write"], ["swnorm", "float", "read_write"], ["gswsave", "float", "read_write"]],
+      "shapes": {"xlat": [["ny", "nx"]], "coszen": [["ny", "nx"]], "shadowmask": [["ny", "nx"]], "diffuse_frac": [["ny", "nx"]], "hrang": [["ny", "nx"]], "slope": [["ny", "nx"]], "slp_azi": [["ny", "nx"]], "swdown": [["ny", "nx"]], "gsw": [["ny", "nx"]], "swnorm": [["ny", "nx"]], "gswsave": [["ny", "nx"]]},
+      "parameters": [["declin", "float32"], ["n", "int32"], ["nx", "int32"], ["ny", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "topo_rad_restore",
+      "module": "topo_radiation",
+      "source": "woof/metal/shaders/topo_radiation_family.metal",
+      "cuda_source": "woof/core/kernels/topo_radiation.cu",
+      "cuda_symbol": "topo_rad_restore",
+      "resources": [["swdown", "float", "read_write"], ["gsw", "float", "read_write"], ["swnorm", "float", "read_write"], ["gswsave", "float", "read"]],
+      "shapes": {"swdown": [["ny", "nx"]], "gsw": [["ny", "nx"]], "swnorm": [["ny", "nx"]], "gswsave": [["ny", "nx"]]},
+      "parameters": [["n", "int32"], ["nx", "int32"], ["ny", "int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    }
+  ]
+}

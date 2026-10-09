@@ -1,0 +1,49 @@
+{
+  "kernels": [
+    {
+      "name": "wdm6_column",
+      "module": "wdm6_family",
+      "source": "woof/metal/shaders/wdm6_family.metal",
+      "cuda_source": "woof/core/kernels/wdm6.cu",
+      "cuda_symbol": "wdm6_column",
+      "resources": [
+        ["theta", "float", "read_write"], ["qv", "float", "read_write"],
+        ["qc", "float", "read_write"], ["qi", "float", "read_write"],
+        ["qr", "float", "read_write"], ["qs", "float", "read_write"],
+        ["qg", "float", "read_write"], ["nn", "float", "read_write"],
+        ["nc", "float", "read_write"], ["nr", "float", "read_write"],
+        ["den", "float", "read"], ["p", "float", "read"],
+        ["pii", "float", "read"], ["dz", "float", "read"],
+        ["xland", "float", "read"], ["rainnc", "float", "read_write"],
+        ["rainncv", "float", "read_write"], ["snownc", "float", "read_write"],
+        ["snowncv", "float", "read_write"], ["graupelnc", "float", "read_write"],
+        ["graupelncv", "float", "read_write"], ["sr", "float", "read_write"],
+        ["effc", "float", "read_write"], ["effi", "float", "read_write"],
+        ["effs", "float", "read_write"], ["count_status", "int32", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["nz", "ny", "nx"]], "qv": [["nz", "ny", "nx"]],
+        "qc": [["nz", "ny", "nx"]], "qi": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]], "qs": [["nz", "ny", "nx"]],
+        "qg": [["nz", "ny", "nx"]], "nn": [["nz", "ny", "nx"]],
+        "nc": [["nz", "ny", "nx"]], "nr": [["nz", "ny", "nx"]],
+        "den": [["nz", "ny", "nx"]], "p": [["nz", "ny", "nx"]],
+        "pii": [["nz", "ny", "nx"]], "dz": [["nz", "ny", "nx"]],
+        "xland": [["ny", "nx"]], "rainnc": [["ny", "nx"]],
+        "rainncv": [["ny", "nx"]], "snownc": [["ny", "nx"]],
+        "snowncv": [["ny", "nx"]], "graupelnc": [["ny", "nx"]],
+        "graupelncv": [["ny", "nx"]], "sr": [["ny", "nx"]],
+        "effc": [["nz", "ny", "nx"]], "effi": [["nz", "ny", "nx"]],
+        "effs": [["nz", "ny", "nx"]], "count_status": [["status_words"]]
+      },
+      "parameters": [
+        ["dt", "float32"], ["hail_opt", "int32"],
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["status_words", "int32"]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

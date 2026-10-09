@@ -1,0 +1,284 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_legacy_lw_rtrn_march",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_rtrn_march",
+      "resources": [
+        [
+          "cldfmc",
+          "float",
+          "read"
+        ],
+        [
+          "odcld",
+          "float",
+          "read"
+        ],
+        [
+          "efclfrac",
+          "float",
+          "read"
+        ],
+        [
+          "icldlyr",
+          "int32",
+          "read"
+        ],
+        [
+          "secdiff",
+          "float",
+          "read"
+        ],
+        [
+          "semiss",
+          "float",
+          "read"
+        ],
+        [
+          "planklay",
+          "float",
+          "read"
+        ],
+        [
+          "planklev",
+          "float",
+          "read"
+        ],
+        [
+          "plankbnd",
+          "float",
+          "read"
+        ],
+        [
+          "fracs",
+          "float",
+          "read"
+        ],
+        [
+          "taut",
+          "float",
+          "read"
+        ],
+        [
+          "tau_tbl",
+          "float",
+          "read"
+        ],
+        [
+          "exp_tbl",
+          "float",
+          "read"
+        ],
+        [
+          "tfn_tbl",
+          "float",
+          "read"
+        ],
+        [
+          "ngb",
+          "int32",
+          "read"
+        ],
+        [
+          "radld_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "radclrd_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "radlu_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "radclru_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "iclddn_p",
+          "int32",
+          "read_write"
+        ],
+        [
+          "radlu_sfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "radclru_sfc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cldfmc": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "odcld": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "efclfrac": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "icldlyr": [
+          [
+            "ncol",
+            "nl"
+          ]
+        ],
+        "secdiff": [
+          [
+            "ncol",
+            "16"
+          ]
+        ],
+        "semiss": [
+          [
+            "ncol",
+            "16"
+          ]
+        ],
+        "planklay": [
+          [
+            "ncol",
+            "nl",
+            "16"
+          ]
+        ],
+        "planklev": [
+          [
+            "ncol",
+            "nl+1",
+            "16"
+          ]
+        ],
+        "plankbnd": [
+          [
+            "ncol",
+            "16"
+          ]
+        ],
+        "fracs": [
+          [
+            "ncol",
+            "nl",
+            "140"
+          ]
+        ],
+        "taut": [
+          [
+            "ncol",
+            "nl",
+            "140"
+          ]
+        ],
+        "tau_tbl": [
+          [
+            "10001"
+          ]
+        ],
+        "exp_tbl": [
+          [
+            "10001"
+          ]
+        ],
+        "tfn_tbl": [
+          [
+            "10001"
+          ]
+        ],
+        "ngb": [
+          [
+            "140"
+          ]
+        ],
+        "radld_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "radclrd_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "radlu_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "radclru_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "iclddn_p": [
+          [
+            "ncol",
+            "140",
+            "nl"
+          ]
+        ],
+        "radlu_sfc": [
+          [
+            "ncol",
+            "140"
+          ]
+        ],
+        "radclru_sfc": [
+          [
+            "ncol",
+            "140"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "bpade",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

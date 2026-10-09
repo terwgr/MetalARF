@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 50b722ac9be513cceb82f4181d5cc6a5b73ccdb78ec9383572d2ece415f52795.
+struct EnsembleSurfaceOffsetSstResources {
+    device float *temperature [[id(0)]];
+    device const float *land [[id(1)]];
+    device const float *lake [[id(2)]];
+    device const float *ice [[id(3)]];
+    device const float *parameters [[id(4)]];
+    device uint *bad [[id(5)]];
+};
+struct EnsembleSurfaceOffsetSstParams {
+    int columns;
+    int apply;
+    float minimum_temperature;
+    float maximum_temperature;
+};
+static_assert(sizeof(EnsembleSurfaceOffsetSstParams) == 16, "ensemble_surface_offset_sst parameter ABI size changed");

@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 6ba023a09d84e41564427e283ac1ce106a13b58867d0e3e06246d763bc31ec25.
+struct Nssl2PrepareFusedGsResources {
+    device float *temperature_k [[id(0)]];
+    device float *target_m3 [[id(1)]];
+    device const float *state [[id(2)]];
+    device const float *full_theta [[id(3)]];
+    device const float *air_density [[id(4)]];
+    device const float *pressure_pa [[id(5)]];
+    device const float *exner [[id(6)]];
+};
+struct Nssl2PrepareFusedGsParams {
+    int n;
+    int nz;
+    int ncol;
+};
+static_assert(sizeof(Nssl2PrepareFusedGsParams) == 12, "nssl2_prepare_fused_gs parameter ABI size changed");

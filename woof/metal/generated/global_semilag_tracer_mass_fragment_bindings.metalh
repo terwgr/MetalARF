@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 73f02f49bd4512f3c3c1d50d87b93753680e38f277be25398289d98bd379e20f.
+struct GlobalSemilagTracerMassFragmentResources {
+    device const ulong *before [[id(0)]];
+    device const ulong *dp_before [[id(1)]];
+    device const ulong *advected [[id(2)]];
+    device const ulong *dp_after [[id(3)]];
+    device const ulong *cell_weight [[id(4)]];
+    device ulong *target_partial [[id(5)]];
+    device ulong *after_partial [[id(6)]];
+    device ulong *clamp_partial [[id(7)]];
+};
+struct GlobalSemilagTracerMassFragmentParams {
+    int columns;
+    int nlevel;
+    int nlon;
+};
+static_assert(sizeof(GlobalSemilagTracerMassFragmentParams) == 12, "global_semilag_tracer_mass_fragment parameter ABI size changed");

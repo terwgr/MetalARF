@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 58c971254ccd30eaa822eed9e69a4402781d6c007a203d1b6836031c12044eeb.
+struct UrbanBemTemperatureProfileAverageFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const int *utype [[id(1)]];
+    device const float *class_float [[id(2)]];
+    device const float *tg [[id(3)]];
+    device const float *tr [[id(4)]];
+    device const float *trv [[id(5)]];
+    device float *tg_av [[id(6)]];
+    device float *tr_av [[id(7)]];
+    device int *error [[id(8)]];
+};
+struct UrbanBemTemperatureProfileAverageFragmentParams {
+    int ncol;
+};
+static_assert(sizeof(UrbanBemTemperatureProfileAverageFragmentParams) == 4, "urban_bem_temperature_profile_average_fragment parameter ABI size changed");

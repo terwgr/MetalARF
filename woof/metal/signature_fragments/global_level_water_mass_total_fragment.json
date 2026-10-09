@@ -1,0 +1,23 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._level_water_mass_total",
+      "layout_version": 1,
+      "module": "global_level_water_mass_total_fragment",
+      "name": "global_level_water_mass_total_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["mass", "float64_bits", "read"],
+        ["total", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "mass": [["any_1d"]],
+        "total": [[1]]
+      },
+      "source": "woof/metal/shaders/global_level_water_mass_total_fragment.metal",
+      "threads_per_group": 1
+    }
+  ]
+}

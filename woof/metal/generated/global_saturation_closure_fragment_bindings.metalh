@@ -1,0 +1,28 @@
+// Generated from kernel_signatures.json; layout a96c702587fbdc960ab9555764bf529025a5ce2dc082b0ed8ba4b5ae48139d49.
+struct GlobalSaturationClosureFragmentResources {
+    device const ulong *theta [[id(0)]];
+    device const ulong *qv [[id(1)]];
+    device const ulong *qc [[id(2)]];
+    device const ulong *qr [[id(3)]];
+    device const ulong *qi [[id(4)]];
+    device const ulong *qs [[id(5)]];
+    device const ulong *qg [[id(6)]];
+    device const ulong *dp [[id(7)]];
+    device const ulong *before_water [[id(8)]];
+    device const ulong *surface_water [[id(9)]];
+    device const ulong *gravity [[id(10)]];
+    device ulong *qv_out [[id(11)]];
+    device ulong *qc_out [[id(12)]];
+    device ulong *qr_out [[id(13)]];
+    device ulong *qi_out [[id(14)]];
+    device ulong *qs_out [[id(15)]];
+    device ulong *qg_out [[id(16)]];
+    device ulong *surface_water_out [[id(17)]];
+    device uint *partial_status [[id(18)]];
+    device ulong *partial_repair_max [[id(19)]];
+};
+struct GlobalSaturationClosureFragmentParams {
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalSaturationClosureFragmentParams) == 8, "global_saturation_closure_fragment parameter ABI size changed");

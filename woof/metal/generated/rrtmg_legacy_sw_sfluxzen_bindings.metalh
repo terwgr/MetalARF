@@ -1,0 +1,26 @@
+// Generated from kernel_signatures.json; layout 29dd80f8e433791dc6fa5d020e737efe94c767f56b31a446122b2e36573c3106.
+struct RrtmgLegacySwSfluxzenResources {
+    device const int *laytrop [[id(0)]];
+    device const float *tab [[id(1)]];
+    device const int *ngb [[id(2)]];
+    device const int *laysolfr [[id(3)]];
+    device const int *jp [[id(4)]];
+    device const int *jt [[id(5)]];
+    device const int *jt1 [[id(6)]];
+    device const float *colh2o [[id(7)]];
+    device const float *colco2 [[id(8)]];
+    device const float *colch4 [[id(9)]];
+    device const float *colo2 [[id(10)]];
+    device const float *colo3 [[id(11)]];
+    device const float *fac00 [[id(12)]];
+    device const float *fac01 [[id(13)]];
+    device const float *fac10 [[id(14)]];
+    device const float *fac11 [[id(15)]];
+    device float *sfluxzen [[id(16)]];
+};
+struct RrtmgLegacySwSfluxzenParams {
+    int ncol;
+    int nl;
+    int ntab;
+};
+static_assert(sizeof(RrtmgLegacySwSfluxzenParams) == 12, "rrtmg_legacy_sw_sfluxzen parameter ABI size changed");

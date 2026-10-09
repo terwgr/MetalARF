@@ -1,0 +1,23 @@
+// Generated from kernel_signatures.json; layout 7ab5154302a8d73583d047132c72cc3284492ae51afe80e520f750545b4bc72d.
+struct InstallMuBoundaryResources {
+    device float *mup [[id(0)]];
+    device float *old_mup_frame [[id(1)]];
+    device const float *west [[id(2)]];
+    device const float *west_t [[id(3)]];
+    device const float *east [[id(4)]];
+    device const float *east_t [[id(5)]];
+    device const float *south [[id(6)]];
+    device const float *south_t [[id(7)]];
+    device const float *north [[id(8)]];
+    device const float *north_t [[id(9)]];
+};
+struct InstallMuBoundaryParams {
+    float dtbc;
+    int width;
+    int spec_zone;
+    int ny;
+    int nx;
+    int frame_count;
+    int one;
+};
+static_assert(sizeof(InstallMuBoundaryParams) == 28, "install_mu_boundary parameter ABI size changed");

@@ -1,0 +1,34 @@
+// Generated from kernel_signatures.json; layout 966230da28060e14af1d99baab29283c030f018db3b2fe227de3aa8c4de50c22.
+struct UrbanBepBemGreenRoofFluxPackFragmentResources {
+    device const int *utype [[id(0)]];
+    device const float *class_float [[id(1)]];
+    device const int *class_int [[id(2)]];
+    device const float *interp [[id(3)]];
+    device const float *ptrv [[id(4)]];
+    device const float *swdown [[id(5)]];
+    device const float *qr [[id(6)]];
+    device const float *sfrv [[id(7)]];
+    device const float *lfrv [[id(8)]];
+    device float *dz [[id(9)]];
+    device float *z0 [[id(10)]];
+    device float *ua [[id(11)]];
+    device float *va [[id(12)]];
+    device float *pt [[id(13)]];
+    device float *pt0 [[id(14)]];
+    device float *ptg [[id(15)]];
+    device float *da [[id(16)]];
+    device float *qv [[id(17)]];
+    device float *pr [[id(18)]];
+    device float *rsg [[id(19)]];
+    device float *pv_frac_roof [[id(20)]];
+    device int *gr_type [[id(21)]];
+    device float *qr_rows [[id(22)]];
+    device float *sf [[id(23)]];
+    device float *lf [[id(24)]];
+};
+struct UrbanBepBemGreenRoofFluxPackFragmentParams {
+    int nitem;
+    int ncol;
+    float dz_u;
+};
+static_assert(sizeof(UrbanBepBemGreenRoofFluxPackFragmentParams) == 12, "urban_bep_bem_green_roof_flux_pack_fragment parameter ABI size changed");

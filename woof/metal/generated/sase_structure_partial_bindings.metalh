@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 0b82c05e06e81704634841a930b8e4f535277874cdea190bc935ba512aaa7725.
+struct SaseStructurePartialResources {
+    device const float *f [[id(0)]];
+    device ulong *partials [[id(1)]];
+};
+struct SaseStructurePartialParams {
+    int nz;
+    int ny;
+    int nx;
+    int nblocks;
+};
+static_assert(sizeof(SaseStructurePartialParams) == 16, "sase_structure_partial parameter ABI size changed");

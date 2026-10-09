@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 73f290e75cc6ea0774fe5894ae3613f7bf99b5fde9b4abbfc93d81bcc2028c0f.
+struct GlobalTopSpongeFragmentResources {
+    device const ulong *u [[id(0)]];
+    device const ulong *v [[id(1)]];
+    device const ulong *p_full [[id(2)]];
+    device const ulong *p_half [[id(3)]];
+    device const ulong *constants [[id(4)]];
+    device ulong *u_out [[id(5)]];
+    device ulong *v_out [[id(6)]];
+};
+struct GlobalTopSpongeFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalTopSpongeFragmentParams) == 12, "global_top_sponge_fragment parameter ABI size changed");

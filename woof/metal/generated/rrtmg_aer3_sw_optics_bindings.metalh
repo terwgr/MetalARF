@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout eb1eeaed2ef0f6af8664549d5e2750be6e8a1e9055559829d837a190c4969310.
+struct RrtmgAer3SwOpticsResources {
+    device const float *p3d [[id(0)]];
+    device const float *t3d [[id(1)]];
+    device const float *qv3d [[id(2)]];
+    device const float *dz8w [[id(3)]];
+    device const float *nwfa [[id(4)]];
+    device const float *nifa [[id(5)]];
+    device const float *smoke_aod [[id(6)]];
+    device float *ztaua [[id(7)]];
+    device float *zasya [[id(8)]];
+    device float *zomga [[id(9)]];
+    device float *taod [[id(10)]];
+};
+struct RrtmgAer3SwOpticsParams {
+    int nc;
+    int nz;
+    int nlayers;
+    int smoke_feedback;
+};
+static_assert(sizeof(RrtmgAer3SwOpticsParams) == 16, "rrtmg_aer3_sw_optics parameter ABI size changed");

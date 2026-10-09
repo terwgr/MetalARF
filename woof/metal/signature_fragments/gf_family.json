@@ -1,0 +1,364 @@
+{
+  "kernels": [
+    {
+      "name": "gf_gfdrv_stage",
+      "module": "gf_family",
+      "source": "woof/metal/shaders/gf_family.metal",
+      "cuda_source": "woof/core/kernels/gf.cu",
+      "cuda_symbol": "gf_gfdrv_stage",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "dz8w",
+          "float",
+          "read"
+        ],
+        [
+          "p_interface",
+          "float",
+          "read"
+        ],
+        [
+          "rthften",
+          "float",
+          "read"
+        ],
+        [
+          "rqvften",
+          "float",
+          "read"
+        ],
+        [
+          "rthraten_lw",
+          "float",
+          "read"
+        ],
+        [
+          "rthraten_sw",
+          "float",
+          "read"
+        ],
+        [
+          "rthblten",
+          "float",
+          "read"
+        ],
+        [
+          "rqvblten",
+          "float",
+          "read"
+        ],
+        [
+          "ht",
+          "float",
+          "read"
+        ],
+        [
+          "hfx",
+          "float",
+          "read"
+        ],
+        [
+          "qfx",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "kpbl",
+          "int32",
+          "read"
+        ],
+        [
+          "rthcuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqvcuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqccuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqicuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rucuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rvcuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainc",
+          "float",
+          "read_write"
+        ],
+        [
+          "dx_column",
+          "float",
+          "read"
+        ],
+        [
+          "workspace",
+          "float",
+          "read_write"
+        ],
+        [
+          "spp_conv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p_interface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthften": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvften": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthraten_lw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthraten_sw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthblten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvblten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ht": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xland": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kpbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthcuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvcuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqccuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqicuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rucuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rvcuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "workspace": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dx_column": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spp_conv": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "use_dx_column",
+          "int32"
+        ],
+        [
+          "ishallow",
+          "int32"
+        ],
+        [
+          "ichoice",
+          "int32"
+        ],
+        [
+          "spp_enabled",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

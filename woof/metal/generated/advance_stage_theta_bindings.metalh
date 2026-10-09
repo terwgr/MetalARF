@@ -1,0 +1,22 @@
+// Generated from kernel_signatures.json; layout 31c218712d884c162a8d795f39c3112b32733cab510494e689100c71e5c1e1cc.
+struct AdvanceStageThetaResources {
+    device float *thp [[id(0)]];
+    device const float *thp0 [[id(1)]];
+    device const float *rth_t [[id(2)]];
+    device const float *thb [[id(3)]];
+    device const float *mub2d [[id(4)]];
+    device const float *mup0 [[id(5)]];
+    device const float *mup [[id(6)]];
+    device const float *c1h [[id(7)]];
+    device const float *c2h [[id(8)]];
+    device const float *msft [[id(9)]];
+};
+struct AdvanceStageThetaParams {
+    float dt_eff;
+    int has_msf;
+    int base3d;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(AdvanceStageThetaParams) == 24, "advance_stage_theta parameter ABI size changed");

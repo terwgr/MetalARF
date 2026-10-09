@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 20012c53025445803f364a83062f805af6176a7356372cc6f8c45502f24259a8.
+struct GlobalSemilagWindSynthesisFragmentResources {
+    device const ulong *east [[id(0)]];
+    device const ulong *north [[id(1)]];
+    device const ulong *coslat [[id(2)]];
+    device const ulong *radius [[id(3)]];
+    device ulong *u [[id(4)]];
+    device ulong *v [[id(5)]];
+};
+struct GlobalSemilagWindSynthesisFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalSemilagWindSynthesisFragmentParams) == 12, "global_semilag_wind_synthesis_fragment parameter ABI size changed");

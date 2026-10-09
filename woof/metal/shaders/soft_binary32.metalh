@@ -1,0 +1,360 @@
+#ifndef WOOF_SOFT_BINARY32_METALH
+#define WOOF_SOFT_BINARY32_METALH
+
+// Integer-only IEEE-754 binary32 primitives for MSL.
+//
+// A value is a uint bit pattern. Arithmetic below never converts a bit pattern
+// to float and never uses native floating-point operations. Finite arithmetic
+// is round-to-nearest, ties-to-even (RN-even); packing retains gradual
+// underflow. This header is source-only and is not a claim of conformance.
+
+enum Soft32Kind : uint {
+    SOFT32_ZERO = 0u,
+    SOFT32_FINITE = 1u,
+    SOFT32_INFINITY = 2u,
+    SOFT32_NAN = 3u
+};
+
+struct Soft32Decoded {
+    uint kind;
+    bool sign;
+    int exponent;
+    uint significand;
+};
+
+static inline uint soft32_sign_mask() { return 0x80000000u; }
+static inline uint soft32_exp_mask()  { return 0x7f800000u; }
+static inline uint soft32_frac_mask() { return 0x007fffffu; }
+static inline uint soft32_hidden()    { return 0x00800000u; }
+static inline uint soft32_inf()      { return 0x7f800000u; }
+static inline uint soft32_qnan()     { return 0x7fc00000u; }
+
+static inline bool soft32_sign(uint bits)
+{ return (bits & soft32_sign_mask()) != 0u; }
+
+static inline uint soft32_abs_bits(uint bits)
+{ return bits & ~soft32_sign_mask(); }
+
+static inline uint soft32_negate_bits(uint bits)
+{ return bits ^ soft32_sign_mask(); }
+
+static inline bool soft32_is_nan(uint bits)
+{
+    return (bits & soft32_exp_mask()) == soft32_exp_mask()
+        && (bits & soft32_frac_mask()) != 0u;
+}
+
+static inline bool soft32_is_signaling_nan(uint bits)
+{ return soft32_is_nan(bits) && (bits & 0x00400000u) == 0u; }
+
+static inline bool soft32_is_infinite(uint bits)
+{ return (bits & ~soft32_sign_mask()) == soft32_inf(); }
+
+static inline bool soft32_is_zero(uint bits)
+{ return (bits & ~soft32_sign_mask()) == 0u; }
+
+static inline bool soft32_is_finite(uint bits)
+{ return (bits & soft32_exp_mask()) != soft32_exp_mask(); }
+
+static inline uint soft32_quiet_nan(uint bits)
+{ return bits | 0x00400000u; }
+
+static inline Soft32Decoded soft32_decode(uint bits)
+{
+    Soft32Decoded d;
+    d.sign = soft32_sign(bits);
+    const uint efield = (bits >> 23) & 0xffu;
+    const uint fraction = bits & soft32_frac_mask();
+    if (efield == 0xffu) {
+        d.kind = fraction == 0u ? SOFT32_INFINITY : SOFT32_NAN;
+        d.exponent = 0;
+        d.significand = fraction;
+        return d;
+    }
+    if (efield == 0u) {
+        if (fraction == 0u) {
+            d.kind = SOFT32_ZERO;
+            d.exponent = -126;
+            d.significand = 0u;
+            return d;
+        }
+        d.kind = SOFT32_FINITE;
+        d.exponent = -126;
+        d.significand = fraction;
+        while (d.significand < soft32_hidden()) {
+            d.significand <<= 1;
+            d.exponent -= 1;
+        }
+        return d;
+    }
+    d.kind = SOFT32_FINITE;
+    d.exponent = int(efield) - 127;
+    d.significand = soft32_hidden() | fraction;
+    return d;
+}
+
+static inline uint soft32_shift_right_jam(uint value, uint distance)
+{
+    if (distance == 0u) return value;
+    if (distance < 32u) {
+        const uint mask = (1u << distance) - 1u;
+        return (value >> distance) | uint((value & mask) != 0u);
+    }
+    return uint(value != 0u);
+}
+
+static inline uint soft32_shift_right_jam64(ulong value, uint distance)
+{
+    if (distance == 0u) return uint(value);
+    if (distance < 64u) {
+        const ulong mask = (1ul << distance) - 1ul;
+        return uint(value >> distance) | uint((value & mask) != 0ul);
+    }
+    return uint(value != 0ul);
+}
+
+static inline uint soft32_pack_extended(bool sign, int exponent, uint ext)
+{
+    const uint signbits = sign ? soft32_sign_mask() : 0u;
+    if (ext == 0u) return signbits;
+
+    // Three low bits carry guard/round/sticky through normalization and pack.
+    if ((ext & 0x08000000u) != 0u) {
+        ext = soft32_shift_right_jam(ext, 1u);
+        exponent += 1;
+    }
+    while ((ext & 0x04000000u) == 0u && exponent > -126) {
+        ext <<= 1;
+        exponent -= 1;
+    }
+    if (exponent < -126) {
+        ext = soft32_shift_right_jam(ext, uint(-126 - exponent));
+        exponent = -126;
+    }
+
+    uint significand = ext >> 3;
+    const uint roundbits = ext & 7u;
+    if (roundbits > 4u || (roundbits == 4u && (significand & 1u) != 0u))
+        significand += 1u;
+
+    if (significand == 0u) return signbits;
+    if (exponent == -126 && significand < soft32_hidden())
+        return signbits | significand;
+    if (significand >= 0x01000000u) {
+        significand >>= 1;
+        exponent += 1;
+    }
+    if (exponent > 127) return signbits | soft32_inf();
+
+    return signbits | (uint(exponent + 127) << 23)
+                    | (significand & soft32_frac_mask());
+}
+
+// Return -1, 0, 1, or 2 for less, equal, greater, or unordered.
+static inline int soft32_compare(uint a, uint b)
+{
+    if (soft32_is_nan(a) || soft32_is_nan(b)) return 2;
+    if (soft32_is_zero(a) && soft32_is_zero(b)) return 0;
+    const bool sa = soft32_sign(a), sb = soft32_sign(b);
+    if (sa != sb) return sa ? -1 : 1;
+    const uint ma = soft32_abs_bits(a), mb = soft32_abs_bits(b);
+    const int mag = ma < mb ? -1 : (ma > mb ? 1 : 0);
+    return sa ? -mag : mag;
+}
+
+static inline bool soft32_equal(uint a, uint b)
+{ return soft32_compare(a, b) == 0; }
+static inline bool soft32_less(uint a, uint b)
+{ return soft32_compare(a, b) == -1; }
+static inline bool soft32_less_equal(uint a, uint b)
+{ const int c = soft32_compare(a, b); return c == -1 || c == 0; }
+static inline bool soft32_greater(uint a, uint b)
+{ return soft32_compare(a, b) == 1; }
+static inline bool soft32_greater_equal(uint a, uint b)
+{ const int c = soft32_compare(a, b); return c == 1 || c == 0; }
+
+static inline uint soft32_add_sub(uint a, uint b, bool subtract_b)
+{
+    if (soft32_is_nan(a)) return soft32_quiet_nan(a);
+    if (soft32_is_nan(b)) return soft32_quiet_nan(b);
+
+    Soft32Decoded da = soft32_decode(a);
+    Soft32Decoded db = soft32_decode(b);
+    const bool sa = da.sign;
+    const bool sb = db.sign != subtract_b;
+    const uint sign_a = sa ? soft32_sign_mask() : 0u;
+    const uint sign_b = sb ? soft32_sign_mask() : 0u;
+
+    if (da.kind == SOFT32_INFINITY || db.kind == SOFT32_INFINITY) {
+        if (da.kind == SOFT32_INFINITY && db.kind == SOFT32_INFINITY)
+            return sa == sb ? sign_a | soft32_inf() : soft32_qnan();
+        return da.kind == SOFT32_INFINITY ? sign_a | soft32_inf()
+                                           : sign_b | soft32_inf();
+    }
+    if (da.kind == SOFT32_ZERO && db.kind == SOFT32_ZERO)
+        return (sa && sb) ? soft32_sign_mask() : 0u;
+    if (da.kind == SOFT32_ZERO)
+        return sign_b | (b & ~soft32_sign_mask());
+    if (db.kind == SOFT32_ZERO) return a;
+
+    const bool a_larger = da.exponent > db.exponent
+        || (da.exponent == db.exponent && da.significand >= db.significand);
+    const Soft32Decoded large = a_larger ? da : db;
+    const Soft32Decoded small = a_larger ? db : da;
+    const bool large_sign = a_larger ? sa : sb;
+    const bool small_sign = a_larger ? sb : sa;
+    const uint distance = uint(large.exponent - small.exponent);
+    const uint large_ext = large.significand << 3;
+    const uint small_ext = soft32_shift_right_jam(small.significand << 3,
+                                                  distance);
+    if (large_sign == small_sign)
+        return soft32_pack_extended(large_sign, large.exponent,
+                                   large_ext + small_ext);
+    if (large_ext == small_ext) return 0u;
+    return soft32_pack_extended(large_sign, large.exponent,
+                                large_ext - small_ext);
+}
+
+static inline uint soft32_add(uint a, uint b)
+{ return soft32_add_sub(a, b, false); }
+
+static inline uint soft32_sub(uint a, uint b)
+{ return soft32_add_sub(a, b, true); }
+
+static inline uint soft32_mul(uint a, uint b)
+{
+    if (soft32_is_nan(a)) return soft32_quiet_nan(a);
+    if (soft32_is_nan(b)) return soft32_quiet_nan(b);
+    const Soft32Decoded da = soft32_decode(a);
+    const Soft32Decoded db = soft32_decode(b);
+    const bool sign = da.sign != db.sign;
+    const uint signbits = sign ? soft32_sign_mask() : 0u;
+    if ((da.kind == SOFT32_INFINITY && db.kind == SOFT32_ZERO)
+        || (db.kind == SOFT32_INFINITY && da.kind == SOFT32_ZERO))
+        return soft32_qnan();
+    if (da.kind == SOFT32_INFINITY || db.kind == SOFT32_INFINITY)
+        return signbits | soft32_inf();
+    if (da.kind == SOFT32_ZERO || db.kind == SOFT32_ZERO) return signbits;
+
+    const ulong product = ulong(da.significand) * ulong(db.significand);
+    const bool high = (product & (1ul << 47)) != 0ul;
+    const uint ext = soft32_shift_right_jam64(product, high ? 21u : 20u);
+    return soft32_pack_extended(sign,
+                                da.exponent + db.exponent + int(high), ext);
+}
+
+// Correctly rounded binary32 square root, represented entirely as integer bits.
+// The integer radicand carries the 24-bit significand plus three rounding bits;
+// a nonzero remainder is jammed into the sticky bit before the shared packer.
+static inline uint soft32_sqrt(uint bits)
+{
+    if (soft32_is_nan(bits)) return soft32_quiet_nan(bits);
+    if (soft32_is_zero(bits) || soft32_is_infinite(bits))
+        return soft32_sign(bits) && !soft32_is_zero(bits) ? soft32_qnan() : bits;
+    if (soft32_sign(bits)) return soft32_qnan();
+    Soft32Decoded d = soft32_decode(bits);
+    ulong radicand = ulong(d.significand) << 29;
+    if ((d.exponent % 2) != 0) {
+        radicand <<= 1;
+        d.exponent -= 1;
+    }
+    ulong lo = 1ul << 26;
+    ulong hi = 1ul << 28;
+    while (lo + 1ul < hi) {
+        const ulong mid = (lo + hi) >> 1;
+        if (mid * mid <= radicand) lo = mid;
+        else hi = mid;
+    }
+    const ulong square = lo * lo;
+    const uint ext = uint(lo) | uint(square != radicand);
+    return soft32_pack_extended(false, d.exponent / 2, ext);
+}
+
+static inline uint soft32_div(uint a, uint b)
+{
+    if (soft32_is_nan(a)) return soft32_quiet_nan(a);
+    if (soft32_is_nan(b)) return soft32_quiet_nan(b);
+    const Soft32Decoded da = soft32_decode(a);
+    const Soft32Decoded db = soft32_decode(b);
+    const bool sign = da.sign != db.sign;
+    const uint signbits = sign ? soft32_sign_mask() : 0u;
+    if ((da.kind == SOFT32_ZERO && db.kind == SOFT32_ZERO)
+        || (da.kind == SOFT32_INFINITY && db.kind == SOFT32_INFINITY))
+        return soft32_qnan();
+    if (da.kind == SOFT32_INFINITY || db.kind == SOFT32_ZERO)
+        return signbits | soft32_inf();
+    if (da.kind == SOFT32_ZERO || db.kind == SOFT32_INFINITY) return signbits;
+
+    const bool less = da.significand < db.significand;
+    const ulong denominator = ulong(db.significand);
+    const ulong scaled = ulong(da.significand) << uint(less ? 1u : 0u);
+    ulong remainder = scaled - denominator;
+    ulong quotient = 1ul << 26;
+    for (int bit = 25; bit >= 0; --bit) {
+        remainder <<= 1;
+        if (remainder >= denominator) {
+            remainder -= denominator;
+            quotient |= 1ul << uint(bit);
+        }
+    }
+    const uint ext = uint(quotient) | uint(remainder != 0ul);
+    return soft32_pack_extended(sign,
+                                da.exponent - db.exponent - int(less), ext);
+}
+
+// Exact widening conversion from binary32 bits to binary64 bits. NaNs are
+// quieted while preserving sign and the representable payload bits.
+static inline ulong soft32_to_binary64(uint bits)
+{
+    const bool sign = soft32_sign(bits);
+    const ulong signbits = sign ? 0x8000000000000000ul : 0ul;
+    const uint efield = (bits >> 23) & 0xffu;
+    const uint fraction = bits & soft32_frac_mask();
+    if (efield == 0xffu) {
+        if (fraction == 0u) return signbits | 0x7ff0000000000000ul;
+        const ulong payload = ulong(fraction) << 29;
+        return signbits | 0x7ff0000000000000ul | payload
+             | 0x0008000000000000ul;
+    }
+    if (efield == 0u && fraction == 0u) return signbits;
+
+    Soft32Decoded d = soft32_decode(bits);
+    const ulong exponent = ulong(d.exponent + 1023);
+    const ulong sig_fraction = ulong(d.significand & soft32_frac_mask()) << 29;
+    return signbits | (exponent << 52) | sig_fraction;
+}
+
+// Convert binary64 bits to binary32 with RN-even and gradual underflow.
+// NaN payloads are truncated to the high binary32 payload bits and quieted.
+static inline uint soft32_from_binary64(ulong bits)
+{
+    const bool sign = (bits & 0x8000000000000000ul) != 0ul;
+    const uint signbits = sign ? soft32_sign_mask() : 0u;
+    const uint efield = uint((bits >> 52) & 0x7fful);
+    const ulong fraction = bits & 0x000ffffffffffffful;
+    if (efield == 0x7ffu) {
+        if (fraction == 0ul) return signbits | soft32_inf();
+        uint payload = uint(fraction >> 29) & soft32_frac_mask();
+        payload |= 0x00400000u;
+        return signbits | soft32_inf() | payload;
+    }
+    if (efield == 0u && fraction == 0ul) return signbits;
+
+    int exponent;
+    ulong significand;
+    if (efield == 0u) {
+        exponent = -1022;
+        significand = fraction;
+        while (significand < (1ul << 52)) {
+            significand <<= 1;
+            exponent -= 1;
+        }
+    } else {
+        exponent = int(efield) - 1023;
+        significand = (1ul << 52) | fraction;
+    }
+    const uint ext = soft32_shift_right_jam64(significand, 26u);
+    return soft32_pack_extended(sign, exponent, ext);
+}
+
+#endif // WOOF_SOFT_BINARY32_METALH

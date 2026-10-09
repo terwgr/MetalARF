@@ -1,0 +1,542 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_couple",
+      "module": "urban_bep_couple_family",
+      "source": "woof/metal/shaders/urban_bep_couple_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_couple.cu",
+      "cuda_symbol": "urban_bep_couple",
+      "resources": [
+        [
+          "frc_urb2d",
+          "float",
+          "read"
+        ],
+        [
+          "glw",
+          "float",
+          "read"
+        ],
+        [
+          "swdown",
+          "float",
+          "read"
+        ],
+        [
+          "rl_up_urb",
+          "float",
+          "read"
+        ],
+        [
+          "rs_abs_urb",
+          "float",
+          "read"
+        ],
+        [
+          "emiss_urb",
+          "float",
+          "read"
+        ],
+        [
+          "grdflx_urb",
+          "float",
+          "read"
+        ],
+        [
+          "ust",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsk",
+          "float",
+          "read_write"
+        ],
+        [
+          "hfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "qfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "lh",
+          "float",
+          "read_write"
+        ],
+        [
+          "grdflx",
+          "float",
+          "read_write"
+        ],
+        [
+          "albedo",
+          "float",
+          "read_write"
+        ],
+        [
+          "emiss",
+          "float",
+          "read_write"
+        ],
+        [
+          "ts_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "sh_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "lh_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "g_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "rn_urb2d",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz8w",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "u_phy",
+          "float",
+          "read"
+        ],
+        [
+          "v_phy",
+          "float",
+          "read"
+        ],
+        [
+          "a_u_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "a_v_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "a_t_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "a_q_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "a_e_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_u_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_v_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_t_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_q_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_e_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "sf_bep",
+          "float",
+          "read_write"
+        ],
+        [
+          "vl_bep",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "frc_urb2d": [
+          [
+            "ncol"
+          ]
+        ],
+        "glw": [
+          [
+            "ncol"
+          ]
+        ],
+        "swdown": [
+          [
+            "ncol"
+          ]
+        ],
+        "rl_up_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "rs_abs_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "emiss_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "grdflx_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "ust": [
+          [
+            "ncol"
+          ]
+        ],
+        "tsk": [
+          [
+            "ncol"
+          ]
+        ],
+        "hfx": [
+          [
+            "ncol"
+          ]
+        ],
+        "qfx": [
+          [
+            "ncol"
+          ]
+        ],
+        "lh": [
+          [
+            "ncol"
+          ]
+        ],
+        "grdflx": [
+          [
+            "ncol"
+          ]
+        ],
+        "albedo": [
+          [
+            "ncol"
+          ]
+        ],
+        "emiss": [
+          [
+            "ncol"
+          ]
+        ],
+        "ts_urb2d": [
+          [
+            "ncol"
+          ]
+        ],
+        "sh_urb2d": [
+          [
+            "ncol"
+          ]
+        ],
+        "lh_urb2d": [
+          [
+            "ncol"
+          ]
+        ],
+        "g_urb2d": [
+          [
+            "ncol"
+          ]
+        ],
+        "rn_urb2d": [
+          [
+            "ncol"
+          ]
+        ],
+        "dz8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_u_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_v_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_t_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_q_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_e_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b_u_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b_v_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b_t_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b_q_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b_e_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sf_bep": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vl_bep": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "lsm",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_sfcdiag",
+      "module": "urban_bep_couple_family",
+      "source": "woof/metal/shaders/urban_bep_couple_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_couple.cu",
+      "cuda_symbol": "urban_bep_sfcdiag",
+      "resources": [
+        [
+          "utype_urb2d",
+          "int32",
+          "read"
+        ],
+        [
+          "th_phy",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "u_phy",
+          "float",
+          "read"
+        ],
+        [
+          "v_phy",
+          "float",
+          "read"
+        ],
+        [
+          "psfc",
+          "float",
+          "read"
+        ],
+        [
+          "t2",
+          "float",
+          "read_write"
+        ],
+        [
+          "th2",
+          "float",
+          "read_write"
+        ],
+        [
+          "q2",
+          "float",
+          "read_write"
+        ],
+        [
+          "u10",
+          "float",
+          "read_write"
+        ],
+        [
+          "v10",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "utype_urb2d": [
+          [
+            "ncol"
+          ]
+        ],
+        "th_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psfc": [
+          [
+            "ncol"
+          ]
+        ],
+        "t2": [
+          [
+            "ncol"
+          ]
+        ],
+        "th2": [
+          [
+            "ncol"
+          ]
+        ],
+        "q2": [
+          [
+            "ncol"
+          ]
+        ],
+        "u10": [
+          [
+            "ncol"
+          ]
+        ],
+        "v10": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,798 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_prepare_clamp_top",
+      "module": "rrtmgp_prepare_family",
+      "source": "woof/metal/shaders/rrtmgp_prepare_family.metal",
+      "cuda_source": "woof/core/rrtmgp.py",
+      "cuda_symbol": "RRTMGPRadiation.__call__ top-interface clamp",
+      "resources": [["plev", "float", "read_write"]],
+      "shapes": {"plev": [["ncol", "nlev"]]},
+      "parameters": [["ncol", "int32"], ["nlev", "int32"],
+                     ["pressure_floor", "float32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["float32_max"]
+    },
+    {
+      "name": "rrtmgp_prepare_interface_temperatures",
+      "module": "rrtmgp_prepare_family",
+      "source": "woof/metal/shaders/rrtmgp_prepare_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_gas_optics",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "plev",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "tlev",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "plev": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlev": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "ordered-fp32",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "rrtmgp_prepare_pack_columns",
+      "module": "rrtmgp_prepare_family",
+      "source": "woof/metal/shaders/rrtmgp_prepare_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_gas_optics",
+      "resources": [
+        [
+          "input",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "input": [
+          [
+            "nlay",
+            "ny",
+            "nx"
+          ]
+        ],
+        "output": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "index-only",
+        "dependency-marked-unverified"
+      ]
+    },
+    {
+      "name": "rrtmgp_prepare_clear_upper_fields",
+      "module": "rrtmgp_prepare_family",
+      "source": "woof/metal/shaders/rrtmgp_prepare_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_clear_upper_layers",
+      "resources": [
+        [
+          "in_0",
+          "float",
+          "read"
+        ],
+        [
+          "in_1",
+          "float",
+          "read"
+        ],
+        [
+          "in_2",
+          "float",
+          "read"
+        ],
+        [
+          "in_3",
+          "float",
+          "read"
+        ],
+        [
+          "in_4",
+          "float",
+          "read"
+        ],
+        [
+          "out_0",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_1",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_2",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_3",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_4",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "in_0": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "in_1": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "in_2": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "in_3": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "in_4": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "out_0": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "out_1": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "out_2": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "out_3": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "out_4": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "model_nlay",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "rrtmgp_prepare_lw_profile",
+      "module": "rrtmgp_prepare_family",
+      "source": "woof/metal/shaders/rrtmgp_prepare_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_append_lw_profile",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "plev",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "tlev",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "climo_pressure",
+          "float",
+          "read"
+        ],
+        [
+          "climo_temperature",
+          "float",
+          "read"
+        ],
+        [
+          "out_play",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_plev",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_tlay",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "out_tlev",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "out_qv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "plev": [
+          [
+            "ncol",
+            "model_nlay+1"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "tlev": [
+          [
+            "ncol",
+            "model_nlay+1"
+          ]
+        ],
+        "qv": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "climo_pressure": [
+          [
+            "nclimo"
+          ]
+        ],
+        "climo_temperature": [
+          [
+            "nclimo"
+          ]
+        ],
+        "out_play": [
+          [
+            "ncol",
+            "total_nlay"
+          ]
+        ],
+        "out_plev": [
+          [
+            "ncol",
+            "total_nlay+1"
+          ]
+        ],
+        "out_tlay": [
+          [
+            "ncol",
+            "total_nlay"
+          ]
+        ],
+        "out_tlev": [
+          [
+            "ncol",
+            "total_nlay+1"
+          ]
+        ],
+        "out_qv": [
+          [
+            "ncol",
+            "total_nlay"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "model_nlay",
+          "int32"
+        ],
+        [
+          "upper_nlay",
+          "int32"
+        ],
+        [
+          "total_nlay",
+          "int32"
+        ],
+        [
+          "nclimo",
+          "int32"
+        ],
+        [
+          "p_top",
+          "float32"
+        ],
+        [
+          "pressure_floor",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "rrtmgp_prepare_sw_profile",
+      "module": "rrtmgp_prepare_family",
+      "source": "woof/metal/shaders/rrtmgp_prepare_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_append_profile_fp32",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "plev",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "tlev",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "out_play",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_plev",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_tlay",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_tlev",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_qv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "plev": [
+          [
+            "ncol",
+            "model_nlay+1"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "tlev": [
+          [
+            "ncol",
+            "model_nlay+1"
+          ]
+        ],
+        "qv": [
+          [
+            "ncol",
+            "model_nlay"
+          ]
+        ],
+        "out_play": [
+          [
+            "ncol",
+            "total_nlay"
+          ]
+        ],
+        "out_plev": [
+          [
+            "ncol",
+            "total_nlay+1"
+          ]
+        ],
+        "out_tlay": [
+          [
+            "ncol",
+            "total_nlay"
+          ]
+        ],
+        "out_tlev": [
+          [
+            "ncol",
+            "total_nlay+1"
+          ]
+        ],
+        "out_qv": [
+          [
+            "ncol",
+            "total_nlay"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "model_nlay",
+          "int32"
+        ],
+        [
+          "upper_nlay",
+          "int32"
+        ],
+        [
+          "total_nlay",
+          "int32"
+        ],
+        [
+          "pressure_floor",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "rrtmgp_prepare_solver_temperatures",
+      "module": "rrtmgp_prepare_family",
+      "source": "woof/metal/shaders/rrtmgp_prepare_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_solver_temperatures",
+      "resources": [
+        [
+          "tlay",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "tlev",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "out_tlay",
+          "float",
+          "read_write"
+        ],
+        [
+          "out_tlev",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlev": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ],
+        "out_tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "out_tlev": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "rrtmgp_prepare_gas_vmr",
+      "module": "rrtmgp_prepare_family",
+      "source": "woof/metal/shaders/rrtmgp_prepare_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_gas_vmr_fill",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "ozone_pressure",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ozone_vmr",
+          "float",
+          "read"
+        ],
+        [
+          "trace_index",
+          "int32",
+          "read"
+        ],
+        [
+          "trace_value",
+          "float",
+          "read"
+        ],
+        [
+          "vmr",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncells"
+          ]
+        ],
+        "qv": [
+          [
+            "ncells"
+          ]
+        ],
+        "ozone_pressure": [
+          [
+            "nozone"
+          ]
+        ],
+        "ozone_vmr": [
+          [
+            "nozone"
+          ]
+        ],
+        "trace_index": [
+          [
+            "ntrace"
+          ]
+        ],
+        "trace_value": [
+          [
+            "ntrace"
+          ]
+        ],
+        "vmr": [
+          [
+            "ncells",
+            "nslot"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nslot",
+          "int32"
+        ],
+        [
+          "nozone",
+          "int32"
+        ],
+        [
+          "ntrace",
+          "int32"
+        ],
+        [
+          "h2o_index",
+          "int32"
+        ],
+        [
+          "o3_index",
+          "int32"
+        ],
+        [
+          "h2o_scale",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

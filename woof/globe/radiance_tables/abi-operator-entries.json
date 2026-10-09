@@ -1,0 +1,351 @@
+{
+  "bands": {
+    "13": {
+      "acceptance_contract": {
+        "bias_treatment": "the linear correction obs = a + b sim is measured per class on the blocks the stream hands the filter (one block, one row, no pixel weighting) and recorded; the entry ships with that correction and the residual after it as the observation error, and the stream applies the correction to the operator's output so the filter's O-B is in the corrected frame; the sensor term (GOES-16 transmittance coefficients under GOES-19 Planck constants) is inside the correction",
+        "error_correlations": "adjacent blocks share the analysed column's errors and the scan's calibration; the filter treats blocks as independent with the error the filter-facing residual after the correction; a block is 24 ABI pixels (about 48 km at the sub-satellite point, a larger footprint toward the limb) and no further thinning is applied; a block is kept only when it holds at least 12 both-clear pixels and at least 50% of its paired pixels are both-clear (the cloud-edge gate); zenith beyond 60.0 degrees is not admitted; the residual's shape (tails, skew, its correlation with zenith and latitude) rides in the entry so the Gaussian the error stands for can be disputed",
+        "location": "the block's mean pixel latitude and longitude on the GOES-R fixed grid (GRS80 navigation); no parallax correction is applied to a clear-sky column",
+        "measurement": "ABI band 13 brightness temperature: the Level 1b radiance inverted with the granule's own band-corrected Planck constants (fk1 10860.4, fk2 1395.19, bc1 0.07481, bc2 0.99975); the superobservation is the mean over the both-clear pixels of a 24-pixel block (about 48 km at the sub-satellite point), clear by the ACM mask and by the model's own condensate",
+        "representativeness": "one 24-pixel block against one model column at the block centre (T255, about 52 km); the block mean stands for the column, the pixel-to-pixel variance inside a clear block is not carried",
+        "time": "the block's position in the scan window: the full disk scans north to south over about 9.5 minutes, a row's fraction from the north places it linearly in the window (swath structure not modelled, about 26 s uncertainty); the nominal scan start is the analysis instant compared today",
+        "vertical_coordinate": "not one level: the temperature weighting function of the reference peaks at 947.4 hPa (5 to 95 percent of columns 781.2 to 1012.0 hPa) and holds half its sensitivity between 746.9158939748213 and 935.549999501223 hPa (median); the operator's Jacobians (temperature, vapor, skin) ride in its output for model-space localisation; release 1 places the row at the median peak with the band's own vertical cutoff and says so; skin share 0.6036717989605838"
+      },
+      "admitted_classes": [
+        "water"
+      ],
+      "band": 13,
+      "classes": {
+        "land": {
+          "bias_correction": null,
+          "filter_facing": {
+            "bias_k": 1.1875669263456603,
+            "blocks_rejected": {
+              "below_minimum_clear_fraction": 2390,
+              "below_minimum_pixels": 406,
+              "beyond_zenith": 0
+            },
+            "correlation": 0.8202074938689867,
+            "fit_intercept_k": 72.16161027443519,
+            "fit_slope": 0.7569572149885051,
+            "n": 5311,
+            "residual_shape_after_correction": {
+              "correlation_with_latitude": -0.260400853796295,
+              "correlation_with_zenith": 0.10266230773548617,
+              "excess_kurtosis": 1.6146732288304104,
+              "fraction_beyond_2_sigma": 0.045942383731877236,
+              "fraction_beyond_3_sigma": 0.012615326680474487,
+              "gaussian_beyond_3_sigma": 0.0027,
+              "n": 5311,
+              "p1_k": -5.149679779503197,
+              "p99_k": 10.198226492655355,
+              "skew": 0.9793073731286687
+            },
+            "rmse_after_k": 3.0555501508997396,
+            "rmse_k": 3.5672532284782137
+          },
+          "n_blocks": 5311,
+          "observation_error_k": null,
+          "pixel_weighted_all_blocks": {
+            "bias_k": 1.0767925853483238,
+            "correlation": 0.8236552320381474,
+            "fit_intercept_k": 69.1462777584368,
+            "fit_slope": 0.7670798962005594,
+            "n": 8107,
+            "rmse_after_k": 3.143075624602744,
+            "rmse_k": 3.599979432543964
+          },
+          "raw": {
+            "bias_k": 1.0767925853483238,
+            "correlation": 0.8236552320381474,
+            "rmse_after_k": 3.143075624602744,
+            "rmse_k": 3.599979432543964
+          },
+          "reason": "5311 blocks after the stream QC: bias +1.188 K, rmse 3.567 K, after the fit 3.056 K, outside 1.5 K",
+          "reference_minus_operator_pixel_weighted": {
+            "bias_k": -0.04095537650559233,
+            "n": 8107,
+            "rmse_after_k": 0.08225927232644949,
+            "rmse_k": 0.09206025713331065
+          },
+          "verdict": "NOT ADMITTED"
+        },
+        "water": {
+          "bias_correction": {
+            "form": "obs = intercept + slope * simulated",
+            "intercept_k": -2.821810340778157,
+            "slope": 1.0096226520114815
+          },
+          "filter_facing": {
+            "bias_k": 0.005288657530244294,
+            "blocks_rejected": {
+              "below_minimum_clear_fraction": 6751,
+              "below_minimum_pixels": 1585,
+              "beyond_zenith": 0
+            },
+            "correlation": 0.9925538018108582,
+            "fit_intercept_k": -2.821810340778157,
+            "fit_slope": 1.0096226520114815,
+            "n": 7417,
+            "residual_shape_after_correction": {
+              "correlation_with_latitude": -0.14544021146271488,
+              "correlation_with_zenith": -0.19120199850146388,
+              "excess_kurtosis": 25.631581960073525,
+              "fraction_beyond_2_sigma": 0.03707698530403128,
+              "fraction_beyond_3_sigma": 0.013482540110556829,
+              "gaussian_beyond_3_sigma": 0.0027,
+              "n": 7417,
+              "p1_k": -1.5926214831116408,
+              "p99_k": 1.2470804577061312,
+              "skew": 1.0065150764657456
+            },
+            "rmse_after_k": 0.5537733677317406,
+            "rmse_k": 0.5554661131608644
+          },
+          "n_blocks": 7417,
+          "observation_error_k": 0.5537733677317406,
+          "pixel_weighted_all_blocks": {
+            "bias_k": 0.05253786563576372,
+            "correlation": 0.9915246309008985,
+            "fit_intercept_k": -3.6866856478157533,
+            "fit_slope": 1.0124274271865497,
+            "n": 15753,
+            "rmse_after_k": 0.6069699690042165,
+            "rmse_k": 0.6118872156247532
+          },
+          "raw": {
+            "bias_k": 0.05253786563576372,
+            "correlation": 0.9915246309008985,
+            "rmse_after_k": 0.6069699690042165,
+            "rmse_k": 0.6118872156247532
+          },
+          "reason": "7417 blocks after the stream QC: bias +0.005 K, rmse 0.555 K, after obs = -2.822 + 1.0096 sim the rmse is 0.554 K, inside 1.5 K",
+          "reference_minus_operator_pixel_weighted": {
+            "bias_k": 0.10784127694932995,
+            "n": 15753,
+            "rmse_after_k": 0.12288797037530347,
+            "rmse_k": 0.16807912883029413
+          },
+          "verdict": "ADMITTED"
+        }
+      },
+      "constrains": "skin temperature and cloud-top temperature; the clear column is the skin seen through a weak vapor continuum",
+      "form": "linear",
+      "jacobians_vs_reference": {
+        "columns": 27713,
+        "reference_run": "g16_own",
+        "skin": {
+          "mean_other": 0.6036717989605838,
+          "mean_primary": 0.6032654001294415,
+          "rms_difference": 0.003613586700927944,
+          "rms_primary": 0.6256301995109788
+        },
+        "temperature": {
+          "column_sum_mean_other": 0.40095124186715786,
+          "column_sum_mean_primary": 0.3949265992921193,
+          "rms_difference": 0.0009016397023157097,
+          "rms_primary": 0.017866800836941844
+        },
+        "vapor_dln_q": {
+          "column_sum_mean_other": -5.602631126776296,
+          "column_sum_mean_primary": -5.430875631079099,
+          "rms_difference": 0.019547025320415527,
+          "rms_primary": 0.2866975299938566
+        }
+      },
+      "name": "abi-band13-window",
+      "transmittance_model_vs_reference": {
+        "against": "the reference's layer optical depths through the same march and the reference's own per-column emissivity: the transmittance model alone, not the operator as shipped",
+        "test_bias_k": -0.008558177779046333,
+        "test_columns": 14075,
+        "test_p99_abs_k": 0.24885298215051885,
+        "test_rms_k": 0.08074764491332682
+      },
+      "vertical_placement_release_1_hpa": 947.4
+    },
+    "8": {
+      "acceptance_contract": {
+        "bias_treatment": "the linear correction obs = a + b sim is measured per class on the blocks the stream hands the filter (one block, one row, no pixel weighting) and recorded; the entry ships with that correction and the residual after it as the observation error, and the stream applies the correction to the operator's output so the filter's O-B is in the corrected frame; the sensor term (GOES-16 transmittance coefficients under GOES-19 Planck constants) is inside the correction",
+        "error_correlations": "adjacent blocks share the analysed column's errors and the scan's calibration; the filter treats blocks as independent with the error the filter-facing residual after the correction; a block is 24 ABI pixels (about 48 km at the sub-satellite point, a larger footprint toward the limb) and no further thinning is applied; a block is kept only when it holds at least 12 both-clear pixels and at least 50% of its paired pixels are both-clear (the cloud-edge gate); zenith beyond 60.0 degrees is not admitted; the residual's shape (tails, skew, its correlation with zenith and latitude) rides in the entry so the Gaussian the error stands for can be disputed",
+        "location": "the block's mean pixel latitude and longitude on the GOES-R fixed grid (GRS80 navigation); no parallax correction is applied to a clear-sky column",
+        "measurement": "ABI band 8 brightness temperature: the Level 1b radiance inverted with the granule's own band-corrected Planck constants (fk1 50451.5, fk2 2327.96, bc1 1.7139, bc2 0.99631); the superobservation is the mean over the both-clear pixels of a 24-pixel block (about 48 km at the sub-satellite point), clear by the ACM mask and by the model's own condensate",
+        "representativeness": "one 24-pixel block against one model column at the block centre (T255, about 52 km); the block mean stands for the column, the pixel-to-pixel variance inside a clear block is not carried",
+        "time": "the block's position in the scan window: the full disk scans north to south over about 9.5 minutes, a row's fraction from the north places it linearly in the window (swath structure not modelled, about 26 s uncertainty); the nominal scan start is the analysis instant compared today",
+        "vertical_coordinate": "not one level: the temperature weighting function of the reference peaks at 356.7 hPa (5 to 95 percent of columns 292.8 to 533.7 hPa) and holds half its sensitivity between 236.416139939841 and 379.9454685782927 hPa (median); the operator's Jacobians (temperature, vapor, skin) ride in its output for model-space localisation; release 1 places the row at the median peak with the band's own vertical cutoff and says so; skin share 0.00042513528485334614"
+      },
+      "admitted_classes": [
+        "water"
+      ],
+      "band": 8,
+      "classes": {
+        "land": {
+          "bias_correction": null,
+          "filter_facing": {
+            "bias_k": -0.24582405152584252,
+            "blocks_rejected": {
+              "below_minimum_clear_fraction": 2390,
+              "below_minimum_pixels": 406,
+              "beyond_zenith": 0
+            },
+            "correlation": 0.956014372259606,
+            "fit_intercept_k": 15.606338284255473,
+            "fit_slope": 0.9373498512242933,
+            "n": 5311,
+            "residual_shape_after_correction": {
+              "correlation_with_latitude": -0.002030849464525655,
+              "correlation_with_zenith": -0.17886422395056606,
+              "excess_kurtosis": 7.15927359456939,
+              "fraction_beyond_2_sigma": 0.05177932592732065,
+              "fraction_beyond_3_sigma": 0.025795518734701563,
+              "gaussian_beyond_3_sigma": 0.0027,
+              "n": 5311,
+              "p1_k": -7.600915194423657,
+              "p99_k": 4.1091560066150805,
+              "skew": -1.5379604866633705
+            },
+            "rmse_after_k": 1.833775975704514,
+            "rmse_k": 1.8928138100081155
+          },
+          "n_blocks": 5311,
+          "observation_error_k": null,
+          "pixel_weighted_all_blocks": {
+            "bias_k": -0.22680441379087302,
+            "correlation": 0.953238611104626,
+            "fit_intercept_k": 16.708721798973727,
+            "fit_slope": 0.9327103296663956,
+            "n": 8107,
+            "rmse_after_k": 1.909079447382823,
+            "rmse_k": 1.9709748621178185
+          },
+          "raw": {
+            "bias_k": -0.22680441379087302,
+            "correlation": 0.953238611104626,
+            "rmse_after_k": 1.909079447382823,
+            "rmse_k": 1.9709748621178185
+          },
+          "reason": "5311 blocks after the stream QC: bias -0.246 K, rmse 1.893 K, after the fit 1.834 K, outside 1.5 K",
+          "reference_minus_operator_pixel_weighted": {
+            "bias_k": -0.012205920847908763,
+            "n": 8107,
+            "rmse_after_k": 0.17391033038681772,
+            "rmse_k": 0.1745345842558205
+          },
+          "verdict": "NOT ADMITTED"
+        },
+        "water": {
+          "bias_correction": {
+            "form": "obs = intercept + slope * simulated",
+            "intercept_k": 12.528607345530142,
+            "slope": 0.9505325801407183
+          },
+          "filter_facing": {
+            "bias_k": -0.6327549514503288,
+            "blocks_rejected": {
+              "below_minimum_clear_fraction": 6751,
+              "below_minimum_pixels": 1585,
+              "beyond_zenith": 0
+            },
+            "correlation": 0.9723611711402443,
+            "fit_intercept_k": 12.528607345530142,
+            "fit_slope": 0.9505325801407183,
+            "n": 7417,
+            "residual_shape_after_correction": {
+              "correlation_with_latitude": 0.2394785614997497,
+              "correlation_with_zenith": -0.18303064840047864,
+              "excess_kurtosis": 6.9625532888415815,
+              "fraction_beyond_2_sigma": 0.03963866792503708,
+              "fraction_beyond_3_sigma": 0.009572603478495348,
+              "gaussian_beyond_3_sigma": 0.0027,
+              "n": 7417,
+              "p1_k": -2.7985984840282527,
+              "p99_k": 3.051542911632078,
+              "skew": -0.008928869979766168
+            },
+            "rmse_after_k": 1.2140856572550198,
+            "rmse_k": 1.3941384623733724
+          },
+          "n_blocks": 7417,
+          "observation_error_k": 1.2140856572550198,
+          "pixel_weighted_all_blocks": {
+            "bias_k": -0.6325724073237937,
+            "correlation": 0.9741540810972704,
+            "fit_intercept_k": 12.592899251360022,
+            "fit_slope": 0.9502789148179215,
+            "n": 15753,
+            "rmse_after_k": 1.2342684069174839,
+            "rmse_k": 1.414614428306491
+          },
+          "raw": {
+            "bias_k": -0.6325724073237937,
+            "correlation": 0.9741540810972704,
+            "rmse_after_k": 1.2342684069174839,
+            "rmse_k": 1.414614428306491
+          },
+          "reason": "7417 blocks after the stream QC: bias -0.633 K, rmse 1.394 K, after obs = 12.529 + 0.9505 sim the rmse is 1.214 K, inside 1.5 K",
+          "reference_minus_operator_pixel_weighted": {
+            "bias_k": 0.02274790272865027,
+            "n": 15753,
+            "rmse_after_k": 0.1772877410846152,
+            "rmse_k": 0.1789233491902136
+          },
+          "verdict": "ADMITTED"
+        }
+      },
+      "constrains": "upper-tropospheric water vapor and temperature (the weighting function peaks in the upper troposphere); a moister column reads colder",
+      "form": "two_term",
+      "jacobians_vs_reference": {
+        "columns": 27713,
+        "reference_run": "g16_own",
+        "skin": {
+          "mean_other": 0.00042513528485334603,
+          "mean_primary": 0.0004549640116657601,
+          "rms_difference": 0.0008207834507424537,
+          "rms_primary": 0.0070812167572583
+        },
+        "temperature": {
+          "column_sum_mean_other": 0.9933139018063301,
+          "column_sum_mean_primary": 0.9776663597869446,
+          "rms_difference": 0.006386536709785117,
+          "rms_primary": 0.0625662497951842
+        },
+        "vapor_dln_q": {
+          "column_sum_mean_other": -7.545164425925167,
+          "column_sum_mean_primary": -7.459986192735709,
+          "rms_difference": 0.06907828951974866,
+          "rms_primary": 0.5321263668648993
+        }
+      },
+      "name": "abi-band08-upper-water-vapor",
+      "transmittance_model_vs_reference": {
+        "against": "the reference's layer optical depths through the same march and the reference's own per-column emissivity: the transmittance model alone, not the operator as shipped",
+        "test_bias_k": 0.004666986668012487,
+        "test_columns": 14075,
+        "test_p99_abs_k": 0.5926336207136345,
+        "test_rms_k": 0.2068620769161289
+      },
+      "vertical_placement_release_1_hpa": 356.7
+    }
+  },
+  "gate": {
+    "minimum_blocks": 1000,
+    "population": "the blocks the stream hands the filter (stream_qc), one block one row, unweighted",
+    "rmse_after_linear_k_max": 1.5,
+    "zenith_max_deg": 60.0
+  },
+  "operator": {
+    "binary": "rw_goes forward",
+    "coordinate_sha256": "e5dfc38230dcd6fe204d05e78edc01b43eac020b636f40a87f45b47653429071",
+    "run": "fast_own",
+    "table_schema": "gpuwm-da.abi-fast-model.v1",
+    "table_written_utc": "2026-09-06T02:04:16+00:00"
+  },
+  "reference_run": "g16_own",
+  "schema": "gpuwm-da.abi-operator-entries.v1",
+  "stream": "goes-abi-l1b-bt",
+  "stream_qc": {
+    "minimum_clear_fraction": 0.5,
+    "minimum_pixels": 12,
+    "zenith_max_deg": 60.0
+  },
+  "variable": "brightness_temperature_k",
+  "written_utc": "2026-09-06T12:31:15+00:00"
+}

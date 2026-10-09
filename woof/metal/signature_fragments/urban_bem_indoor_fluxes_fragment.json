@@ -1,0 +1,48 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_indoor_fluxes_fragment",
+      "module": "urban_bem_indoor_fluxes_fragment",
+      "source": "woof/metal/shaders/urban_bem_indoor_fluxes_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_bem: bem_radfluxs, bem_hsinsflux, bem_fluxcond; non-PV roof bem_radfluxs",
+      "resources": [
+        ["active_cols", "int32", "read"], ["utype", "int32", "read"],
+        ["building_nlev", "int32", "read"], ["class_float", "float", "read"],
+        ["bs", "float", "read"], ["rsw", "float", "read"], ["rlw", "float", "read"],
+        ["rsint", "float", "read"], ["rlint", "float", "read"],
+        ["tw", "float", "read"], ["twlev", "float", "read"],
+        ["tflev", "float", "read"], ["tglev", "float", "read"], ["tr", "float", "read"],
+        ["tlev", "float", "read"], ["tr_av", "float", "read"],
+        ["swdown", "float", "read"], ["glw", "float", "read"],
+        ["hrwalout", "float", "read_write"], ["hrwinout", "float", "read_write"],
+        ["hrrof", "float", "read_write"], ["hrwalins", "float", "read_write"],
+        ["hrwinins", "float", "read_write"], ["hswalins", "float", "read_write"],
+        ["hswinins", "float", "read_write"], ["surwal", "float", "read_write"],
+        ["hscond", "float", "read_write"], ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]], "utype": [["ncol"]],
+        "building_nlev": [["ncol", 15]], "class_float": [["class_float_len"]],
+        "bs": [["ncol", 2]], "rsw": [["ncol", 4, 18]], "rlw": [["ncol", 4, 18]],
+        "rsint": [["nitem", 6]], "rlint": [["nitem", 6]],
+        "tw": [["ncol", 15, 10, 18, 4]], "twlev": [["ncol", 15, 18, 4]],
+        "tflev": [["ncol", 15, 10, 17, 2]], "tglev": [["ncol", 15, 10, 2]],
+        "tr": [["ncol", 10, 18, 2]], "tlev": [["ncol", 15, 18]],
+        "tr_av": [["ncol", 18, 2]], "swdown": [["ncol"]], "glw": [["ncol"]],
+        "hrwalout": [["nitem", 4]], "hrwinout": [["nitem", 4]],
+        "hrrof": [["ncol", 15]], "hrwalins": [["nitem", 6]],
+        "hrwinins": [["nitem", 4]], "hswalins": [["nitem", 6]],
+        "hswinins": [["nitem", 4]], "surwal": [["nitem", 6]],
+        "hscond": [["nitem"]], "error": [["nitem"]]
+      },
+      "parameters": [
+        ["ncol", "int32"], ["nitem", "int32"], ["nurbm", "int32"],
+        ["class_float_len", "int32"], ["dz_u", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

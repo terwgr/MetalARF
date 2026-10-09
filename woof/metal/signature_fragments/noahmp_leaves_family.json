@@ -1,0 +1,150 @@
+{
+  "kernels": [
+    {
+      "name": "noahmp_leaf_esat",
+      "module": "noahmp_leaves",
+      "source": "woof/metal/shaders/noahmp_leaves_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_leaves.cu",
+      "cuda_symbol": "noahmp_leaf_esat",
+      "resources": [
+        [
+          "xs",
+          "float",
+          "read"
+        ],
+        [
+          "ys",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "xs": [
+          [
+            "ncase",
+            "n_in"
+          ]
+        ],
+        "ys": [
+          [
+            "ncase",
+            "n_out"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncase",
+          "int32"
+        ],
+        [
+          "n_in",
+          "int32"
+        ],
+        [
+          "n_out",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "noahmp_leaf_rosr12",
+      "module": "noahmp_leaves",
+      "source": "woof/metal/shaders/noahmp_leaves_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_leaves.cu",
+      "cuda_symbol": "noahmp_leaf_rosr12",
+      "resources": [
+        [
+          "xs",
+          "float",
+          "read"
+        ],
+        [
+          "ys",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "xs": [
+          [
+            "n_in"
+          ]
+        ],
+        "ys": [
+          [
+            "n_out"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntop0",
+          "int32"
+        ],
+        [
+          "n_in",
+          "int32"
+        ],
+        [
+          "n_out",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "noahmp_leaf_atm",
+      "module": "noahmp_leaves",
+      "source": "woof/metal/shaders/noahmp_leaves_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_leaves.cu",
+      "cuda_symbol": "noahmp_leaf_atm",
+      "resources": [
+        [
+          "xs",
+          "float",
+          "read"
+        ],
+        [
+          "ys",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "xs": [
+          [
+            "ncase",
+            11
+          ]
+        ],
+        "ys": [
+          [
+            "ncase",
+            17
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncase",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

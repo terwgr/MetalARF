@@ -1,0 +1,23 @@
+// Generated from kernel_signatures.json; layout caafa6ea3bd850f611f6d200ec151852c5c1b6594c1fff112b8eff46981c0d1c.
+struct ColdStartNumbersResources {
+    device const float *mass [[id(0)]];
+    device const float *number [[id(1)]];
+    device const float *alt [[id(2)]];
+    device const float *temperature [[id(3)]];
+    device const float *aerosol [[id(4)]];
+    device const float *xland [[id(5)]];
+    device const float *retab [[id(6)]];
+    device const float *gratio [[id(7)]];
+    device const ulong *constants [[id(8)]];
+    device float *final_number [[id(9)]];
+    device float *seed_volume [[id(10)]];
+    device int *seeded [[id(11)]];
+    device int *offender [[id(12)]];
+};
+struct ColdStartNumbersParams {
+    int n;
+    int species;
+    int retab_n;
+    int gratio_n;
+};
+static_assert(sizeof(ColdStartNumbersParams) == 16, "cold_start_numbers parameter ABI size changed");

@@ -1,0 +1,4 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "noah_check_soil_categories_bindings.metalh"
+#include "noah_column_bindings.metalh"
+#include "noah_initialize_sh2o_bindings.metalh"

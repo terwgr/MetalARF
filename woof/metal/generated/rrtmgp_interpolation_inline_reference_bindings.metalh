@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout e05878ad1c98e8948251239c3503d90d5a636e7ae05d6a6c095abbc7f1eacf54.
+struct RrtmgpInterpolationInlineReferenceResources {
+    device const float *play [[id(0)]];
+    device const float *tlay [[id(1)]];
+    device const float *press_ref [[id(2)]];
+    device const float *temp_ref [[id(3)]];
+    device float *iatm_out [[id(4)]];
+    device float *jt_out [[id(5)]];
+    device float *jp_out [[id(6)]];
+    device float *ftemp_out [[id(7)]];
+    device float *fpress_out [[id(8)]];
+};
+struct RrtmgpInterpolationInlineReferenceParams {
+    float press_ref_trop;
+    int ncell;
+    int ntemp;
+    int npres;
+};
+static_assert(sizeof(RrtmgpInterpolationInlineReferenceParams) == 16, "rrtmgp_interpolation_inline_reference parameter ABI size changed");

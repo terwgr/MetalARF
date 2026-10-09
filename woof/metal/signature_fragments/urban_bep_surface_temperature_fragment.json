@@ -1,0 +1,193 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_surface_temperature_fragment",
+      "module": "urban_bep_surface_temperature_fragment",
+      "source": "woof/metal/shaders/urban_bep_surface_temperature_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "bep_surf_temp",
+      "resources": [
+        [
+          "column_param",
+          "float",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "utype_urb",
+          "int32",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "column_state",
+          "float",
+          "read_write"
+        ],
+        [
+          "column_interp_x",
+          "float",
+          "read"
+        ],
+        [
+          "swdown",
+          "float",
+          "read"
+        ],
+        [
+          "glw",
+          "float",
+          "read"
+        ],
+        [
+          "rlw",
+          "float",
+          "read"
+        ],
+        [
+          "rlg",
+          "float",
+          "read"
+        ],
+        [
+          "rsw",
+          "float",
+          "read"
+        ],
+        [
+          "rsg",
+          "float",
+          "read"
+        ],
+        [
+          "surface_x",
+          "float",
+          "read_write"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "column_param": [
+          [
+            "ncol",
+            140
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "class_x": [
+          [
+            1,
+            1085
+          ]
+        ],
+        "utype_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_state": [
+          [
+            "ncol",
+            1210
+          ]
+        ],
+        "column_interp_x": [
+          [
+            "ncol",
+            108
+          ]
+        ],
+        "swdown": [
+          [
+            "ncol"
+          ]
+        ],
+        "glw": [
+          [
+            "ncol"
+          ]
+        ],
+        "rlw": [
+          [
+            "ncol",
+            2,
+            2,
+            18
+          ]
+        ],
+        "rlg": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "rsw": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "rsg": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "surface_x": [
+          [
+            "ncol",
+            330
+          ]
+        ],
+        "error": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

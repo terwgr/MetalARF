@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 7df709187712fdb59f12ab8221d7fa3db03d75969455593c7e437d550f95c606.
+struct NoahCheckSoilCategoriesResources {
+    device const int *isltyp [[id(0)]];
+    device uint *status [[id(1)]];
+};
+struct NoahCheckSoilCategoriesParams {
+    int slcats;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(NoahCheckSoilCategoriesParams) == 12, "noah_check_soil_categories parameter ABI size changed");

@@ -1,0 +1,2 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "hex_solve_vertical_system_bindings.metalh"

@@ -1,0 +1,31 @@
+// Generated from kernel_signatures.json; layout 1b1e5c891e14c322a4914314c6419d8550f63682112e2a851255e4a82c539f73.
+struct NtiedtkePostConversionResources {
+    device const float *pcte [[id(0)]];
+    device const float *ztp1 [[id(1)]];
+    device const float *ptte [[id(2)]];
+    device const float *ztt [[id(3)]];
+    device const float *pqte [[id(4)]];
+    device const float *zqq [[id(5)]];
+    device float *zqp1 [[id(6)]];
+    device const float *qcf [[id(7)]];
+    device const float *qif [[id(8)]];
+    device const float *uf [[id(9)]];
+    device const float *vf [[id(10)]];
+    device const float *pvom [[id(11)]];
+    device const float *pvol [[id(12)]];
+    device const float *prsfc [[id(13)]];
+    device const float *pssfc [[id(14)]];
+    device float *pqc [[id(15)]];
+    device float *pqi [[id(16)]];
+    device float *pt [[id(17)]];
+    device float *pqv [[id(18)]];
+    device float *pu [[id(19)]];
+    device float *pv [[id(20)]];
+    device float *zprecc [[id(21)]];
+};
+struct NtiedtkePostConversionParams {
+    int ncol;
+    int klev;
+    float delt;
+};
+static_assert(sizeof(NtiedtkePostConversionParams) == 12, "ntiedtke_post_conversion parameter ABI size changed");

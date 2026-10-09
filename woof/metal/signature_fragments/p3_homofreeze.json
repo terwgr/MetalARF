@@ -1,0 +1,35 @@
+{
+  "kernels": [
+    {
+      "name": "p3_homofreeze",
+      "module": "p3_homofreeze",
+      "source": "woof/metal/shaders/p3_homofreeze.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_homofreeze",
+      "resources": [
+        ["theta", "float", "read_write"], ["temperature", "float", "read"],
+        ["tmparr1", "float", "read"], ["qv", "float", "read"],
+        ["qv_cld", "float", "read_write"], ["qc", "float", "read_write"],
+        ["nc", "float", "read_write"], ["qr", "float", "read_write"],
+        ["nr", "float", "read_write"], ["qi", "float", "read_write"],
+        ["qir", "float", "read_write"], ["ni", "float", "read_write"],
+        ["qib", "float", "read_write"], ["flags", "float", "read"]
+      ],
+      "shapes": {
+        "theta": [["nz", "ny", "nx"]], "temperature": [["nz", "ny", "nx"]],
+        "tmparr1": [["nz", "ny", "nx"]], "qv": [["nz", "ny", "nx"]],
+        "qv_cld": [["nz", "ny", "nx"]], "qc": [["nz", "ny", "nx"]],
+        "nc": [["nz", "ny", "nx"]], "qr": [["nz", "ny", "nx"]],
+        "nr": [["nz", "ny", "nx"]], "qi": [["nz", "ny", "nx"]],
+        "qir": [["nz", "ny", "nx"]], "ni": [["nz", "ny", "nx"]],
+        "qib": [["nz", "ny", "nx"]], "flags": [[2, "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

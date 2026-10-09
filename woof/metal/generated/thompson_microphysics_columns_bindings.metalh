@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout 0b4bbcc6cc920dceccc602d841cfbc29b9990edc3e62fb74e7968d08749a4c4f.
+struct ThompsonMicrophysicsColumnsResources {
+    device const float *qc [[id(0)]];
+    device const float *qi [[id(1)]];
+    device const float *qr [[id(2)]];
+    device const float *qs [[id(3)]];
+    device const float *qg [[id(4)]];
+    device const float *temperature [[id(5)]];
+    device const float *pressure [[id(6)]];
+    device const float *qv [[id(7)]];
+    device float *micro_columns [[id(8)]];
+};
+struct ThompsonMicrophysicsColumnsParams {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonMicrophysicsColumnsParams) == 12, "thompson_microphysics_columns parameter ABI size changed");

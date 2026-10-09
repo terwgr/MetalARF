@@ -1,0 +1,130 @@
+{
+  "kernels": [
+    {
+      "name": "global_insitu_spectra_modes_fragment",
+      "module": "global_insitu_spectra_fragment",
+      "source": "woof/metal/shaders/global_insitu_spectra_fragment.metal",
+      "cuda_source": "woof/globe/insitu/spectra.py",
+      "cuda_symbol": "SpectralKineticEnergy.by_degree",
+      "resources": [
+        [
+          "vorticity",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "divergence",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "factor",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "order_weight",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "per_degree",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "vorticity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "divergence": [
+          [
+            "any_1d"
+          ]
+        ],
+        "factor": [
+          [
+            "any_1d"
+          ]
+        ],
+        "order_weight": [
+          [
+            "any_1d"
+          ]
+        ],
+        "per_degree": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nterm",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "global_insitu_spectra_pack_fragment",
+      "module": "global_insitu_spectra_fragment",
+      "source": "woof/metal/shaders/global_insitu_spectra_fragment.metal",
+      "cuda_source": "woof/globe/insitu/spectra.py",
+      "cuda_symbol": "SpectralKineticEnergy.sample",
+      "resources": [
+        [
+          "per_degree",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "row",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "per_degree": [
+          [
+            "any_1d"
+          ]
+        ],
+        "row": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevel",
+          "int32"
+        ],
+        [
+          "nterm",
+          "int32"
+        ],
+        [
+          "band_start",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

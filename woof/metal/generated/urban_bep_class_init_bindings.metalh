@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout f05f90e8a15cc0e63d4b1853806bd7e3331fdbcfde254c83b7a65971c3a68dc9.
+struct UrbanBepClassInitResources {
+    device const float *table_x [[id(0)]];
+    device const int *table_ix [[id(1)]];
+    device float *class_x [[id(2)]];
+    device int *class_ix [[id(3)]];
+};
+struct UrbanBepClassInitParams {
+    int ncase;
+};
+static_assert(sizeof(UrbanBepClassInitParams) == 4, "urban_bep_class_init parameter ABI size changed");

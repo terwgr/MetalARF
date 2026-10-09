@@ -1,0 +1,52 @@
+{
+  "kernels": [
+    {
+      "name": "ieva_solve_w",
+      "module": "ieva_solve_family",
+      "source": "woof/metal/shaders/ieva_solve_family.metal",
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_w",
+      "resources": [
+        ["tend", "float", "read_write"], ["utend", "float", "read"],
+        ["vtend", "float", "read"], ["mux", "float", "read"],
+        ["muy", "float", "read"], ["c1h", "float", "read"],
+        ["c2h", "float", "read"], ["msfu", "float", "read"],
+        ["msfv", "float", "read"], ["ht", "float", "read"],
+        ["rom", "float", "read"], ["ph_new", "float", "read"],
+        ["ph_old", "float", "read"], ["ph_tend", "float", "read"],
+        ["w_old", "float", "read"], ["c1f", "float", "read"],
+        ["c2f", "float", "read"], ["mut", "float", "read"],
+        ["mut_old", "float", "read"], ["mut_new", "float", "read"],
+        ["rdn", "float", "read"], ["msft", "float", "read"]
+      ],
+      "shapes": {
+        "tend": [["nz+1", "ny", "nx"]],
+        "utend": [["nz", "ny", "nx+1"]],
+        "vtend": [["nz", "ny+1", "nx"]],
+        "mux": [["ny", "nx+1"]], "muy": [["ny+1", "nx"]],
+        "c1h": [["nz"]], "c2h": [["nz"]],
+        "msfu": [["ny", "nx+1"]], "msfv": [["ny+1", "nx"]],
+        "ht": [["ny", "nx"]], "rom": [["nz+1", "ny", "nx"]],
+        "ph_new": [["nz+1", "ny", "nx"]],
+        "ph_old": [["nz+1", "ny", "nx"]],
+        "ph_tend": [["nz+1", "ny", "nx"]],
+        "w_old": [["nz+1", "ny", "nx"]],
+        "c1f": [["nz"]], "c2f": [["nz"]],
+        "mut": [["ny", "nx"]], "mut_old": [["ny", "nx"]],
+        "mut_new": [["ny", "nx"]], "rdn": [["nz"]],
+        "msft": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["cf1", "float32"], ["cf2", "float32"], ["cf3", "float32"],
+        ["rdx", "float32"], ["rdy", "float32"], ["dt", "float32"],
+        ["g", "float32"], ["one", "float32"], ["zero", "float32"],
+        ["half_val", "float32"], ["has_msf", "int32"],
+        ["bx", "int32"], ["by", "int32"], ["legacy", "int32"],
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft64-rn-bit-ops", "wrf-exact"]
+    }
+  ]
+}

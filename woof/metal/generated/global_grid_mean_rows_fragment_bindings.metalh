@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 83f8c791f1a4556a0b1721e867552af76fd182ff1b0f004e115146431872cb37.
+struct GlobalGridMeanRowsFragmentResources {
+    device const ulong *values [[id(0)]];
+    device const ulong *quadrature_weights [[id(1)]];
+    device ulong *weighted_rows [[id(2)]];
+};
+struct GlobalGridMeanRowsFragmentParams {
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalGridMeanRowsFragmentParams) == 8, "global_grid_mean_rows_fragment parameter ABI size changed");

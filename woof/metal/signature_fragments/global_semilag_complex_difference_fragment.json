@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "name": "global_semilag_complex_difference_fragment",
+      "module": "global_semilag_complex_difference_fragment",
+      "source": "woof/metal/shaders/global_semilag_complex_difference_fragment.metal",
+      "cuda_source": "woof/globe/semilag/step.py",
+      "cuda_symbol": "semilag_step",
+      "resources": [
+        ["before", "float64_bits", "read"],
+        ["after", "float64_bits", "read"],
+        ["magnitudes", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "before": [["any_1d"]],
+        "after": [["any_1d"]],
+        "magnitudes": [["any_1d"]]
+      },
+      "parameters": [["count", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+// Generated from kernel_signatures.json; layout c00ba6aacb639ecd7e6213b718fe89e0b5d79224b5d630e6d556669c32dc65d3.
+struct GlobalSemilagAssembleFragmentResources {
+    device const ulong *u [[id(0)]];
+    device const ulong *v [[id(1)]];
+    device const ulong *theta [[id(2)]];
+    device const ulong *logps [[id(3)]];
+    device const ulong *a_u [[id(4)]];
+    device const ulong *a_v [[id(5)]];
+    device const ulong *a_lnps [[id(6)]];
+    device const ulong *l_u [[id(7)]];
+    device const ulong *l_v [[id(8)]];
+    device const ulong *l_theta [[id(9)]];
+    device const ulong *l_lnps [[id(10)]];
+    device const ulong *lead [[id(11)]];
+    device const ulong *half_dt [[id(12)]];
+    device ulong *n_u [[id(13)]];
+    device ulong *n_v [[id(14)]];
+    device ulong *n_theta [[id(15)]];
+    device ulong *n_lnps [[id(16)]];
+    device ulong *bundle_u [[id(17)]];
+    device ulong *bundle_v [[id(18)]];
+    device ulong *bundle_theta [[id(19)]];
+    device ulong *bundle_lnps [[id(20)]];
+};
+struct GlobalSemilagAssembleFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalSemilagAssembleFragmentParams) == 12, "global_semilag_assemble_fragment parameter ABI size changed");

@@ -1,0 +1,376 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_diagnostics.cu",
+      "cuda_symbol": "nssl2_radardd02",
+      "layout_version": 1,
+      "module": "nssl2_diagnostics",
+      "name": "nssl2_radardd02",
+      "parameters": [
+        [
+          "concentration_space",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "temperature_k",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "qh",
+          "float",
+          "read"
+        ],
+        [
+          "qnr",
+          "float",
+          "read"
+        ],
+        [
+          "qni",
+          "float",
+          "read"
+        ],
+        [
+          "qns",
+          "float",
+          "read"
+        ],
+        [
+          "qng",
+          "float",
+          "read"
+        ],
+        [
+          "qnh",
+          "float",
+          "read"
+        ],
+        [
+          "qvolg",
+          "float",
+          "read"
+        ],
+        [
+          "qvolh",
+          "float",
+          "read"
+        ],
+        [
+          "refl_10cm",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qng": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qnr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qns": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qvolg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qvolh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "refl_10cm": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature_k": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_diagnostics.metal",
+      "threads_per_group": 256
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_diagnostics.cu",
+      "cuda_symbol": "nssl2_effective_radius_concentration",
+      "layout_version": 1,
+      "module": "nssl2_diagnostics",
+      "name": "nssl2_effective_radius_concentration",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "cloud_number",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "ice_number",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "snow_number",
+          "float",
+          "read"
+        ],
+        [
+          "re_cloud",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_ice",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_snow",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cloud_number": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ice_number": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "re_cloud": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "re_ice": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "re_snow": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_number": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_diagnostics.metal",
+      "threads_per_group": 256
+    }
+  ]
+}

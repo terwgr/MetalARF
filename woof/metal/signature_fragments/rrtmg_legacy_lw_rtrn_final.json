@@ -1,0 +1,137 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmg_legacy_lw_rtrn_final",
+      "module": "rrtmg_legacy_lw_family",
+      "source": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmg_lw_chain.cu",
+      "cuda_symbol": "rlw_rtrn_final",
+      "resources": [
+        [
+          "pz",
+          "float",
+          "read"
+        ],
+        [
+          "totuflux",
+          "float",
+          "read_write"
+        ],
+        [
+          "totdflux",
+          "float",
+          "read_write"
+        ],
+        [
+          "totuclfl",
+          "float",
+          "read_write"
+        ],
+        [
+          "totdclfl",
+          "float",
+          "read_write"
+        ],
+        [
+          "fnet",
+          "float",
+          "read_write"
+        ],
+        [
+          "fnetc",
+          "float",
+          "read_write"
+        ],
+        [
+          "htr",
+          "float",
+          "read_write"
+        ],
+        [
+          "htrc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pz": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "totuflux": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "totdflux": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "totuclfl": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "totdclfl": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "fnet": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "fnetc": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "htr": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ],
+        "htrc": [
+          [
+            "ncol",
+            "nl+1"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "fluxfac",
+          "float32"
+        ],
+        [
+          "heatfac",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

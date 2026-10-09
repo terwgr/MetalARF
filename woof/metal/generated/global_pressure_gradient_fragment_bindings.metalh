@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 21816abddc4429840537e1c3c7aecc8ba4a51cf5e23be0b357b6170ab933d687.
+struct GlobalPressureGradientFragmentResources {
+    device const ulong *b_upper [[id(0)]];
+    device const ulong *b_lower [[id(1)]];
+    device const ulong *pressure_half [[id(2)]];
+    device const ulong *surface_pressure [[id(3)]];
+    device ulong *factor [[id(4)]];
+};
+struct GlobalPressureGradientFragmentParams {
+    int count;
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalPressureGradientFragmentParams) == 12, "global_pressure_gradient_fragment parameter ABI size changed");

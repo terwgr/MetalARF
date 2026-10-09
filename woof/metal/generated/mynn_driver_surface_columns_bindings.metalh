@@ -1,0 +1,26 @@
+// Generated from kernel_signatures.json; layout 9cfbfa572d5841d3b3c711fc2895345c2263ddbcf6cc044eb1c7693da26845d7.
+struct MynnDriverSurfaceColumnsResources {
+    device const float *rho [[id(0)]];
+    device const float *exner [[id(1)]];
+    device const float *dz [[id(2)]];
+    device const float *qv1 [[id(3)]];
+    device const float *ust [[id(4)]];
+    device const float *hfx [[id(5)]];
+    device const float *qfx [[id(6)]];
+    device const float *ts [[id(7)]];
+    device float *flt [[id(8)]];
+    device float *fltv [[id(9)]];
+    device float *flq [[id(10)]];
+    device float *flqv [[id(11)]];
+    device float *flqc [[id(12)]];
+    device float *th_sfc [[id(13)]];
+    device float *rmol [[id(14)]];
+    device float *zet [[id(15)]];
+    device float *pmz [[id(16)]];
+    device float *phh [[id(17)]];
+};
+struct MynnDriverSurfaceColumnsParams {
+    int nz;
+    int ncol;
+};
+static_assert(sizeof(MynnDriverSurfaceColumnsParams) == 8, "mynn_driver_surface_columns parameter ABI size changed");

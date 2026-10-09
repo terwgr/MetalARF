@@ -1,0 +1,27 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._level_water_mass_total",
+      "layout_version": 1,
+      "module": "global_level_water_mass_finalize_fragment",
+      "name": "global_level_water_mass_finalize_fragment",
+      "parameters": [["nspecies", "int32"], ["nlev", "int32"], ["nlat", "int32"]],
+      "resources": [
+        ["rows", "float64_bits", "read"],
+        ["quadrature_weights", "float64_bits", "read"],
+        ["gravity", "float64_bits", "read"],
+        ["mass", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "gravity": [[1]],
+        "mass": [["nspecies", "nlev"]],
+        "quadrature_weights": [["nlat"]],
+        "rows": [["any_2d"]]
+      },
+      "source": "woof/metal/shaders/global_level_water_mass_finalize_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

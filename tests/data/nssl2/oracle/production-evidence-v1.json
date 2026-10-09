@@ -1,0 +1,69 @@
+{
+  "schema": "gpuwm.nssl2.production-evidence.v1",
+  "base_commit": "961b52cb2f443dba66b118183a19857412d770bd",
+  "wrf": {
+    "version": "4.6.1",
+    "commit": "d66e442fccc04111067e29274c9f9eaccc3cef28",
+    "source": "phys/module_mp_nssl_2mom.F",
+    "source_sha256": "5aaae368289694c929d38365d77d445e4f22291a30a48555df7a21d470b72ae3",
+    "compiler": "gfortran -O2",
+    "oracle_visibility_change": "Only public NUCOND and radardd02 declarations were added; no executable statement changed."
+  },
+  "oracle_build": {
+    "command": "tools/nssl2_wrf461_production_oracle/build.sh /path/to/WRF-v4.6.1 /new/oracle-build",
+    "build_sh_sha256": "a1e91d039f6f748a51eeafe2c922c02bdccfd4e80026b7cbe559a1bd431b2266",
+    "visibility_patch_sha256": "403dedb337a1a288717b584ba2fc0af65e741c656bad18f017110d9f7ed9633a",
+    "nucond_harness_sha256": "1f02611d3c947e9c1818144d4ff302e54dd2347c1d058949560f71feede7ff9e",
+    "radardd02_harness_sha256": "87436bae9ba500fd389a2711146f0d262c2501a30135c89a6e1a06e26c686949"
+  },
+  "fixtures": {
+    "nucond-production.csv": {
+      "rows": 64,
+      "sha256": "1b1b472a832a6c9b9968e218d43a61b06c924880254ae0ea049b67e74eff4911"
+    },
+    "radardd02.csv": {
+      "rows": 64,
+      "sha256": "37b4173833d9b1213da323ccdff1edf7cf5f79ba8b8f1eff62fc8ac91d9e65b7"
+    }
+  },
+  "implementation": {
+    "gpuwm/core/nssl2_nucond.py": "8283f19d17d8cdc5d4f0ed314688c4f380a2cd849060e2548a4a4a9adf0229d3",
+    "gpuwm/core/kernels/nssl2_nucond.cu": "b4819a1e912924fe2e30c33897585e3a46c32e89dcb3ab43eb1ee32b212b6db1",
+    "gpuwm/core/nssl2_diagnostics.py": "7a7ee43052f2a4262281cc9b17061d63a86a8a070ebe7d754d0bf9fe726bcd81",
+    "gpuwm/core/kernels/nssl2_diagnostics.cu": "a95ae9e0bc3dd20a13865cfa6d1148d2a78ee5d7c17c9c1bca9a0c8dbdf19868",
+    "gpuwm/core/nssl2_radiation.py": "1a640c5ada9c0b40b27407294dd3f5a4019ab72244703eebfba123a4ff84de70",
+    "tests/test_nssl2_nucond_diagnostics.py": "cff319cac39fe1918635d403a012521fb848e4536d7da438f5e7a554351f2474"
+  },
+  "unit_contracts": {
+    "registry_mode": "Mass kg/kg, number and CCN #/kg, volume m3/kg.",
+    "concentration_mode": "Mass kg/kg, number and CCN #/m3, volume m3/m3; NUCOND input/output scales and diagnostic moment scales are identity and do not scatter or gather through density.",
+    "dual_mode_oracle_gate": "Both modes execute all 64 NUCOND and all 64 radardd02 fixture rows; each mode is compared independently with the compiled WRF v4.6.1 outputs.",
+    "dual_mode_equivalence_gate": "test_nucond_registry_and_concentration_modes_are_equivalent compares thermodynamics, water, and density-related number images directly.",
+    "no_round_trip_gate": "test_concentration_space_kernels_have_identity_moment_scales pins identity input/output number and volume scaling in the CUDA concentration path.",
+    "conservation_gates": "Both NUCOND modes assert total warm water, latent-energy/theta closure, predicted CCN plus droplet number where native bounds do not intentionally renormalize, and nonnegative native moments."
+  },
+  "validation": {
+    "production_gate": {
+      "command": "python -m pytest -q tests/test_nssl2_nucond_diagnostics.py",
+      "result": "14 passed"
+    },
+    "full_focused_gate": {
+      "command": "python -m pytest -q tests/test_nssl2*.py tests/test_real74_nssl2_500m_comparator.py tests/test_real74_nssl2_500m_runner.py",
+      "result": "191 passed"
+    },
+    "changed_file_ruff_gate": {
+      "command": "python -m ruff check gpuwm/core/nssl2_nucond.py gpuwm/core/nssl2_diagnostics.py gpuwm/core/nssl2_radiation.py tests/test_nssl2_nucond_diagnostics.py",
+      "result": "passed"
+    },
+    "full_repository_ruff_note": "The base tree reports 151 pre-existing Ruff findings outside this slice; every changed Python file passes Ruff.",
+    "nssl_ccn_variant_repin": "Re-pinned gpuwm/core/nssl2_nucond.py and gpuwm/core/kernels/nssl2_nucond.cu when the nssl_ccn_on=0 variant added the diagnosed-CCN nucleation pool (WRF renucfrac=1.0, module_mp_nssl_2mom.F:2555-2557 and :10112-10131). The re-pin was made AFTER re-running the oracle, not in place of it: test_nucond_matches_compiled_official_wrf_and_conserves_water_energy passes on all 64 fixture rows in BOTH unit modes against the edited files, as do both radardd02 arms and the registry/concentration equivalence gate. The default lane's arithmetic is untouched by construction -- the variant is a separate branch selected by the new predicted_ccn argument -- and that is measured independently: all 30 digests in evidence/nssl2-variants/mp18-digest-baseline.json reproduce byte-for-byte. No fixture, no oracle build input and no WRF source hash changed.",
+    "a146_repin": "Re-pinned gpuwm/core/kernels/nssl2_nucond.cu when A146 spelled its float divisions by compile-time constants __fdiv_rn (NVRTC compiled them as reciprocal multiplies on Blackwell). The re-pin was made after re-running the file's card tests on the RTX 5070 Ti (sm_120, NVRTC 13.4.92) at 4370d5b87: every oracle comparison passed against the edited file; only this hash moved. No fixture, no oracle build input and no WRF source hash changed."
+  },
+  "frozen_low_level_kernel": {
+    "gpuwm/core/nssl2.py": "1fa293913fb4a8541b9357bf918fc260c6c63f910a0221394a368b264d382e96",
+    "gpuwm/core/kernels/nssl2.cu": "296120cb3ca678bbb42a5c19940eec029bebb52a5224f678f252a4706231840b",
+    "hash_scope": "base_commit_git_blob",
+    "base_commit_must_be_ancestor": true,
+    "checkout_policy": "Current checkout bytes may differ after legitimate descendant core commits; the pinned base blobs remain immutable evidence."
+  }
+}

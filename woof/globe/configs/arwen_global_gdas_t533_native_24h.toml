@@ -1,0 +1,90 @@
+# T533 L40, the whole native WOOF CUDA column suite, one forecast day
+# from the archived GDAS 2026-08-30 18Z analysis: the T533 config of record
+# and the door a bare run goes through.
+#
+# It names NO integrator and NO step on purpose.  A config that omits
+# [time] integrator runs the shipped default core (config.SHIPPED_INTEGRATOR,
+# the two-time-level semi-Lagrangian semi-implicit core "sl_si"), and one
+# that omits dt_s under it takes that core's 300 s step (config.DEFAULT_
+# SEMILAG_STEP_S).  The Eulerian core is selectable by name:
+# `..._t533_native_imex_24h.toml` is this suite on `imex_ssp3` at its
+# rule step (config.default_eulerian_step_s).  What this file leaves out
+# reads the semi-Lagrangian core's own defaults, the values every graded arm
+# ran at: [semi_implicit] off_centring_weight 0.55, [time] maximum_lipschitz
+# 0.75, the six-point quintic gather with three trajectory iterations, and
+# the order 16 / 12 min hyperdiffusion (config.SEMILAG_DIFFUSION_*, set on
+# the dry ladder of 2026-09-07).
+#
+# 86400/300 = 288 whole steps; 3600/300 = 12-step output cadence.
+# (T533 at dealias 1.5 quadrature is 801 x 1602: grid spacing about
+# 25 km at the equator.)
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-gdas-t533-native-24h"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 533
+dealias_factor = 1.5
+
+[time]
+duration_s = 86400.0
+output_interval_s = 3600
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+# analysis_mapping is the packaged authority's BARE ID, not a path: the
+# resolver globs rw-wps-<id>-*.mapping.json under gpuwm/authorities and
+# requires exactly one match, so this spelling resolves from an installed
+# wheel as well as from a checkout root.
+[initial]
+mode = "analysis"
+analysis_grib = "cases/gdas/gdas.t18z.pgrb2.0p25.f000"
+analysis_mapping = "gdas-global"
+surface_water_kg_m2 = 500.0
+
+# start_time_utc matches the ingested GDAS cycle, so the RRTMGP solar
+# geometry runs on the analysis instant.  radiation_interval_s follows the
+# regional radt convention of one minute per km of grid spacing, taken as
+# the whole multiple of the 300 s step nearest it (1500 s); the land
+# bucket is the step.  Both are BUCKETED, not stepped, so a value that is
+# not a whole multiple of the step would fire on a jittering effective
+# interval.  dx_m feeds sfclay its grid-spacing-dependent branches and the
+# Grell-Freitas cumulus scheme its scale-aware closure; cumulus = "gf" is
+# the adapter default (shallow arm on), so it is not repeated below.
+# radiation_column_chunk is the tree's own sizing for this truncation.
+[physics]
+mode = "arwen-native"
+native_adapter_name = "arwen-cuda-column-suite-v1"
+native_adapter_options = { acknowledgement = "device-pending-arwen-native-physics-v1", start_time_utc = "2026-08-30T18:00:00Z", radiation = "rrtmgp", radiation_interval_s = 1500, radiation_column_chunk = 5000, radiation_validation_mode = "fused", surface_layer = "sfclay", sfclay_option = 1, land_surface = "noah", land_surface_interval_s = 300.0, pbl = "ysu", ysu_topdown_pblmix = 1, microphysics = "morrison", morr_rimed_ice = 1, dx_m = 25000 }
+
+# No order and no e-folding time: under the semi-Lagrangian core an omitted
+# drain reads the core's own, order 16 at 720 s at the truncation
+# (config.SEMILAG_DIFFUSION_ORDER / _EFOLD_S, set on the dry ladder of
+# 2026-09-07), so this record is the door with nothing said.
+[diffusion]
+enabled = true
+preserve_degree = 1
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+# The gates are the T255 config of record's, including the native-suite
+# sizing of the physics water repair gate (its derivation is on that file).
+[gates]
+transform_roundtrip_relative_linf = 1.0e-6
+transform_parseval_relative_error = 5.0e-7
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-3
+physics_water_repair_max_step_kg_m2 = 0.010498046875

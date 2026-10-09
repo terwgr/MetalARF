@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout a3a6f7cf9109c76987f626cbf0906343ceb5531b6301e31011031f2a904dc552.
+struct ThompsonRainSedimentWithDensityAndPresenceResources {
+    device float *qr [[id(0)]];
+    device float *nr [[id(1)]];
+    device const float *temperature [[id(2)]];
+    device const float *pressure [[id(3)]];
+    device const float *qv [[id(4)]];
+    device const float *reference_density [[id(5)]];
+    device const float *dz [[id(6)]];
+    device float *rainnc [[id(7)]];
+    device float *rainncv [[id(8)]];
+};
+struct ThompsonRainSedimentWithDensityAndPresenceParams {
+    int accumulate_surface;
+    float dt;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonRainSedimentWithDensityAndPresenceParams) == 20, "thompson_rain_sediment_with_density_and_presence parameter ABI size changed");

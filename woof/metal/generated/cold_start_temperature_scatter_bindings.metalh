@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout 3b507022cab3c0ca11e0fc92eda47382956357fae7ea6439e4b7867820ef2608.
+struct ColdStartTemperatureScatterResources {
+    device const long *indices [[id(0)]];
+    device const float *temperature [[id(1)]];
+    device float *full_temperature [[id(2)]];
+};
+struct ColdStartTemperatureScatterParams {
+    int n;
+    int n_total;
+};
+static_assert(sizeof(ColdStartTemperatureScatterParams) == 8, "cold_start_temperature_scatter parameter ABI size changed");

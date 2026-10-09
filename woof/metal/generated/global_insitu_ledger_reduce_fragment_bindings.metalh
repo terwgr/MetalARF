@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 4de06e6d1af6bea7b107c768e52b1c7452050ce0600909de7efc6eb8263863b0.
+struct GlobalInsituLedgerReduceFragmentResources {
+    device const ulong *columns [[id(0)]];
+    device ulong *partial [[id(1)]];
+};
+struct GlobalInsituLedgerReduceFragmentParams {
+    int ncell;
+    int nterm;
+    int nchunk;
+    int chunk_size;
+};
+static_assert(sizeof(GlobalInsituLedgerReduceFragmentParams) == 16, "global_insitu_ledger_reduce_fragment parameter ABI size changed");

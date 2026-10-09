@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 55020ba9cc8dd34c77a6e7171ddff97d5eed26964abd0f869c934d5b5a565cae.
+struct MpZeroOutResources {
+    device float *field [[id(0)]];
+};
+struct MpZeroOutParams {
+    int count;
+    int nz;
+    int ny;
+    int nx;
+    int spec_zone;
+    int mode;
+    int first_species;
+    float threshold;
+};
+static_assert(sizeof(MpZeroOutParams) == 32, "mp_zero_out parameter ABI size changed");

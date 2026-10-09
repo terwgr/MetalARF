@@ -1,0 +1,230 @@
+{
+  "kernels": [
+    {
+      "name": "apply_emdiv",
+      "module": "acoustic",
+      "source": "woof/metal/shaders/acoustic_emdiv.metal",
+      "cuda_source": "woof/core/kernels/acoustic.cu",
+      "cuda_symbol": "apply_emdiv",
+      "resources": [
+        [
+          "u_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "v_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "mudf",
+          "float",
+          "read"
+        ],
+        [
+          "mu_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mu_prev",
+          "float",
+          "read_write"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "u_pp": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v_pp": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mudf": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu_pp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu_prev": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "xscale",
+          "float32"
+        ],
+        [
+          "yscale",
+          "float32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "specified",
+          "int32"
+        ],
+        [
+          "spec_zone",
+          "int32"
+        ],
+        [
+          "save_mu",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "update_mudf",
+      "module": "acoustic",
+      "source": "woof/metal/shaders/acoustic_emdiv.metal",
+      "cuda_source": "woof/core/kernels/acoustic.cu",
+      "cuda_symbol": "update_mudf",
+      "resources": [
+        [
+          "mudf",
+          "float",
+          "read_write"
+        ],
+        [
+          "mu_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mu_prev",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "mudf": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu_pp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu_prev": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dtau",
+          "float32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

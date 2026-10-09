@@ -1,0 +1,244 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/globe/semilag/trajectory.py",
+      "cuda_symbol": "semi-Lagrangian Lipschitz norm assembly",
+      "layout_version": 1,
+      "module": "global_semilag_lipschitz_norms_fragment",
+      "name": "global_semilag_lipschitz_norms_fragment",
+      "parameters": [
+        [
+          "nlat",
+          "int32"
+        ],
+        [
+          "nlon",
+          "int32"
+        ],
+        [
+          "chunk_levels",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "vx_dx",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vy_dx",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vz_dx",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vx_dy",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vy_dy",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vz_dy",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vx_dk",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vy_dk",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "vz_dk",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "rate_dx",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "rate_dy",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "rate_dk",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "sph",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cph",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "sla",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "cla",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "lref",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "spectral",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "frobenius",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "horizontal",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "balanced",
+          "float64_bits",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "balanced": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cla": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "frobenius": [
+          [
+            "any_1d"
+          ]
+        ],
+        "horizontal": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lref": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rate_dk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rate_dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rate_dy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sla": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spectral": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vx_dk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vx_dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vx_dy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vy_dk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vy_dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vy_dy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vz_dk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vz_dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vz_dy": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/global_semilag_lipschitz_norms_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

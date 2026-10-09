@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout c4e113b77b924771c90c5038d6f60d7672e9080d5b50f8c23e4ac03fe4824572.
+struct HexThetaDiagnosticResources {
+    device float *theta_m [[id(0)]];
+    device const float *rho_theta [[id(1)]];
+    device const float *rho [[id(2)]];
+};
+struct HexThetaDiagnosticParams {
+    int nlev;
+    int ncells;
+};
+static_assert(sizeof(HexThetaDiagnosticParams) == 8, "hex_theta_diagnostic parameter ABI size changed");

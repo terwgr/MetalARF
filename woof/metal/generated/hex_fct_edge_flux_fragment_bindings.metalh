@@ -1,0 +1,24 @@
+// Generated from kernel_signatures.json; layout eb7b49f023f16ae10ef2cdfcfbc8e51e757b961c2440a3d23d487643ebe58821.
+struct HexFctEdgeFluxFragmentResources {
+    device const float *scalar_stage [[id(0)]];
+    device const float *horizontal_velocity [[id(1)]];
+    device const float *dv_edge [[id(2)]];
+    device const int *cells_on_edge [[id(3)]];
+    device const float *adv_coefs [[id(4)]];
+    device const float *adv_coefs_3rd [[id(5)]];
+    device const int *n_adv_cells_for_edge [[id(6)]];
+    device const int *adv_cells_for_edge [[id(7)]];
+    device float *high_flux [[id(8)]];
+};
+struct HexFctEdgeFluxFragmentParams {
+    int nlev;
+    int ncells;
+    int nedges;
+    int storage_cells;
+    int max_adv;
+    int scalar;
+    int order;
+    float coefficient;
+    int monotonic_source_flux;
+};
+static_assert(sizeof(HexFctEdgeFluxFragmentParams) == 36, "hex_fct_edge_flux_fragment parameter ABI size changed");

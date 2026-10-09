@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 78cc3e2c5cbeb678ae090d868b2e6603d5a3e4712316544777cc5b9b601be720.
+struct JacobiEighBatchedResources {
+    device const float *a_in [[id(0)]];
+    device float *w_out [[id(1)]];
+    device float *v_out [[id(2)]];
+    device float *status_out [[id(3)]];
+};
+struct JacobiEighBatchedParams {
+    int n_matrices;
+    int k;
+    int m;
+    int tpb;
+    int sweep_cap;
+};
+static_assert(sizeof(JacobiEighBatchedParams) == 20, "jacobi_eigh_batched parameter ABI size changed");

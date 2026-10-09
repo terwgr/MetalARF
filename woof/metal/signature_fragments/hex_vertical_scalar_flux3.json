@@ -1,0 +1,34 @@
+{
+  "kernels": [
+    {
+      "name": "hex_vertical_scalar_flux3",
+      "module": "hex_scalar_transport",
+      "source": "woof/metal/shaders/hex_vertical_scalar_flux3_fragment.metal",
+      "cuda_source": "woof/hex/transport.py",
+      "cuda_symbol": "atmosphere_vertical_flux_3",
+      "resources": [
+        ["flux", "float", "write"],
+        ["q_im2", "float", "read"],
+        ["q_im1", "float", "read"],
+        ["q_i", "float", "read"],
+        ["q_ip1", "float", "read"],
+        ["vertical_velocity", "float", "read"]
+      ],
+      "shapes": {
+        "flux": [["nitems"]],
+        "q_im2": [["nitems"]],
+        "q_im1": [["nitems"]],
+        "q_i": [["nitems"]],
+        "q_ip1": [["nitems"]],
+        "vertical_velocity": [["nitems"]]
+      },
+      "parameters": [
+        ["nitems", "int32"],
+        ["third_order_coefficient", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

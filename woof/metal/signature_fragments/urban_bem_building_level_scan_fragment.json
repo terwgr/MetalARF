@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_building_level_scan_fragment",
+      "module": "urban_bem_building_level_scan_fragment",
+      "source": "woof/metal/shaders/urban_bem_building_level_scan_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_column building level scan (module_sf_bep_bem.F:739-755)",
+      "resources": [
+        ["active_cols", "int32", "read"],
+        ["ss_urb", "float", "read"],
+        ["nlev", "int32", "read_write"],
+        ["d_urb", "float", "read_write"],
+        ["nbui", "int32", "read_write"],
+        ["building_nlev", "int32", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]],
+        "ss_urb": [["ncol", 19]],
+        "nlev": [["ncol", 18]],
+        "d_urb": [["ncol", 18]],
+        "nbui": [["ncol"]],
+        "building_nlev": [["ncol", 15]],
+        "error": [["ncol"]]
+      },
+      "parameters": [["ncol", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

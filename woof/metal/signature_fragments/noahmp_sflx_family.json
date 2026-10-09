@@ -1,0 +1,76 @@
+{
+  "kernels": [
+    {
+      "name": "k_sflx_error",
+      "module": "noahmp_sflx_family",
+      "source": "woof/metal/shaders/noahmp_sflx_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_sflx.cu",
+      "cuda_symbol": "k_sflx_error",
+      "resources": [
+        ["sc", "float", "read"],
+        ["smc", "float", "read"],
+        ["dzsnso", "float", "read"],
+        ["ist", "int32", "read"],
+        ["calc", "int32", "read"],
+        ["out", "float", "read_write"],
+        ["status", "int32", "read_write"]
+      ],
+      "shapes": {
+        "sc": [["ncase", 34]],
+        "smc": [["ncase", 4]],
+        "dzsnso": [["ncase", 4]],
+        "ist": [["ncase"]],
+        "calc": [["ncase"]],
+        "out": [["ncase", 9]],
+        "status": [["ncase"]]
+      },
+      "parameters": [["ncase", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "k_sflx_marshal",
+      "module": "noahmp_sflx_family",
+      "source": "woof/metal/shaders/noahmp_sflx_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_sflx.cu",
+      "cuda_symbol": "k_sflx_marshal",
+      "resources": [
+        ["zsnso", "float", "read"],
+        ["stc", "float", "read"],
+        ["smc", "float", "read"],
+        ["zsoil", "float", "read"],
+        ["canliq", "float", "read"],
+        ["canice", "float", "read"],
+        ["sneqv", "float", "read"],
+        ["wa", "float", "read"],
+        ["isnow", "int32", "read"],
+        ["nroot", "int32", "read"],
+        ["ist", "int32", "read"],
+        ["dzsnso", "float", "read_write"],
+        ["troot", "float", "read_write"],
+        ["beg_wb", "float", "read_write"]
+      ],
+      "shapes": {
+        "zsnso": [["ncol", 7]],
+        "stc": [["ncol", 7]],
+        "smc": [["ncol", 4]],
+        "zsoil": [["ncol", 4]],
+        "canliq": [["ncol"]],
+        "canice": [["ncol"]],
+        "sneqv": [["ncol"]],
+        "wa": [["ncol"]],
+        "isnow": [["ncol"]],
+        "nroot": [["ncol"]],
+        "ist": [["ncol"]],
+        "dzsnso": [["ncol", 7]],
+        "troot": [["ncol"]],
+        "beg_wb": [["ncol"]]
+      },
+      "parameters": [["ncol", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

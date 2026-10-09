@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout be69dcf5d6d85e696c8def96785a90673b7dc9f2771d49a37064b70a1abbc879.
+struct RrtmgpPrepareGasVmrResources {
+    device const float *play [[id(0)]];
+    device const float *qv [[id(1)]];
+    device const ulong *ozone_pressure [[id(2)]];
+    device const float *ozone_vmr [[id(3)]];
+    device const int *trace_index [[id(4)]];
+    device const float *trace_value [[id(5)]];
+    device float *vmr [[id(6)]];
+};
+struct RrtmgpPrepareGasVmrParams {
+    int ncells;
+    int nslot;
+    int nozone;
+    int ntrace;
+    int h2o_index;
+    int o3_index;
+    float h2o_scale;
+};
+static_assert(sizeof(RrtmgpPrepareGasVmrParams) == 28, "rrtmgp_prepare_gas_vmr parameter ABI size changed");

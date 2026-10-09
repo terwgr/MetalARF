@@ -1,0 +1,4288 @@
+// Per-column Metal ports of the RUC SFCTMP land-surface helpers.
+// Source: woof/core/kernels/ruc.cu; each body keeps its source statement order.
+// The source CUDA wrappers use double-precision libm followed by float
+// rounding for power/exponential and several expm1 paths; log10 also uses a
+// double-libm conversion. Available Metal paths use shared soft_gfk float
+// helpers, the local float expm1 reduction, and native log10, so those results
+// are not bitwise identical to every CUDA wrapper. Explicit soft32 arithmetic
+// and the surrounding source statement order are retained.
+#ifndef RUC_SFCTMP_HELPERS_METALH
+#define RUC_SFCTMP_HELPERS_METALH
+
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_pow.metalh"
+
+#ifndef RUC_NZS_M1
+#define RUC_NZS_M1 8
+#define RUC_NZS_M2 7
+#define RUC_NZS_M3 6
+#define RUC_DTDZS_LEN 14
+#endif
+
+// RUC physics lineage (woof.core.ruc_tier): bit 0 is ruc_soilprop=wrf_461
+// (CUDA GPUWM_SOILPROP_WRF461), bit 1 is ruc_snow=wrf_461 (CUDA
+// GPUWM_SNOW_WRF461). Clear bits are the WRF v4.0-4.5 forms the operational
+// RAP/HRRR branch carries. Every helper that reads them takes `forms`.
+#define RUC_FORM_SOILPROP_V461 1u
+#define RUC_FORM_SNOW_V461 2u
+#define RUC_SOILPROP_V461 ((forms & RUC_FORM_SOILPROP_V461) != 0u)
+#define GPUWM_RUC_SNOW_V461 ((forms & RUC_FORM_SNOW_V461) != 0u)
+
+constant float ruc_sfctmp_soil_layer_depth[9] = {
+    0.00f, 0.01f, 0.04f, 0.10f, 0.30f, 0.60f, 1.00f, 1.60f, 3.00f
+};
+
+static inline float ruc_powf_rn(float base, float exponent) {
+    return as_type<float>(soft_gfk_pow_bits(as_type<uint>(base), as_type<uint>(exponent)));
+}
+static inline float ruc_expf_rn(float value) {
+    return as_type<float>(soft_gfk_exp(as_type<uint>(value)));
+}
+static inline float ruc_logf_rn(float value) {
+    return as_type<float>(soft_gfk_log(as_type<uint>(value)));
+}
+
+static inline void ruc_soil_phase_partition(
+    device const float* soilmois,
+    device const float* tso,
+    device float* smfrkeep,
+    device const float* keepfr,
+    device const float* dqm_a,
+    device const float* qmin_a,
+    device const float* psis_a,
+    device const float* bclh_a,
+    int update_smfrkeep,
+    device float* soiliqw,
+    device float* soilice,
+    device float* tav,
+    device float* soilmoism,
+    device float* soiliqwm,
+    device float* soilicem,
+    device float* lwsat,
+    device float* fwsat,
+    int ncolumn,
+    int column)
+{
+
+    const float zero = 0.0f;
+    const float half_factor = 0.5f;
+    const float one = 1.0f;
+    const float freeze = 273.15f;
+    const float xlmelt = 3.35e5f;
+    const float gravity = 9.81f;
+    // WRF forms RIW as RHOICE*1.E-3.  The product is one float32 ULP
+    // above a source literal 0.9f, so retain the operation boundary.
+    const float riw = ruc_fmul_rn(900.0f, 1.0e-3f);
+    float dqm = dqm_a[column];
+    float qmin = qmin_a[column];
+    float psis = psis_a[column];
+    float bclh = bclh_a[column];
+    float maximum = ruc_fadd_rn(dqm, qmin);
+    float exponent = ruc_fdiv_rn(-one, bclh);
+
+    for (int level = 0; level < RUC_NZS; ++level) {
+        int index = level * ncolumn + column;
+        soiliqw[index] = zero;
+        soilice[index] = zero;
+        tav[index] = zero;
+        soilmoism[index] = zero;
+        soiliqwm[index] = zero;
+        soilicem[index] = zero;
+        lwsat[index] = zero;
+        fwsat[index] = zero;
+
+        float temperature = tso[index];
+        float tln = ruc_logf_rn(ruc_fdiv_rn(temperature, freeze));
+        if (tln < zero) {
+            float base = ruc_fmul_rn(
+                xlmelt, ruc_fsub_rn(temperature, freeze));
+            base = ruc_fdiv_rn(base, temperature);
+            base = ruc_fdiv_rn(base, gravity);
+            base = ruc_fdiv_rn(base, psis);
+            // ruc_powf_rn, not powf: plain CUDA powf drifts ~4 ULP into
+            // soilice on cold deep layers relative to gfortran.  See the
+            // provisional-transcendental note at the top of this file.
+            float liquid = ruc_fsub_rn(
+                ruc_fmul_rn(
+                    maximum,
+                    ruc_powf_rn(base, exponent)),
+                qmin);
+            liquid = ruc_fused_max(zero, liquid);
+            liquid = ruc_fused_min(liquid, soilmois[index]);
+            float ice = ruc_fdiv_rn(
+                ruc_fsub_rn(soilmois[index], liquid), riw);
+            if (keepfr[index] == one) {
+                ice = ruc_fused_min(ice, smfrkeep[index]);
+                liquid = ruc_fused_max(
+                    zero,
+                    ruc_fsub_rn(soilmois[index], ruc_fmul_rn(ice, riw)));
+            }
+            soiliqw[index] = liquid;
+            soilice[index] = ice;
+        } else {
+            soiliqw[index] = soilmois[index];
+        }
+    }
+
+    for (int level = 0; level < RUC_NZS_M1; ++level) {
+        int index = level * ncolumn + column;
+        int below = (level + 1) * ncolumn + column;
+        float middle_temperature = ruc_fmul_rn(
+            half_factor, ruc_fadd_rn(tso[index], tso[below]));
+        float middle_moisture = ruc_fmul_rn(
+            half_factor, ruc_fadd_rn(soilmois[index], soilmois[below]));
+        tav[index] = middle_temperature;
+        soilmoism[index] = middle_moisture;
+        float tln = ruc_logf_rn(ruc_fdiv_rn(middle_temperature, freeze));
+        if (tln < zero) {
+            float base = ruc_fmul_rn(
+                xlmelt, ruc_fsub_rn(middle_temperature, freeze));
+            base = ruc_fdiv_rn(base, middle_temperature);
+            base = ruc_fdiv_rn(base, gravity);
+            base = ruc_fdiv_rn(base, psis);
+            // Same ruc_powf_rn substitution as the full-level loop above.
+            float liquid = ruc_fsub_rn(
+                ruc_fmul_rn(
+                    maximum,
+                    ruc_powf_rn(base, exponent)),
+                qmin);
+            liquid = ruc_fused_max(zero, liquid);
+            liquid = ruc_fused_min(liquid, middle_moisture);
+            float ice = ruc_fdiv_rn(
+                ruc_fsub_rn(middle_moisture, liquid), riw);
+            if (keepfr[index] == one) {
+                float memory = ruc_fmul_rn(
+                    half_factor, ruc_fadd_rn(smfrkeep[index], smfrkeep[below]));
+                ice = ruc_fused_min(ice, memory);
+                liquid = ruc_fused_max(
+                    zero,
+                    ruc_fsub_rn(middle_moisture, ruc_fmul_rn(ice, riw)));
+            }
+            soiliqwm[index] = liquid;
+            soilicem[index] = ice;
+            // WRF forms the saturation fractions from the bounded liquid
+            // state (module_sf_ruclsm.F:2340-2366), after the freezing-curve
+            // result is clamped to 0..soilmoism and the keepfr limit applies.
+            fwsat[index] = ruc_fsub_rn(dqm, liquid);
+            lwsat[index] = ruc_fadd_rn(liquid, qmin);
+        } else {
+            soiliqwm[index] = middle_moisture;
+            lwsat[index] = maximum;
+        }
+    }
+
+    if (update_smfrkeep) {
+        for (int level = 0; level < RUC_NZS; ++level) {
+            int index = level * ncolumn + column;
+            smfrkeep[index] = soilice[index] > zero
+                ? soilice[index]
+                : ruc_fdiv_rn(soilmois[index], riw);
+        }
+    }
+}
+
+static inline void ruc_transpiration(
+    device const float* soiliqw,
+    device const float* tabs,
+    device const float* lai,
+    device const float* gswin,
+    device const float* dqm,
+    device const float* qmin,
+    device const float* reference,
+    device const float* wilt,
+    device const float* pc,
+    device const int* iland,
+    device const float* rstbl,
+    device const float* rgltbl,
+    device const float* zshalf,
+    device const int* nroot_a,
+    float rsmax,
+    device float* tranf,
+    device float* transum,
+    int ncolumn,
+    int column)
+{
+    (void)dqm;
+    int nroot = nroot_a[column];
+
+    for (int level = 0; level < RUC_NZS; ++level) {
+        tranf[level * ncolumn + column] = 0.0f;
+    }
+    float minimum_moisture = qmin[column];
+    float field_capacity = reference[column];
+    float wilting = wilt[column];
+    for (int level = 0; level < nroot; ++level) {
+        int index = level * ncolumn + column;
+        float total_liquid = ruc_fadd_rn(soiliqw[index], minimum_moisture);
+        float depth = level == 0
+            ? zshalf[1]
+            : ruc_fsub_rn(zshalf[level + 1], zshalf[level]);
+        bool saturated = level == 0
+            ? total_liquid > field_capacity
+            : total_liquid >= field_capacity;
+        float weight;
+        if (saturated) {
+            weight = depth;
+        } else if (total_liquid <= wilting) {
+            weight = 0.0f;
+        } else {
+            weight = ruc_fmul_rn(
+                ruc_fdiv_rn(
+                    ruc_fsub_rn(total_liquid, wilting),
+                    ruc_fsub_rn(field_capacity, wilting)),
+                depth);
+        }
+        tranf[index] = weight;
+    }
+
+    float leaf_area = lai[column];
+    float pctot = leaf_area > 4.0f ? 0.8f : pc[column];
+    float temperature = tabs[column];
+    float exponent = temperature <= 302.15f
+        ? ruc_fmul_rn(-0.41f, ruc_fsub_rn(temperature, 282.05f))
+        : ruc_fmul_rn(0.5f, ruc_fsub_rn(temperature, 314.0f));
+    float ftem = ruc_fdiv_rn(1.0f, ruc_fadd_rn(1.0f, ruc_expf_rn(exponent)));
+
+    int vegetation_index = iland[column] - 1;
+    float resistance = rstbl[vegetation_index];
+    float light_threshold = rgltbl[vegetation_index];
+    float cmin = ruc_fdiv_rn(1.0f, rsmax);
+    float cmax = ruc_fdiv_rn(1.0f, resistance);
+    if (leaf_area > 1.0f) cmax = ruc_fdiv_rn(leaf_area, resistance);
+    float fsol;
+    if (gswin[column] < light_threshold) {
+        float light_exponent = ruc_fmul_rn(
+            -0.034f, ruc_fsub_rn(gswin[column], 3.5f));
+        fsol = ruc_fdiv_rn(
+            1.0f, ruc_fadd_rn(1.0f, ruc_expf_rn(light_exponent)));
+    } else {
+        fsol = 1.0f;
+    }
+    float conductance = ruc_fsub_rn(cmax, cmin);
+    conductance = ruc_fmul_rn(conductance, pctot);
+    conductance = ruc_fmul_rn(conductance, ftem);
+    conductance = ruc_fmul_rn(conductance, fsol);
+    conductance = ruc_fadd_rn(cmin, conductance);
+    conductance = ruc_fdiv_rn(conductance, cmax);
+
+    float total = 0.0f;
+    for (int level = 0; level < nroot; ++level) {
+        int index = level * ncolumn + column;
+        float weight = ruc_fused_max(cmin, ruc_fmul_rn(tranf[index], conductance));
+        tranf[index] = weight;
+        total = ruc_fadd_rn(total, weight);
+    }
+    transum[column] = total;
+}
+
+static inline void ruc_soil_prepare_moisture(
+    device const float* qvatm_a,
+    device const float* qsg_a,
+    device const float* qkms_a,
+    device const float* rho_a,
+    device const float* vegfrac_a,
+    device const float* drycan_a,
+    device const float* tranf,
+    device const int* nroot_a,
+    device const float* infwater_a,
+    device float* transp_out,
+    device float* ett1_out,
+    device float* dew_out,
+    device float* prcp_out,
+    device float* ras_out,
+    int ncolumn,
+    int column)
+{
+
+    const float zero = 0.0f;
+    constant float* zsmain = ruc_sfctmp_soil_layer_depth;
+    float zshalf[RUC_NZS];
+    zshalf[0] = zero;
+    for (int level = 1; level < RUC_NZS; ++level) {
+        zshalf[level] = ruc_fmul_rn(
+            ruc_fadd_rn(zsmain[level - 1], zsmain[level]), 0.5f);
+    }
+    for (int level = 0; level < RUC_NZS; ++level) {
+        transp_out[level * ncolumn + column] = zero;
+    }
+
+    float ett1 = zero;
+    float dew = zero;
+    float ras = ruc_fmul_rn(rho_a[column], 1.0e-3f);
+    if (qvatm_a[column] >= qsg_a[column]) {
+        dew = ruc_fmul_rn(
+            qkms_a[column],
+            ruc_fsub_rn(qvatm_a[column], qsg_a[column]));
+    } else {
+        int nroot = nroot_a[column];
+        for (int level = 0; level < nroot; ++level) {
+            int index = level * ncolumn + column;
+            float flux = ruc_fmul_rn(vegfrac_a[column], ras);
+            flux = ruc_fmul_rn(flux, qkms_a[column]);
+            flux = ruc_fmul_rn(
+                flux, ruc_fsub_rn(qvatm_a[column], qsg_a[column]));
+            flux = ruc_fmul_rn(flux, tranf[index]);
+            flux = ruc_fmul_rn(flux, drycan_a[column]);
+            flux = ruc_fdiv_rn(flux, zshalf[nroot]);
+            if (flux > zero) flux = zero;
+            transp_out[index] = flux;
+            ett1 = ruc_fsub_rn(ett1, flux);
+        }
+    }
+    ett1_out[column] = ett1;
+    dew_out[column] = dew;
+    prcp_out[column] = -infwater_a[column];
+    ras_out[column] = ras;
+}
+
+static inline void ruc_soil_moisture_step(
+    device const float* diffu,
+    device const float* hydro,
+    device const float* transp,
+    device const float* soilice,
+    device const float* soilmois_in,
+    device const float* soiliqw_in,
+    device const float* qsg_a,
+    device const float* qvg_a,
+    device const float* qcg_a,
+    device const float* qcatm_a,
+    device const float* qvatm_a,
+    device const float* prcp_a,
+    device const float* qkms_a,
+    device const float* drip_a,
+    device const float* dew_a,
+    device const float* smelt_a,
+    device const float* vegfrac_a,
+    device const float* snowfrac_a,
+    device const float* soilres_a,
+    device const float* dqm_a,
+    device const float* qmin_a,
+    device const float* reference_a,
+    device const float* ksat_a,
+    device const float* ras_a,
+    float delt,
+    device float* soilmois_out,
+    device float* soiliqw_out,
+    device float* mavail_out,
+    device float* runoff_out,
+    device float* runoff2_out,
+    device float* infiltrp_out,
+    device float* infmax_out,
+    int ncolumn,
+    int column)
+{
+
+    const float one = 1.0f;
+    const float minimum = 1.0e-8f;
+    constant float* zsmain = ruc_sfctmp_soil_layer_depth;
+    float zshalf[RUC_NZS];
+    float dtdzs[RUC_DTDZS_LEN];
+    float dtdzs2[RUC_NZS];
+    zshalf[0] = 0.0f;
+    for (int level = 1; level < RUC_NZS; ++level) {
+        zshalf[level] = ruc_fmul_rn(
+            ruc_fadd_rn(zsmain[level - 1], zsmain[level]), 0.5f);
+    }
+    for (int index = 0; index < RUC_DTDZS_LEN; ++index) dtdzs[index] = 0.0f;
+    for (int index = 0; index < RUC_NZS; ++index) dtdzs2[index] = 0.0f;
+    for (int fortran_level = 2; fortran_level < RUC_NZS; ++fortran_level) {
+        int first = 2 * fortran_level - 3;
+        int second = first + 1;
+        int level = fortran_level - 1;
+        float x = ruc_fdiv_rn(
+            ruc_fdiv_rn(delt, 2.0f),
+            ruc_fsub_rn(zshalf[level + 1], zshalf[level]));
+        dtdzs[first - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level], zsmain[level - 1]));
+        dtdzs2[level - 1] = x;
+        dtdzs[second - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level + 1], zsmain[level]));
+    }
+
+    for (int level = 0; level < RUC_NZS; ++level) {
+        int index = level * ncolumn + column;
+        soilmois_out[index] = soilmois_in[index];
+        soiliqw_out[index] = soiliqw_in[index];
+    }
+    float cosmc[RUC_NZS] = {0.0f};
+    float rhsmc[RUC_NZS] = {0.0f};
+    cosmc[0] = 0.0f;
+    rhsmc[0] = soilmois_in[RUC_NZS_M1 * ncolumn + column];
+    for (int step = 1; step < RUC_NZS_M1; ++step) {
+        int kn = RUC_NZS - step;
+        int first = 2 * kn - 3;
+        float x4 = ruc_fmul_rn(
+            ruc_fmul_rn(2.0f, dtdzs[first - 1]),
+            diffu[(kn - 2) * ncolumn + column]);
+        float x2 = ruc_fmul_rn(
+            ruc_fmul_rn(2.0f, dtdzs[first]),
+            diffu[(kn - 1) * ncolumn + column]);
+        float q4 = ruc_fadd_rn(
+            x4,
+            ruc_fmul_rn(
+                hydro[(kn - 2) * ncolumn + column], dtdzs2[kn - 2]));
+        float q2 = ruc_fsub_rn(
+            x2,
+            ruc_fmul_rn(
+                hydro[kn * ncolumn + column], dtdzs2[kn - 2]));
+        float denominator = ruc_fadd_rn(1.0f, x2);
+        denominator = ruc_fadd_rn(denominator, x4);
+        denominator = ruc_fsub_rn(
+            denominator, ruc_fmul_rn(q2, cosmc[step - 1]));
+        cosmc[step] = ruc_fdiv_rn(q4, denominator);
+        float rhs = ruc_fadd_rn(
+            soilmois_in[(kn - 1) * ncolumn + column],
+            ruc_fmul_rn(q2, rhsmc[step - 1]));
+        float root_flux = ruc_fdiv_rn(
+            transp[(kn - 1) * ncolumn + column],
+            ruc_fsub_rn(zshalf[kn], zshalf[kn - 1]));
+        rhs = ruc_fadd_rn(rhs, ruc_fmul_rn(root_flux, delt));
+        rhsmc[step] = ruc_fdiv_rn(rhs, denominator);
+    }
+
+    float vegfrac = vegfrac_a[column];
+    float umveg = ruc_fmul_rn(ruc_fsub_rn(one, vegfrac), soilres_a[column]);
+    float runoff = 0.0f;
+    float runoff2 = 0.0f;
+    float dzs = zsmain[1];
+    float r1 = cosmc[RUC_NZS_M2];
+    float r2 = rhsmc[RUC_NZS_M2];
+    float r3 = ruc_fdiv_rn(diffu[column], dzs);
+    float r4 = ruc_fadd_rn(r3, ruc_fmul_rn(hydro[column], 0.5f));
+    float r5 = ruc_fsub_rn(
+        r3, ruc_fmul_rn(hydro[ncolumn + column], 0.5f));
+    float r6 = ruc_fmul_rn(qkms_a[column], ras_a[column]);
+    float total_liquid = prcp_a[column];
+    total_liquid = ruc_fsub_rn(
+        total_liquid, ruc_fdiv_rn(drip_a[column], delt));
+    total_liquid = ruc_fsub_rn(
+        total_liquid,
+        ruc_fmul_rn(ruc_fmul_rn(umveg, dew_a[column]), ras_a[column]));
+    total_liquid = ruc_fsub_rn(total_liquid, smelt_a[column]);
+    float flux = total_liquid;
+
+    float dqm = dqm_a[column];
+    float qmin = qmin_a[column];
+    float reference = reference_a[column];
+    float ksat = ksat_a[column];
+    float delt1 = ruc_fdiv_rn(delt, 86400.0f);
+    float f1max = ruc_fmul_rn(dqm, zshalf[1]);
+    float free_storage = ruc_fmul_rn(
+        f1max,
+        ruc_fsub_rn(
+            one, ruc_fdiv_rn(soilmois_in[column], dqm)));
+    float frozen_depth = ruc_fmul_rn(soilice[column], zshalf[1]);
+    for (int level = 1; level < RUC_NZS_M1; ++level) {
+        int index = level * ncolumn + column;
+        float thickness = ruc_fsub_rn(zshalf[level + 1], zshalf[level]);
+        frozen_depth = ruc_fadd_rn(
+            frozen_depth, ruc_fmul_rn(soilice[index], thickness));
+        float maximum = ruc_fmul_rn(dqm, thickness);
+        float available = ruc_fmul_rn(
+            maximum,
+            ruc_fsub_rn(one, ruc_fdiv_rn(soilmois_in[index], dqm)));
+        free_storage = ruc_fadd_rn(free_storage, available);
+    }
+    float kdt = ruc_fdiv_rn(ruc_fmul_rn(3.0f, ksat), 3.4341e-6f);
+    float infiltration_fraction = ruc_fsub_rn(
+        one, ruc_expf_rn(ruc_fmul_rn(-kdt, delt1)));
+    float ddt = ruc_fmul_rn(free_storage, infiltration_fraction);
+    float water_input = ruc_fmul_rn(-total_liquid, delt);
+    if (water_input < 0.0f) water_input = 0.0f;
+    float infmax1 = 0.0f;
+    if (water_input > 0.0f) {
+        infmax1 = ruc_fdiv_rn(
+            ruc_fmul_rn(
+                water_input,
+                ruc_fdiv_rn(ddt, ruc_fadd_rn(water_input, ddt))),
+            delt);
+    }
+    float frzx = ruc_fmul_rn(
+        0.15f, ruc_fdiv_rn(ruc_fadd_rn(dqm, qmin), reference));
+    frzx = ruc_fmul_rn(frzx, ruc_fdiv_rn(0.412f, 0.468f));
+    float frozen_factor = 1.0f;
+    if (frozen_depth > 1.0e-2f) {
+        float acrt = ruc_fdiv_rn(ruc_fmul_rn(3.0f, frzx), frozen_depth);
+        // ``SUM = SUM + (ACRT ** (CVFRZ-JK)) / FLOAT(K)`` at
+        // module_sf_ruclsm.F:5983.  CVFRZ is declared ``float`` at :5826 and
+        // set to 3. at :5936, so ``CVFRZ-JK`` is REAL and gfortran lowers the
+        // whole thing to glibc powf -- it does NOT expand to a multiplication
+        // the way Noah-MP's INTEGER PARAMETER CVFRZ does.  Neither float32
+        // pow available here is glibc's, so this site takes the same
+        // float64-evaluated, rounded-once form as every other ** in this file
+        // and in the host transcription (see _RUC_PROVISIONAL_TRANSCENDENTALS
+        // and gpuwm/core/ruc.py:1533); for an exponent of 2 that form is the
+        // exactly-rounded square, because a float32 squared is exact in
+        // float64.
+        //
+        // This was the CUDA device libm ``powf`` until 2026-07-26.  It differs
+        // from the host by 1 ULP on the acrt a frozen column reaches (1.03 to
+        // 1.47 on a snow grid), and the ``1 - exp(-acrt)*SUM`` cancellation at
+        // :5985 amplifies that into 10 ULP of ``infiltr``.  No fixture could
+        // see it: three of soilmoist.csv's four cases carry soilice = 0 so
+        // :5972 is false, and the fourth multiplies the result by an
+        // ``infmax1`` of exactly zero.  See
+        // tests/test_ruc_gpu.py::test_ruc_soil_moisture_cuda_agrees_off_fixture.
+        float series = ruc_fadd_rn(
+            1.0f, ruc_fdiv_rn(ruc_powf_rn(acrt, 2.0f), 2.0f));
+        series = ruc_fadd_rn(series, acrt);
+        frozen_factor = ruc_fsub_rn(
+            1.0f, ruc_fmul_rn(ruc_expf_rn(-acrt), series));
+    }
+    infmax1 = ruc_fmul_rn(infmax1, frozen_factor);
+    float infmax = ruc_fused_max(
+        infmax1, ruc_fmul_rn(hydro[column], soilmois_in[column]));
+    // Fortran MIN preserves the first +0 operand when the upper bound is
+    // -0; fminf would manufacture -0 and break exact WRF state identity.
+    float infiltration_upper = -total_liquid;
+    if (infiltration_upper < infmax) infmax = infiltration_upper;
+    if (-total_liquid > infmax) {
+        runoff = ruc_fsub_rn(-total_liquid, infmax);
+        flux = -infmax;
+    }
+    float infiltrp = flux;
+
+    float r7 = ruc_fdiv_rn(ruc_fmul_rn(0.5f, dzs), delt);
+    r4 = ruc_fadd_rn(r4, r7);
+    flux = ruc_fsub_rn(
+        flux, ruc_fmul_rn(soilmois_in[column], r7));
+    float r8 = ruc_fmul_rn(umveg, r6);
+    r8 = ruc_fmul_rn(r8, ruc_fsub_rn(one, snowfrac_a[column]));
+    float qtot = ruc_fadd_rn(qvatm_a[column], qcatm_a[column]);
+    float r9 = transp[column];
+    float r10 = ruc_fsub_rn(qtot, qsg_a[column]);
+    float denominator, numerator, candidate, saturated_flux;
+    if (r10 <= 0.0f) {
+        denominator = ruc_fsub_rn(r4, ruc_fmul_rn(r5, r1));
+        denominator = ruc_fsub_rn(
+            denominator,
+            ruc_fdiv_rn(
+                ruc_fmul_rn(r10, r8), ruc_fsub_rn(reference, qmin)));
+        numerator = ruc_fsub_rn(ruc_fmul_rn(r5, r2), flux);
+        numerator = ruc_fadd_rn(numerator, r9);
+        candidate = ruc_fdiv_rn(numerator, denominator);
+        saturated_flux = ruc_fmul_rn(-dqm, denominator);
+        saturated_flux = ruc_fadd_rn(
+            saturated_flux, ruc_fmul_rn(r5, r2));
+        saturated_flux = ruc_fadd_rn(saturated_flux, r9);
+    } else {
+        denominator = ruc_fsub_rn(r4, ruc_fmul_rn(r1, r5));
+        float humidity = ruc_fsub_rn(qtot, qcg_a[column]);
+        humidity = ruc_fsub_rn(humidity, qvg_a[column]);
+        numerator = ruc_fsub_rn(ruc_fmul_rn(r2, r5), flux);
+        numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(r8, humidity));
+        numerator = ruc_fadd_rn(numerator, r9);
+        candidate = ruc_fdiv_rn(numerator, denominator);
+        saturated_flux = ruc_fmul_rn(-dqm, denominator);
+        saturated_flux = ruc_fadd_rn(
+            saturated_flux, ruc_fmul_rn(r2, r5));
+        saturated_flux = ruc_fadd_rn(
+            saturated_flux, ruc_fmul_rn(r8, humidity));
+        saturated_flux = ruc_fadd_rn(saturated_flux, r9);
+    }
+    if (candidate < 0.0f) {
+        soilmois_out[column] = minimum;
+    } else if (candidate > dqm) {
+        soilmois_out[column] = dqm;
+        runoff = ruc_fadd_rn(
+            runoff, ruc_fsub_rn(saturated_flux, flux));
+    } else {
+        soilmois_out[column] = ruc_fused_min(dqm, ruc_fused_max(minimum, candidate));
+    }
+
+    for (int level = 1; level < RUC_NZS; ++level) {
+        int index = level * ncolumn + column;
+        int previous = (level - 1) * ncolumn + column;
+        int coefficient = RUC_NZS_M1 - level;
+        candidate = ruc_fadd_rn(
+            ruc_fmul_rn(cosmc[coefficient], soilmois_out[previous]),
+            rhsmc[coefficient]);
+        if (candidate < 0.0f) {
+            soilmois_out[index] = minimum;
+        } else if (candidate > dqm) {
+            soilmois_out[index] = dqm;
+            float thickness = level == RUC_NZS_M1
+                ? ruc_fsub_rn(zsmain[level], zshalf[level])
+                : ruc_fsub_rn(zshalf[level + 1], zshalf[level]);
+            runoff2 = ruc_fadd_rn(
+                runoff2,
+                ruc_fdiv_rn(
+                    ruc_fmul_rn(ruc_fsub_rn(candidate, dqm), thickness),
+                    delt));
+        } else {
+            soilmois_out[index] = ruc_fused_min(dqm, ruc_fused_max(minimum, candidate));
+        }
+    }
+    float availability = ruc_fdiv_rn(
+        soilmois_out[column], ruc_fsub_rn(reference, qmin));
+    availability = ruc_fmul_rn(
+        availability, ruc_fsub_rn(one, snowfrac_a[column]));
+    availability = ruc_fadd_rn(availability, snowfrac_a[column]);
+    mavail_out[column] = ruc_fused_max(0.00001f, ruc_fused_min(one, availability));
+    runoff_out[column] = runoff;
+    runoff2_out[column] = runoff2;
+    infiltrp_out[column] = infiltrp;
+    infmax_out[column] = infmax;
+}
+
+static inline bool ruc_vilka(
+    float tn,
+    float d1,
+    float d2,
+    float pp,
+    device const float* table,
+    thread float* qs,
+    thread float* ts)
+{
+    float raw_index = ruc_fsub_rn(tn, 173.15f);
+    raw_index = ruc_fdiv_rn(raw_index, 0.05f);
+    raw_index = ruc_fadd_rn(raw_index, 1.0f);
+    int index = int(raw_index);
+    if (index < 1 || index > 5000) return false;
+
+    float t1 = ruc_fadd_rn(
+        173.1f, ruc_fmul_rn(float(index), 0.05f));
+    float delta = ruc_fsub_rn(table[index], table[index - 1]);
+    float f1 = ruc_fadd_rn(t1, ruc_fmul_rn(d1, table[index - 1]));
+    f1 = ruc_fsub_rn(f1, d2);
+    float denominator = ruc_fadd_rn(0.05f, ruc_fmul_rn(d1, delta));
+    float ratio = ruc_fdiv_rn(f1, denominator);
+    index = int(
+        ruc_fsub_rn(float(index), ratio));
+    if (index < 1 || index > 5000) return false;
+
+    float rn = 0.0f;
+    bool converged = false;
+    for (int iteration = 0; iteration < 5001; ++iteration) {
+        int previous = index;
+        t1 = ruc_fadd_rn(
+            173.1f, ruc_fmul_rn(float(index), 0.05f));
+        delta = ruc_fsub_rn(table[index], table[index - 1]);
+        f1 = ruc_fadd_rn(t1, ruc_fmul_rn(d1, table[index - 1]));
+        f1 = ruc_fsub_rn(f1, d2);
+        denominator = ruc_fadd_rn(0.05f, ruc_fmul_rn(d1, delta));
+        rn = ruc_fdiv_rn(f1, denominator);
+        index -= int(rn);
+        if (index < 1 || index > 5000) return false;
+        if (index == previous) {
+            converged = true;
+            break;
+        }
+    }
+    if (!converged) return false;
+
+    *ts = ruc_fsub_rn(t1, ruc_fmul_rn(0.05f, rn));
+    float numerator = ruc_fadd_rn(
+        table[index - 1],
+        ruc_fmul_rn(
+            ruc_fsub_rn(table[index - 1], table[index]), rn));
+    *qs = ruc_fdiv_rn(numerator, pp);
+    return true;
+}
+
+static inline void ruc_soil_temperature_step(
+    device const float* thdif,
+    device const float* cap,
+    device const float* tso_in,
+    device const float* prcpms_a,
+    device const float* rainf_a,
+    device const float* patm_a,
+    device const float* tabs_a,
+    device const float* qvatm_a,
+    device const float* emiss_a,
+    device const float* rnet_a,
+    device const float* qkms_a,
+    device const float* tkms_a,
+    device const float* rho_a,
+    device const float* vegfrac_a,
+    device const float* drycan_a,
+    device const float* wetcan_a,
+    device const float* transum_a,
+    device const float* mavail_a,
+    device const float* soilres_a,
+    device const float* soilt_in,
+    device const float* qvg_in,
+    device const int* nroot_a,
+    device const float* tbq,
+    float delt,
+    // ``0.5*dz8w(i,1,j)`` -- half the lowest model layer, which is a
+    // PER-COLUMN depth on a terrain-following coordinate.  WRF passes it
+    // as a scalar only because ``sfctmp`` is called from inside DO j/DO i.
+    device const float* conflx,
+    float cvw,
+    device float* tso_out,
+    device float* soilt_out,
+    device float* qvg_out,
+    device float* qsg_out,
+    device float* qcg_out,
+    device float* storage_out,
+    int ncolumn,
+    int column)
+{
+
+    const float one = 1.0f;
+    const float half_factor = 0.5f;
+    const float cp_air = 1004.5f;
+    const float xlv = 2.5e6f;
+    const float stbolt = 5.67051e-8f;
+    const float freeze = 273.15f;
+    constant float* zsmain = ruc_sfctmp_soil_layer_depth;
+    float zshalf[RUC_NZS];
+    float dtdzs[RUC_DTDZS_LEN];
+    zshalf[0] = 0.0f;
+    for (int level = 1; level < RUC_NZS; ++level) {
+        zshalf[level] = ruc_fmul_rn(
+            ruc_fadd_rn(zsmain[level - 1], zsmain[level]), half_factor);
+    }
+    for (int index = 0; index < RUC_DTDZS_LEN; ++index) dtdzs[index] = 0.0f;
+    for (int fortran_level = 2; fortran_level < RUC_NZS; ++fortran_level) {
+        int first = 2 * fortran_level - 3;
+        int second = first + 1;
+        int level = fortran_level - 1;
+        float x = ruc_fdiv_rn(
+            ruc_fdiv_rn(delt, 2.0f),
+            ruc_fsub_rn(zshalf[level + 1], zshalf[level]));
+        dtdzs[first - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level], zsmain[level - 1]));
+        dtdzs[second - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level + 1], zsmain[level]));
+    }
+
+    float cotso[RUC_NZS] = {0.0f};
+    float rhtso[RUC_NZS] = {0.0f};
+    rhtso[0] = tso_in[RUC_NZS_M1 * ncolumn + column];
+    for (int step = 0; step < RUC_NZS_M2; ++step) {
+        int kn = RUC_NZS_M1 - step;
+        int first = 2 * kn - 3;
+        float x1 = ruc_fmul_rn(
+            dtdzs[first - 1], thdif[(kn - 2) * ncolumn + column]);
+        float x2 = ruc_fmul_rn(
+            dtdzs[first], thdif[(kn - 1) * ncolumn + column]);
+        float ft = ruc_fadd_rn(
+            tso_in[(kn - 1) * ncolumn + column],
+            ruc_fmul_rn(
+                x1,
+                ruc_fsub_rn(
+                    tso_in[(kn - 2) * ncolumn + column],
+                    tso_in[(kn - 1) * ncolumn + column])));
+        ft = ruc_fsub_rn(
+            ft,
+            ruc_fmul_rn(
+                x2,
+                ruc_fsub_rn(
+                    tso_in[(kn - 1) * ncolumn + column],
+                    tso_in[kn * ncolumn + column])));
+        float denominator = ruc_fadd_rn(one, x1);
+        denominator = ruc_fadd_rn(denominator, x2);
+        denominator = ruc_fsub_rn(
+            denominator, ruc_fmul_rn(x2, cotso[step]));
+        cotso[step + 1] = ruc_fdiv_rn(x1, denominator);
+        rhtso[step + 1] = ruc_fdiv_rn(
+            ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[step])), denominator);
+    }
+
+    float rhcs = cap[column];
+    float h = mavail_a[column];
+    float trans = ruc_fdiv_rn(
+        ruc_fmul_rn(transum_a[column], drycan_a[column]),
+        zshalf[nroot_a[column]]);
+    float can = ruc_fadd_rn(wetcan_a[column], trans);
+    float umveg = ruc_fmul_rn(
+        ruc_fsub_rn(one, vegfrac_a[column]), soilres_a[column]);
+    float d1 = cotso[RUC_NZS_M2];
+    float d2 = rhtso[RUC_NZS_M2];
+    float tn = soilt_in[column];
+    float qgold = qvg_in[column];
+    float dzstop = ruc_fdiv_rn(
+        one, ruc_fsub_rn(zsmain[1], zsmain[0]));
+    float d9 = ruc_fmul_rn(
+        ruc_fmul_rn(thdif[column], rhcs), dzstop);
+    float d10 = ruc_fmul_rn(
+        ruc_fmul_rn(tkms_a[column], cp_air), rho_a[column]);
+    float r211 = ruc_fdiv_rn(ruc_fmul_rn(half_factor, conflx[column]), delt);
+    float r21 = ruc_fmul_rn(ruc_fmul_rn(r211, cp_air), rho_a[column]);
+    float depth_square = ruc_fmul_rn(dzstop, dzstop);
+    float denominator = ruc_fmul_rn(
+        ruc_fmul_rn(thdif[column], delt), depth_square);
+    float r22 = ruc_fdiv_rn(half_factor, denominator);
+    float tn2 = ruc_fmul_rn(tn, tn);
+    float tn4 = ruc_fmul_rn(tn2, tn2);
+    float r6 = ruc_fmul_rn(
+        ruc_fmul_rn(ruc_fmul_rn(emiss_a[column], stbolt), half_factor), tn4);
+    float r7 = ruc_fdiv_rn(r6, tn);
+    float d11 = ruc_fadd_rn(rnet_a[column], r6);
+    float tdenom = ruc_fmul_rn(
+        d9, ruc_fadd_rn(ruc_fsub_rn(one, d1), r22));
+    tdenom = ruc_fadd_rn(tdenom, d10);
+    tdenom = ruc_fadd_rn(tdenom, r21);
+    tdenom = ruc_fadd_rn(tdenom, r7);
+    float rain_heat_capacity = ruc_fmul_rn(
+        ruc_fmul_rn(rainf_a[column], cvw), prcpms_a[column]);
+    tdenom = ruc_fadd_rn(tdenom, rain_heat_capacity);
+    float fkq = ruc_fmul_rn(qkms_a[column], rho_a[column]);
+    float r210 = ruc_fmul_rn(r211, rho_a[column]);
+    float c = ruc_fmul_rn(
+        ruc_fmul_rn(vegfrac_a[column], fkq), can);
+    float cc = ruc_fdiv_rn(ruc_fmul_rn(c, xlv), tdenom);
+    float aa_inner = ruc_fadd_rn(ruc_fmul_rn(fkq, umveg), r210);
+    float aa = ruc_fdiv_rn(ruc_fmul_rn(xlv, aa_inner), tdenom);
+
+    float humidity_inner = ruc_fadd_rn(ruc_fmul_rn(fkq, umveg), c);
+    humidity_inner = ruc_fmul_rn(qvatm_a[column], humidity_inner);
+    humidity_inner = ruc_fadd_rn(
+        humidity_inner, ruc_fmul_rn(r210, qgold));
+    float numerator = ruc_fmul_rn(d10, tabs_a[column]);
+    numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(r21, tn));
+    numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(xlv, humidity_inner));
+    numerator = ruc_fadd_rn(numerator, d11);
+    float conduction = ruc_fadd_rn(d2, ruc_fmul_rn(r22, tn));
+    numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(d9, conduction));
+    float rain_temperature = ruc_fused_max(freeze, tabs_a[column]);
+    numerator = ruc_fadd_rn(
+        numerator, ruc_fmul_rn(rain_heat_capacity, rain_temperature));
+    float bb = ruc_fdiv_rn(numerator, tdenom);
+    float aa1 = ruc_fadd_rn(aa, cc);
+    float pp = ruc_fmul_rn(patm_a[column], 1.0e3f);
+    aa1 = ruc_fdiv_rn(aa1, pp);
+    float qs1, ts1;
+    bool valid = ruc_vilka(tn, aa1, bb, pp, tbq, &qs1, &ts1);
+    float tx2 = ruc_fmul_rn(qvatm_a[column], ruc_fsub_rn(one, h));
+    float q1 = ruc_fadd_rn(tx2, ruc_fmul_rn(h, qs1));
+    float qvg, qsg, qcg;
+    if (valid && q1 >= qs1) {
+        qvg = qs1;
+        qsg = qs1;
+        qcg = ruc_fused_max(0.0f, ruc_fsub_rn(q1, qs1));
+    } else if (valid) {
+        bb = ruc_fsub_rn(bb, ruc_fmul_rn(aa, tx2));
+        aa = ruc_fdiv_rn(ruc_fadd_rn(ruc_fmul_rn(aa, h), cc), pp);
+        valid = ruc_vilka(tn, aa, bb, pp, tbq, &qs1, &ts1);
+        q1 = ruc_fadd_rn(tx2, ruc_fmul_rn(h, qs1));
+        if (valid && q1 >= qs1) {
+            qvg = qs1;
+            qsg = qs1;
+            qcg = ruc_fused_max(0.0f, ruc_fsub_rn(q1, qs1));
+        } else if (valid) {
+            qsg = qs1;
+            qvg = q1;
+            qcg = 0.0f;
+        }
+    }
+    if (!valid) {
+        float invalid = as_type<float>(0x7fc00000u);
+        for (int level = 0; level < RUC_NZS; ++level) {
+            tso_out[level * ncolumn + column] = invalid;
+        }
+        soilt_out[column] = invalid;
+        qvg_out[column] = invalid;
+        qsg_out[column] = invalid;
+        qcg_out[column] = invalid;
+        storage_out[column] = invalid;
+        return;
+    }
+
+    tso_out[column] = ts1;
+    for (int level = 1; level < RUC_NZS; ++level) {
+        int coefficient = RUC_NZS_M1 - level;
+        tso_out[level * ncolumn + column] = ruc_fadd_rn(
+            rhtso[coefficient],
+            ruc_fmul_rn(
+                cotso[coefficient],
+                tso_out[(level - 1) * ncolumn + column]));
+    }
+    float storage_coefficient = ruc_fadd_rn(
+        ruc_fmul_rn(ruc_fmul_rn(cp_air, rho_a[column]), r211),
+        ruc_fdiv_rn(
+            ruc_fmul_rn(ruc_fmul_rn(rhcs, zsmain[1]), half_factor), delt));
+    float storage = ruc_fmul_rn(
+        storage_coefficient, ruc_fsub_rn(ts1, tn));
+    storage = ruc_fadd_rn(
+        storage,
+        ruc_fmul_rn(
+            ruc_fmul_rn(ruc_fmul_rn(xlv, rho_a[column]), r211),
+            ruc_fsub_rn(qvg, qgold)));
+    storage = ruc_fsub_rn(
+        storage,
+        ruc_fmul_rn(
+            rain_heat_capacity, ruc_fsub_rn(rain_temperature, ts1)));
+    soilt_out[column] = ts1;
+    qvg_out[column] = qvg;
+    qsg_out[column] = qsg;
+    qcg_out[column] = qcg;
+    storage_out[column] = storage;
+}
+
+static inline void ruc_soil_finalize(
+    device const float* soilice,
+    device const float* tso,
+    device const float* told,
+    device const float* soilmois,
+    device const float* smold,
+    device float* keepfr,
+    device const float* thdif,
+    device const float* cap,
+    device const float* cst_in,
+    device const float* dew,
+    device const float* soilt,
+    device const float* qvg,
+    device const float* qsg,
+    device const float* qcg,
+    device const float* ett1_in,
+    device const float* wetcan,
+    device const float* soilres,
+    device const float* ras,
+    device const float* tkms,
+    device const float* rho,
+    device const float* tabs,
+    device const float* patm,
+    device const float* qkms,
+    device const float* qvatm,
+    device const float* vegfrac,
+    device const float* rnet,
+    device const float* prcpms,
+    device const float* storage,
+    float delt,
+    device float* cst_out,
+    device float* edir1_out,
+    device float* ec1_out,
+    device float* ett1_out,
+    device float* eeta_out,
+    device float* qfx_out,
+    device float* hfx_out,
+    device float* s_out,
+    device float* evapl_out,
+    device float* prcpl_out,
+    device float* fltot_out,
+    device float* smf_out,
+    int ncolumn,
+    int column)
+{
+
+    const float zero = 0.0f;
+    const float one = 1.0f;
+    const float xlv = 2.5e6f;
+    const float cp_air = 1004.5f;
+    const float rovcp = ruc_fdiv_rn(287.0f, cp_air);
+// >>> RUC_NZS DZSTOP >>>
+    // The ONE soil literal in this file that is a DEPTH rather than an
+    // extent, and the one the RUC_NZS sweep therefore walked past: it was
+    // `ruc_fsub_rn(0.01f, 0.0f)`, WRF's nine-level zsmain(2) - zsmain(1)
+    // written out.  Correct while nine was the only geometry; at six levels
+    // zsmain(2) - zsmain(1) is 0.05, so this kernel divided by 0.01 and
+    // returned a ground heat flux five times too large -- MEASURED, before
+    // the fix, as grdflx = -337.1 W m-2 against the host lane's -67.4 on
+    // the same column, exactly a factor of 5.  Every other site in this
+    // file already reads the table (:1667, :2702, :3495); this one now
+    // does too, which is all the fix is.
+    //
+    // At nine levels ruc_sfctmp_soil_layer_depth[1] IS 0.01f and [0] IS 0.00f, so
+    // the subtraction, the divide and every number downstream of them are
+    // unchanged -- tests/test_ruc_nzs_device.py measures that on the
+    // hardware.  The PTX is not unchanged (a __constant__ load where an
+    // immediate was), which is why the sentinel exists: it keeps
+    // tests/test_ruc_nzs_tier.py's inversion to the pre-lift file exact,
+    // and keeps the ladder's own no-op claim separate from this fix's.
+    constant float* zsmain = ruc_sfctmp_soil_layer_depth;
+    const float dzstop = ruc_fdiv_rn(one, ruc_fsub_rn(zsmain[1], zsmain[0]));
+// <<< RUC_NZS DZSTOP <<<
+
+    for (int level = 0; level < RUC_NZS; ++level) {
+        int index = level * ncolumn + column;
+        if (soilice[index] > zero) {
+            keepfr[index] = tso[index] > told[index]
+                    && soilmois[index] > smold[index]
+                ? one : zero;
+        }
+    }
+
+    float hft = ruc_fmul_rn(tkms[column], cp_air);
+    hft = ruc_fmul_rn(hft, rho[column]);
+    hft = ruc_fmul_rn(-hft, ruc_fsub_rn(tabs[column], soilt[column]));
+    // Same substitution, and this is the site that was MEASURED to diverge:
+    // hfx moved 1 ULP on 1 of 512 warm columns and 2 ULP on 13 of 4,096,
+    // which no 64-column gate could see.  See _RUC_PROVISIONAL_TRANSCENDENTALS.
+    float pressure_factor = ruc_powf_rn(
+        ruc_fdiv_rn(one, patm[column]), rovcp);
+    float hfx = ruc_fmul_rn(hft, pressure_factor);
+    float q1 = ruc_fmul_rn(qkms[column], ras[column]);
+    q1 = ruc_fmul_rn(-q1, ruc_fsub_rn(qvatm[column], qsg[column]));
+
+    float cst = cst_in[column];
+    float edir1;
+    float ec1;
+    float ett1 = ett1_in[column];
+    float eeta;
+    if (q1 <= zero) {
+        ec1 = zero;
+        edir1 = zero;
+        ett1 = zero;
+        eeta = -ruc_fmul_rn(rho[column], dew[column]);
+        float canopy_dew = ruc_fmul_rn(delt, dew[column]);
+        canopy_dew = ruc_fmul_rn(canopy_dew, ras[column]);
+        canopy_dew = ruc_fmul_rn(canopy_dew, vegfrac[column]);
+        cst = ruc_fadd_rn(cst, canopy_dew);
+    } else {
+        edir1 = ruc_fmul_rn(
+            soilres[column], ruc_fsub_rn(one, vegfrac[column]));
+        edir1 = ruc_fmul_rn(edir1, qkms[column]);
+        edir1 = ruc_fmul_rn(edir1, ras[column]);
+        edir1 = ruc_fmul_rn(
+            -edir1, ruc_fsub_rn(qvatm[column], qvg[column]));
+        ec1 = ruc_fmul_rn(q1, wetcan[column]);
+        ec1 = ruc_fmul_rn(ec1, vegfrac[column]);
+        cst = ruc_fused_max(zero, ruc_fsub_rn(cst, ruc_fmul_rn(ec1, delt)));
+        float total_evaporation = ruc_fadd_rn(edir1, ec1);
+        total_evaporation = ruc_fadd_rn(total_evaporation, ett1);
+        eeta = ruc_fmul_rn(total_evaporation, 1.0e3f);
+    }
+
+    float soil_heat = ruc_fmul_rn(thdif[column], cap[column]);
+    soil_heat = ruc_fmul_rn(soil_heat, dzstop);
+    soil_heat = ruc_fmul_rn(
+        soil_heat, ruc_fsub_rn(tso[column], tso[ncolumn + column]));
+    float balance = ruc_fsub_rn(rnet[column], hft);
+    balance = ruc_fsub_rn(balance, ruc_fmul_rn(xlv, eeta));
+    balance = ruc_fsub_rn(balance, soil_heat);
+    balance = ruc_fsub_rn(balance, storage[column]);
+
+    cst_out[column] = cst;
+    edir1_out[column] = edir1;
+    ec1_out[column] = ec1;
+    ett1_out[column] = ett1;
+    eeta_out[column] = eeta;
+    qfx_out[column] = ruc_fmul_rn(xlv, eeta);
+    hfx_out[column] = hfx;
+    s_out[column] = soil_heat;
+    evapl_out[column] = eeta;
+    prcpl_out[column] = prcpms[column];
+    fltot_out[column] = balance;
+    smf_out[column] = zero;
+}
+
+
+// The source CUDA wrappers use binary64 libm here; the local glibc float
+// expm1 reduction is a stable Metal substitute but is not bitwise identical.
+static inline float ruc_log10f_rn(float value) { return log10(value); }
+static inline float ruc_fnegate(float value) { return as_type<float>(as_type<uint>(value) ^ 0x80000000u); }
+static inline float ruc_expf_glibc(float value) { return ruc_expf_rn(value); }
+// Stable glibc-style float expm1 reduction; the source CUDA wrapper uses double.
+static inline float ruc_expm1f_glibc(float x)
+{
+    const float ln2_hi = as_type<float>(0x3F317180u);
+    const float ln2_lo = as_type<float>(0x3717F7D1u);
+    const float invln2 = as_type<float>(0x3FB8AA3Bu);
+    const float q1 = as_type<float>(0xBD088889u);
+    const float q2 = as_type<float>(0x3AD00D01u);
+    const float q3 = as_type<float>(0xB8A670CDu);
+    const float q4 = as_type<float>(0x36867E54u);
+    const float q5 = as_type<float>(0xB457EDBBu);
+    const float tiny = 1.0e-30f;
+    const uint word = as_type<uint>(x);
+    const uint sign = word & 0x80000000u;
+    const uint magnitude = word & 0x7fffffffu;
+    if (magnitude >= 0x4195b844u) {
+        if (magnitude >= 0x42b17218u) {
+            if (magnitude > 0x7f800000u)
+                return ruc_fadd_rn(x, x);
+            if (magnitude == 0x7f800000u)
+                return sign == 0u ? x : -1.0f;
+            if (x > 8.8721679688e01f)
+                return as_type<float>(0x7f800000u);
+        }
+        if (sign != 0u) return ruc_fsub_rn(tiny, 1.0f);
+    }
+    int k;
+    float correction;
+    if (magnitude > 0x3eb17218u) {
+        float hi, lo;
+        if (magnitude < 0x3f851592u) {
+            if (sign == 0u) {
+                hi = ruc_fsub_rn(x, ln2_hi);
+                lo = ln2_lo;
+                k = 1;
+            } else {
+                hi = ruc_fadd_rn(x, ln2_hi);
+                lo = ruc_fnegate(ln2_lo);
+                k = -1;
+            }
+        } else {
+            k = int(ruc_fadd_rn(ruc_fmul_rn(invln2, x),
+                                  sign == 0u ? 0.5f : -0.5f));
+            const float scale = float(k);
+            hi = ruc_fsub_rn(x, ruc_fmul_rn(scale, ln2_hi));
+            lo = ruc_fmul_rn(scale, ln2_lo);
+        }
+        x = ruc_fsub_rn(hi, lo);
+        correction = ruc_fsub_rn(ruc_fsub_rn(hi, x), lo);
+    } else if (magnitude < 0x33000000u) {
+        return x;
+    } else {
+        k = 0;
+        correction = 0.0f;
+    }
+
+    const float hfx = ruc_fmul_rn(0.5f, x);
+    const float hxs = ruc_fmul_rn(x, hfx);
+    float polynomial = ruc_fadd_rn(q4, ruc_fmul_rn(hxs, q5));
+    polynomial = ruc_fadd_rn(q3, ruc_fmul_rn(hxs, polynomial));
+    polynomial = ruc_fadd_rn(q2, ruc_fmul_rn(hxs, polynomial));
+    polynomial = ruc_fadd_rn(q1, ruc_fmul_rn(hxs, polynomial));
+    const float r1 = ruc_fadd_rn(1.0f,
+        ruc_fmul_rn(hxs, polynomial));
+    float t = ruc_fsub_rn(3.0f, ruc_fmul_rn(r1, hfx));
+    float e = ruc_fmul_rn(hxs, ruc_fdiv_rn(
+        ruc_fsub_rn(r1, t),
+        ruc_fsub_rn(6.0f, ruc_fmul_rn(x, t))));
+    if (k == 0) return ruc_fsub_rn(x,
+        ruc_fsub_rn(ruc_fmul_rn(x, e), hxs));
+    e = ruc_fsub_rn(ruc_fmul_rn(x,
+        ruc_fsub_rn(e, correction)), correction);
+    e = ruc_fsub_rn(e, hxs);
+    if (k == -1) return ruc_fsub_rn(
+        ruc_fmul_rn(0.5f, ruc_fsub_rn(x, e)), 0.5f);
+    if (k == 1) {
+        if (x < -0.25f)
+            return ruc_fmul_rn(-2.0f,
+                ruc_fsub_rn(e, ruc_fadd_rn(x, 0.5f)));
+        return ruc_fadd_rn(1.0f,
+            ruc_fmul_rn(2.0f, ruc_fsub_rn(x, e)));
+    }
+    float y;
+    if (k <= -2 || k > 56) {
+        y = ruc_fsub_rn(1.0f, ruc_fsub_rn(e, x));
+        y = as_type<float>(as_type<uint>(y) + (uint(k) << 23));
+        return ruc_fsub_rn(y, 1.0f);
+    }
+    if (k < 23) {
+        t = as_type<float>(0x3f800000u - (0x01000000u >> uint(k)));
+        y = ruc_fsub_rn(t, ruc_fsub_rn(e, x));
+    } else {
+        t = as_type<float>(uint(0x7f - k) << 23);
+        y = ruc_fadd_rn(ruc_fsub_rn(x, ruc_fadd_rn(e, t)), 1.0f);
+    }
+    return as_type<float>(as_type<uint>(y) + (uint(k) << 23));
+}
+
+constant float ruc_sncovfac[30] = {
+    0.030f, 0.030f, 0.030f, 0.030f, 0.030f,
+    0.016f, 0.016f, 0.020f, 0.020f, 0.020f,
+    0.020f, 0.014f, 0.042f, 0.026f, 0.030f,
+    0.016f, 0.030f, 0.030f, 0.030f, 0.030f,
+    0.000f, 0.000f, 0.000f, 0.000f, 0.000f,
+    0.000f, 0.000f, 0.000f, 0.000f, 0.000f
+};
+
+
+
+static inline float ruc_qsn_lookup(float tn, device const float* table)
+{
+    float raw = ruc_fsub_rn(tn, 173.15f);
+    raw = ruc_fdiv_rn(raw, 0.05f);
+    raw = ruc_fadd_rn(raw, 1.0f);
+    int index = int(raw);
+    if (index < 1) {
+        index = 1;
+        raw = 1.0f;
+    }
+    if (index > 5000) {
+        index = 5000;
+        raw = 5001.0f;
+    }
+    float lower = table[index - 1];
+    float weight = ruc_fsub_rn(raw, float(index));
+    float value = ruc_fsub_rn(table[index], lower);
+    value = ruc_fmul_rn(value, weight);
+    return ruc_fadd_rn(value, lower);
+}
+
+static inline float ruc_tanhf_glibc(float x)
+{
+    const float one = 1.0f;
+    const float two = 2.0f;
+    float magnitude = fabs(x);
+    float z;
+    if (magnitude < 22.0f) {
+        if (magnitude < 3.7252902984619141e-09f) {
+            // tanh(tiny) == tiny, in fdlibm's inexact-flag form.
+            return ruc_fmul_rn(x, ruc_fadd_rn(one, x));
+        }
+        float doubled = ruc_fmul_rn(two, magnitude);
+        float t;
+        if (magnitude >= one) {
+            t = ruc_expm1f_glibc(doubled);
+            z = ruc_fsub_rn(one, ruc_fdiv_rn(two, ruc_fadd_rn(t, two)));
+        } else {
+            t = ruc_expm1f_glibc(-doubled);
+            z = ruc_fdiv_rn(-t, ruc_fadd_rn(t, two));
+        }
+    } else {
+        // fdlibm returns one-tiny here, which rounds to exactly one.
+        z = one;
+    }
+    return (x >= 0.0f) ? z : -z;
+}
+
+static inline void ruc_tanhf_glibc_array(
+    device const float* x,
+    device float* out,
+    const int ncolumn,
+    int column)
+{
+    out[column] = ruc_tanhf_glibc(x[column]);
+}
+
+static inline void ruc_soil_canopy_setup(
+    device const float* soilmois,
+    device const float* qvatm_a,
+    device const float* qsg_a,
+    device const float* qvg_a,
+    device const float* qkms_a,
+    device const float* cst_a,
+    device const float* sat_a,
+    device const float* cn_a,
+    device const float* qmin_a,
+    device const float* reference_a,
+    device float* dew_out,
+    device float* wetcan_out,
+    device float* drycan_out,
+    device float* soilres_out,
+    int ncolumn,
+    int column)
+{
+
+    const float zero = 0.0f;
+    const float one = 1.0f;
+    const float quarter = 0.25f;
+    float dew = zero;
+    if (qvatm_a[column] >= qsg_a[column]) {
+        dew = ruc_fmul_rn(
+            qkms_a[column],
+            ruc_fsub_rn(qvatm_a[column], qsg_a[column]));
+    }
+    float ratio = ruc_fdiv_rn(cst_a[column], sat_a[column]);
+    ratio = ruc_fused_max(zero, ratio);
+    // float64 evaluated and rounded once, matching the host transcription,
+    // ruc_snow_soil_canopy_setup below, and every other ** in this file.  The
+    // CUDA device libm powf and numpy's float32 pow are two DIFFERENT
+    // non-glibc functions -- they disagree on 6.3% of the arguments this site
+    // spans -- so leaving one on each side is a divergence waiting for a wide
+    // enough grid.  See _RUC_PROVISIONAL_TRANSCENDENTALS.
+    float wetcan = ruc_fused_min(quarter, ruc_powf_rn(ratio, cn_a[column]));
+    float drycan = ruc_fsub_rn(one, wetcan);
+
+    float fc = ruc_fused_max(
+        qmin_a[column], ruc_fmul_rn(reference_a[column], 0.5f));
+    float total_top = ruc_fadd_rn(soilmois[column], qmin_a[column]);
+    float soilres;
+    if (total_top > fc
+            || ruc_fsub_rn(qvatm_a[column], qvg_a[column]) > zero) {
+        soilres = one;
+    } else {
+        float fex = ruc_fdiv_rn(total_top, fc);
+        fex = ruc_fused_max(0.01f, ruc_fused_min(one, fex));
+        float resistance = ruc_fsub_rn(
+            one, cos(ruc_fmul_rn(3.141592653589793f, fex)));
+        resistance = ruc_fmul_rn(resistance, resistance);
+        soilres = ruc_fmul_rn(quarter, resistance);
+    }
+    dew_out[column] = dew;
+    wetcan_out[column] = wetcan;
+    drycan_out[column] = drycan;
+    soilres_out[column] = soilres;
+}
+
+static inline void ruc_soil_properties(
+    device const float* fwsat,
+    device const float* lwsat,
+    device const float* tav,
+    device const float* keepfr,
+    device const float* soilmois,
+    device const float* soiliqw,
+    device const float* soilice,
+    device const float* soilmoism,
+    device const float* soiliqwm,
+    device const float* soilicem,
+    device const float* qwrtz_a,
+    device const float* rhocs_a,
+    device const float* dqm_a,
+    device const float* qmin_a,
+    device const float* psis_a,
+    device const float* bclh_a,
+    device const float* ksat_a,
+    float riw,
+    device float* thdif,
+    device float* diffu,
+    device float* hydro,
+    device float* cap,
+    int ncolumn,
+    int column,
+    uint forms)
+{
+
+    const float xlmelt = 3.35e5f;
+    const float heat_air = 1004.5f;
+    const float gravity = 9.81f;
+    const float heat_water = 4.183e6f;
+    const float heat_ice = 1.89e6f;
+    const float conductivity_quartz = 7.7f;
+    const float conductivity_ice = 2.2f;
+    const float conductivity_water = 0.57f;
+    const float minimum = 1.0e-8f;
+
+    float qwrtz = qwrtz_a[column];
+    float rhocs = rhocs_a[column];
+    float dqm = dqm_a[column];
+    float qmin = qmin_a[column];
+    float psis = psis_a[column];
+    float bclh = bclh_a[column];
+    float ksat = ksat_a[column];
+    float ws = ruc_fadd_rn(dqm, qmin);
+    float x1 = ruc_fdiv_rn(xlmelt, ruc_fmul_rn(gravity, psis));
+    float x2 = ruc_fmul_rn(ruc_fdiv_rn(x1, bclh), ws);
+    float x4 = ruc_fdiv_rn(ruc_fadd_rn(bclh, 1.0f), bclh);
+    float gamd = ruc_fmul_rn(ruc_fsub_rn(1.0f, ws), 2700.0f);
+    float kdry = ruc_fdiv_rn(
+        ruc_fadd_rn(ruc_fmul_rn(0.135f, gamd), 64.7f),
+        ruc_fsub_rn(2700.0f, ruc_fmul_rn(0.947f, gamd)));
+    float mineral = RUC_SOILPROP_V461 ? (qwrtz > 0.2f ? 2.0f : 3.0f) : 2.0f;
+    float kas = ruc_fmul_rn(
+        ruc_powf_rn(conductivity_quartz, qwrtz),
+        ruc_powf_rn(mineral, ruc_fsub_rn(1.0f, qwrtz)));
+
+    for (int level = 0; level < RUC_NZS; ++level) {
+        int index = level * ncolumn + column;
+        thdif[index] = 0.0f;
+        diffu[index] = 0.0f;
+        hydro[index] = 0.0f;
+        cap[index] = 0.0f;
+    }
+
+    for (int level = 0; level < RUC_NZS_M1; ++level) {
+        int index = level * ncolumn + column;
+        float middle_temperature = tav[index];
+        float tn = ruc_fsub_rn(middle_temperature, 273.15f);
+        float middle_ice = soilicem[index];
+        float wd = ruc_fsub_rn(ws, ruc_fmul_rn(riw, middle_ice));
+        float middle_liquid = soiliqwm[index];
+        float first_ratio = ruc_fdiv_rn(
+            wd, ruc_fadd_rn(middle_liquid, qmin));
+        float psif = ruc_fmul_rn(
+            ruc_fmul_rn(ruc_fmul_rn(psis, 100.0f), ruc_powf_rn(first_ratio, bclh)),
+            ruc_powf_rn(ruc_fdiv_rn(ws, wd), 3.0f));
+        float pf = ruc_log10f_rn(fabs(psif));
+        // WRF also evaluates the legacy McCumber conductivity here, but the
+        // active Johansen path below is the only consumer of conductivity.
+
+        float detal = 0.0f;
+        if (middle_ice != 0.0f && tn < 0.0f) {
+            detal = ruc_fmul_rn(
+                ruc_fdiv_rn(
+                    ruc_fmul_rn(273.15f, x2),
+                    ruc_fmul_rn(middle_temperature, middle_temperature)),
+                ruc_powf_rn(
+                    ruc_fdiv_rn(
+                        middle_temperature, ruc_fmul_rn(x1, tn)),
+                    x4));
+            if (keepfr[index] == 1.0f) detal = 0.0f;
+        }
+
+        float kasat = ruc_powf_rn(kas, ruc_fsub_rn(1.0f, ws));
+        kasat = ruc_fmul_rn(kasat, ruc_powf_rn(conductivity_ice, fwsat[index]));
+        kasat = ruc_fmul_rn(kasat, ruc_powf_rn(conductivity_water, lwsat[index]));
+        float middle_moisture = soilmoism[index];
+        float x5 = ruc_fdiv_rn(ruc_fadd_rn(middle_moisture, qmin), ws);
+        float ke = middle_ice == 0.0f
+            ? ruc_fadd_rn(ruc_log10f_rn(ruc_fused_max(0.101f, x5)), 1.0f)
+            : x5;
+        float kjpl = ruc_fadd_rn(
+            ruc_fmul_rn(ke, ruc_fsub_rn(kasat, kdry)), kdry);
+
+        float capacity = ruc_fmul_rn(ruc_fsub_rn(1.0f, ws), rhocs);
+        capacity = ruc_fadd_rn(
+            capacity,
+            ruc_fmul_rn(ruc_fadd_rn(middle_liquid, qmin), heat_water));
+        capacity = ruc_fadd_rn(capacity, ruc_fmul_rn(middle_ice, heat_ice));
+        capacity = ruc_fadd_rn(
+            capacity,
+            ruc_fmul_rn(
+                ruc_fmul_rn(ruc_fsub_rn(dqm, middle_moisture), heat_air),
+                1.2f));
+        capacity = ruc_fsub_rn(
+            capacity, ruc_fmul_rn(ruc_fmul_rn(detal, 1.0e3f), xlmelt));
+        cap[index] = capacity;
+
+        float ice = ruc_fmul_rn(riw, middle_ice);
+        float diffusivity = 0.0f;
+        if (ruc_fsub_rn(ws, ice) >= 0.12f) {
+            float h;
+            float porosity;
+            if (RUC_SOILPROP_V461) {
+                h = ruc_fused_max(
+                    0.0f,
+                    ruc_fdiv_rn(
+                        ruc_fsub_rn(ruc_fadd_rn(middle_moisture, qmin), ice),
+                        ruc_fused_max(minimum, ruc_fsub_rn(ws, ice))));
+                porosity = ws;
+            } else {
+                h = ruc_fused_max(
+                    0.0f,
+                    ruc_fdiv_rn(
+                        ruc_fsub_rn(middle_moisture, ice),
+                        ruc_fused_max(minimum, ruc_fsub_rn(dqm, ice))));
+                porosity = dqm;
+            }
+            float facd = 1.0f;
+            if (ice != 0.0f) {
+                facd = ruc_fsub_rn(
+                    1.0f, ruc_fdiv_rn(ice, ruc_fused_max(minimum, middle_moisture)));
+            }
+            float ame = ruc_fused_max(minimum, ruc_fsub_rn(porosity, ice));
+            diffusivity = ruc_fmul_rn(ruc_fmul_rn(-bclh, ksat), psis);
+            diffusivity = ruc_fdiv_rn(diffusivity, ame);
+            diffusivity = ruc_fmul_rn(
+                diffusivity, ruc_powf_rn(ruc_fdiv_rn(porosity, ame), 3.0f));
+            diffusivity = ruc_fmul_rn(
+                diffusivity, ruc_powf_rn(h, ruc_fadd_rn(bclh, 2.0f)));
+            diffusivity = ruc_fmul_rn(diffusivity, facd);
+        }
+        diffu[index] = diffusivity;
+        thdif[index] = ruc_fdiv_rn(kjpl, capacity);
+    }
+
+    for (int level = 0; level < RUC_NZS; ++level) {
+        int index = level * ncolumn + column;
+        float level_ice = soilice[index];
+        float ice = ruc_fmul_rn(riw, level_ice);
+        if (ruc_fsub_rn(ws, ice) < 0.12f) continue;
+        float fach = 1.0f;
+        if (level_ice != 0.0f) {
+            fach = ruc_fsub_rn(
+                1.0f,
+                ruc_fdiv_rn(ice, ruc_fused_max(minimum, soilmois[index])));
+        }
+        float am = ruc_fused_max(
+            minimum, ruc_fsub_rn(RUC_SOILPROP_V461 ? ws : dqm, ice));
+        float conductivity = ruc_fdiv_rn(ksat, am);
+        float exponent = ruc_fadd_rn(ruc_fmul_rn(2.0f, bclh), 2.0f);
+        conductivity = ruc_fmul_rn(
+            conductivity,
+            ruc_powf_rn(ruc_fdiv_rn(soiliqw[index], am), exponent));
+        conductivity = ruc_fmul_rn(conductivity, fach);
+        conductivity = ruc_fused_min(ksat, conductivity);
+        if (conductivity < 1.0e-10f) conductivity = 0.0f;
+        hydro[index] = conductivity;
+    }
+}
+
+static inline void ruc_sea_ice_step(
+    device const float* capice,
+    device const float* thdifice,
+    device const float* tso_in,
+    device const float* prcpms_a,
+    device const float* rainf_a,
+    device const float* patm_a,
+    device const float* qvatm_a,
+    device const float* emiss_a,
+    device const float* rnet_a,
+    device const float* qkms_a,
+    device const float* tkms_a,
+    device const float* rho_a,
+    device const float* tabs_a,
+    device const float* soilt_in,
+    device const float* qvg_in,
+    device const float* qsg_in,
+    device const float* tbq,
+    float delt,
+    // ``0.5*dz8w(i,1,j)`` -- half the lowest model layer, which is a
+    // PER-COLUMN depth on a terrain-following coordinate.  WRF passes it
+    // as a scalar only because ``sfctmp`` is called from inside DO j/DO i.
+    device const float* conflx,
+    float cvw,
+    int myj,
+    device float* tso_out,
+    device float* dew_out,
+    device float* soilt_out,
+    device float* qvg_out,
+    device float* qsg_out,
+    device float* qcg_out,
+    device float* eeta_out,
+    device float* qfx_out,
+    device float* hfx_out,
+    device float* s_out,
+    device float* evapl_out,
+    device float* prcpl_out,
+    device float* fltot_out,
+    int ncolumn,
+    int column)
+{
+
+    const float zero = 0.0f;
+    const float one = 1.0f;
+    const float half_factor = 0.5f;
+    // cp and rovcp arrive from module_model_constants; the pinned RUC lane
+    // fixes them at these values and the oracle carries the same bytes.
+    const float cp_air = 1004.5f;
+    const float rovcp = ruc_fdiv_rn(287.0f, cp_air);
+    // module_model_constants XLS, the latent heat of sublimation.
+    const float xls = 2.85e6f;
+    const float stbolt = 5.67051e-8f;
+    const float freeze = 273.15f;
+    // module_sf_ruclsm.F:3032 - sice caps every ice temperature here and
+    // does not model the melt itself.
+    const float ice_cap = 271.4f;
+    // p1000mb*0.00001 from the :3050-3051 Exner factor.
+    const float reference = ruc_fmul_rn(100000.0f, 0.00001f);
+
+    // share/module_soil_pre.F:1153-1194 nine-level RUC depths, and the
+    // lsmruc-side zshalf/dtdzs construction sice consumes.
+    constant float* zsmain = ruc_sfctmp_soil_layer_depth;
+    float zshalf[RUC_NZS];
+    float dtdzs[RUC_DTDZS_LEN];
+    zshalf[0] = zero;
+    for (int level = 1; level < RUC_NZS; ++level) {
+        zshalf[level] = ruc_fmul_rn(
+            ruc_fadd_rn(zsmain[level - 1], zsmain[level]), half_factor);
+    }
+    for (int index = 0; index < RUC_DTDZS_LEN; ++index) dtdzs[index] = zero;
+    for (int fortran_level = 2; fortran_level < RUC_NZS; ++fortran_level) {
+        int first = 2 * fortran_level - 3;
+        int second = first + 1;
+        int level = fortran_level - 1;
+        float x = ruc_fdiv_rn(
+            ruc_fdiv_rn(delt, 2.0f),
+            ruc_fsub_rn(zshalf[level + 1], zshalf[level]));
+        dtdzs[first - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level], zsmain[level - 1]));
+        dtdzs[second - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level + 1], zsmain[level]));
+    }
+
+    // module_sf_ruclsm.F:2964-2967 prologue.
+    float prcpl = prcpms_a[column];
+    float ras = ruc_fmul_rn(rho_a[column], 1.0e-3f);
+    float dzstop = ruc_fdiv_rn(one, ruc_fsub_rn(zsmain[1], zsmain[0]));
+
+    // module_sf_ruclsm.F:2973-2989 upward tridiagonal sweep.
+    float cotso[RUC_NZS] = {0.0f};
+    float rhtso[RUC_NZS] = {0.0f};
+    rhtso[0] = tso_in[RUC_NZS_M1 * ncolumn + column];
+    for (int step = 0; step < RUC_NZS_M2; ++step) {
+        int kn = RUC_NZS_M1 - step;
+        int first = 2 * kn - 3;
+        float x1 = ruc_fmul_rn(
+            dtdzs[first - 1], thdifice[(kn - 2) * ncolumn + column]);
+        float x2 = ruc_fmul_rn(
+            dtdzs[first], thdifice[(kn - 1) * ncolumn + column]);
+        float ft = ruc_fadd_rn(
+            tso_in[(kn - 1) * ncolumn + column],
+            ruc_fmul_rn(
+                x1,
+                ruc_fsub_rn(
+                    tso_in[(kn - 2) * ncolumn + column],
+                    tso_in[(kn - 1) * ncolumn + column])));
+        ft = ruc_fsub_rn(
+            ft,
+            ruc_fmul_rn(
+                x2,
+                ruc_fsub_rn(
+                    tso_in[(kn - 1) * ncolumn + column],
+                    tso_in[kn * ncolumn + column])));
+        float denominator = ruc_fadd_rn(one, x1);
+        denominator = ruc_fadd_rn(denominator, x2);
+        denominator = ruc_fsub_rn(
+            denominator, ruc_fmul_rn(x2, cotso[step]));
+        cotso[step + 1] = ruc_fdiv_rn(x1, denominator);
+        rhtso[step + 1] = ruc_fdiv_rn(
+            ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[step])), denominator);
+    }
+
+    // module_sf_ruclsm.F:2991-3016 heat balance (Smirnova et al. 1996).
+    float rhcs = capice[column];
+    float d1 = cotso[RUC_NZS_M2];
+    float d2 = rhtso[RUC_NZS_M2];
+    float tn = soilt_in[column];
+    float d9 = ruc_fmul_rn(
+        ruc_fmul_rn(thdifice[column], rhcs), dzstop);
+    float d10 = ruc_fmul_rn(
+        ruc_fmul_rn(tkms_a[column], cp_air), rho_a[column]);
+    float r211 = ruc_fdiv_rn(ruc_fmul_rn(half_factor, conflx[column]), delt);
+    float r21 = ruc_fmul_rn(ruc_fmul_rn(r211, cp_air), rho_a[column]);
+    float depth_square = ruc_fmul_rn(dzstop, dzstop);
+    float denominator = ruc_fmul_rn(
+        ruc_fmul_rn(thdifice[column], delt), depth_square);
+    float r22 = ruc_fdiv_rn(half_factor, denominator);
+    float tn2 = ruc_fmul_rn(tn, tn);
+    float tn4 = ruc_fmul_rn(tn2, tn2);
+    float r6 = ruc_fmul_rn(
+        ruc_fmul_rn(ruc_fmul_rn(emiss_a[column], stbolt), half_factor), tn4);
+    float r7 = ruc_fdiv_rn(r6, tn);
+    float d11 = ruc_fadd_rn(rnet_a[column], r6);
+    float tdenom = ruc_fmul_rn(
+        d9, ruc_fadd_rn(ruc_fsub_rn(one, d1), r22));
+    tdenom = ruc_fadd_rn(tdenom, d10);
+    tdenom = ruc_fadd_rn(tdenom, r21);
+    tdenom = ruc_fadd_rn(tdenom, r7);
+    float rain_heat_capacity = ruc_fmul_rn(
+        ruc_fmul_rn(rainf_a[column], cvw), prcpms_a[column]);
+    tdenom = ruc_fadd_rn(tdenom, rain_heat_capacity);
+    float fkq = ruc_fmul_rn(qkms_a[column], rho_a[column]);
+    float r210 = ruc_fmul_rn(r211, rho_a[column]);
+    float aa = ruc_fdiv_rn(ruc_fmul_rn(xls, ruc_fadd_rn(fkq, r210)), tdenom);
+
+    float humidity_inner = ruc_fmul_rn(qvatm_a[column], fkq);
+    humidity_inner = ruc_fadd_rn(
+        humidity_inner, ruc_fmul_rn(r210, qvg_in[column]));
+    float numerator = ruc_fmul_rn(d10, tabs_a[column]);
+    numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(r21, tn));
+    numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(xls, humidity_inner));
+    numerator = ruc_fadd_rn(numerator, d11);
+    float conduction = ruc_fadd_rn(d2, ruc_fmul_rn(r22, tn));
+    numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(d9, conduction));
+    float rain_temperature = ruc_fused_max(freeze, tabs_a[column]);
+    numerator = ruc_fadd_rn(
+        numerator, ruc_fmul_rn(rain_heat_capacity, rain_temperature));
+    float bb = ruc_fdiv_rn(numerator, tdenom);
+    float aa1 = aa;
+    float pp = ruc_fmul_rn(patm_a[column], 1.0e3f);
+    aa1 = ruc_fdiv_rn(aa1, pp);
+
+    // module_sf_ruclsm.F:3027-3033.  Sea ice is always saturated, so sice
+    // takes the single vilka solution without soiltemp's h-weighted retry.
+    float qgold = qsg_in[column];
+    float qs1, ts1;
+    if (!ruc_vilka(tn, aa1, bb, pp, tbq, &qs1, &ts1)) {
+        float invalid = as_type<float>(0x7fc00000u);
+        for (int level = 0; level < RUC_NZS; ++level) {
+            tso_out[level * ncolumn + column] = invalid;
+        }
+        dew_out[column] = invalid;
+        soilt_out[column] = invalid;
+        qvg_out[column] = invalid;
+        qsg_out[column] = invalid;
+        qcg_out[column] = invalid;
+        eeta_out[column] = invalid;
+        qfx_out[column] = invalid;
+        hfx_out[column] = invalid;
+        s_out[column] = invalid;
+        evapl_out[column] = invalid;
+        prcpl_out[column] = invalid;
+        fltot_out[column] = invalid;
+        return;
+    }
+    float qvg = qs1;
+    float qsg = qs1;
+    tso_out[column] = ruc_fused_min(ice_cap, ts1);
+    float qcg = zero;
+    float soilt = tso_out[column];
+
+    // module_sf_ruclsm.F:3037-3041 downward substitution, capped level by
+    // level exactly as WRF caps it.
+    for (int level = 1; level < RUC_NZS; ++level) {
+        int coefficient = RUC_NZS_M1 - level;
+        tso_out[level * ncolumn + column] = ruc_fused_min(
+            ice_cap,
+            ruc_fadd_rn(
+                rhtso[coefficient],
+                ruc_fmul_rn(
+                    cotso[coefficient],
+                    tso_out[(level - 1) * ncolumn + column])));
+    }
+    float dew = zero;
+
+    // module_sf_ruclsm.F:3049-3052 surface flux diagnostics.
+    float hft = ruc_fmul_rn(tkms_a[column], cp_air);
+    hft = ruc_fmul_rn(hft, rho_a[column]);
+    hft = ruc_fmul_rn(hft, ruc_fsub_rn(tabs_a[column], soilt));
+    // Same substitution as ruc_soil_finalize, and as ruc_snow_sea_ice_step
+    // below; see _RUC_PROVISIONAL_TRANSCENDENTALS.
+    float exner = ruc_powf_rn(ruc_fdiv_rn(reference, patm_a[column]), rovcp);
+    float hfx = -ruc_fmul_rn(hft, exner);
+    hft = -hft;
+    float q1 = ruc_fmul_rn(qkms_a[column], ras);
+    q1 = -ruc_fmul_rn(q1, ruc_fsub_rn(qvatm_a[column], qsg));
+
+    // module_sf_ruclsm.F:3053-3089.  Both branches recompute eeta after
+    // qfx, so the qfx-side value never leaves the branch.
+    float eeta;
+    float qfx;
+    if (q1 <= zero) {
+        if (myj) {
+            eeta = ruc_fmul_rn(qkms_a[column], ras);
+            eeta = -ruc_fmul_rn(
+                eeta,
+                ruc_fsub_rn(
+                    ruc_fdiv_rn(
+                        qvatm_a[column],
+                        ruc_fadd_rn(one, qvatm_a[column])),
+                    ruc_fdiv_rn(qsg, ruc_fadd_rn(one, qsg))));
+            eeta = ruc_fmul_rn(eeta, 1.0e3f);
+        } else {
+            dew = ruc_fmul_rn(
+                qkms_a[column], ruc_fsub_rn(qvatm_a[column], qsg));
+            eeta = -ruc_fmul_rn(rho_a[column], dew);
+        }
+        qfx = ruc_fmul_rn(xls, eeta);
+        eeta = -ruc_fmul_rn(rho_a[column], dew);
+    } else {
+        if (myj) {
+            eeta = ruc_fmul_rn(qkms_a[column], ras);
+            eeta = -ruc_fmul_rn(
+                eeta,
+                ruc_fsub_rn(
+                    ruc_fdiv_rn(
+                        qvatm_a[column],
+                        ruc_fadd_rn(one, qvatm_a[column])),
+                    ruc_fdiv_rn(qvg, ruc_fadd_rn(one, qvg))));
+            eeta = ruc_fmul_rn(eeta, 1.0e3f);
+        } else {
+            eeta = ruc_fmul_rn(q1, 1.0e3f);
+        }
+        qfx = ruc_fmul_rn(xls, eeta);
+        eeta = ruc_fmul_rn(q1, 1.0e3f);
+    }
+    float evapl = eeta;
+
+    // module_sf_ruclsm.F:3092-3100 storage and the surface heat residual.
+    float storage = ruc_fmul_rn(
+        ruc_fmul_rn(thdifice[column], rhcs), dzstop);
+    storage = ruc_fmul_rn(
+        storage,
+        ruc_fsub_rn(tso_out[column], tso_out[ncolumn + column]));
+    float x = ruc_fadd_rn(
+        ruc_fmul_rn(ruc_fmul_rn(cp_air, rho_a[column]), r211),
+        ruc_fdiv_rn(
+            ruc_fmul_rn(ruc_fmul_rn(rhcs, zsmain[1]), half_factor), delt));
+    x = ruc_fmul_rn(x, ruc_fsub_rn(soilt, tn));
+    x = ruc_fadd_rn(
+        x,
+        ruc_fmul_rn(
+            ruc_fmul_rn(ruc_fmul_rn(xls, rho_a[column]), r211),
+            ruc_fsub_rn(qsg, qgold)));
+    x = ruc_fsub_rn(
+        x,
+        ruc_fmul_rn(
+            rain_heat_capacity, ruc_fsub_rn(rain_temperature, soilt)));
+
+    // module_sf_ruclsm.F:3103 icemelt absorbs the entire residual, so the
+    // :3108 fltot difference cancels to an exact zero.
+    float residual = ruc_fsub_rn(rnet_a[column], ruc_fmul_rn(xls, eeta));
+    residual = ruc_fsub_rn(residual, hft);
+    residual = ruc_fsub_rn(residual, storage);
+    residual = ruc_fsub_rn(residual, x);
+    float icemelt = residual;
+    float fltot = ruc_fsub_rn(residual, icemelt);
+
+    dew_out[column] = dew;
+    soilt_out[column] = soilt;
+    qvg_out[column] = qvg;
+    qsg_out[column] = qsg;
+    qcg_out[column] = qcg;
+    eeta_out[column] = eeta;
+    qfx_out[column] = qfx;
+    hfx_out[column] = hfx;
+    s_out[column] = storage;
+    evapl_out[column] = evapl;
+    prcpl_out[column] = prcpl;
+    fltot_out[column] = fltot;
+}
+
+constant float ruc_snow_layer_threshold_depth[2] = { 0.05f, 0.01f };
+
+static inline float ruc_snow_thermal_diffusivity(
+    float rhosn,
+    float rhocsn,
+    float rhonewsn,
+    float newsnow,
+    float snhei,
+    uint forms)
+{
+    // wrf_45: the constant conductivity, thdifsn = 0.265/rhocsn.
+    if (!GPUWM_RUC_SNOW_V461) return ruc_fdiv_rn(0.265f, rhocsn);
+    const float fact = 1.0f;
+    float keff;
+    if (rhosn < 156.0f || (newsnow > 0.0f && rhonewsn < 156.0f)) {
+        keff = ruc_fadd_rn(
+            0.023f, ruc_fmul_rn(ruc_fmul_rn(0.234f, rhosn), 1.0e-3f));
+    } else {
+        keff = ruc_fsub_rn(
+            0.138f, ruc_fmul_rn(ruc_fmul_rn(1.01f, rhosn), 1.0e-3f));
+        keff = ruc_fadd_rn(
+            keff,
+            ruc_fmul_rn(
+                ruc_fmul_rn(3.233f, ruc_fmul_rn(rhosn, rhosn)), 1.0e-6f));
+    }
+    if (newsnow <= 0.0f && snhei > 1.0f && rhosn > 250.0f) {
+        // :5600-5606 hard slabs under deep packs get a fixed diffusivity.
+        return 4.431718e-7f;
+    }
+    return ruc_fmul_rn(ruc_fdiv_rn(keff, rhocsn), fact);
+}
+
+static inline void ruc_snow_temperature_step(
+    device const float* cap,
+    device const float* thdif,
+    device const float* tranf,
+    device const float* tso_in,
+    device const float* snwe_in,
+    device const float* snwepr_a,
+    device const float* snhei_in,
+    device const float* newsnow_a,
+    device const float* snowfrac_a,
+    device const float* beta_in,
+    device const float* deltsn_a,
+    device const float* snth_a,
+    device const float* rhosn_in,
+    device const float* rhonewsn_a,
+    device const float* meltfactor_a,
+    device const float* prcpms_a,
+    device const float* rainf_a,
+    device const float* patm_a,
+    device const float* tabs_a,
+    device const float* qvatm_a,
+    device const float* emiss_a,
+    device const float* rnet_a,
+    device const float* qkms_a,
+    device const float* tkms_a,
+    device const float* rho_a,
+    device const float* vegfrac_a,
+    device const float* drycan_a,
+    device const float* wetcan_a,
+    device const float* transum_a,
+    device const float* dew_in,
+    device const float* soilt_in,
+    device const float* soilt1_in,
+    device const float* qvg_in,
+    device const int* nroot_a,
+    device const int* ilnb_in,
+    device const float* tbq,
+    float delt,
+    // ``0.5*dz8w(i,1,j)`` -- half the lowest model layer, which is a
+    // PER-COLUMN depth on a terrain-following coordinate.  WRF passes it
+    // as a scalar only because ``sfctmp`` is called from inside DO j/DO i.
+    device const float* conflx,
+    float xlvm,
+    float cvw,
+    device float* tso_out,
+    device float* soilt_out,
+    device float* soilt1_out,
+    device float* tsnav_out,
+    device float* qvg_out,
+    device float* qsg_out,
+    device float* qcg_out,
+    device float* dew_out,
+    device float* snwe_out,
+    device float* snhei_out,
+    device float* rhosn_out,
+    device float* beta_out,
+    device float* smelt_out,
+    device float* snoh_out,
+    device float* snflx_out,
+    device float* s_out,
+    device float* rsm_out,
+    device float* snweprint_out,
+    device float* snheiprint_out,
+    device float* storage_out,
+    device int* ilnb_out,
+    int ncolumn,
+    int column,
+    uint forms)
+{
+
+    const float zero = 0.0f;
+    const float one = 1.0f;
+    const float half_factor = 0.5f;
+    // module_model_constants cp and stbolt; the pinned RUC lane fixes them at
+    // these values and the oracle carries the same bytes.
+    const float cp_air = 1004.5f;
+    const float stbolt = 5.67051e-8f;
+    const float freeze = 273.15f;
+    // :5045 latent heat of fusion.
+    const float xlmelt = 3.35e5f;
+    const float thousand = 1.0e3f;
+    const float milli = 1.0e-3f;
+
+    // share/module_soil_pre.F:1153-1194 nine-level RUC depths, and the
+    // lsmruc-side zshalf/dtdzs construction snowtemp consumes.
+    constant float* zsmain = ruc_sfctmp_soil_layer_depth;
+    float zshalf[RUC_NZS];
+    float dtdzs[RUC_DTDZS_LEN];
+    zshalf[0] = zero;
+    for (int level = 1; level < RUC_NZS; ++level) {
+        zshalf[level] = ruc_fmul_rn(
+            ruc_fadd_rn(zsmain[level - 1], zsmain[level]), half_factor);
+    }
+    for (int index = 0; index < RUC_DTDZS_LEN; ++index) dtdzs[index] = zero;
+    for (int fortran_level = 2; fortran_level < RUC_NZS; ++fortran_level) {
+        int first = 2 * fortran_level - 3;
+        int second = first + 1;
+        int level = fortran_level - 1;
+        float x = ruc_fdiv_rn(
+            ruc_fdiv_rn(delt, 2.0f),
+            ruc_fsub_rn(zshalf[level + 1], zshalf[level]));
+        dtdzs[first - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level], zsmain[level - 1]));
+        dtdzs[second - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level + 1], zsmain[level]));
+    }
+    float dzstop = ruc_fdiv_rn(one, ruc_fsub_rn(zsmain[1], zsmain[0]));
+
+    int root_count = nroot_a[column];
+    int snow_layers = ilnb_in[column];
+    float tso[RUC_NZS];
+    for (int level = 0; level < RUC_NZS; ++level) {
+        tso[level] = tso_in[level * ncolumn + column];
+    }
+    float snwe = snwe_in[column];
+    float snwepr = snwepr_a[column];
+    float snhei = snhei_in[column];
+    float newsnow = newsnow_a[column];
+    float snowfrac = snowfrac_a[column];
+    float beta = beta_in[column];
+    float deltsn = deltsn_a[column];
+    float snth = snth_a[column];
+    float rhosn = rhosn_in[column];
+    float rhonewsn = rhonewsn_a[column];
+    float meltfactor = meltfactor_a[column];
+    float prcpms = prcpms_a[column];
+    float rainf = rainf_a[column];
+    float patm = patm_a[column];
+    float tabs = tabs_a[column];
+    float qvatm = qvatm_a[column];
+    float emiss = emiss_a[column];
+    float rnet = rnet_a[column];
+    float qkms = qkms_a[column];
+    float tkms = tkms_a[column];
+    float rho = rho_a[column];
+    float vegfrac = vegfrac_a[column];
+    float drycan = drycan_a[column];
+    float wetcan = wetcan_a[column];
+    float transum = transum_a[column];
+    float dew = dew_in[column];
+    float soilt = soilt_in[column];
+    float soilt1 = soilt1_in[column];
+    float qvg = qvg_in[column];
+    float thdif0 = thdif[column];
+
+    // :5046-5072 snow heat capacity and thermal diffusivity.
+    float rhocsn = ruc_fmul_rn(2090.0f, rhosn);
+    float rhonewcsn = ruc_fmul_rn(2090.0f, rhonewsn);
+    float thdifsn = ruc_snow_thermal_diffusivity(
+        rhosn, rhocsn, rhonewsn, newsnow, snhei, forms);
+    // :5074-5091 prologue.
+    float ras = ruc_fmul_rn(rho, milli);
+    float soiltfrac = soilt;
+    float smelt = zero;
+    float rsm = zero;
+    float fsn = one;
+    float fso = zero;
+    float qgold = qvg;
+    float snprim = zero;
+    float tsob = zero;
+    float cotsn = zero;
+    float rhtsn = zero;
+    float tsnav = zero;
+
+    // :5103-5115 upward tridiagonal sweep through the soil.
+    float cotso[RUC_NZS];
+    float rhtso[RUC_NZS];
+    for (int level = 0; level < RUC_NZS; ++level) {
+        cotso[level] = zero;
+        rhtso[level] = zero;
+    }
+    rhtso[0] = tso[RUC_NZS_M1];
+    for (int step = 0; step < RUC_NZS_M2; ++step) {
+        int kn = RUC_NZS_M1 - step;
+        int first = 2 * kn - 3;
+        float x1 = ruc_fmul_rn(dtdzs[first - 1], thdif[(kn - 2) * ncolumn + column]);
+        float x2 = ruc_fmul_rn(dtdzs[first], thdif[(kn - 1) * ncolumn + column]);
+        float ft = ruc_fadd_rn(
+            tso[kn - 1],
+            ruc_fmul_rn(x1, ruc_fsub_rn(tso[kn - 2], tso[kn - 1])));
+        ft = ruc_fsub_rn(ft, ruc_fmul_rn(x2, ruc_fsub_rn(tso[kn - 1], tso[kn])));
+        float denominator = ruc_fadd_rn(one, x1);
+        denominator = ruc_fadd_rn(denominator, x2);
+        denominator = ruc_fsub_rn(denominator, ruc_fmul_rn(x2, cotso[step]));
+        cotso[step + 1] = ruc_fdiv_rn(x1, denominator);
+        rhtso[step + 1] = ruc_fdiv_rn(
+            ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[step])), denominator);
+    }
+
+    float half_step = ruc_fdiv_rn(delt, 2.0f);
+    if (snhei >= snth) {
+        if (snhei <= ruc_fadd_rn(deltsn, snth)) {
+            // :5124-5141 one snow layer.
+            snow_layers = 1;
+            snprim = ruc_fused_max(snth, snhei);
+            tsob = tso[0];
+            soilt1 = tso[0];
+            float xsn = ruc_fdiv_rn(
+                half_step, ruc_fadd_rn(zshalf[1], ruc_fmul_rn(half_factor, snprim)));
+            float ddzsn = ruc_fdiv_rn(xsn, snprim);
+            float x1sn = ruc_fmul_rn(ddzsn, thdifsn);
+            float x2 = ruc_fmul_rn(dtdzs[0], thdif0);
+            float ft = ruc_fadd_rn(
+                tso[0], ruc_fmul_rn(x1sn, ruc_fsub_rn(soilt, tso[0])));
+            ft = ruc_fsub_rn(ft, ruc_fmul_rn(x2, ruc_fsub_rn(tso[0], tso[1])));
+            float denominator = ruc_fadd_rn(one, x1sn);
+            denominator = ruc_fadd_rn(denominator, x2);
+            denominator = ruc_fsub_rn(denominator, ruc_fmul_rn(x2, cotso[RUC_NZS_M2]));
+            cotso[RUC_NZS_M1] = ruc_fdiv_rn(x1sn, denominator);
+            rhtso[RUC_NZS_M1] = ruc_fdiv_rn(
+                ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[RUC_NZS_M2])), denominator);
+            cotsn = cotso[RUC_NZS_M1];
+            rhtsn = rhtso[RUC_NZS_M1];
+            tsnav = ruc_fsub_rn(
+                ruc_fmul_rn(half_factor, ruc_fadd_rn(soilt, tso[0])), freeze);
+        } else {
+            // :5148-5171 two snow layers, soilt1 sits at deltsn depth.
+            snow_layers = 2;
+            snprim = deltsn;
+            tsob = soilt1;
+            float xsn = ruc_fdiv_rn(half_step, ruc_fmul_rn(half_factor, deltsn));
+            float xsn1 = ruc_fdiv_rn(
+                half_step,
+                ruc_fadd_rn(
+                    zshalf[1],
+                    ruc_fmul_rn(half_factor, ruc_fsub_rn(snhei, deltsn))));
+            float ddzsn = ruc_fdiv_rn(xsn, deltsn);
+            float ddzsn1 = ruc_fdiv_rn(xsn1, ruc_fsub_rn(snhei, deltsn));
+            float x1sn = ruc_fmul_rn(ddzsn, thdifsn);
+            float x1sn1 = ruc_fmul_rn(ddzsn1, thdifsn);
+            float x2 = ruc_fmul_rn(dtdzs[0], thdif0);
+            float ft = ruc_fadd_rn(
+                tso[0], ruc_fmul_rn(x1sn1, ruc_fsub_rn(soilt1, tso[0])));
+            ft = ruc_fsub_rn(ft, ruc_fmul_rn(x2, ruc_fsub_rn(tso[0], tso[1])));
+            float denominator = ruc_fadd_rn(one, x1sn1);
+            denominator = ruc_fadd_rn(denominator, x2);
+            denominator = ruc_fsub_rn(denominator, ruc_fmul_rn(x2, cotso[RUC_NZS_M2]));
+            cotso[RUC_NZS_M1] = ruc_fdiv_rn(x1sn1, denominator);
+            rhtso[RUC_NZS_M1] = ruc_fdiv_rn(
+                ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[RUC_NZS_M2])), denominator);
+            float ftsnow = ruc_fadd_rn(
+                soilt1, ruc_fmul_rn(x1sn, ruc_fsub_rn(soilt, soilt1)));
+            ftsnow = ruc_fsub_rn(
+                ftsnow, ruc_fmul_rn(x1sn1, ruc_fsub_rn(soilt1, tso[0])));
+            float denomsn = ruc_fadd_rn(one, x1sn);
+            denomsn = ruc_fadd_rn(denomsn, x1sn1);
+            denomsn = ruc_fsub_rn(denomsn, ruc_fmul_rn(x1sn1, cotso[RUC_NZS_M1]));
+            cotsn = ruc_fdiv_rn(x1sn, denomsn);
+            rhtsn = ruc_fdiv_rn(
+                ruc_fadd_rn(ftsnow, ruc_fmul_rn(x1sn1, rhtso[RUC_NZS_M1])), denomsn);
+            tsnav = ruc_fmul_rn(ruc_fadd_rn(soilt, soilt1), deltsn);
+            tsnav = ruc_fadd_rn(
+                tsnav,
+                ruc_fmul_rn(
+                    ruc_fadd_rn(soilt1, tso[0]),
+                    ruc_fsub_rn(snhei, deltsn)));
+            tsnav = ruc_fsub_rn(
+                ruc_fmul_rn(ruc_fdiv_rn(half_factor, snhei), tsnav), freeze);
+        }
+    }
+    if (snhei < snth && snhei > zero) {
+        // :5174-5198 snow too thin for its own layer: blend it with the top
+        // soil layer.
+        snprim = ruc_fadd_rn(snhei, zsmain[1]);
+        fsn = ruc_fdiv_rn(snhei, snprim);
+        fso = ruc_fsub_rn(one, fsn);
+        soilt1 = tso[0];
+        tsob = tso[1];
+        float xsn = ruc_fdiv_rn(
+            half_step,
+            ruc_fadd_rn(
+                ruc_fsub_rn(zshalf[2], zsmain[1]),
+                ruc_fmul_rn(half_factor, snprim)));
+        float ddzsn = ruc_fdiv_rn(xsn, snprim);
+        float x1sn = ruc_fmul_rn(
+            ddzsn,
+            ruc_fadd_rn(ruc_fmul_rn(fsn, thdifsn), ruc_fmul_rn(fso, thdif0)));
+        float x2 = ruc_fmul_rn(dtdzs[1], thdif[ncolumn + column]);
+        float ft = ruc_fadd_rn(
+            tso[1], ruc_fmul_rn(x1sn, ruc_fsub_rn(soilt, tso[1])));
+        ft = ruc_fsub_rn(ft, ruc_fmul_rn(x2, ruc_fsub_rn(tso[1], tso[2])));
+        float denominator = ruc_fadd_rn(one, x1sn);
+        denominator = ruc_fadd_rn(denominator, x2);
+        denominator = ruc_fsub_rn(denominator, ruc_fmul_rn(x2, cotso[RUC_NZS_M3]));
+        cotso[RUC_NZS_M2] = ruc_fdiv_rn(x1sn, denominator);
+        rhtso[RUC_NZS_M2] = ruc_fdiv_rn(
+            ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[RUC_NZS_M3])), denominator);
+        tsnav = ruc_fsub_rn(
+            ruc_fmul_rn(half_factor, ruc_fadd_rn(soilt, tso[0])), freeze);
+        cotso[RUC_NZS_M1] = cotso[RUC_NZS_M2];
+        rhtso[RUC_NZS_M1] = rhtso[RUC_NZS_M2];
+        cotsn = cotso[RUC_NZS_M1];
+        rhtsn = rhtso[RUC_NZS_M1];
+    }
+
+    // :5203-5224 heat balance (Smirnova et al. 1996, eq. 21, 26).
+    int nmelt = 0;
+    float snoh = zero;
+    float ett1 = zero;
+    float epot = -ruc_fmul_rn(qkms, ruc_fsub_rn(qvatm, qgold));
+    float rhcs = cap[column];
+    float h = one;
+    float trans = ruc_fdiv_rn(
+        ruc_fmul_rn(transum, drycan), zshalf[root_count]);
+    float can = ruc_fadd_rn(wetcan, trans);
+    float umveg = ruc_fsub_rn(one, vegfrac);
+    float d1 = cotso[RUC_NZS_M2];
+    float d2 = rhtso[RUC_NZS_M2];
+    float tn = soilt;
+    float d9 = ruc_fmul_rn(ruc_fmul_rn(thdif0, rhcs), dzstop);
+    float d10 = ruc_fmul_rn(ruc_fmul_rn(tkms, cp_air), rho);
+    float r211 = ruc_fdiv_rn(ruc_fmul_rn(half_factor, conflx[column]), delt);
+    float r21 = ruc_fmul_rn(ruc_fmul_rn(r211, cp_air), rho);
+    float r22 = ruc_fdiv_rn(
+        half_factor,
+        ruc_fmul_rn(ruc_fmul_rn(thdif0, delt), ruc_fmul_rn(dzstop, dzstop)));
+    float tn2 = ruc_fmul_rn(tn, tn);
+    float tn4 = ruc_fmul_rn(tn2, tn2);
+    float r6 = ruc_fmul_rn(ruc_fmul_rn(ruc_fmul_rn(emiss, stbolt), half_factor), tn4);
+    float r7 = ruc_fdiv_rn(r6, tn);
+    float d11 = ruc_fadd_rn(rnet, r6);
+
+    // :5226-5270 the snow row of the tridiagonal system.
+    float d1sn = zero;
+    float d2sn = zero;
+    float d9sn = zero;
+    float r22sn = zero;
+    if (snhei >= snth) {
+        if (snhei <= ruc_fadd_rn(deltsn, snth)) {
+            d1sn = cotso[RUC_NZS_M1];
+            d2sn = rhtso[RUC_NZS_M1];
+        } else {
+            d1sn = cotsn;
+            d2sn = rhtsn;
+        }
+        d9sn = ruc_fdiv_rn(ruc_fmul_rn(thdifsn, rhocsn), snprim);
+        r22sn = ruc_fdiv_rn(
+            ruc_fmul_rn(ruc_fmul_rn(snprim, snprim), half_factor),
+            ruc_fmul_rn(thdifsn, delt));
+    }
+    if (snhei < snth && snhei > zero) {
+        d1sn = d1;
+        d2sn = d2;
+        d9sn = ruc_fdiv_rn(
+            ruc_fadd_rn(
+                ruc_fmul_rn(ruc_fmul_rn(fsn, thdifsn), rhocsn),
+                ruc_fmul_rn(ruc_fmul_rn(fso, thdif0), rhcs)),
+            snprim);
+        r22sn = ruc_fdiv_rn(
+            ruc_fmul_rn(ruc_fmul_rn(snprim, snprim), half_factor),
+            ruc_fmul_rn(
+                ruc_fadd_rn(
+                    ruc_fmul_rn(fsn, thdifsn), ruc_fmul_rn(fso, thdif0)),
+                delt));
+    }
+
+    // :5279-5280 and :5290-5291.  These rain and new-snow heat terms do not
+    // depend on anything the melt iteration updates, so WRF's second pass
+    // through :5275 recomputes them identically.
+    float rain_heat_capacity = ruc_fmul_rn(ruc_fmul_rn(rainf, cvw), prcpms);
+    float snow_heat_capacity = ruc_fdiv_rn(
+        ruc_fmul_rn(rhonewcsn, newsnow), delt);
+    float rain_temperature = ruc_fused_max(freeze, tabs);
+    float snow_temperature = ruc_fused_min(freeze, tabs);
+
+    float qsg = zero;
+    float qcg = zero;
+    float snflx = zero;
+    float storage = zero;
+    float r210 = zero;
+    bool failed = false;
+
+    while (true) {
+        // :5275 the melt iteration entry point.
+        float tdenom = ruc_fmul_rn(
+            d9sn, ruc_fadd_rn(ruc_fsub_rn(one, d1sn), r22sn));
+        tdenom = ruc_fadd_rn(tdenom, d10);
+        tdenom = ruc_fadd_rn(tdenom, r21);
+        tdenom = ruc_fadd_rn(tdenom, r7);
+        tdenom = ruc_fadd_rn(tdenom, rain_heat_capacity);
+        tdenom = ruc_fadd_rn(tdenom, snow_heat_capacity);
+        float fkq = ruc_fmul_rn(qkms, rho);
+        r210 = ruc_fmul_rn(r211, rho);
+        float c = ruc_fmul_rn(ruc_fmul_rn(vegfrac, fkq), can);
+        float cc = ruc_fdiv_rn(ruc_fmul_rn(c, xlvm), tdenom);
+        float evaporation = ruc_fmul_rn(ruc_fmul_rn(beta, fkq), umveg);
+        float aa = ruc_fdiv_rn(
+            ruc_fmul_rn(xlvm, ruc_fadd_rn(evaporation, r210)), tdenom);
+        float humidity_inner = ruc_fmul_rn(qvatm, ruc_fadd_rn(evaporation, c));
+        humidity_inner = ruc_fadd_rn(
+            humidity_inner, ruc_fmul_rn(r210, qgold));
+        float numerator = ruc_fmul_rn(d10, tabs);
+        numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(r21, tn));
+        numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(xlvm, humidity_inner));
+        numerator = ruc_fadd_rn(numerator, d11);
+        numerator = ruc_fadd_rn(
+            numerator,
+            ruc_fmul_rn(d9sn, ruc_fadd_rn(d2sn, ruc_fmul_rn(r22sn, tn))));
+        numerator = ruc_fadd_rn(
+            numerator, ruc_fmul_rn(rain_heat_capacity, rain_temperature));
+        numerator = ruc_fadd_rn(
+            numerator, ruc_fmul_rn(snow_heat_capacity, snow_temperature));
+        float bb = ruc_fdiv_rn(numerator, tdenom);
+        float aa1 = ruc_fadd_rn(aa, cc);
+        float pp = ruc_fmul_rn(patm, thousand);
+        aa1 = ruc_fdiv_rn(aa1, pp);
+        bb = ruc_fsub_rn(bb, ruc_fdiv_rn(snoh, tdenom));
+
+        float qs1, ts1;
+        if (!ruc_vilka(tn, aa1, bb, pp, tbq, &qs1, &ts1)) {
+            failed = true;
+            break;
+        }
+        float tq2 = qvatm;
+        float tx2 = ruc_fmul_rn(tq2, ruc_fsub_rn(one, h));
+        float q1 = ruc_fadd_rn(tx2, ruc_fmul_rn(h, qs1));
+        bool saturated = !(q1 < qs1);
+        if (!saturated) {
+            // :5315-5328.  Unreachable while h == 1; transcribed anyway.
+            bb = ruc_fsub_rn(bb, ruc_fmul_rn(aa, tx2));
+            aa = ruc_fdiv_rn(ruc_fadd_rn(ruc_fmul_rn(aa, h), cc), pp);
+            if (!ruc_vilka(tn, aa, bb, pp, tbq, &qs1, &ts1)) {
+                failed = true;
+                break;
+            }
+            q1 = ruc_fadd_rn(tx2, ruc_fmul_rn(h, qs1));
+            saturated = q1 > qs1;
+        }
+        if (saturated) {
+            qvg = qs1;
+            qsg = qs1;
+            qcg = ruc_fused_max(zero, ruc_fsub_rn(q1, qs1));
+        } else {
+            qsg = qs1;
+            qvg = q1;
+            qcg = zero;
+        }
+
+        // :5332-5340 skin temperature.
+        soilt = ts1;
+        // wrf_45 (the branch) has neither freezing clamp on the second pass.
+        if (GPUWM_RUC_SNOW_V461 && nmelt == 1 && snowfrac == one && snwe > zero
+            && soilt > freeze) {
+            soilt = ruc_fused_min(freeze, soilt);
+        }
+
+        // :5348-5378 the snow-soil interface and the 7.5 cm level.
+        if (snhei >= snth) {
+            if (snhei > ruc_fadd_rn(deltsn, snth)) {
+                soilt1 = ruc_fused_min(
+                    freeze, ruc_fadd_rn(rhtsn, ruc_fmul_rn(cotsn, soilt)));
+                tso[0] = ruc_fadd_rn(rhtso[RUC_NZS_M1], ruc_fmul_rn(cotso[RUC_NZS_M1], soilt1));
+                tsob = soilt1;
+            } else {
+                tso[0] = ruc_fadd_rn(rhtso[RUC_NZS_M1], ruc_fmul_rn(cotso[RUC_NZS_M1], soilt));
+                soilt1 = tso[0];
+                tsob = tso[0];
+            }
+        } else if (snhei > zero && snhei < snth) {
+            tso[1] = ruc_fadd_rn(rhtso[RUC_NZS_M2], ruc_fmul_rn(cotso[RUC_NZS_M2], soilt));
+            tso[0] = ruc_fadd_rn(
+                tso[1], ruc_fmul_rn(ruc_fsub_rn(soilt, tso[1]), fso));
+            soilt1 = tso[0];
+            tsob = tso[1];
+        } else {
+            tso[0] = soilt;
+            soilt1 = soilt;
+            tsob = tso[0];
+        }
+        if (GPUWM_RUC_SNOW_V461 && nmelt == 1 && snowfrac == one) {
+            soilt1 = ruc_fused_min(freeze, soilt1);
+            tso[0] = ruc_fused_min(freeze, tso[0]);
+            tsob = ruc_fused_min(freeze, tsob);
+        }
+
+        // :5382-5394 downward substitution.
+        int start = (snhei > zero && snhei < snth) ? 2 : 1;
+        for (int level = start; level < RUC_NZS; ++level) {
+            int coefficient = RUC_NZS_M1 - level;
+            tso[level] = ruc_fadd_rn(
+                rhtso[coefficient],
+                ruc_fmul_rn(cotso[coefficient], tso[level - 1]));
+        }
+
+        if (nmelt == 1) break;
+
+        bool melts;
+        if (GPUWM_RUC_SNOW_V461) {
+            melts = soilt > freeze && beta == one && snhei > zero;
+        } else {
+            // Branch :5586: melt while the pack outlasts the step's evaporation.
+            melts = soilt > freeze
+                && ruc_fsub_rn(
+                       snwepr,
+                       ruc_fmul_rn(ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras), delt))
+                   > zero
+                && snhei > zero;
+        }
+        if (melts) {
+            // :5414-5553 top melt.
+            nmelt = 1;
+            soiltfrac = ruc_fadd_rn(
+                ruc_fmul_rn(snowfrac, freeze),
+                ruc_fmul_rn(ruc_fsub_rn(one, snowfrac), soilt));
+            qsg = ruc_fused_min(
+                qsg, ruc_fdiv_rn(ruc_qsn_lookup(soiltfrac, tbq), pp));
+            if (GPUWM_RUC_SNOW_V461) {
+                qvg = ruc_fadd_rn(
+                    ruc_fmul_rn(snowfrac, qsg),
+                    ruc_fmul_rn(ruc_fsub_rn(one, snowfrac), qvg));
+            } else {
+                qvg = qsg;  // branch :5590, saturated at melt
+            }
+            // :5419-5421 t3/upflux/xinet are dead: xinet is never read.
+            epot = -ruc_fmul_rn(qkms, ruc_fsub_rn(qvatm, qsg));
+            q1 = ruc_fmul_rn(epot, ras);
+            float qfx;
+            if (q1 <= zero) {
+                dew = -epot;
+                qfx = -ruc_fmul_rn(ruc_fmul_rn(xlvm, rho), dew);
+            } else {
+                for (int level = 0; level < root_count; ++level) {
+                    float transp = -ruc_fdiv_rn(
+                        ruc_fmul_rn(
+                            ruc_fmul_rn(
+                                ruc_fmul_rn(vegfrac, q1),
+                                tranf[level * ncolumn + column]),
+                            drycan),
+                        zshalf[root_count]);
+                    ett1 = ruc_fsub_rn(ett1, transp);
+                }
+                float edir1 = ruc_fmul_rn(ruc_fmul_rn(q1, umveg), beta);
+                float ec1 = ruc_fmul_rn(ruc_fmul_rn(q1, wetcan), vegfrac);
+                float eeta = ruc_fmul_rn(
+                    ruc_fadd_rn(ruc_fadd_rn(edir1, ec1), ett1), thousand);
+                qfx = ruc_fmul_rn(xlvm, eeta);
+            }
+            float hfx = -ruc_fmul_rn(d10, ruc_fsub_rn(tabs, soiltfrac));
+            float soh;
+            if (snhei >= snth) {
+                soh = ruc_fdiv_rn(
+                    ruc_fmul_rn(
+                        ruc_fmul_rn(thdifsn, rhocsn),
+                        ruc_fsub_rn(soiltfrac, tsob)),
+                    snprim);
+            } else {
+                soh = ruc_fdiv_rn(
+                    ruc_fmul_rn(
+                        ruc_fadd_rn(
+                            ruc_fmul_rn(ruc_fmul_rn(fsn, thdifsn), rhocsn),
+                            ruc_fmul_rn(ruc_fmul_rn(fso, thdif0), rhcs)),
+                        ruc_fsub_rn(soiltfrac, tsob)),
+                    snprim);
+            }
+            snflx = soh;
+            storage = ruc_fmul_rn(
+                ruc_fadd_rn(r21, ruc_fmul_rn(d9sn, r22sn)),
+                ruc_fsub_rn(soiltfrac, tn));
+            storage = ruc_fadd_rn(
+                storage,
+                ruc_fmul_rn(
+                    ruc_fmul_rn(xlvm, r210), ruc_fsub_rn(qvg, qgold)));
+            snoh = ruc_fsub_rn(rnet, qfx);
+            snoh = ruc_fsub_rn(snoh, hfx);
+            snoh = ruc_fsub_rn(snoh, soh);
+            snoh = ruc_fsub_rn(snoh, storage);
+            snoh = ruc_fadd_rn(
+                snoh,
+                ruc_fmul_rn(
+                    snow_heat_capacity,
+                    ruc_fsub_rn(snow_temperature, soiltfrac)));
+            snoh = ruc_fadd_rn(
+                snoh,
+                ruc_fmul_rn(
+                    rain_heat_capacity,
+                    ruc_fsub_rn(rain_temperature, soiltfrac)));
+            snoh = ruc_fused_max(zero, snoh);
+            smelt = ruc_fmul_rn(ruc_fdiv_rn(snoh, xlmelt), milli);
+            // :5530 the Koren et al. (1999) retained fraction, both lineages.
+            float rsmfrac = ruc_fused_min(
+                0.18f,
+                ruc_fused_max(
+                    0.08f,
+                    ruc_fmul_rn(ruc_fdiv_rn(snwepr, 0.10f), 0.13f)));
+            if (!GPUWM_RUC_SNOW_V461) {
+                // Branch :5652-5698, straight-line: the cap does not scale
+                // with the step or depend on density, and liquid is
+                // retained whenever the pack is deeper than 1 cm.
+                float available = ruc_fsub_rn(
+                    ruc_fdiv_rn(snwepr, delt),
+                    ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras));
+                smelt = ruc_fused_min(smelt, available);
+                smelt = ruc_fused_max(zero, smelt);
+                float limit = ruc_fmul_rn(5.6e-8f, meltfactor);
+                limit = ruc_fmul_rn(
+                    limit, ruc_fused_max(one, ruc_fsub_rn(soilt, freeze)));
+                smelt = ruc_fused_min(smelt, limit);
+                float rr = ruc_fused_max(zero, available);
+                smelt = ruc_fused_min(smelt, rr);
+                snoh = ruc_fmul_rn(ruc_fmul_rn(smelt, xlmelt), thousand);
+                if (snhei > 0.01f) {
+                    rsm = ruc_fmul_rn(ruc_fmul_rn(rsmfrac, smelt), delt);
+                } else {
+                    rsm = zero;
+                }
+                smelt = ruc_fused_max(zero, ruc_fsub_rn(smelt, ruc_fdiv_rn(rsm, delt)));
+                snwe = ruc_fused_max(
+                    zero,
+                    ruc_fsub_rn(
+                        snwepr,
+                        ruc_fmul_rn(
+                            ruc_fadd_rn(
+                                smelt,
+                                ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras)),
+                            delt)));
+            } else {
+                float potential = ruc_fmul_rn(ruc_fmul_rn(epot, ras), delt);
+                if (epot > zero && snwepr <= potential) {
+                    // :5483-5491 all the snow can evaporate; jump to :5518.
+                    beta = ruc_fdiv_rn(snwepr, potential);
+                    smelt = ruc_fused_min(
+                        smelt,
+                        ruc_fsub_rn(
+                            ruc_fdiv_rn(snwepr, delt),
+                            ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras)));
+                    snwe = zero;
+                } else {
+                    smelt = ruc_fused_max(zero, smelt);
+                    // :5499-5501 the Egglston melt limiter.
+                    if ((rhosn < 350.0f
+                         || (newsnow > zero && rhonewsn < 450.0f))
+                        && soilt < 283.0f) {
+                        float limit = ruc_fdiv_rn(delt, 60.0f);
+                        limit = ruc_fmul_rn(limit, 5.6e-8f);
+                        limit = ruc_fmul_rn(limit, meltfactor);
+                        limit = ruc_fmul_rn(
+                            limit, ruc_fused_max(one, ruc_fsub_rn(soilt, freeze)));
+                        smelt = ruc_fused_min(smelt, limit);
+                    }
+                    float rr = ruc_fused_max(
+                        zero,
+                        ruc_fsub_rn(
+                            ruc_fdiv_rn(snwepr, delt),
+                            ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras)));
+                    if (smelt > rr) {
+                        smelt = ruc_fused_min(smelt, rr);
+                        snwe = zero;
+                    }
+                }
+                // :5518-5522.
+                snoh = ruc_fmul_rn(ruc_fmul_rn(smelt, xlmelt), thousand);
+                if (smelt > zero) {
+                    // :5529-5543 Koren et al. (1999) liquid retention.
+                    if (snhei > 0.01f && rhosn < 350.0f) {
+                        rsm = ruc_fmul_rn(ruc_fmul_rn(rsmfrac, smelt), delt);
+                    } else {
+                        rsm = zero;
+                    }
+                    if (rsm > zero) {
+                        smelt = ruc_fused_max(
+                            zero, ruc_fsub_rn(smelt, ruc_fdiv_rn(rsm, delt)));
+                    }
+                }
+                if (snwe > zero) {
+                    snwe = ruc_fused_max(
+                        zero,
+                        ruc_fsub_rn(
+                            snwepr,
+                            ruc_fmul_rn(
+                                ruc_fadd_rn(
+                                    smelt,
+                                    ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras)),
+                                delt)));
+                }
+            }
+        } else {
+            // :5557-5567 no melt: sublimation or condensation only.  The
+            // branch updates any pack and never zeroes one here.
+            if (snhei != zero && (beta == one || !GPUWM_RUC_SNOW_V461)) {
+                epot = -ruc_fmul_rn(qkms, ruc_fsub_rn(qvatm, qsg));
+                snwe = ruc_fused_max(
+                    zero,
+                    ruc_fsub_rn(
+                        snwepr,
+                        ruc_fmul_rn(
+                            ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras), delt)));
+            } else if (GPUWM_RUC_SNOW_V461) {
+                snwe = zero;
+            }
+        }
+
+        if (nmelt == 1) continue;
+        break;
+    }
+
+    if (failed) {
+        float invalid = as_type<float>(0x7fc00000u);
+        for (int level = 0; level < RUC_NZS; ++level) {
+            tso_out[level * ncolumn + column] = invalid;
+        }
+        soilt_out[column] = invalid;
+        soilt1_out[column] = invalid;
+        tsnav_out[column] = invalid;
+        qvg_out[column] = invalid;
+        qsg_out[column] = invalid;
+        qcg_out[column] = invalid;
+        dew_out[column] = invalid;
+        snwe_out[column] = invalid;
+        snhei_out[column] = invalid;
+        rhosn_out[column] = invalid;
+        beta_out[column] = invalid;
+        smelt_out[column] = invalid;
+        snoh_out[column] = invalid;
+        snflx_out[column] = invalid;
+        s_out[column] = invalid;
+        rsm_out[column] = invalid;
+        snweprint_out[column] = invalid;
+        snheiprint_out[column] = invalid;
+        storage_out[column] = invalid;
+        ilnb_out[column] = snow_layers;
+        return;
+    }
+
+    // :5572-5613 melt water changes the snow density.  WRF only prints a
+    // diagnostic when snwe <= rsm and leaves the density alone.
+    if (smelt > zero && rsm > zero && snwe > rsm) {
+        float xsn = ruc_fdiv_rn(
+            ruc_fadd_rn(
+                ruc_fmul_rn(rhosn, ruc_fsub_rn(snwe, rsm)),
+                ruc_fmul_rn(thousand, rsm)),
+            snwe);
+        rhosn = ruc_fused_min(ruc_fused_max(58.8f, xsn), 500.0f);
+        rhocsn = ruc_fmul_rn(2090.0f, rhosn);
+        thdifsn = ruc_snow_thermal_diffusivity(
+            rhosn, rhocsn, rhonewsn, newsnow, snhei, forms);
+    }
+
+    // :5616-5629 flux in the top snow layer, then in the top soil layer.
+    float s;
+    if (snhei >= snth) {
+        s = ruc_fdiv_rn(
+            ruc_fmul_rn(
+                ruc_fmul_rn(thdifsn, rhocsn), ruc_fsub_rn(soilt, tsob)),
+            snprim);
+    } else if (snhei < snth && snhei > zero) {
+        s = ruc_fdiv_rn(
+            ruc_fmul_rn(
+                ruc_fadd_rn(
+                    ruc_fmul_rn(ruc_fmul_rn(fsn, thdifsn), rhocsn),
+                    ruc_fmul_rn(ruc_fmul_rn(fso, thdif0), rhcs)),
+                ruc_fsub_rn(soilt, tsob)),
+            snprim);
+    } else {
+        s = ruc_fmul_rn(d9sn, ruc_fsub_rn(soilt, tsob));
+    }
+    snflx = s;
+    s = ruc_fmul_rn(d9, ruc_fsub_rn(tso[0], tso[1]));
+
+    snhei = ruc_fdiv_rn(ruc_fmul_rn(snwe, thousand), rhosn);
+
+    // :5636-5684 melt from the bottom of the pack on thawed ground.
+    if (tso[0] > freeze && snhei > zero) {
+        float hsn;
+        if (snhei > ruc_fadd_rn(deltsn, snth)) {
+            hsn = ruc_fsub_rn(snhei, deltsn);
+        } else {
+            hsn = snhei;
+        }
+        soiltfrac = ruc_fadd_rn(
+            ruc_fmul_rn(snowfrac, freeze),
+            ruc_fmul_rn(ruc_fsub_rn(one, snowfrac), tso[0]));
+        float snohg = ruc_fadd_rn(
+            ruc_fmul_rn(cap[column], zshalf[1]),
+            ruc_fmul_rn(ruc_fmul_rn(rhocsn, half_factor), hsn));
+        snohg = ruc_fdiv_rn(
+            ruc_fmul_rn(ruc_fsub_rn(tso[0], soiltfrac), snohg), delt);
+        snohg = ruc_fused_max(zero, snohg);
+        float smeltg = ruc_fmul_rn(ruc_fdiv_rn(snohg, xlmelt), milli);
+        // :5658-5660 the Egglston bottom-melt limit; unconditional in the
+        // branch.
+        if (!GPUWM_RUC_SNOW_V461
+            || ((rhosn < 350.0f || (newsnow > zero && rhonewsn < 450.0f))
+                && soilt < 283.0f)) {
+            smeltg = ruc_fused_min(smeltg, 5.8e-9f);
+        }
+        float rr = ruc_fdiv_rn(snwe, delt);
+        smeltg = ruc_fused_min(smeltg, rr);
+        snwe = ruc_fused_max(zero, ruc_fsub_rn(snwe, ruc_fmul_rn(smeltg, delt)));
+        snhei = ruc_fdiv_rn(ruc_fmul_rn(snwe, thousand), rhosn);
+        // The branch keeps the bottom melt water out of smelt.
+        if (GPUWM_RUC_SNOW_V461) smelt = ruc_fadd_rn(smelt, smeltg);
+        if (snhei > zero) tso[0] = soiltfrac;
+    }
+
+    float snweprint = snwe;
+    float snheiprint = ruc_fdiv_rn(ruc_fmul_rn(snweprint, thousand), rhosn);
+
+    // :5697-5708 surface heat storage.
+    storage = ruc_fmul_rn(
+        ruc_fadd_rn(r21, ruc_fmul_rn(d9sn, r22sn)), ruc_fsub_rn(soilt, tn));
+    storage = ruc_fadd_rn(
+        storage,
+        ruc_fmul_rn(ruc_fmul_rn(xlvm, r210), ruc_fsub_rn(qsg, qgold)));
+    storage = ruc_fsub_rn(
+        storage,
+        ruc_fmul_rn(
+            snow_heat_capacity, ruc_fsub_rn(snow_temperature, soilt)));
+    storage = ruc_fsub_rn(
+        storage,
+        ruc_fmul_rn(
+            rain_heat_capacity, ruc_fsub_rn(rain_temperature, soilt)));
+
+    // :5715-5725 mean snow-pack temperature in Celsius.
+    if (snhei > zero) {
+        if (snow_layers > 1) {
+            tsnav = ruc_fmul_rn(ruc_fadd_rn(soilt, soilt1), deltsn);
+            tsnav = ruc_fadd_rn(
+                tsnav,
+                ruc_fmul_rn(
+                    ruc_fadd_rn(soilt1, tso[0]),
+                    ruc_fsub_rn(snhei, deltsn)));
+            tsnav = ruc_fsub_rn(
+                ruc_fmul_rn(ruc_fdiv_rn(half_factor, snhei), tsnav), freeze);
+        } else {
+            tsnav = ruc_fsub_rn(
+                ruc_fmul_rn(half_factor, ruc_fadd_rn(soilt, tso[0])), freeze);
+        }
+    } else {
+        tsnav = ruc_fsub_rn(soilt, freeze);
+    }
+
+    for (int level = 0; level < RUC_NZS; ++level) {
+        tso_out[level * ncolumn + column] = tso[level];
+    }
+    soilt_out[column] = soilt;
+    soilt1_out[column] = soilt1;
+    tsnav_out[column] = tsnav;
+    qvg_out[column] = qvg;
+    qsg_out[column] = qsg;
+    qcg_out[column] = qcg;
+    dew_out[column] = dew;
+    snwe_out[column] = snwe;
+    snhei_out[column] = snhei;
+    rhosn_out[column] = rhosn;
+    beta_out[column] = beta;
+    smelt_out[column] = smelt;
+    snoh_out[column] = snoh;
+    snflx_out[column] = snflx;
+    s_out[column] = s;
+    rsm_out[column] = rsm;
+    snweprint_out[column] = snweprint;
+    snheiprint_out[column] = snheiprint;
+    storage_out[column] = storage;
+    ilnb_out[column] = snow_layers;
+}
+
+
+
+static inline void ruc_snow_preparation(
+    device const float* ts1d,
+    device const float* seaice_a,
+    device const float* gsw_a,
+    device const float* tabs_a,
+    device const float* tsnav_a,
+    device const float* prcpms_a,
+    device const float* newsnms_a,
+    device const float* vegfra_a,
+    device const float* lai_a,
+    device const float* sat_a,
+    device const float* soilt_a,
+    device const float* snowfallac_a,
+    device const float* alb_snow_a,
+    device const float* alb_snow_free_a,
+    device const float* snowrat_a,
+    device const float* grauprat_a,
+    device const float* icerat_a,
+    device const float* curat_a,
+    device const float* snwe_in,
+    device const float* snhei_in,
+    device const float* snowfrac_in,
+    device const float* rhosn_in,
+    device const float* rhosnfall_in,
+    device const float* cst_in,
+    device const float* alb_in,
+    device const float* emiss_in,
+    device const float* znt_in,
+    device const int* ivgtyp_a,
+    device const int* iland_in,
+    device const float* z0tbl,
+    device const float* lemitbl,
+    float delt,
+    float c1sn,
+    float c2sn,
+    int isice,
+    int urban,
+    int isncovr_opt,
+    device float* tice_out,
+    device float* rhosice_out,
+    device float* capice_out,
+    device float* thdifice_out,
+    device float* snhei_crit_out,
+    device float* snhei_crit_newsn_out,
+    device float* zntsn_out,
+    device float* snow_mosaic_out,
+    device float* snfr_out,
+    device float* newsn_out,
+    device float* newsnowratio_out,
+    device float* snowfracnewsn_out,
+    device float* rhonewsn_out,
+    device float* smelt_out,
+    device float* rainf_out,
+    device float* rsm_out,
+    device float* dd1_out,
+    device float* infiltr_out,
+    device float* vegfrac_out,
+    device float* drip_out,
+    device float* dripsn_out,
+    device float* dripliq_out,
+    device float* smf_out,
+    device float* interw_out,
+    device float* intersn_out,
+    device float* infwater_out,
+    device float* intwratio_out,
+    device float* gswnew_out,
+    device float* gswin_out,
+    device float* albice_out,
+    device float* albsn_out,
+    device float* emissn_out,
+    device float* emiss_snowfree_out,
+    device float* keep_snow_albedo_out,
+    device float* snowfrac2_out,
+    device float* snwe_out,
+    device float* snhei_out,
+    device float* snowfrac_out,
+    device float* rhosn_out,
+    device float* rhosnfall_out,
+    device float* cst_out,
+    device float* alb_out,
+    device float* emiss_out,
+    device float* znt_out,
+    device int* iland_out,
+    int ncolumn,
+    int column,
+    uint forms)
+{
+
+    const float zero = 0.0f;
+    const float one = 1.0f;
+    // module_model_constants rhowater.
+    const float rhowater = 1000.0f;
+    // :1418-1419 and :1493 fold their leading products at compile time in
+    // default REAL; the same products are formed here.
+    const float critical_depth_coefficient = ruc_fmul_rn(0.01601f, rhowater);
+    const float new_snow_depth_coefficient = ruc_fmul_rn(0.0005f, rhowater);
+    const float aging_depth_coefficient = ruc_fmul_rn(0.0081f, 1.0e3f);
+    const float freeze = 273.15f;
+    const float snow_emissivity = 0.98f;
+    // (273.15-263.15) in the :1735/:1761 albedo forms.
+    const float albedo_span = ruc_fsub_rn(273.15f, 263.15f);
+
+    float seaice = seaice_a[column];
+    float gsw = gsw_a[column];
+    float tabs = tabs_a[column];
+    float tsnav = tsnav_a[column];
+    float prcpms = prcpms_a[column];
+    float newsnms = newsnms_a[column];
+    float vegfra = vegfra_a[column];
+    float lai = lai_a[column];
+    float sat = sat_a[column];
+    float soilt = soilt_a[column];
+    float snowfallac = snowfallac_a[column];
+    float alb_snow = alb_snow_a[column];
+    float alb_snow_free = alb_snow_free_a[column];
+    float snowrat = snowrat_a[column];
+    float grauprat = grauprat_a[column];
+    float icerat = icerat_a[column];
+    float curat = curat_a[column];
+    float snwe = snwe_in[column];
+    float snhei = snhei_in[column];
+    float snowfrac = snowfrac_in[column];
+    float rhosn = rhosn_in[column];
+    float rhosnfall = rhosnfall_in[column];
+    float cst = cst_in[column];
+    float alb = alb_in[column];
+    float emiss = emiss_in[column];
+    float znt = znt_in[column];
+    int ivgtyp = ivgtyp_a[column];
+    int iland = iland_in[column];
+
+    // :1418-1419
+    float snhei_crit = ruc_fdiv_rn(critical_depth_coefficient, rhosn);
+    float snhei_crit_newsn = ruc_fdiv_rn(new_snow_depth_coefficient, rhosn);
+    // :1421 - assigned and never read again by sfctmp.
+    float zntsn = z0tbl[isice - 1];
+    // :1423-1434
+    float snow_mosaic = zero;
+    float snfr = one;
+    float newsn = zero;
+    float newsnowratio = zero;
+    float snowfracnewsn = zero;
+    float rhonewsn = 100.0f;
+    if (snhei == zero) snowfrac = zero;
+    float smelt = zero;
+    float rainf = zero;
+    float rsm = zero;
+    float dd1 = zero;
+    float infiltr = zero;
+    // :1442-1449
+    float vegfrac = ruc_fmul_rn(0.01f, vegfra);
+    float drip = zero;
+    float dripsn = zero;
+    float dripliq = zero;
+    float smf = zero;
+    float interw = zero;
+    float intersn = zero;
+    float infwater = zero;
+    // :1452-1458 - the ice column starts at zero on every point.
+    for (int level = 0; level < RUC_NZS; ++level) {
+        int index = level * ncolumn + column;
+        tice_out[index] = zero;
+        rhosice_out[index] = zero;
+        capice_out[index] = zero;
+        thdifice_out[index] = zero;
+    }
+    // :1460-1465
+    float gswnew = gsw;
+    float gswin = ruc_fdiv_rn(gsw, ruc_fsub_rn(one, alb));
+    float albice = alb_snow_free;
+    float albsn = alb_snow;
+    float emissn = snow_emissivity;
+    float emiss_snowfree = lemitbl[ivgtyp - 1];
+
+    // :1471-1485 sea-ice column properties (Zubov) and the ice albedo.
+    if (seaice >= 0.5f) {
+        for (int level = 0; level < RUC_NZS; ++level) {
+            int index = level * ncolumn + column;
+            float tice = ruc_fsub_rn(ts1d[index], freeze);
+            float rhosice = ruc_fdiv_rn(
+                917.6f, ruc_fsub_rn(one, ruc_fmul_rn(0.000165f, tice)));
+            float cice = ruc_fadd_rn(2115.85f, ruc_fmul_rn(7.7948f, tice));
+            float capice = ruc_fmul_rn(cice, rhosice);
+            tice_out[index] = tice;
+            rhosice_out[index] = rhosice;
+            capice_out[index] = capice;
+            thdifice_out[index] = ruc_fdiv_rn(2.260872f, capice);
+        }
+        float surface_tice = tice_out[column];
+        albice = ruc_fused_min(
+            alb_snow_free,
+            ruc_fused_max(
+                ruc_fsub_rn(alb_snow_free, 0.05f),
+                ruc_fsub_rn(
+                    alb_snow_free,
+                    ruc_fdiv_rn(
+                        ruc_fmul_rn(0.1f, ruc_fadd_rn(surface_tice, 10.0f)),
+                        10.0f))));
+    }
+
+    // :1493-1501 Koren et al. (1999) compaction of the existing pack.
+    if (snhei > ruc_fdiv_rn(aging_depth_coefficient, rhosn)) {
+        float bsn = ruc_fmul_rn(
+            ruc_fmul_rn(ruc_fdiv_rn(delt, 3600.0f), c1sn),
+            ruc_expf_glibc(
+                ruc_fsub_rn(
+                    ruc_fmul_rn(0.08f, ruc_fused_min(zero, tsnav)),
+                    ruc_fmul_rn(ruc_fmul_rn(c2sn, rhosn), 1.0e-3f))));
+        float compaction = ruc_fmul_rn(ruc_fmul_rn(bsn, snwe), 100.0f);
+        // :1496 - goto 777 leaves rhosn untouched.
+        if (!(compaction < 1.0e-4f)) {
+            float xsn = ruc_fdiv_rn(
+                ruc_fmul_rn(rhosn, ruc_fsub_rn(ruc_expf_glibc(compaction), one)),
+                compaction);
+            rhosn = ruc_fused_min(ruc_fused_max(58.8f, xsn), 500.0f);
+        }
+    }
+
+    // :1504 - the mosaic flag from the previous step's snow fraction.
+    if (GPUWM_RUC_SNOW_V461 && snowfrac < 0.75f) snow_mosaic = one;
+
+    // :1506-1540 fresh snowfall and its density.
+    newsn = ruc_fmul_rn(newsnms, delt);
+    if (newsn > zero) {
+        newsnowratio = ruc_fused_min(one, ruc_fdiv_rn(newsn, ruc_fadd_rn(snwe, newsn)));
+        rhonewsn = ruc_fused_min(
+            125.0f,
+            ruc_fdiv_rn(
+                1000.0f,
+                ruc_fused_max(
+                    8.0f,
+                    ruc_fmul_rn(
+                        17.0f,
+                        ruc_tanhf_glibc(
+                            ruc_fmul_rn(ruc_fsub_rn(276.65f, tabs), 0.15f))))));
+        float rhonewgr = ruc_fused_min(
+            500.0f,
+            ruc_fdiv_rn(
+                rhowater,
+                ruc_fused_max(
+                    2.0f,
+                    ruc_fmul_rn(
+                        3.5f,
+                        ruc_tanhf_glibc(
+                            ruc_fmul_rn(ruc_fsub_rn(274.15f, tabs), 0.3333f))))));
+        float rhonewice = rhonewsn;
+        float weighted = ruc_fmul_rn(rhonewsn, snowrat);
+        weighted = ruc_fadd_rn(weighted, ruc_fmul_rn(rhonewgr, grauprat));
+        weighted = ruc_fadd_rn(weighted, ruc_fmul_rn(rhonewice, icerat));
+        weighted = ruc_fadd_rn(weighted, ruc_fmul_rn(rhonewgr, curat));
+        rhosnfall = ruc_fused_min(500.0f, ruc_fused_max(58.8f, weighted));
+        // :1531 - from here rhonewsn is the density of the falling frozen
+        // precipitation, not of fresh snow alone.
+        rhonewsn = rhosnfall;
+        float xsn = ruc_fdiv_rn(
+            ruc_fadd_rn(ruc_fmul_rn(rhosn, snwe), ruc_fmul_rn(rhonewsn, newsn)),
+            ruc_fadd_rn(snwe, newsn));
+        rhosn = ruc_fused_min(ruc_fused_max(58.8f, xsn), 500.0f);
+    }
+
+    // :1542-1551
+    if (prcpms != zero) rainf = one;
+
+    // :1553-1578 canopy interception (Lawrence et al. 2006 CLM eq. 1).
+    drip = zero;
+    float intwratio = zero;
+    if (vegfrac > 0.01f) {
+        float canopy_gap = ruc_fsub_rn(
+            one, ruc_expf_glibc(ruc_fmul_rn(-0.5f, lai)));
+        interw = ruc_fmul_rn(
+            ruc_fmul_rn(ruc_fmul_rn(ruc_fmul_rn(0.25f, delt), prcpms), canopy_gap),
+            vegfrac);
+        intersn = ruc_fmul_rn(
+            ruc_fmul_rn(ruc_fmul_rn(0.25f, newsn), canopy_gap), vegfrac);
+        infwater = ruc_fsub_rn(prcpms, ruc_fdiv_rn(interw, delt));
+        float intercepted = ruc_fadd_rn(interw, intersn);
+        if (intercepted > zero) intwratio = ruc_fdiv_rn(interw, intercepted);
+        dd1 = ruc_fadd_rn(ruc_fadd_rn(cst, interw), intersn);
+        cst = dd1;
+        if (cst > sat) {
+            cst = sat;
+            drip = ruc_fsub_rn(dd1, sat);
+        }
+    } else {
+        cst = zero;
+        drip = zero;
+        interw = zero;
+        intersn = zero;
+        infwater = prcpms;
+    }
+
+    if (!GPUWM_RUC_SNOW_V461) {
+        // Branch :1675-1679: the critical depths from the density this step
+        // built, and the mosaic flag from the depth before new snow.
+        snhei_crit = ruc_fdiv_rn(critical_depth_coefficient, rhosn);
+        snhei_crit_newsn = ruc_fdiv_rn(new_snow_depth_coefficient, rhosn);
+        snowfrac = ruc_fused_min(one, ruc_fdiv_rn(snhei, ruc_fmul_rn(2.0f, snhei_crit)));
+        if (snowfrac < 0.75f) snow_mosaic = one;
+    }
+
+    // :1580-1598 fresh snow onto the ground.
+    if (newsn > zero) {
+        snwe = ruc_fused_max(zero, ruc_fsub_rn(ruc_fadd_rn(snwe, newsn), intersn));
+        if (drip > zero) {
+            if (snow_mosaic == one) {
+                dripliq = ruc_fmul_rn(drip, intwratio);
+                dripsn = ruc_fsub_rn(drip, dripliq);
+                snwe = ruc_fadd_rn(snwe, dripsn);
+                infwater = ruc_fadd_rn(infwater, dripliq);
+                dripliq = zero;
+                dripsn = zero;
+            } else {
+                snwe = ruc_fadd_rn(snwe, drip);
+            }
+        }
+        snhei = ruc_fdiv_rn(ruc_fmul_rn(snwe, rhowater), rhosn);
+        newsn = ruc_fdiv_rn(ruc_fmul_rn(newsn, rhowater), rhonewsn);
+    }
+
+    // WRF leaves both undefined when the snhei>0. branch does not run.
+    float keep_snow_albedo = zero;
+    float snowfrac2 = zero;
+
+    if (snhei > zero) {
+        // :1603 - snow-covered points use the snow/ice land-use class.
+        iland = isice;
+        if (!GPUWM_RUC_SNOW_V461) {
+            // Branch :1708-1719.  isncovr_opt is not read.
+            snowfrac = ruc_fused_min(one, ruc_fdiv_rn(snhei, ruc_fmul_rn(2.0f, snhei_crit)));
+            if (ivgtyp == urban) snowfrac = ruc_fused_min(0.75f, snowfrac);
+            if (snowfrac < 0.75f) snow_mosaic = one;
+            if (newsn > zero) {
+                snowfracnewsn = ruc_fused_min(one, ruc_fdiv_rn(snhei, snhei_crit_newsn));
+            }
+            keep_snow_albedo = zero;
+            if (newsn > zero && snowfracnewsn > 0.99f) {
+                keep_snow_albedo = one;
+                snow_mosaic = zero;
+            }
+        } else {
+            if (isncovr_opt == 1) {
+                snowfrac = ruc_fused_min(
+                    one, ruc_fdiv_rn(snhei, ruc_fmul_rn(2.0f, snhei_crit)));
+            } else if (isncovr_opt == 2) {
+                snowfrac = ruc_fused_min(
+                    one, ruc_fdiv_rn(snhei, ruc_fmul_rn(2.0f, snhei_crit)));
+                // (rhosn/rhonewsn)**1. is the quotient itself; a float exponent of
+                // exactly 1 is an identity, so no pow is issued.
+                snowfrac2 = ruc_tanhf_glibc(
+                    ruc_fdiv_rn(
+                        snhei,
+                        ruc_fmul_rn(
+                            ruc_fmul_rn(2.5f, ruc_fused_min(0.2f, znt)),
+                            ruc_fdiv_rn(rhosn, rhonewsn))));
+                snowfrac = ruc_fmul_rn(0.5f, ruc_fadd_rn(snowfrac, snowfrac2));
+            } else {
+                // :1633 - m is the Noah-MP facsnf exponent, held at 1.
+                snowfrac = ruc_tanhf_glibc(
+                    ruc_fdiv_rn(
+                        snhei,
+                        ruc_fmul_rn(
+                            ruc_fmul_rn(10.0f, ruc_sncovfac[ivgtyp - 1]),
+                            ruc_fdiv_rn(rhosn, rhonewsn))));
+            }
+            if (newsn > zero) {
+                snowfracnewsn = ruc_fused_min(
+                    one,
+                    ruc_fdiv_rn(
+                        ruc_fmul_rn(snowfallac, 1.0e-3f), snhei_crit_newsn));
+            }
+            // :1645
+            if (ivgtyp == urban) snowfrac = ruc_fused_min(0.75f, snowfrac);
+            // :1656
+            if (snowfrac < 0.75f) snow_mosaic = one;
+            // :1658-1663
+            keep_snow_albedo = zero;
+            if (snowfracnewsn > 0.99f && rhosnfall < 450.0f) {
+                keep_snow_albedo = one;
+                snow_mosaic = zero;
+            }
+        }
+        // :1672-1680 roughness blend toward the snow/ice class.
+        if (newsn == zero && znt <= 0.2f && ivgtyp != isice) {
+            float snow_roughness = z0tbl[iland - 1];
+            if (snhei <= ruc_fmul_rn(2.0f, znt)) {
+                znt = ruc_fadd_rn(
+                    ruc_fmul_rn(0.55f, znt), ruc_fmul_rn(0.45f, snow_roughness));
+            } else if (snhei > ruc_fmul_rn(2.0f, znt)
+                       && snhei <= ruc_fmul_rn(4.0f, znt)) {
+                znt = ruc_fadd_rn(
+                    ruc_fmul_rn(0.2f, znt), ruc_fmul_rn(0.8f, snow_roughness));
+            } else if (snhei > ruc_fmul_rn(4.0f, znt)) {
+                znt = snow_roughness;
+            }
+        }
+
+        if (seaice < 0.5f) {
+            // :1682-1737 snow on soil.
+            if (snow_mosaic == one) {
+                albsn = alb_snow;
+                // :1690-1696 is unreachable: :1662 clears snow_mosaic
+                // whenever keep_snow_albedo is set, so this test can never
+                // pass.  Transcribed to stay faithful.
+                // The branch has no 0.7 floor, here or below.
+                if (GPUWM_RUC_SNOW_V461 && keep_snow_albedo > 0.9f && albsn < 0.4f) {
+                    albsn = 0.7f;
+                }
+                emiss = emissn;
+            } else {
+                albsn = ruc_fused_max(
+                    ruc_fmul_rn(keep_snow_albedo, alb_snow),
+                    ruc_fused_min(
+                        ruc_fadd_rn(
+                            alb_snow_free,
+                            ruc_fmul_rn(
+                                ruc_fsub_rn(alb_snow, alb_snow_free), snowfrac)),
+                        alb_snow));
+                if (GPUWM_RUC_SNOW_V461 && newsn > zero && keep_snow_albedo > 0.9f
+                    && albsn < 0.4f) {
+                    albsn = 0.7f;
+                }
+                emiss = ruc_fused_max(
+                    ruc_fmul_rn(keep_snow_albedo, emissn),
+                    ruc_fused_min(
+                        ruc_fadd_rn(
+                            emiss_snowfree,
+                            ruc_fmul_rn(
+                                ruc_fsub_rn(emissn, emiss_snowfree), snowfrac)),
+                        emissn));
+            }
+            if (albsn < 0.4f || keep_snow_albedo == one) {
+                alb = albsn;
+            } else {
+                alb = ruc_fused_min(
+                    albsn,
+                    ruc_fused_max(
+                        ruc_fsub_rn(
+                            albsn,
+                            ruc_fmul_rn(
+                                ruc_fdiv_rn(
+                                    ruc_fmul_rn(
+                                        0.1f, ruc_fsub_rn(soilt, 263.15f)),
+                                    albedo_span),
+                                albsn)),
+                        ruc_fsub_rn(albsn, 0.05f)));
+            }
+        } else {
+            // :1738-1765 snow on ice.
+            if (snow_mosaic == one) {
+                albsn = alb_snow;
+                emiss = emissn;
+            } else {
+                albsn = ruc_fused_max(
+                    ruc_fmul_rn(keep_snow_albedo, alb_snow),
+                    ruc_fused_min(
+                        ruc_fadd_rn(
+                            albice,
+                            ruc_fmul_rn(ruc_fsub_rn(alb_snow, albice), snowfrac)),
+                        alb_snow));
+                emiss = ruc_fused_max(
+                    ruc_fmul_rn(keep_snow_albedo, emissn),
+                    ruc_fused_min(
+                        ruc_fadd_rn(
+                            emiss_snowfree,
+                            ruc_fmul_rn(
+                                ruc_fsub_rn(emissn, emiss_snowfree), snowfrac)),
+                        emissn));
+            }
+            if (albsn < alb_snow || keep_snow_albedo == one) {
+                alb = albsn;
+            } else {
+                alb = ruc_fused_min(
+                    albsn,
+                    ruc_fused_max(
+                        ruc_fsub_rn(
+                            albsn,
+                            ruc_fdiv_rn(
+                                ruc_fmul_rn(
+                                    ruc_fmul_rn(0.15f, albsn),
+                                    ruc_fsub_rn(soilt, 263.15f)),
+                                albedo_span)),
+                        ruc_fsub_rn(albsn, 0.1f)));
+            }
+        }
+    }
+
+    snhei_crit_out[column] = snhei_crit;
+    snhei_crit_newsn_out[column] = snhei_crit_newsn;
+    zntsn_out[column] = zntsn;
+    snow_mosaic_out[column] = snow_mosaic;
+    snfr_out[column] = snfr;
+    newsn_out[column] = newsn;
+    newsnowratio_out[column] = newsnowratio;
+    snowfracnewsn_out[column] = snowfracnewsn;
+    rhonewsn_out[column] = rhonewsn;
+    smelt_out[column] = smelt;
+    rainf_out[column] = rainf;
+    rsm_out[column] = rsm;
+    dd1_out[column] = dd1;
+    infiltr_out[column] = infiltr;
+    vegfrac_out[column] = vegfrac;
+    drip_out[column] = drip;
+    dripsn_out[column] = dripsn;
+    dripliq_out[column] = dripliq;
+    smf_out[column] = smf;
+    interw_out[column] = interw;
+    intersn_out[column] = intersn;
+    infwater_out[column] = infwater;
+    intwratio_out[column] = intwratio;
+    gswnew_out[column] = gswnew;
+    gswin_out[column] = gswin;
+    albice_out[column] = albice;
+    albsn_out[column] = albsn;
+    emissn_out[column] = emissn;
+    emiss_snowfree_out[column] = emiss_snowfree;
+    keep_snow_albedo_out[column] = keep_snow_albedo;
+    snowfrac2_out[column] = snowfrac2;
+    snwe_out[column] = snwe;
+    snhei_out[column] = snhei;
+    snowfrac_out[column] = snowfrac;
+    rhosn_out[column] = rhosn;
+    rhosnfall_out[column] = rhosnfall;
+    cst_out[column] = cst;
+    alb_out[column] = alb;
+    emiss_out[column] = emiss;
+    znt_out[column] = znt;
+    iland_out[column] = iland;
+}
+
+static inline void ruc_snow_sea_ice_step(
+    device const float* capice,
+    device const float* thdifice,
+    device const float* tso_in,
+    device const float* meltfactor_a,
+    device const float* rhonewsn_a,
+    device const float* prcpms_a,
+    device const float* rainf_a,
+    device const float* newsnow_a,
+    device const float* snhei_in,
+    device const float* snwe_in,
+    device const float* snowfrac_a,
+    device const float* rhosn_in,
+    device const float* patm_a,
+    device const float* qvatm_a,
+    device const float* emiss_in,
+    device const float* rnet_a,
+    device const float* qkms_a,
+    device const float* tkms_a,
+    device const float* rho_a,
+    device const float* alb_in,
+    device const float* znt_in,
+    device const float* tabs_a,
+    device const float* soilt_in,
+    device const float* soilt1_in,
+    device const float* tsnav_in,
+    device const float* qvg_in,
+    device const float* qsg_in,
+    device const float* snom_in,
+    device const float* s_in,
+    device const int* ilnb_in,
+    device const float* tbq,
+    float delt,
+    // ``0.5*dz8w(i,1,j)`` -- half the lowest model layer, which is a
+    // PER-COLUMN depth on a terrain-following coordinate.  WRF passes it
+    // as a scalar only because ``sfctmp`` is called from inside DO j/DO i.
+    device const float* conflx,
+    float cvw,
+    float xlv,
+    int myj,
+    device float* tso_out,
+    device int* ilnb_out,
+    device float* snweprint_out,
+    device float* snheiprint_out,
+    device float* rsm_out,
+    device float* dew_out,
+    device float* soilt_out,
+    device float* soilt1_out,
+    device float* tsnav_out,
+    device float* qvg_out,
+    device float* qsg_out,
+    device float* qcg_out,
+    device float* smelt_out,
+    device float* snoh_out,
+    device float* snflx_out,
+    device float* snom_out,
+    device float* eeta_out,
+    device float* qfx_out,
+    device float* hfx_out,
+    device float* s_out,
+    device float* sublim_out,
+    device float* prcpl_out,
+    device float* fltot_out,
+    device float* snwe_out,
+    device float* snhei_out,
+    device float* rhosn_out,
+    device float* emiss_out,
+    device float* alb_out,
+    device float* znt_out,
+    int ncolumn,
+    int column)
+{
+
+    const float zero = 0.0f;
+    const float one = 1.0f;
+    const float half_factor = 0.5f;
+    const float two = 2.0f;
+    // cp and rovcp arrive from module_model_constants; the pinned RUC lane
+    // fixes them at these values and the oracle carries the same bytes.
+    const float cp_air = 1004.5f;
+    const float rovcp = ruc_fdiv_rn(287.0f, cp_air);
+    const float stbolt = 5.67051e-8f;
+    const float freeze = 273.15f;
+    // module_sf_ruclsm.F:4211 caps every ice temperature here.
+    const float ice_cap = 271.4f;
+    // :3930 latent heat of fusion, :3932 the sublimation sum.
+    const float xlmelt = 3.35e5f;
+    const float xlvm = ruc_fadd_rn(xlv, xlmelt);
+    const float thousand = 1.0e3f;
+    const float milli = 1.0e-3f;
+    const float snow_heat = 2090.0f;
+    const float snow_cond = 0.265f;
+    // :3945-3946 two-layer and blending depth thresholds.
+    const float deltsn_scale = ruc_fmul_rn(0.05f, thousand);
+    const float snth_scale = ruc_fmul_rn(0.01f, thousand);
+    // :4318 Egglston melt-rate limit.
+    const float egglston = 5.6e-8f;
+    // :4341 Koren et al. (1999) retained-liquid fraction.
+    const float rsm_low = 0.08f;
+    const float rsm_high = 0.18f;
+    const float rsm_depth = 0.10f;
+    const float rsm_share = 0.13f;
+    const float rsm_snhei = 0.01f;
+    const float rhosn_low = 58.8f;
+    const float rhosn_high = 500.0f;
+    const float epdt_floor = 1.0e-8f;
+    // (p1000mb*0.00001) from the :4438 Exner factor.
+    const float reference = ruc_fmul_rn(100000.0f, 0.00001f);
+    // :4519-4521 bare sea-ice surface properties.
+    const float bare_emiss = 0.98f;
+    const float bare_znt = 0.011f;
+    const float bare_alb = 0.55f;
+
+    // share/module_soil_pre.F:1153-1194 nine-level RUC depths, and the
+    // lsmruc-side zshalf/dtdzs construction snowseaice consumes.
+    constant float* zsmain = ruc_sfctmp_soil_layer_depth;
+    float zshalf[RUC_NZS];
+    float dtdzs[RUC_DTDZS_LEN];
+    zshalf[0] = zero;
+    for (int level = 1; level < RUC_NZS; ++level) {
+        zshalf[level] = ruc_fmul_rn(
+            ruc_fadd_rn(zsmain[level - 1], zsmain[level]), half_factor);
+    }
+    for (int index = 0; index < RUC_DTDZS_LEN; ++index) dtdzs[index] = zero;
+    for (int fortran_level = 2; fortran_level < RUC_NZS; ++fortran_level) {
+        int first = 2 * fortran_level - 3;
+        int second = first + 1;
+        int level = fortran_level - 1;
+        float x = ruc_fdiv_rn(
+            ruc_fdiv_rn(delt, two),
+            ruc_fsub_rn(zshalf[level + 1], zshalf[level]));
+        dtdzs[first - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level], zsmain[level - 1]));
+        dtdzs[second - 1] = ruc_fdiv_rn(
+            x, ruc_fsub_rn(zsmain[level + 1], zsmain[level]));
+    }
+
+    float rhosn = rhosn_in[column];
+    float rhonewsn = rhonewsn_a[column];
+    float snhei = snhei_in[column];
+    float snwe = snwe_in[column];
+    float soilt = soilt_in[column];
+    float soilt1 = soilt1_in[column];
+    float tsnav = tsnav_in[column];
+    float qvg = qvg_in[column];
+    float qsg = qsg_in[column];
+    float emiss = emiss_in[column];
+    float alb = alb_in[column];
+    float znt = znt_in[column];
+    float snom = snom_in[column];
+    float storage = s_in[column];
+    int ilnb = ilnb_in[column];
+    float rho = rho_a[column];
+    float qkms = qkms_a[column];
+    float tkms = tkms_a[column];
+    float qvatm = qvatm_a[column];
+    float tabs = tabs_a[column];
+    float patm = patm_a[column];
+    float rnet = rnet_a[column];
+    float prcpms = prcpms_a[column];
+    float rainf = rainf_a[column];
+    float newsnow = newsnow_a[column];
+    float meltfactor = meltfactor_a[column];
+    float snowfrac = snowfrac_a[column];
+
+    // module_sf_ruclsm.F:3945-3956.  The snhei tested here is the incoming
+    // one; :4004 below rebuilds it from snwe.
+    float deltsn = ruc_fdiv_rn(deltsn_scale, rhosn);
+    float snth = ruc_fdiv_rn(snth_scale, rhosn);
+    if (snhei >= ruc_fadd_rn(deltsn, snth)) {
+        if (ruc_fsub_rn(ruc_fsub_rn(snhei, deltsn), snth) < snth) {
+            deltsn = ruc_fmul_rn(half_factor, ruc_fsub_rn(snhei, snth));
+        }
+    }
+
+    // module_sf_ruclsm.F:3958-3993.
+    float ras = ruc_fmul_rn(rho, milli);
+    float rhocsn = ruc_fmul_rn(snow_heat, rhosn);
+    float rhonewcsn = ruc_fmul_rn(snow_heat, rhonewsn);
+    float thdifsn = ruc_fdiv_rn(snow_cond, rhocsn);
+    float smelt = zero;
+    float snoh = zero;
+    float rsm = zero;
+    float fsn = one;
+    float fso = zero;
+    float qgold = qsg;
+    float tnold = soilt;
+    float dzstop = ruc_fdiv_rn(one, ruc_fsub_rn(zsmain[1], zsmain[0]));
+    float prcpl = prcpms;
+
+    // module_sf_ruclsm.F:4003-4014.
+    float fq = qkms;
+    snhei = ruc_fdiv_rn(ruc_fmul_rn(snwe, thousand), rhosn);
+    float snwepr = snwe;
+    float beta = one;
+    float epot = -ruc_fmul_rn(fq, ruc_fsub_rn(qvatm, qsg));
+    float epdt = ruc_fmul_rn(ruc_fmul_rn(epot, ras), delt);
+    if (epdt > zero && snwepr <= epdt) {
+        beta = ruc_fdiv_rn(snwepr, ruc_fused_max(epdt_floor, epdt));
+        snwe = zero;
+    }
+
+    // module_sf_ruclsm.F:4020-4032 upward tridiagonal sweep in the ice.
+    float cotso[RUC_NZS] = {0.0f};
+    float rhtso[RUC_NZS] = {0.0f};
+    rhtso[0] = tso_in[RUC_NZS_M1 * ncolumn + column];
+    for (int step = 0; step < RUC_NZS_M2; ++step) {
+        int kn = RUC_NZS_M1 - step;
+        int first = 2 * kn - 3;
+        float x1 = ruc_fmul_rn(
+            dtdzs[first - 1], thdifice[(kn - 2) * ncolumn + column]);
+        float x2 = ruc_fmul_rn(
+            dtdzs[first], thdifice[(kn - 1) * ncolumn + column]);
+        float ft = ruc_fadd_rn(
+            tso_in[(kn - 1) * ncolumn + column],
+            ruc_fmul_rn(
+                x1,
+                ruc_fsub_rn(
+                    tso_in[(kn - 2) * ncolumn + column],
+                    tso_in[(kn - 1) * ncolumn + column])));
+        ft = ruc_fsub_rn(
+            ft,
+            ruc_fmul_rn(
+                x2,
+                ruc_fsub_rn(
+                    tso_in[(kn - 1) * ncolumn + column],
+                    tso_in[kn * ncolumn + column])));
+        float denominator = ruc_fadd_rn(one, x1);
+        denominator = ruc_fadd_rn(denominator, x2);
+        denominator = ruc_fsub_rn(denominator, ruc_fmul_rn(x2, cotso[step]));
+        cotso[step + 1] = ruc_fdiv_rn(x1, denominator);
+        rhtso[step + 1] = ruc_fdiv_rn(
+            ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[step])), denominator);
+    }
+
+    // WRF leaves snprim/tsob/cotsn/rhtsn undefined when snhei == 0; no
+    // consumer is reached on that path, so zero stands in for them here.
+    float snprim = zero;
+    float tsob = zero;
+    float cotsn = zero;
+    float rhtsn = zero;
+    float d1sn = zero;
+    float d2sn = zero;
+    float d9sn = zero;
+    float r22sn = zero;
+    bool thin = (snhei < snth) && (snhei > zero);
+    float thdifice_top = thdifice[column];
+    float tso1_in = tso_in[column];
+    float tso2_in = tso_in[ncolumn + column];
+    float tso3_in = tso_in[2 * ncolumn + column];
+    if (snhei >= snth) {
+        if (snhei <= ruc_fadd_rn(deltsn, snth)) {
+            // module_sf_ruclsm.F:4037-4055 one-layer snow.
+            ilnb = 1;
+            snprim = ruc_fused_max(snth, snhei);
+            soilt1 = tso1_in;
+            tsob = tso1_in;
+            float xsn = ruc_fdiv_rn(
+                ruc_fdiv_rn(delt, two),
+                ruc_fadd_rn(zshalf[1], ruc_fmul_rn(half_factor, snprim)));
+            float ddzsn = ruc_fdiv_rn(xsn, snprim);
+            float x1sn = ruc_fmul_rn(ddzsn, thdifsn);
+            float x2 = ruc_fmul_rn(dtdzs[0], thdifice_top);
+            float ft = ruc_fadd_rn(
+                tso1_in, ruc_fmul_rn(x1sn, ruc_fsub_rn(soilt, tso1_in)));
+            ft = ruc_fsub_rn(ft, ruc_fmul_rn(x2, ruc_fsub_rn(tso1_in, tso2_in)));
+            float denominator = ruc_fadd_rn(one, x1sn);
+            denominator = ruc_fadd_rn(denominator, x2);
+            denominator = ruc_fsub_rn(denominator, ruc_fmul_rn(x2, cotso[RUC_NZS_M2]));
+            cotso[RUC_NZS_M1] = ruc_fdiv_rn(x1sn, denominator);
+            rhtso[RUC_NZS_M1] = ruc_fdiv_rn(
+                ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[RUC_NZS_M2])), denominator);
+            cotsn = cotso[RUC_NZS_M1];
+            rhtsn = rhtso[RUC_NZS_M1];
+            tsnav = ruc_fsub_rn(
+                ruc_fmul_rn(half_factor, ruc_fadd_rn(soilt, tso1_in)), freeze);
+        } else {
+            // module_sf_ruclsm.F:4058-4082 two-layer snow.
+            ilnb = 2;
+            snprim = deltsn;
+            tsob = soilt1;
+            float xsn = ruc_fdiv_rn(
+                ruc_fdiv_rn(delt, two), ruc_fmul_rn(half_factor, snhei));
+            float xsn1 = ruc_fdiv_rn(
+                ruc_fdiv_rn(delt, two),
+                ruc_fadd_rn(
+                    zshalf[1],
+                    ruc_fmul_rn(half_factor, ruc_fsub_rn(snhei, deltsn))));
+            float ddzsn = ruc_fdiv_rn(xsn, deltsn);
+            float ddzsn1 = ruc_fdiv_rn(xsn1, ruc_fsub_rn(snhei, deltsn));
+            float x1sn = ruc_fmul_rn(ddzsn, thdifsn);
+            float x1sn1 = ruc_fmul_rn(ddzsn1, thdifsn);
+            float x2 = ruc_fmul_rn(dtdzs[0], thdifice_top);
+            float ft = ruc_fadd_rn(
+                tso1_in, ruc_fmul_rn(x1sn1, ruc_fsub_rn(soilt1, tso1_in)));
+            ft = ruc_fsub_rn(ft, ruc_fmul_rn(x2, ruc_fsub_rn(tso1_in, tso2_in)));
+            float denominator = ruc_fadd_rn(one, x1sn1);
+            denominator = ruc_fadd_rn(denominator, x2);
+            denominator = ruc_fsub_rn(denominator, ruc_fmul_rn(x2, cotso[RUC_NZS_M2]));
+            cotso[RUC_NZS_M1] = ruc_fdiv_rn(x1sn1, denominator);
+            rhtso[RUC_NZS_M1] = ruc_fdiv_rn(
+                ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[RUC_NZS_M2])), denominator);
+            float ftsnow = ruc_fadd_rn(
+                soilt1, ruc_fmul_rn(x1sn, ruc_fsub_rn(soilt, soilt1)));
+            ftsnow = ruc_fsub_rn(
+                ftsnow, ruc_fmul_rn(x1sn1, ruc_fsub_rn(soilt1, tso1_in)));
+            float denomsn = ruc_fadd_rn(one, x1sn);
+            denomsn = ruc_fadd_rn(denomsn, x1sn1);
+            denomsn = ruc_fsub_rn(denomsn, ruc_fmul_rn(x1sn1, cotso[RUC_NZS_M1]));
+            cotsn = ruc_fdiv_rn(x1sn, denomsn);
+            rhtsn = ruc_fdiv_rn(
+                ruc_fadd_rn(ftsnow, ruc_fmul_rn(x1sn1, rhtso[RUC_NZS_M1])), denomsn);
+            tsnav = ruc_fsub_rn(
+                ruc_fmul_rn(
+                    ruc_fdiv_rn(half_factor, snhei),
+                    ruc_fadd_rn(
+                        ruc_fmul_rn(ruc_fadd_rn(soilt, soilt1), deltsn),
+                        ruc_fmul_rn(
+                            ruc_fadd_rn(soilt1, tso1_in),
+                            ruc_fsub_rn(snhei, deltsn)))),
+                freeze);
+        }
+    }
+
+    if (thin) {
+        // module_sf_ruclsm.F:4089-4108 snow blended into the top ice layer.
+        snprim = ruc_fadd_rn(snhei, zsmain[1]);
+        fsn = ruc_fdiv_rn(snhei, snprim);
+        fso = ruc_fsub_rn(one, fsn);
+        soilt1 = tso1_in;
+        tsob = tso2_in;
+        float xsn = ruc_fdiv_rn(
+            ruc_fdiv_rn(delt, two),
+            ruc_fadd_rn(
+                ruc_fsub_rn(zshalf[2], zsmain[1]),
+                ruc_fmul_rn(half_factor, snprim)));
+        float ddzsn = ruc_fdiv_rn(xsn, snprim);
+        float x1sn = ruc_fmul_rn(
+            ddzsn,
+            ruc_fadd_rn(
+                ruc_fmul_rn(fsn, thdifsn), ruc_fmul_rn(fso, thdifice_top)));
+        float x2 = ruc_fmul_rn(dtdzs[1], thdifice[ncolumn + column]);
+        float ft = ruc_fadd_rn(
+            tso2_in, ruc_fmul_rn(x1sn, ruc_fsub_rn(soilt, tso2_in)));
+        ft = ruc_fsub_rn(ft, ruc_fmul_rn(x2, ruc_fsub_rn(tso2_in, tso3_in)));
+        float denominator = ruc_fadd_rn(one, x1sn);
+        denominator = ruc_fadd_rn(denominator, x2);
+        denominator = ruc_fsub_rn(denominator, ruc_fmul_rn(x2, cotso[RUC_NZS_M3]));
+        cotso[RUC_NZS_M2] = ruc_fdiv_rn(x1sn, denominator);
+        rhtso[RUC_NZS_M2] = ruc_fdiv_rn(
+            ruc_fadd_rn(ft, ruc_fmul_rn(x2, rhtso[RUC_NZS_M3])), denominator);
+        tsnav = ruc_fsub_rn(
+            ruc_fmul_rn(half_factor, ruc_fadd_rn(soilt, tso1_in)), freeze);
+        cotso[RUC_NZS_M1] = cotso[RUC_NZS_M2];
+        rhtso[RUC_NZS_M1] = rhtso[RUC_NZS_M2];
+        cotsn = cotso[RUC_NZS_M1];
+        rhtsn = rhtso[RUC_NZS_M1];
+    }
+
+    // module_sf_ruclsm.F:4114-4131 heat balance coefficients.
+    epot = -ruc_fmul_rn(qkms, ruc_fsub_rn(qvatm, qsg));
+    float rhcs = capice[column];
+    float d1 = cotso[RUC_NZS_M2];
+    float d2 = rhtso[RUC_NZS_M2];
+    float tn = soilt;
+    float d9 = ruc_fmul_rn(ruc_fmul_rn(thdifice_top, rhcs), dzstop);
+    float d10 = ruc_fmul_rn(ruc_fmul_rn(tkms, cp_air), rho);
+    float r211 = ruc_fdiv_rn(ruc_fmul_rn(half_factor, conflx[column]), delt);
+    float r21 = ruc_fmul_rn(ruc_fmul_rn(r211, cp_air), rho);
+    float depth_square = ruc_fmul_rn(dzstop, dzstop);
+    float r22 = ruc_fdiv_rn(
+        half_factor, ruc_fmul_rn(ruc_fmul_rn(thdifice_top, delt), depth_square));
+    float tn2 = ruc_fmul_rn(tn, tn);
+    float tn4 = ruc_fmul_rn(tn2, tn2);
+    float r6 = ruc_fmul_rn(ruc_fmul_rn(ruc_fmul_rn(emiss, stbolt), half_factor), tn4);
+    float r7 = ruc_fdiv_rn(r6, tn);
+    float d11 = ruc_fadd_rn(rnet, r6);
+
+    // module_sf_ruclsm.F:4133-4163 snow-side coefficients.
+    if (snhei >= snth) {
+        if (snhei <= ruc_fadd_rn(deltsn, snth)) {
+            d1sn = cotso[RUC_NZS_M1];
+            d2sn = rhtso[RUC_NZS_M1];
+        } else {
+            d1sn = cotsn;
+            d2sn = rhtsn;
+        }
+        d9sn = ruc_fdiv_rn(ruc_fmul_rn(thdifsn, rhocsn), snprim);
+        r22sn = ruc_fdiv_rn(
+            ruc_fmul_rn(ruc_fmul_rn(snprim, snprim), half_factor),
+            ruc_fmul_rn(thdifsn, delt));
+    }
+    if (thin) {
+        d1sn = d1;
+        d2sn = d2;
+        d9sn = ruc_fdiv_rn(
+            ruc_fadd_rn(
+                ruc_fmul_rn(ruc_fmul_rn(fsn, thdifsn), rhocsn),
+                ruc_fmul_rn(ruc_fmul_rn(fso, thdifice_top), rhcs)),
+            snprim);
+        r22sn = ruc_fdiv_rn(
+            ruc_fmul_rn(ruc_fmul_rn(snprim, snprim), half_factor),
+            ruc_fmul_rn(
+                ruc_fadd_rn(
+                    ruc_fmul_rn(fsn, thdifsn),
+                    ruc_fmul_rn(fso, thdifice_top)),
+                delt));
+    }
+    if (snhei == zero) {
+        d9sn = d9;
+        r22sn = r22;
+        d1sn = d1;
+        d2sn = d2;
+    }
+
+    // module_sf_ruclsm.F:4167-4182.
+    float rain_heat_capacity = ruc_fmul_rn(ruc_fmul_rn(rainf, cvw), prcpms);
+    float newsnow_heat_capacity = ruc_fdiv_rn(
+        ruc_fmul_rn(rhonewcsn, newsnow), delt);
+    float tdenom = ruc_fmul_rn(
+        d9sn, ruc_fadd_rn(ruc_fsub_rn(one, d1sn), r22sn));
+    tdenom = ruc_fadd_rn(tdenom, d10);
+    tdenom = ruc_fadd_rn(tdenom, r21);
+    tdenom = ruc_fadd_rn(tdenom, r7);
+    tdenom = ruc_fadd_rn(tdenom, rain_heat_capacity);
+    tdenom = ruc_fadd_rn(tdenom, newsnow_heat_capacity);
+    float fkq = ruc_fmul_rn(qkms, rho);
+    float r210 = ruc_fmul_rn(r211, rho);
+    float beta_fkq = ruc_fmul_rn(beta, fkq);
+    float aa = ruc_fdiv_rn(
+        ruc_fmul_rn(xlvm, ruc_fadd_rn(beta_fkq, r210)), tdenom);
+    float humidity_inner = ruc_fmul_rn(qvatm, beta_fkq);
+    humidity_inner = ruc_fadd_rn(humidity_inner, ruc_fmul_rn(r210, qvg));
+    float rain_temperature = ruc_fused_max(freeze, tabs);
+    float newsnow_temperature = ruc_fused_min(freeze, tabs);
+    float numerator = ruc_fmul_rn(d10, tabs);
+    numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(r21, tn));
+    numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(xlvm, humidity_inner));
+    numerator = ruc_fadd_rn(numerator, d11);
+    float conduction = ruc_fadd_rn(d2sn, ruc_fmul_rn(r22sn, tn));
+    numerator = ruc_fadd_rn(numerator, ruc_fmul_rn(d9sn, conduction));
+    numerator = ruc_fadd_rn(
+        numerator, ruc_fmul_rn(rain_heat_capacity, rain_temperature));
+    numerator = ruc_fadd_rn(
+        numerator,
+        ruc_fmul_rn(newsnow_heat_capacity, newsnow_temperature));
+    float bb = ruc_fdiv_rn(numerator, tdenom);
+    float aa1 = aa;
+    float pp = ruc_fmul_rn(patm, thousand);
+    aa1 = ruc_fdiv_rn(aa1, pp);
+
+    // module_sf_ruclsm.F:4184-4200.  snoh is still zero on the only pass WRF
+    // makes; the :4374 second iteration is commented out upstream.
+    bb = ruc_fsub_rn(bb, ruc_fdiv_rn(snoh, tdenom));
+    float qs1, ts1;
+    if (!ruc_vilka(tn, aa1, bb, pp, tbq, &qs1, &ts1)) {
+        float invalid = as_type<float>(0x7fc00000u);
+        for (int level = 0; level < RUC_NZS; ++level) {
+            tso_out[level * ncolumn + column] = invalid;
+        }
+        ilnb_out[column] = ilnb;
+        snweprint_out[column] = invalid;
+        snheiprint_out[column] = invalid;
+        rsm_out[column] = invalid;
+        dew_out[column] = invalid;
+        soilt_out[column] = invalid;
+        soilt1_out[column] = invalid;
+        tsnav_out[column] = invalid;
+        qvg_out[column] = invalid;
+        qsg_out[column] = invalid;
+        qcg_out[column] = invalid;
+        smelt_out[column] = invalid;
+        snoh_out[column] = invalid;
+        snflx_out[column] = invalid;
+        snom_out[column] = invalid;
+        eeta_out[column] = invalid;
+        qfx_out[column] = invalid;
+        hfx_out[column] = invalid;
+        s_out[column] = invalid;
+        sublim_out[column] = invalid;
+        prcpl_out[column] = invalid;
+        fltot_out[column] = invalid;
+        snwe_out[column] = invalid;
+        snhei_out[column] = invalid;
+        rhosn_out[column] = invalid;
+        emiss_out[column] = invalid;
+        alb_out[column] = invalid;
+        znt_out[column] = invalid;
+        return;
+    }
+    qvg = qs1;
+    qsg = qs1;
+    float qcg = zero;
+    soilt = ts1;
+
+    // module_sf_ruclsm.F:4207-4230 snow interior and top ice temperature.
+    if (snhei >= snth) {
+        if (snhei > ruc_fadd_rn(deltsn, snth)) {
+            soilt1 = ruc_fused_min(freeze, ruc_fadd_rn(rhtsn, ruc_fmul_rn(cotsn, soilt)));
+            tso_out[column] = ruc_fused_min(
+                ice_cap, ruc_fadd_rn(rhtso[RUC_NZS_M1], ruc_fmul_rn(cotso[RUC_NZS_M1], soilt1)));
+            tsob = soilt1;
+        } else {
+            tso_out[column] = ruc_fused_min(
+                ice_cap, ruc_fadd_rn(rhtso[RUC_NZS_M1], ruc_fmul_rn(cotso[RUC_NZS_M1], soilt)));
+            soilt1 = tso_out[column];
+            tsob = tso_out[column];
+        }
+    } else if (thin) {
+        tso_out[ncolumn + column] = ruc_fused_min(
+            ice_cap, ruc_fadd_rn(rhtso[RUC_NZS_M2], ruc_fmul_rn(cotso[RUC_NZS_M2], soilt)));
+        tso_out[column] = ruc_fused_min(
+            ice_cap,
+            ruc_fadd_rn(
+                tso_out[ncolumn + column],
+                ruc_fmul_rn(
+                    ruc_fsub_rn(soilt, tso_out[ncolumn + column]), fso)));
+        soilt1 = tso_out[column];
+        tsob = tso_out[ncolumn + column];
+    } else {
+        tso_out[column] = ruc_fused_min(ice_cap, soilt);
+        soilt1 = ruc_fused_min(ice_cap, soilt);
+        tsob = tso_out[column];
+    }
+
+    // module_sf_ruclsm.F:4232-4243 downward substitution through the ice.
+    for (int level = thin ? 2 : 1; level < RUC_NZS; ++level) {
+        int coefficient = RUC_NZS_M1 - level;
+        tso_out[level * ncolumn + column] = ruc_fused_min(
+            ice_cap,
+            ruc_fadd_rn(
+                rhtso[coefficient],
+                ruc_fmul_rn(
+                    cotso[coefficient],
+                    tso_out[(level - 1) * ncolumn + column])));
+    }
+
+    // module_sf_ruclsm.F:4257 melting test on the pre-vilka epot.
+    float dew = zero;
+    float eeta;
+    float qfx;
+    float hfx;
+    float snflx;
+    float melt_supply = ruc_fsub_rn(
+        snwepr, ruc_fmul_rn(ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras), delt));
+    if (soilt > freeze && melt_supply > zero && snhei > zero) {
+        // module_sf_ruclsm.F:4259-4360 the single melt pass.
+        float soiltfrac = ruc_fadd_rn(
+            ruc_fmul_rn(snowfrac, freeze),
+            ruc_fmul_rn(
+                ruc_fsub_rn(one, snowfrac), ruc_fused_min(ice_cap, soilt)));
+        qsg = ruc_fdiv_rn(ruc_qsn_lookup(soiltfrac, tbq), pp);
+        epot = -ruc_fmul_rn(qkms, ruc_fsub_rn(qvatm, qsg));
+        float q1 = ruc_fmul_rn(epot, ras);
+        if (q1 <= zero) {
+            dew = -epot;
+            qfx = ruc_fmul_rn(ruc_fmul_rn(xlvm, rho), dew);
+            eeta = ruc_fdiv_rn(qfx, xlvm);
+        } else {
+            eeta = ruc_fmul_rn(ruc_fmul_rn(q1, beta), thousand);
+            qfx = -ruc_fmul_rn(xlvm, eeta);
+        }
+        hfx = ruc_fmul_rn(d10, ruc_fsub_rn(tabs, soiltfrac));
+        float soh;
+        if (snhei >= snth) {
+            soh = ruc_fdiv_rn(
+                ruc_fmul_rn(
+                    ruc_fmul_rn(thdifsn, rhocsn),
+                    ruc_fsub_rn(soiltfrac, tsob)),
+                snprim);
+        } else {
+            soh = ruc_fdiv_rn(
+                ruc_fmul_rn(
+                    ruc_fadd_rn(
+                        ruc_fmul_rn(ruc_fmul_rn(fsn, thdifsn), rhocsn),
+                        ruc_fmul_rn(ruc_fmul_rn(fso, thdifice_top), rhcs)),
+                    ruc_fsub_rn(soiltfrac, tsob)),
+                snprim);
+        }
+        snflx = soh;
+        float x = ruc_fmul_rn(
+            ruc_fadd_rn(r21, ruc_fmul_rn(d9sn, r22sn)),
+            ruc_fsub_rn(soiltfrac, tnold));
+        x = ruc_fadd_rn(
+            x,
+            ruc_fmul_rn(ruc_fmul_rn(xlvm, r210), ruc_fsub_rn(qsg, qgold)));
+        snoh = ruc_fadd_rn(rnet, qfx);
+        snoh = ruc_fadd_rn(snoh, hfx);
+        snoh = ruc_fadd_rn(
+            snoh,
+            ruc_fmul_rn(
+                newsnow_heat_capacity,
+                ruc_fsub_rn(newsnow_temperature, soiltfrac)));
+        snoh = ruc_fsub_rn(snoh, soh);
+        snoh = ruc_fsub_rn(snoh, x);
+        snoh = ruc_fadd_rn(
+            snoh,
+            ruc_fmul_rn(
+                rain_heat_capacity,
+                ruc_fsub_rn(rain_temperature, soiltfrac)));
+        snoh = ruc_fused_max(zero, snoh);
+        smelt = ruc_fmul_rn(ruc_fdiv_rn(snoh, xlmelt), milli);
+        float potential = ruc_fsub_rn(
+            ruc_fdiv_rn(snwepr, delt),
+            ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras));
+        smelt = ruc_fused_min(smelt, potential);
+        smelt = ruc_fused_max(zero, smelt);
+        smelt = ruc_fused_min(
+            smelt,
+            ruc_fmul_rn(
+                ruc_fmul_rn(egglston, meltfactor),
+                ruc_fused_max(one, ruc_fsub_rn(soilt, freeze))));
+        float rr = ruc_fsub_rn(
+            ruc_fdiv_rn(snwepr, delt),
+            ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras));
+        smelt = ruc_fused_min(smelt, rr);
+        // WRF's snodif here only feeds debug prints.
+        snoh = ruc_fmul_rn(ruc_fmul_rn(smelt, xlmelt), thousand);
+        float rsmfrac = ruc_fused_min(
+            rsm_high,
+            ruc_fused_max(
+                rsm_low,
+                ruc_fmul_rn(ruc_fdiv_rn(snwepr, rsm_depth), rsm_share)));
+        if (snhei > rsm_snhei) {
+            rsm = ruc_fmul_rn(ruc_fmul_rn(rsmfrac, smelt), delt);
+        } else {
+            rsm = zero;
+        }
+        smelt = ruc_fused_max(zero, ruc_fsub_rn(smelt, ruc_fdiv_rn(rsm, delt)));
+        snwe = ruc_fused_max(
+            zero,
+            ruc_fsub_rn(
+                snwepr,
+                ruc_fmul_rn(
+                    ruc_fadd_rn(
+                        smelt, ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras)),
+                    delt)));
+        soilt = soiltfrac;
+    } else {
+        // module_sf_ruclsm.F:4363-4370 evaporation-only update.
+        if (snhei != zero) {
+            epot = -ruc_fmul_rn(qkms, ruc_fsub_rn(qvatm, qsg));
+            snwe = ruc_fused_max(
+                zero,
+                ruc_fsub_rn(
+                    snwepr,
+                    ruc_fmul_rn(
+                        ruc_fmul_rn(ruc_fmul_rn(beta, epot), ras), delt)));
+        }
+    }
+
+    // module_sf_ruclsm.F:4377-4396 melt-driven snow densification.
+    if (smelt > zero && rsm > zero) {
+        if (snwe > rsm) {
+            float xsn = ruc_fdiv_rn(
+                ruc_fadd_rn(
+                    ruc_fmul_rn(rhosn, ruc_fsub_rn(snwe, rsm)),
+                    ruc_fmul_rn(thousand, rsm)),
+                snwe);
+            rhosn = ruc_fused_min(ruc_fused_max(rhosn_low, xsn), rhosn_high);
+            rhocsn = ruc_fmul_rn(snow_heat, rhosn);
+            thdifsn = ruc_fdiv_rn(snow_cond, rhocsn);
+        }
+    }
+
+    // module_sf_ruclsm.F:4398-4403 diagnostic copies.
+    float snweprint = snwe;
+    float snheiprint = ruc_fdiv_rn(ruc_fmul_rn(snweprint, thousand), rhosn);
+
+    // module_sf_ruclsm.F:4409-4417 snow-pack mean temperature.
+    if (snhei > zero) {
+        if (ilnb > 1) {
+            tsnav = ruc_fsub_rn(
+                ruc_fmul_rn(
+                    ruc_fdiv_rn(half_factor, snhei),
+                    ruc_fadd_rn(
+                        ruc_fmul_rn(ruc_fadd_rn(soilt, soilt1), deltsn),
+                        ruc_fmul_rn(
+                            ruc_fadd_rn(soilt1, tso_out[column]),
+                            ruc_fsub_rn(snhei, deltsn)))),
+                freeze);
+        } else {
+            tsnav = ruc_fsub_rn(
+                ruc_fmul_rn(half_factor, ruc_fadd_rn(soilt, tso_out[column])), freeze);
+        }
+    }
+
+    // module_sf_ruclsm.F:4419-4428.
+    dew = zero;
+    pp = ruc_fmul_rn(patm, thousand);
+    qsg = ruc_fdiv_rn(ruc_qsn_lookup(soilt, tbq), pp);
+    epot = -ruc_fmul_rn(fq, ruc_fsub_rn(qvatm, qsg));
+    if (epot < zero) {
+        dew = -epot;
+    }
+    snom = ruc_fadd_rn(snom, ruc_fmul_rn(ruc_fmul_rn(smelt, delt), thousand));
+
+    // module_sf_ruclsm.F:4432-4466 surface flux diagnostics.  WRF's
+    // t3/upflux/xinet block here is dead: xinet is assigned, never read.
+    float sensible = ruc_fmul_rn(ruc_fmul_rn(tkms, cp_air), rho);
+    sensible = ruc_fmul_rn(sensible, ruc_fsub_rn(tabs, soilt));
+    float hft = -sensible;
+    // Same substitution; see _RUC_PROVISIONAL_TRANSCENDENTALS.
+    float exner = ruc_powf_rn(ruc_fdiv_rn(reference, patm), rovcp);
+    hfx = -ruc_fmul_rn(sensible, exner);
+    float q1 = -ruc_fmul_rn(ruc_fmul_rn(fq, ras), ruc_fsub_rn(qvatm, qsg));
+    if (q1 < zero) {
+        if (myj) {
+            eeta = -ruc_fmul_rn(
+                ruc_fmul_rn(
+                    ruc_fmul_rn(qkms, ras),
+                    ruc_fsub_rn(
+                        ruc_fdiv_rn(qvatm, ruc_fadd_rn(one, qvatm)),
+                        ruc_fdiv_rn(qsg, ruc_fadd_rn(one, qsg)))),
+                thousand);
+        } else {
+            dew = ruc_fmul_rn(qkms, ruc_fsub_rn(qvatm, qsg));
+            eeta = -ruc_fmul_rn(rho, dew);
+        }
+        qfx = ruc_fmul_rn(xlvm, eeta);
+        eeta = -ruc_fmul_rn(rho, dew);
+    } else {
+        if (myj) {
+            eeta = -ruc_fmul_rn(
+                ruc_fmul_rn(
+                    ruc_fmul_rn(ruc_fmul_rn(qkms, ras), beta),
+                    ruc_fsub_rn(
+                        ruc_fdiv_rn(qvatm, ruc_fadd_rn(one, qvatm)),
+                        ruc_fdiv_rn(qvg, ruc_fadd_rn(one, qvg)))),
+                thousand);
+        } else {
+            eeta = ruc_fmul_rn(ruc_fmul_rn(q1, beta), thousand);
+        }
+        qfx = ruc_fmul_rn(xlvm, eeta);
+        eeta = ruc_fmul_rn(ruc_fmul_rn(q1, beta), thousand);
+    }
+    float sublim = eeta;
+
+    // module_sf_ruclsm.F:4468-4486.  The snhei tested here is still the
+    // pre-melt depth; :4486 rebuilds it from the updated snwe.
+    if (snhei >= snth) {
+        storage = ruc_fdiv_rn(
+            ruc_fmul_rn(
+                ruc_fmul_rn(thdifsn, rhocsn), ruc_fsub_rn(soilt, tsob)),
+            snprim);
+        snflx = storage;
+    } else if (thin) {
+        storage = ruc_fdiv_rn(
+            ruc_fmul_rn(
+                ruc_fadd_rn(
+                    ruc_fmul_rn(ruc_fmul_rn(fsn, thdifsn), rhocsn),
+                    ruc_fmul_rn(ruc_fmul_rn(fso, thdifice_top), rhcs)),
+                ruc_fsub_rn(soilt, tsob)),
+            snprim);
+        snflx = storage;
+    } else {
+        snflx = ruc_fmul_rn(d9sn, ruc_fsub_rn(soilt, tsob));
+    }
+    snhei = ruc_fdiv_rn(ruc_fmul_rn(snwe, thousand), rhosn);
+
+    // module_sf_ruclsm.F:4492-4509.
+    float x = ruc_fmul_rn(
+        ruc_fadd_rn(r21, ruc_fmul_rn(d9sn, r22sn)), ruc_fsub_rn(soilt, tnold));
+    x = ruc_fadd_rn(
+        x, ruc_fmul_rn(ruc_fmul_rn(xlvm, r210), ruc_fsub_rn(qsg, qgold)));
+    x = ruc_fsub_rn(
+        x,
+        ruc_fmul_rn(
+            newsnow_heat_capacity,
+            ruc_fsub_rn(newsnow_temperature, soilt)));
+    x = ruc_fsub_rn(
+        x,
+        ruc_fmul_rn(
+            rain_heat_capacity, ruc_fsub_rn(rain_temperature, soilt)));
+    float residual = ruc_fsub_rn(rnet, hft);
+    residual = ruc_fsub_rn(residual, ruc_fmul_rn(xlvm, eeta));
+    residual = ruc_fsub_rn(residual, storage);
+    residual = ruc_fsub_rn(residual, snoh);
+    residual = ruc_fsub_rn(residual, x);
+    float icemelt = residual;
+    float fltot = ruc_fsub_rn(residual, icemelt);
+
+    // module_sf_ruclsm.F:4517-4522 restore the bare sea-ice surface.
+    if (snhei == zero) {
+        tsnav = ruc_fsub_rn(soilt, freeze);
+        emiss = bare_emiss;
+        znt = bare_znt;
+        alb = bare_alb;
+    }
+
+    ilnb_out[column] = ilnb;
+    snweprint_out[column] = snweprint;
+    snheiprint_out[column] = snheiprint;
+    rsm_out[column] = rsm;
+    dew_out[column] = dew;
+    soilt_out[column] = soilt;
+    soilt1_out[column] = soilt1;
+    tsnav_out[column] = tsnav;
+    qvg_out[column] = qvg;
+    qsg_out[column] = qsg;
+    qcg_out[column] = qcg;
+    smelt_out[column] = smelt;
+    snoh_out[column] = snoh;
+    snflx_out[column] = snflx;
+    snom_out[column] = snom;
+    eeta_out[column] = eeta;
+    qfx_out[column] = qfx;
+    hfx_out[column] = hfx;
+    s_out[column] = storage;
+    sublim_out[column] = sublim;
+    prcpl_out[column] = prcpl;
+    fltot_out[column] = fltot;
+    snwe_out[column] = snwe;
+    snhei_out[column] = snhei;
+    rhosn_out[column] = rhosn;
+    emiss_out[column] = emiss;
+    alb_out[column] = alb;
+    znt_out[column] = znt;
+}
+
+static inline void ruc_snow_soil_canopy_setup(
+    device const float* qvatm_a,
+    device const float* qsg_a,
+    device const float* qkms_a,
+    device const float* rho_a,
+    device const float* vegfrac_a,
+    device const float* snwe_a,
+    device const float* cst_a,
+    device const float* sat_a,
+    device const float* cn_a,
+    float delt,
+    device float* beta_out,
+    device float* wetcan_out,
+    device float* drycan_out,
+    device float* snwe_out,
+    device float* ras_out,
+    int ncolumn,
+    int column)
+{
+
+    const float one = 1.0f;
+    float ras = ruc_fmul_rn(rho_a[column], 1.0e-3f);
+    float umveg = ruc_fsub_rn(one, vegfrac_a[column]);
+    float epot = -ruc_fmul_rn(
+        qkms_a[column], ruc_fsub_rn(qvatm_a[column], qsg_a[column]));
+    float snwepr = snwe_a[column];
+    float snwe = snwepr;
+    float beta = one;
+    float epdt = ruc_fmul_rn(epot, ras);
+    epdt = ruc_fmul_rn(epdt, delt);
+    epdt = ruc_fmul_rn(epdt, umveg);
+    if (epdt > 0.0f && snwepr <= epdt) {
+        beta = ruc_fdiv_rn(snwepr, ruc_fused_max(1.0e-8f, epdt));
+        snwe = 0.0f;
+    }
+    float ratio = ruc_fused_max(0.0f, ruc_fdiv_rn(cst_a[column], sat_a[column]));
+    float wetcan = ruc_fused_min(0.25f, ruc_powf_rn(ratio, cn_a[column]));
+
+    beta_out[column] = beta;
+    wetcan_out[column] = wetcan;
+    drycan_out[column] = ruc_fsub_rn(one, wetcan);
+    snwe_out[column] = snwe;
+    ras_out[column] = ras;
+}
+
+static inline void ruc_snow_layer_thresholds(
+    device const float* rhosn_a,
+    device const float* snhei_a,
+    device float* deltsn_out,
+    device float* snth_out,
+    int ncolumn,
+    int column)
+{
+
+    const float half_factor = 0.5f;
+    const float thousand = 1.0e3f;
+    float rhosn = rhosn_a[column];
+    float snhei = snhei_a[column];
+    float deltsn = ruc_fdiv_rn(
+        ruc_fmul_rn(ruc_snow_layer_threshold_depth[0], thousand), rhosn);
+    float snth = ruc_fdiv_rn(
+        ruc_fmul_rn(ruc_snow_layer_threshold_depth[1], thousand), rhosn);
+    if (snhei >= ruc_fadd_rn(deltsn, snth)) {
+        if (ruc_fsub_rn(ruc_fsub_rn(snhei, deltsn), snth) < snth) {
+            deltsn = ruc_fmul_rn(half_factor, ruc_fsub_rn(snhei, snth));
+        }
+    }
+    deltsn_out[column] = deltsn;
+    snth_out[column] = snth;
+}
+
+static inline void ruc_snow_soil_prepare_moisture(
+    device const float* qvatm_a,
+    device const float* qsg_a,
+    device const float* qkms_a,
+    device const float* vegfrac_a,
+    device const float* drycan_a,
+    device const float* ras_a,
+    device const float* tranf,
+    device const int* nroot_a,
+    device const float* infwater_a,
+    device float* transp,
+    device float* ett1_out,
+    device float* dew_out,
+    device float* prcp_out,
+    int ncolumn,
+    int column)
+{
+
+    const float zero = 0.0f;
+    float zshalf[RUC_NZS];
+    constant float* zsmain = ruc_sfctmp_soil_layer_depth;
+    zshalf[0] = zero;
+    for (int level = 1; level < RUC_NZS; ++level) {
+        zshalf[level] = ruc_fmul_rn(
+            ruc_fadd_rn(zsmain[level - 1], zsmain[level]), 0.5f);
+    }
+
+    float dew = zero;
+    float ett1 = zero;
+    float deficit = ruc_fsub_rn(qvatm_a[column], qsg_a[column]);
+    float epot = -ruc_fmul_rn(qkms_a[column], deficit);
+    int nroot = nroot_a[column];
+    for (int level = 0; level < RUC_NZS; ++level) {
+        transp[level * ncolumn + column] = zero;
+    }
+    if (epot > zero) {
+        for (int level = 0; level < nroot; ++level) {
+            float flux = ruc_fmul_rn(vegfrac_a[column], ras_a[column]);
+            flux = ruc_fmul_rn(flux, qkms_a[column]);
+            flux = ruc_fmul_rn(flux, deficit);
+            flux = ruc_fmul_rn(flux, tranf[level * ncolumn + column]);
+            flux = ruc_fmul_rn(flux, drycan_a[column]);
+            flux = ruc_fdiv_rn(flux, zshalf[nroot]);
+            transp[level * ncolumn + column] = flux;
+            ett1 = ruc_fsub_rn(ett1, flux);
+        }
+    } else {
+        dew = -epot;
+    }
+    ett1_out[column] = ett1;
+    dew_out[column] = dew;
+    prcp_out[column] = -infwater_a[column];
+}
+
+static inline void ruc_snow_soil_finalize(
+    device const float* soilice,
+    device const float* tso,
+    device const float* told,
+    device const float* soilmois,
+    device const float* smold,
+    device float* keepfr,
+    device const float* snhei_a,
+    device const float* smelt_a,
+    device const float* snom_in,
+    device const float* snflx_a,
+    device const float* snoh_a,
+    device const float* storage_a,
+    device const float* soilt_a,
+    device const float* qsg_a,
+    device const float* tsnav_in,
+    device const float* beta_a,
+    device const float* wetcan_a,
+    device const float* ett1_in,
+    device const float* dew_in,
+    device const float* ras_a,
+    device const float* cst_in,
+    device const float* tkms_a,
+    device const float* rho_a,
+    device const float* tabs_a,
+    device const float* patm_a,
+    device const float* qkms_a,
+    device const float* qvatm_a,
+    device const float* vegfrac_a,
+    device const float* rnet_a,
+    float delt,
+    float xlvm,
+    device float* tsnav_out,
+    device float* snom_out,
+    device float* cst_out,
+    device float* dew_out,
+    device float* ett1_out,
+    device float* edir1_out,
+    device float* ec1_out,
+    device float* eeta_out,
+    device float* qfx_out,
+    device float* hfx_out,
+    device float* sublim_out,
+    device float* fltot_out,
+    int ncolumn,
+    int column)
+{
+
+    const float zero = 0.0f;
+    const float one = 1.0f;
+    const float freeze = 273.15f;
+    const float cp_air = 1004.5f;
+    const float rovcp = ruc_fdiv_rn(287.0f, cp_air);
+    // p1000mb*0.00001 from the :3703 Exner factor; exactly 1 in float32.
+    const float reference = ruc_fmul_rn(100000.0f, 0.00001f);
+
+    float soilt = soilt_a[column];
+    float qsg = qsg_a[column];
+
+    // :3671-3677 restore the snow-free average when the pack is gone.
+    tsnav_out[column] = (snhei_a[column] == zero)
+        ? ruc_fsub_rn(soilt, freeze) : tsnav_in[column];
+    snom_out[column] = ruc_fadd_rn(
+        snom_in[column],
+        ruc_fmul_rn(ruc_fmul_rn(smelt_a[column], delt), 1.0e3f));
+
+    // :3688-3696 latch keepfr where rain fell on frozen soil.
+    for (int level = 0; level < RUC_NZS; ++level) {
+        int index = level * ncolumn + column;
+        if (soilice[index] > zero) {
+            keepfr[index] =
+                (tso[index] > told[index] && soilmois[index] > smold[index])
+                ? one : zero;
+        }
+    }
+
+    // :3699-3701 t3/upflux/xinet are assigned and never read.
+    float sensible = ruc_fmul_rn(
+        ruc_fmul_rn(tkms_a[column], cp_air), rho_a[column]);
+    sensible = ruc_fmul_rn(sensible, ruc_fsub_rn(tabs_a[column], soilt));
+    float hft = -sensible;
+    float exner = ruc_powf_rn(ruc_fdiv_rn(reference, patm_a[column]), rovcp);
+    hfx_out[column] = -ruc_fmul_rn(sensible, exner);
+
+    float deficit = ruc_fsub_rn(qvatm_a[column], qsg);
+    float q1 = -ruc_fmul_rn(
+        ruc_fmul_rn(qkms_a[column], ras_a[column]), deficit);
+    float umveg = ruc_fsub_rn(one, vegfrac_a[column]);
+    float edir1 = zero;
+    float ec1 = zero;
+    float ett1 = ett1_in[column];
+    // The evaporation branch never touches dew, so it keeps whatever the
+    // :3604-3626 recomputation left there.
+    float dew = dew_in[column];
+    float eeta;
+    float cst;
+    if (q1 < zero) {
+        ett1 = zero;
+        dew = ruc_fmul_rn(qkms_a[column], deficit);
+        eeta = -ruc_fmul_rn(rho_a[column], dew);
+        cst = ruc_fadd_rn(
+            cst_in[column],
+            ruc_fmul_rn(
+                ruc_fmul_rn(ruc_fmul_rn(delt, dew), ras_a[column]),
+                vegfrac_a[column]));
+        qfx_out[column] = ruc_fmul_rn(xlvm, eeta);
+        eeta = -ruc_fmul_rn(rho_a[column], dew);
+    } else {
+        edir1 = ruc_fmul_rn(ruc_fmul_rn(q1, umveg), beta_a[column]);
+        ec1 = ruc_fmul_rn(
+            ruc_fmul_rn(q1, wetcan_a[column]), vegfrac_a[column]);
+        cst = ruc_fused_max(
+            zero, ruc_fsub_rn(cst_in[column], ruc_fmul_rn(ec1, delt)));
+        float total = ruc_fadd_rn(ruc_fadd_rn(edir1, ec1), ett1);
+        eeta = ruc_fmul_rn(total, 1.0e3f);
+        qfx_out[column] = ruc_fmul_rn(xlvm, eeta);
+        eeta = ruc_fmul_rn(total, 1.0e3f);
+    }
+    cst_out[column] = cst;
+    dew_out[column] = dew;
+    ett1_out[column] = ett1;
+    edir1_out[column] = edir1;
+    ec1_out[column] = ec1;
+    eeta_out[column] = eeta;
+    sublim_out[column] = ruc_fmul_rn(edir1, 1.0e3f);
+
+    float balance = ruc_fsub_rn(rnet_a[column], hft);
+    balance = ruc_fsub_rn(balance, ruc_fmul_rn(xlvm, eeta));
+    balance = ruc_fsub_rn(balance, snflx_a[column]);
+    balance = ruc_fsub_rn(balance, snoh_a[column]);
+    balance = ruc_fsub_rn(balance, storage_a[column]);
+    fltot_out[column] = balance;
+}
+
+#endif // RUC_SFCTMP_HELPERS_METALH

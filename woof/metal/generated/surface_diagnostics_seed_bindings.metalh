@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 4dc5949e2053f38061195802c9256fbfbdbb3d30c3a46f71fc129e4bfbf59925.
+struct SurfaceDiagnosticsSeedResources {
+    device const float *t2 [[id(0)]];
+    device const float *psfc [[id(1)]];
+    device const float *u10_staggered [[id(2)]];
+    device const float *v10_staggered [[id(3)]];
+    device float *th2 [[id(4)]];
+    device float *u10 [[id(5)]];
+    device float *v10 [[id(6)]];
+};
+struct SurfaceDiagnosticsSeedParams {
+    int nx;
+    int ny;
+    int n;
+};
+static_assert(sizeof(SurfaceDiagnosticsSeedParams) == 12, "surface_diagnostics_seed parameter ABI size changed");

@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 97a142a8dc894938d96ff7b19ffda9f3c5bdf08acfac16aa19be1641db9504ec.
+struct UrbanBemBuildingLevelScanFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const float *ss_urb [[id(1)]];
+    device int *nlev [[id(2)]];
+    device float *d_urb [[id(3)]];
+    device int *nbui [[id(4)]];
+    device int *building_nlev [[id(5)]];
+    device int *error [[id(6)]];
+};
+struct UrbanBemBuildingLevelScanFragmentParams {
+    int ncol;
+};
+static_assert(sizeof(UrbanBemBuildingLevelScanFragmentParams) == 4, "urban_bem_building_level_scan_fragment parameter ABI size changed");

@@ -1,0 +1,31 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_consump_total_fragment",
+      "module": "urban_bem_consump_total_fragment",
+      "source": "woof/metal/shaders/urban_bem_consump_total_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_consump_total",
+      "resources": [
+        ["hsout", "float", "read"],
+        ["consump", "float", "read"],
+        ["nlev", "int32", "read"],
+        ["hsoutbuild", "float", "read_write"],
+        ["consumpbuild", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "hsout": [["nitem", "nzcanm"]],
+        "consump": [["nitem", "nzcanm"]],
+        "nlev": [["nitem"]],
+        "hsoutbuild": [["nitem"]],
+        "consumpbuild": [["nitem"]],
+        "error": [["nitem"]]
+      },
+      "parameters": [["nitem", "int32"], ["nzcanm", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

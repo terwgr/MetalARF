@@ -1,0 +1,61 @@
+{
+  "kernels": [{
+    "name": "urban_bem_buildings_tendency_fragment",
+    "module": "urban_bem_buildings_tendency_fragment",
+    "source": "woof/metal/shaders/urban_bem_buildings_tendency_fragment.metal",
+    "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+    "cuda_symbol": "bb_buildings, module_sf_bep_bem.F:2832-2888",
+    "resources": [
+      ["active_cols", "int32", "read"], ["building_nlev", "int32", "read"],
+      ["utype", "int32", "read"], ["d_urb", "float", "read"],
+      ["pb", "float", "read"], ["bs", "float", "read"],
+      ["class_float", "float", "read"], ["interp", "float", "read"],
+      ["sflev", "float", "read"], ["lflev", "float", "read"],
+      ["sfvlev", "float", "read"], ["lfvlev", "float", "read"],
+      ["wall_uva", "float", "read"], ["wall_vva", "float", "read"],
+      ["wall_uvb", "float", "read"], ["wall_vvb", "float", "read"],
+      ["wall_sfw", "float", "read"], ["wall_sfwin", "float", "read"],
+      ["wall_evb", "float", "read"],
+      ["flat_uhb", "float", "read"], ["flat_vhb", "float", "read"],
+      ["flat_thb", "float", "read"], ["flat_ehb", "float", "read"],
+      ["flat_qhb", "float", "read"],
+      ["uva", "float", "read_write"], ["vva", "float", "read_write"],
+      ["uvb", "float", "read_write"], ["vvb", "float", "read_write"],
+      ["tvb", "float", "read_write"], ["tvb_ac", "float", "read_write"],
+      ["evb", "float", "read_write"], ["qvb", "float", "read_write"],
+      ["uhb", "float", "read_write"], ["vhb", "float", "read_write"],
+      ["thb", "float", "read_write"], ["ehb", "float", "read_write"],
+      ["qhb_flat", "float", "read_write"], ["error", "int32", "read_write"]
+    ],
+    "shapes": {
+      "active_cols": [["ncol"]], "building_nlev": [["ncol", 15]],
+      "utype": [["ncol"]], "d_urb": [["ncol", 18]],
+      "pb": [["ncol", 19]], "bs": [["ncol", 2]],
+      "class_float": [["class_float_len"]], "interp": [["ncol", 7, 18]],
+      "sflev": [["ncol", 15, 18]], "lflev": [["ncol", 15, 18]],
+      "sfvlev": [["ncol", 15, 18]], "lfvlev": [["ncol", 15, 18]],
+      "wall_uva": [["ncol", 15, 18, 4]], "wall_vva": [["ncol", 15, 18, 4]],
+      "wall_uvb": [["ncol", 15, 18, 4]], "wall_vvb": [["ncol", 15, 18, 4]],
+      "wall_sfw": [["ncol", 15, 18, 4]], "wall_sfwin": [["ncol", 15, 18, 4]],
+      "wall_evb": [["ncol", 15, 18, 4]],
+      "flat_uhb": [["ncol", 2, 18]], "flat_vhb": [["ncol", 2, 18]],
+      "flat_thb": [["ncol", 2, 18]], "flat_ehb": [["ncol", 2, 18]],
+      "flat_qhb": [["ncol", 2, 18]],
+      "uva": [["ncol", 4, 18]], "vva": [["ncol", 4, 18]],
+      "uvb": [["ncol", 4, 18]], "vvb": [["ncol", 4, 18]],
+      "tvb": [["ncol", 4, 18]], "tvb_ac": [["ncol", 4, 18]],
+      "evb": [["ncol", 4, 18]], "qvb": [["ncol", 4, 18]],
+      "uhb": [["ncol", 2, 18]], "vhb": [["ncol", 2, 18]],
+      "thb": [["ncol", 2, 18]], "ehb": [["ncol", 2, 18]],
+      "qhb_flat": [["ncol", 2, 18]], "error": [["ncol", 2, 18]]
+    },
+    "parameters": [
+      ["ncol", "int32"], ["nitem", "int32"], ["nurbm", "int32"],
+      ["class_float_len", "int32"], ["cp_u", "float32"],
+      ["latent", "float32"], ["dz_u", "float32"]
+    ],
+    "threads_per_group": 64,
+    "layout_version": 1,
+    "arithmetic_policies": ["soft32"]
+  }]
+}

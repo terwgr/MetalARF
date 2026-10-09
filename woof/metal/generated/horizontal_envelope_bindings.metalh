@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout 89a4a82da7503926f0f9edfa87527bf7b8441b47dbf7872f3e2cab0b68fababd.
+struct HorizontalEnvelopeResources {
+    device const float *src [[id(0)]];
+    device float *bounds [[id(1)]];
+};
+struct HorizontalEnvelopeParams {
+    int count;
+    int n_bounds;
+};
+static_assert(sizeof(HorizontalEnvelopeParams) == 8, "horizontal_envelope parameter ABI size changed");

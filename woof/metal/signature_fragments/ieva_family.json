@@ -1,0 +1,451 @@
+{
+  "kernels": [
+    {
+      "name": "ieva_ww_split",
+      "module": "ieva_family",
+      "source": "woof/metal/shaders/ieva_family.metal",
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_ww_split",
+      "resources": [
+        [
+          "ww",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "mut",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "c1f",
+          "float",
+          "read"
+        ],
+        [
+          "c2f",
+          "float",
+          "read"
+        ],
+        [
+          "ww_e",
+          "float",
+          "read_write"
+        ],
+        [
+          "ww_i",
+          "float",
+          "read_write"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ww": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mut": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "c1f": [
+          [
+            "nz"
+          ]
+        ],
+        "c2f": [
+          [
+            "nz"
+          ]
+        ],
+        "ww_e": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ww_i": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "alpha_max",
+          "float32"
+        ],
+        [
+          "ceps",
+          "float32"
+        ],
+        [
+          "cmnx_ratio",
+          "float32"
+        ],
+        [
+          "cutoff",
+          "float32"
+        ],
+        [
+          "r4cmx",
+          "float32"
+        ],
+        [
+          "quarter",
+          "float32"
+        ],
+        [
+          "one",
+          "float32"
+        ],
+        [
+          "zero",
+          "float32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "legacy",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "ieva_mut_new",
+      "module": "ieva_family",
+      "source": "woof/metal/shaders/ieva_family.metal",
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_mut_new",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "muu",
+          "float",
+          "read"
+        ],
+        [
+          "muv",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "mut_old",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "mut_new",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "muu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "muv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "mut_old": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mut_new": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "one",
+          "float32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/ieva.py",
+      "cuda_symbol": "theta_minus_t0",
+      "layout_version": 1,
+      "module": "ieva_family",
+      "name": "ieva_theta_minus_t0",
+      "parameters": [
+        [
+          "t0",
+          "float32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/ieva_family.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

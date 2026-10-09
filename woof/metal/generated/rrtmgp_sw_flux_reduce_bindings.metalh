@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 25fc40d261b57d9bb167db3d4509775278f58ece8d4444a23cb3a5fcfca80b56.
+struct RrtmgpSwFluxReduceResources {
+    device const float *part_up [[id(0)]];
+    device const float *part_dn [[id(1)]];
+    device const float *part_dir [[id(2)]];
+    device float *flux_up [[id(3)]];
+    device float *flux_dn [[id(4)]];
+    device float *flux_dir [[id(5)]];
+};
+struct RrtmgpSwFluxReduceParams {
+    int ncol;
+    int nlev;
+    int gpt0;
+    int ntile;
+};
+static_assert(sizeof(RrtmgpSwFluxReduceParams) == 16, "rrtmgp_sw_flux_reduce parameter ABI size changed");

@@ -1,0 +1,1578 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_interpolation_prepass",
+      "module": "rrtmgp_gas_family",
+      "source": "woof/metal/shaders/rrtmgp_gas_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_interpolation_prepass",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "press_ref",
+          "float",
+          "read"
+        ],
+        [
+          "temp_ref",
+          "float",
+          "read"
+        ],
+        [
+          "iatm_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "jt_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "jp_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "ftemp_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "fpress_out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncell"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncell"
+          ]
+        ],
+        "iatm_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "jt_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "jp_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "ftemp_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "fpress_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "press_ref": [
+          [
+            "npres"
+          ]
+        ],
+        "temp_ref": [
+          [
+            "ntemp"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "press_ref_trop",
+          "float32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ntemp",
+          "int32"
+        ],
+        [
+          "npres",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "rrtmgp_interpolation_inline_reference",
+      "module": "rrtmgp_gas_family",
+      "source": "woof/metal/shaders/rrtmgp_gas_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_interpolation_inline_reference",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "press_ref",
+          "float",
+          "read"
+        ],
+        [
+          "temp_ref",
+          "float",
+          "read"
+        ],
+        [
+          "iatm_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "jt_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "jp_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "ftemp_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "fpress_out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncell"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncell"
+          ]
+        ],
+        "iatm_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "jt_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "jp_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "ftemp_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "fpress_out": [
+          [
+            "ncell"
+          ]
+        ],
+        "press_ref": [
+          [
+            "npres"
+          ]
+        ],
+        "temp_ref": [
+          [
+            "ntemp"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "press_ref_trop",
+          "float32"
+        ],
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ntemp",
+          "int32"
+        ],
+        [
+          "npres",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "rrtmgp_gas_optics",
+      "module": "rrtmgp_gas_family",
+      "source": "woof/metal/shaders/rrtmgp_gas_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_gas_optics",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "plev",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "vmr",
+          "float",
+          "read"
+        ],
+        [
+          "iatm_meta",
+          "float",
+          "read"
+        ],
+        [
+          "jt_meta",
+          "float",
+          "read"
+        ],
+        [
+          "jp_meta",
+          "float",
+          "read"
+        ],
+        [
+          "ftemp_meta",
+          "float",
+          "read"
+        ],
+        [
+          "fpress_meta",
+          "float",
+          "read"
+        ],
+        [
+          "vmr_ref",
+          "float",
+          "read"
+        ],
+        [
+          "flavor",
+          "float",
+          "read"
+        ],
+        [
+          "gpoint_flavor",
+          "float",
+          "read"
+        ],
+        [
+          "kmajor",
+          "float",
+          "read"
+        ],
+        [
+          "kminor_lower",
+          "float",
+          "read"
+        ],
+        [
+          "kminor_upper",
+          "float",
+          "read"
+        ],
+        [
+          "minor_limits_lower",
+          "float",
+          "read"
+        ],
+        [
+          "minor_limits_upper",
+          "float",
+          "read"
+        ],
+        [
+          "density_lower",
+          "float",
+          "read"
+        ],
+        [
+          "density_upper",
+          "float",
+          "read"
+        ],
+        [
+          "complement_lower",
+          "float",
+          "read"
+        ],
+        [
+          "complement_upper",
+          "float",
+          "read"
+        ],
+        [
+          "idx_minor_lower",
+          "float",
+          "read"
+        ],
+        [
+          "idx_minor_upper",
+          "float",
+          "read"
+        ],
+        [
+          "idx_scaling_lower",
+          "float",
+          "read"
+        ],
+        [
+          "idx_scaling_upper",
+          "float",
+          "read"
+        ],
+        [
+          "kminor_start_lower",
+          "float",
+          "read"
+        ],
+        [
+          "kminor_start_upper",
+          "float",
+          "read"
+        ],
+        [
+          "minor_gpt_start_lower",
+          "float",
+          "read"
+        ],
+        [
+          "minor_gpt_list_lower",
+          "float",
+          "read"
+        ],
+        [
+          "minor_gpt_start_upper",
+          "float",
+          "read"
+        ],
+        [
+          "minor_gpt_list_upper",
+          "float",
+          "read"
+        ],
+        [
+          "rayleigh",
+          "float",
+          "read"
+        ],
+        [
+          "tau",
+          "float",
+          "read_write"
+        ],
+        [
+          "ssa",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "iatm_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jt_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jp_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "ftemp_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fpress_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "plev": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ],
+        "vmr": [
+          [
+            "ncol",
+            "nlay",
+            "ngas+1"
+          ]
+        ],
+        "vmr_ref": [
+          [
+            "natm",
+            "ngas+1",
+            "ntemp"
+          ]
+        ],
+        "flavor": [
+          [
+            "nflav",
+            "nbound"
+          ]
+        ],
+        "gpoint_flavor": [
+          [
+            "natm",
+            "ngpt"
+          ]
+        ],
+        "kmajor": [
+          [
+            "ntemp",
+            "neta",
+            "npres+1",
+            "ngpt"
+          ]
+        ],
+        "kminor_lower": [
+          [
+            "ntemp",
+            "neta",
+            "nk_lower"
+          ]
+        ],
+        "kminor_upper": [
+          [
+            "ntemp",
+            "neta",
+            "nk_upper"
+          ]
+        ],
+        "minor_limits_lower": [
+          [
+            "nminor_lower",
+            "nbound"
+          ]
+        ],
+        "density_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "complement_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "idx_minor_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "idx_scaling_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "kminor_start_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "minor_gpt_start_lower": [
+          [
+            "ngpt+1"
+          ]
+        ],
+        "minor_gpt_list_lower": [
+          [
+            "nminor_gpt_lower"
+          ]
+        ],
+        "minor_limits_upper": [
+          [
+            "nminor_upper",
+            "nbound"
+          ]
+        ],
+        "density_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "complement_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "idx_minor_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "idx_scaling_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "kminor_start_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "minor_gpt_start_upper": [
+          [
+            "ngpt+1"
+          ]
+        ],
+        "minor_gpt_list_upper": [
+          [
+            "nminor_gpt_upper"
+          ]
+        ],
+        "rayleigh": [
+          [
+            "natm",
+            "ntemp",
+            "neta",
+            "ngpt"
+          ],
+          [
+            "ncol",
+            "nlay",
+            "ngpt"
+          ],
+          [
+            "rayleigh_len"
+          ]
+        ],
+        "tau": [
+          [
+            "ncol",
+            "nlay",
+            "ngpt"
+          ]
+        ],
+        "ssa": [
+          [
+            "ncol",
+            "nlay",
+            "ngpt"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "ngas",
+          "int32"
+        ],
+        [
+          "nflav",
+          "int32"
+        ],
+        [
+          "ngpt",
+          "int32"
+        ],
+        [
+          "ntemp",
+          "int32"
+        ],
+        [
+          "npres",
+          "int32"
+        ],
+        [
+          "neta",
+          "int32"
+        ],
+        [
+          "nk_lower",
+          "int32"
+        ],
+        [
+          "nk_upper",
+          "int32"
+        ],
+        [
+          "idx_h2o",
+          "int32"
+        ],
+        [
+          "is_sw",
+          "int32"
+        ],
+        [
+          "nminor_lower",
+          "int32"
+        ],
+        [
+          "nminor_upper",
+          "int32"
+        ],
+        [
+          "natm",
+          "int32"
+        ],
+        [
+          "nbound",
+          "int32"
+        ],
+        [
+          "nminor_gpt_lower",
+          "int32"
+        ],
+        [
+          "nminor_gpt_upper",
+          "int32"
+        ],
+        [
+          "rayleigh_len",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "rrtmgp_gas_optics_reference",
+      "module": "rrtmgp_gas_family",
+      "source": "woof/metal/shaders/rrtmgp_gas_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_gas_optics_reference",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "plev",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "vmr",
+          "float",
+          "read"
+        ],
+        [
+          "iatm_meta",
+          "float",
+          "read"
+        ],
+        [
+          "jt_meta",
+          "float",
+          "read"
+        ],
+        [
+          "jp_meta",
+          "float",
+          "read"
+        ],
+        [
+          "ftemp_meta",
+          "float",
+          "read"
+        ],
+        [
+          "fpress_meta",
+          "float",
+          "read"
+        ],
+        [
+          "vmr_ref",
+          "float",
+          "read"
+        ],
+        [
+          "flavor",
+          "float",
+          "read"
+        ],
+        [
+          "gpoint_flavor",
+          "float",
+          "read"
+        ],
+        [
+          "kmajor",
+          "float",
+          "read"
+        ],
+        [
+          "kminor_lower",
+          "float",
+          "read"
+        ],
+        [
+          "kminor_upper",
+          "float",
+          "read"
+        ],
+        [
+          "minor_limits_lower",
+          "float",
+          "read"
+        ],
+        [
+          "minor_limits_upper",
+          "float",
+          "read"
+        ],
+        [
+          "density_lower",
+          "float",
+          "read"
+        ],
+        [
+          "density_upper",
+          "float",
+          "read"
+        ],
+        [
+          "complement_lower",
+          "float",
+          "read"
+        ],
+        [
+          "complement_upper",
+          "float",
+          "read"
+        ],
+        [
+          "idx_minor_lower",
+          "float",
+          "read"
+        ],
+        [
+          "idx_minor_upper",
+          "float",
+          "read"
+        ],
+        [
+          "idx_scaling_lower",
+          "float",
+          "read"
+        ],
+        [
+          "idx_scaling_upper",
+          "float",
+          "read"
+        ],
+        [
+          "kminor_start_lower",
+          "float",
+          "read"
+        ],
+        [
+          "kminor_start_upper",
+          "float",
+          "read"
+        ],
+        [
+          "minor_gpt_start_lower",
+          "float",
+          "read"
+        ],
+        [
+          "minor_gpt_list_lower",
+          "float",
+          "read"
+        ],
+        [
+          "minor_gpt_start_upper",
+          "float",
+          "read"
+        ],
+        [
+          "minor_gpt_list_upper",
+          "float",
+          "read"
+        ],
+        [
+          "rayleigh",
+          "float",
+          "read"
+        ],
+        [
+          "tau",
+          "float",
+          "read_write"
+        ],
+        [
+          "ssa",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "iatm_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jt_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jp_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "ftemp_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fpress_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "plev": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ],
+        "vmr": [
+          [
+            "ncol",
+            "nlay",
+            "ngas+1"
+          ]
+        ],
+        "vmr_ref": [
+          [
+            "natm",
+            "ngas+1",
+            "ntemp"
+          ]
+        ],
+        "flavor": [
+          [
+            "nflav",
+            "nbound"
+          ]
+        ],
+        "gpoint_flavor": [
+          [
+            "natm",
+            "ngpt"
+          ]
+        ],
+        "kmajor": [
+          [
+            "ntemp",
+            "neta",
+            "npres+1",
+            "ngpt"
+          ]
+        ],
+        "kminor_lower": [
+          [
+            "ntemp",
+            "neta",
+            "nk_lower"
+          ]
+        ],
+        "kminor_upper": [
+          [
+            "ntemp",
+            "neta",
+            "nk_upper"
+          ]
+        ],
+        "minor_limits_lower": [
+          [
+            "nminor_lower",
+            "nbound"
+          ]
+        ],
+        "density_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "complement_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "idx_minor_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "idx_scaling_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "kminor_start_lower": [
+          [
+            "nminor_lower"
+          ]
+        ],
+        "minor_gpt_start_lower": [
+          [
+            "ngpt+1"
+          ]
+        ],
+        "minor_gpt_list_lower": [
+          [
+            "nminor_gpt_lower"
+          ]
+        ],
+        "minor_limits_upper": [
+          [
+            "nminor_upper",
+            "nbound"
+          ]
+        ],
+        "density_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "complement_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "idx_minor_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "idx_scaling_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "kminor_start_upper": [
+          [
+            "nminor_upper"
+          ]
+        ],
+        "minor_gpt_start_upper": [
+          [
+            "ngpt+1"
+          ]
+        ],
+        "minor_gpt_list_upper": [
+          [
+            "nminor_gpt_upper"
+          ]
+        ],
+        "rayleigh": [
+          [
+            "natm",
+            "ntemp",
+            "neta",
+            "ngpt"
+          ],
+          [
+            "ncol",
+            "nlay",
+            "ngpt"
+          ],
+          [
+            "rayleigh_len"
+          ]
+        ],
+        "tau": [
+          [
+            "ncol",
+            "nlay",
+            "ngpt"
+          ]
+        ],
+        "ssa": [
+          [
+            "ncol",
+            "nlay",
+            "ngpt"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "ngas",
+          "int32"
+        ],
+        [
+          "nflav",
+          "int32"
+        ],
+        [
+          "ngpt",
+          "int32"
+        ],
+        [
+          "ntemp",
+          "int32"
+        ],
+        [
+          "npres",
+          "int32"
+        ],
+        [
+          "neta",
+          "int32"
+        ],
+        [
+          "nk_lower",
+          "int32"
+        ],
+        [
+          "nk_upper",
+          "int32"
+        ],
+        [
+          "idx_h2o",
+          "int32"
+        ],
+        [
+          "is_sw",
+          "int32"
+        ],
+        [
+          "nminor_lower",
+          "int32"
+        ],
+        [
+          "nminor_upper",
+          "int32"
+        ],
+        [
+          "natm",
+          "int32"
+        ],
+        [
+          "nbound",
+          "int32"
+        ],
+        [
+          "nminor_gpt_lower",
+          "int32"
+        ],
+        [
+          "nminor_gpt_upper",
+          "int32"
+        ],
+        [
+          "rayleigh_len",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "rrtmgp_planck_sources",
+      "module": "rrtmgp_gas_family",
+      "source": "woof/metal/shaders/rrtmgp_gas_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_planck_sources",
+      "resources": [
+        [
+          "play",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ],
+        [
+          "tlev",
+          "float",
+          "read"
+        ],
+        [
+          "tsfc",
+          "float",
+          "read"
+        ],
+        [
+          "vmr",
+          "float",
+          "read"
+        ],
+        [
+          "iatm_meta",
+          "float",
+          "read"
+        ],
+        [
+          "jt_meta",
+          "float",
+          "read"
+        ],
+        [
+          "jp_meta",
+          "float",
+          "read"
+        ],
+        [
+          "ftemp_meta",
+          "float",
+          "read"
+        ],
+        [
+          "fpress_meta",
+          "float",
+          "read"
+        ],
+        [
+          "temp_ref",
+          "float",
+          "read"
+        ],
+        [
+          "vmr_ref",
+          "float",
+          "read"
+        ],
+        [
+          "flavor",
+          "float",
+          "read"
+        ],
+        [
+          "gpoint_flavor",
+          "float",
+          "read"
+        ],
+        [
+          "gpoint_bands",
+          "float",
+          "read"
+        ],
+        [
+          "planck_fraction",
+          "float",
+          "read"
+        ],
+        [
+          "totplnk",
+          "float",
+          "read"
+        ],
+        [
+          "lay_source",
+          "float",
+          "read_write"
+        ],
+        [
+          "lev_source",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfc_source",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "play": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "iatm_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jt_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "jp_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "ftemp_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "fpress_meta": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlev": [
+          [
+            "ncol",
+            "nlay+1"
+          ]
+        ],
+        "tsfc": [
+          [
+            "ncol"
+          ]
+        ],
+        "vmr": [
+          [
+            "ncol",
+            "nlay",
+            "ngas+1"
+          ]
+        ],
+        "temp_ref": [
+          [
+            "ntemp"
+          ]
+        ],
+        "vmr_ref": [
+          [
+            "natm",
+            "ngas+1",
+            "ntemp"
+          ]
+        ],
+        "flavor": [
+          [
+            "nflav",
+            "nbound"
+          ]
+        ],
+        "gpoint_flavor": [
+          [
+            "natm",
+            "ngpt"
+          ]
+        ],
+        "gpoint_bands": [
+          [
+            "ngpt"
+          ]
+        ],
+        "planck_fraction": [
+          [
+            "ntemp",
+            "neta",
+            "npres+1",
+            "ngpt"
+          ]
+        ],
+        "totplnk": [
+          [
+            "nplanck",
+            "nband"
+          ]
+        ],
+        "lay_source": [
+          [
+            "ncol",
+            "nlay",
+            "ngpt"
+          ]
+        ],
+        "lev_source": [
+          [
+            "ncol",
+            "nlay+1",
+            "ngpt"
+          ]
+        ],
+        "sfc_source": [
+          [
+            "ncol",
+            "ngpt"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "ngas",
+          "int32"
+        ],
+        [
+          "ngpt",
+          "int32"
+        ],
+        [
+          "ntemp",
+          "int32"
+        ],
+        [
+          "npres",
+          "int32"
+        ],
+        [
+          "neta",
+          "int32"
+        ],
+        [
+          "nband",
+          "int32"
+        ],
+        [
+          "nplanck",
+          "int32"
+        ],
+        [
+          "natm",
+          "int32"
+        ],
+        [
+          "nbound",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "rrtmgp_gas_vmr_fill",
+      "module": "rrtmgp_gas_family",
+      "source": "woof/metal/shaders/rrtmgp_gas_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_gas.cu",
+      "cuda_symbol": "rrtmgp_gas_vmr_fill",
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "o3_words",
+          "float",
+          "read"
+        ],
+        [
+          "trace_index",
+          "float",
+          "read"
+        ],
+        [
+          "trace_value",
+          "float",
+          "read"
+        ],
+        [
+          "vmr",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qv": [
+          [
+            "ncells"
+          ]
+        ],
+        "o3_words": [
+          [
+            "no3_words"
+          ]
+        ],
+        "trace_index": [
+          [
+            "ntrace"
+          ]
+        ],
+        "trace_value": [
+          [
+            "ntrace"
+          ]
+        ],
+        "vmr": [
+          [
+            "ncells",
+            "nslot"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "h2o_scale",
+          "float32"
+        ],
+        [
+          "h2o_index",
+          "int32"
+        ],
+        [
+          "o3_index",
+          "int32"
+        ],
+        [
+          "ntrace",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nslot",
+          "int32"
+        ],
+        [
+          "no3_words",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

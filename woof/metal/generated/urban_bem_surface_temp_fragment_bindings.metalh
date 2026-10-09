@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout c3d32f77b33df205b5d7431a97b5303f5ba80aa2212b1acf6336ea0d62d59934.
+struct UrbanBemSurfaceTempFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const int *utype [[id(1)]];
+    device const int *class_int [[id(2)]];
+    device const float *class_float [[id(3)]];
+    device const float *alag [[id(4)]];
+    device const float *csg [[id(5)]];
+    device const float *interp [[id(6)]];
+    device const float *rsg [[id(7)]];
+    device const float *rlg [[id(8)]];
+    device float *tg [[id(9)]];
+    device float *ptg [[id(10)]];
+    device float *sfg [[id(11)]];
+    device float *lfg [[id(12)]];
+    device float *gfg [[id(13)]];
+    device int *error [[id(14)]];
+};
+struct UrbanBemSurfaceTempFragmentParams {
+    int ncol;
+    int nurbm;
+    float dt;
+    float sigma;
+};
+static_assert(sizeof(UrbanBemSurfaceTempFragmentParams) == 16, "urban_bem_surface_temp_fragment parameter ABI size changed");

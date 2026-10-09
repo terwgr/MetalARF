@@ -1,0 +1,26 @@
+{
+  "kernels": [
+    {
+      "name": "horizontal_envelope",
+      "module": "horizontal",
+      "source": "woof/metal/shaders/horizontal_family.metal",
+      "cuda_source": "woof/core/kernels/horizontal.cu",
+      "cuda_symbol": "horizontal_envelope",
+      "resources": [
+        ["src", "float", "read"],
+        ["bounds", "float", "read_write"]
+      ],
+      "shapes": {
+        "src": [["count"]],
+        "bounds": [["n_bounds"]]
+      },
+      "parameters": [
+        ["count", "int32"],
+        ["n_bounds", "int32"]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

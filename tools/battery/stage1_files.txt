@@ -1,0 +1,2424 @@
+# The release battery's stage-1 curated list.
+#
+# WHAT THIS IS
+#   The set of test files the release battery runs as its stage-1 leg:
+#   CPU-only (GPUWM_NO_LOCAL_GPU=1), fast enough to run on every cut, and
+#   chosen to cover the paths a release most often breaks.  It is a
+#   CURATED list, not a discovered one -- `pytest tests/` is a different,
+#   much longer job, and stage 1 exists precisely because it is short.
+#
+# WHO CONSUMES IT
+#   The per-assembly queue scripts (scratchpad q<NNN>_legs.ps1, "LEG S1").
+#   Their $stage1 array is GENERATED from this file, not retyped:
+#
+#     $stage1 = @(Get-Content (Join-Path $CUT 'tools/battery/stage1_files.txt') |
+#         ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') })
+#
+#   This header used to point at scratchpad q_TEMPLATE_stage1.ps1 for the
+#   full leg.  That file is gone from every machine -- the same failure
+#   this list closes (task #122), one level up.  Before this file existed
+#   the list lived ONLY in those scratchpad scripts and was propagated by
+#   copy from one assembly to the next; a lost scratchpad silently lost
+#   every amendment ever made to it.
+#
+#   BEFORE RUNNING THE LEG
+#   The battery runs in a throwaway worktree, which carries no build
+#   output, so the rust binaries every real-artifact suite drives are
+#   absent -- and those suites SKIP rather than fail, so the leg
+#   goes green with the rust half of the product untested.  Stage the
+#   binaries first, and let the script prove they took:
+#
+#     pwsh -File tools/battery/provision_stage1.ps1
+#
+# FORMAT
+#   One repository-relative path per line, forward slashes.  Blank lines
+#   and lines whose first non-space character is `#` are ignored.  Order
+#   is the order the battery runs them and is append-only by convention,
+#   so the amendment history stays legible.
+#
+# AMENDMENT DISCIPLINE
+#   An addition carries its REASON inline, on the line above it, naming
+#   the task or the incident that earned the entry.  A removal is not a
+#   tidy-up: say why the coverage is no longer needed, in the commit.
+#   tests/test_stage1_manifest.py is the gate -- it checks every path
+#   exists, rejects duplicates, and pins the two entries whose absence
+#   caused a real miss.
+
+tests/test_runplan.py
+tests/test_nest_spawn_soil.py
+tests/test_nocturnal_radiation_guard.py
+tests/test_domain_wizard.py
+tests/test_go_chain.py
+tests/test_hrrr_prepared_background.py
+tests/test_da_nowcast_presets.py
+tests/test_da_nowcast.py
+tests/test_da_sweep.py
+tests/test_anisotropic_mixing_advisory.py
+# tests/test_anisotropic_mixing_w_stability.py is the third of the four
+# and is deliberately NOT on this list.  Every test in it is whole-module
+# GPU-marked, so the CPU leg collected 0 of 2 while the line read as
+# coverage; it was already listed on tools/battery/gpu_shard_files.txt
+# SHARD 1a, which is the leg that actually runs it.  Removed 2026-08-28
+# with tools/battery/no_silent_deselection.py, the guard that fails a leg
+# when a file it was told to run contributes no tests.  This line stays
+# so a reader who finds three of the four here does not conclude the
+# fourth does not exist.
+tests/test_les_tornado_attempt1_config.py
+
+# 2026-08-09, the 1.6.0 exposed-mixing defect: the criterion and its
+# advisory (the three entries directly above) had been on this list since
+# they were written, and every shipped LES example was on the wrong side
+# of the criterion anyway -- nothing walked configs/ and checked.  This
+# is the file that walks it.  Placed with its three siblings rather than
+# appended, against the header's append-only convention and deliberately:
+# these four are one gate in four files, and a reader who finds three of
+# them here would reasonably conclude the fourth does not exist.  The
+# amendment history the convention protects is in this block.
+tests/test_shipped_configs_mixing_stability.py
+
+tests/test_doctor.py
+tests/test_ftz_claim_consistency.py
+tests/test_letkf_osse.py
+tests/test_certification_capsule.py
+tests/test_package_data_coverage.py
+
+# The companion distribution split (2.5.0).  recast-woof-data carries the
+# RRTMGP and Thompson table directories because the single wheel had
+# reached 103.62 MiB against PyPI's 100 MiB cap.  Stage 1 gates it
+# because both halves are cut and uploaded together: a version that
+# drifted, or a moved table whose bytes changed, is a release-shaped
+# failure and nothing else in stage 1 would see it.
+tests/test_companion_distribution.py
+
+# Task #121: the physics registry and its citation checker.  The 1.8.5
+# battery was the first to inherit the checker, and stage 1 had no gate
+# on the registry itself until this entry was added.
+tests/test_physics_registry.py
+
+# Task #122: the suites that gate registry-DERIVED artifacts.  During the
+# 1.8.5 assembly this suite went red --
+# test_ground_truth_receipt_regenerates_byte_for_byte, because
+# docs/public/receipts/F2-ground-truth.json is regenerated from the
+# registry and had not been landed with the registry edit.  Stage 1
+# reported 0 failures on that same tree; only the lane-union leg caught
+# it, and a lane union is assembled per cut, so it is not a gate.  A
+# registry edit reaches these receipts on every cut, so the gate belongs
+# here.
+tests/test_physics_registry_composition.py
+
+# A153: a physics selection binds the registry's physics parts, not the
+# registry document.  A citation-only registry commit refused every earlier
+# preparation as a different physics selection, and nothing ran at a
+# registry edit to catch it; a registry edit reaches this suite on every
+# cut, so the gate belongs here beside the two above.
+tests/test_registry_physics_identity.py
+
+# ArWen 1.8.7: the render-on-first-committed-frame surface.  The run now
+# renders the analysis frame as it lands rather than at finalize, which
+# puts a new default-adjacent output on every run: the
+# first_products_ready event, and a finalize that must digest-SKIP the
+# frame the early render already claimed.  A regression here is silent --
+# the run still finishes and the products still exist -- so it belongs on
+# the list the battery runs every cut.
+tests/test_first_products.py
+
+# ArWen 1.8.7: the time-to-first-plot contract itself.  The fetch is
+# ordered analysis-hour-first so the analysis frame can be committed
+# early, and SHA256SUMS is pinned order-independent so that reordering
+# cannot move a digest.  Both halves are contract, not implementation
+# detail, and an ordering change would otherwise pass unnoticed.
+tests/test_fetch_analysis_first.py
+
+# Task #124: the radiation-bearing MYNN family.  Three shipped suites
+# whose whole point is a property no other test measures -- MYNN that a
+# night window may load -- and the property is easy to lose by accident:
+# any edit to a switch row, a registry template or the nocturnal guard
+# can silently put them back in the class the guard refuses.  The file
+# also carries the control that the no-radiation siblings ARE still
+# refused on the same window, so the claim cannot pass vacuously.
+tests/test_mynn_radiation_profiles.py
+
+# Task #124: the physics composition walk.  6530 combinations through
+# woof.experiment.build_experiment, and a receipt regenerated from the
+# result and compared byte for byte.  It belongs on every cut for the
+# same reason the F2 receipts do -- any admission edit in woof/config.py
+# or woof/physics_compat.py moves the receipt, and a receipt that is not
+# landed with the edit is a silent red on the next assembly.  It also
+# carries the standing gate that every refusal names a selector and that
+# doing what a refusal says reaches an accepted run, which is the pair of
+# properties that found two defects the day it was written.
+tests/test_physics_composition_walk.py
+
+# Task #124: PHYSICS.md's reachability claims, derived from the objects
+# that own them.  The page's maturity/reachability columns claim to be
+# quoted verbatim from the registry, and they DRIFTED -- the revised MM5
+# row still said "unreachable" after the registry had moved it to
+# component-override, and the MYNN rows called the 5/5 pairing mandatory
+# in a direction the loader does not enforce.  Both misled real readers
+# into "the physics is hardcoded".  This pins the columns against the
+# registry, the two quoted refusal messages against what
+# build_experiment actually emits, and the implemented-unverified census
+# against the registry's own count, so the page cannot drift back.
+tests/test_physics_md_reachability_claims.py
+
+# Task #124 verification sweep: the OTHER line-anchored receipt.  The
+# census above (test_ftz_claim_consistency.py) has gated its artifact on
+# every cut since 1.5.1, but its sibling never joined the list --
+# tools/ftz_receipt/receipt/route_inventory.json pins a file:line and
+# the exact source text for all 62 cupy kernel-construction sites, and
+# only test_ftz_route_inventory.py regenerates it.  It was found stale
+# AT integration/release-1.8.7, missing the two cp.ElementwiseKernel
+# sites 6e9c690f0 added to woof/core/dycore.py and woof/core/moist.py:
+# a perf lane moved code, the receipt was not regenerated, and no stage-1
+# gate could see it.  Same failure mode as task #121's citation drift and
+# as the census miss this sweep opened with, so it belongs on the list
+# the battery runs every cut.
+tests/test_ftz_route_inventory.py
+
+# Task #125 (prov-wire): the provenance policy at the shared config
+# load.  build_experiment now refuses a version disagreement, warns one
+# line on a borrowed-but-agreeing version, and stays silent for a
+# wheel; every front door inherits all three from that seam.  A
+# regression is silent-green everywhere else -- the run still runs,
+# labelled with a release that is not executing -- so the wiring proof
+# runs on every cut.
+tests/test_provenance_wire.py
+
+# The green-on-nothing gate audit, 2026-08-09: the OTHER half of the
+# radiation gate.  This list already carries
+# tests/test_nocturnal_radiation_guard.py, which proves a bad radiation
+# pairing is REFUSED -- and nothing that proves radiation RUNS.  A
+# refusal-only gate is green on a tree where the radiation step has
+# stopped producing heating: the refusal still fires on the bad config,
+# every listed suite passes, and no stage-1 assertion anywhere would
+# read a single Kelvin per second.  This file closes that half on the
+# CPU: atmosphere -> stock Dudhia adapter -> the production
+# PhysicsDriver radiation seam, asserting rthratensw > 0 and swdown > 0
+# through the real driver, with the night arm (exact zero) beside it so
+# the instrument is exercised in both directions.  10 passed, 2 skipped
+# in 0.64 s under GPUWM_NO_LOCAL_GPU=1 -- the two skips are the
+# @pytest.mark.gpu CUDA twins, which stage 1 is supposed to skip.
+tests/test_wrf_legacy_radiation.py
+
+# The 1.8.8 fidelity audit, round 1: the three binding laws' own suites.
+# The eight-lane merge was landed on the strength of "FULL 28-file
+# stage-1 battery green, 0 failed" -- a true statement about the curated
+# list and NOT evidence that the laws landed intact, because every one of
+# the laws' suites sat outside it.  Running the battery UNION the 39
+# lane-touched files found 17 failures in 4 files, none of them on this
+# list.  Three of the seven entries below were red at that moment.  A
+# contract that gates a release belongs on the list the release runs, so
+# the next cut cannot be told the same true-and-irrelevant thing.
+#
+# Law B, the renderer contract: woof.render.renderer_refusal is the one
+# decider at both seams (CLI and in-process), and this file carries the
+# positive control -- the test that proves the gate can ever say yes.
+# "A refusal that fires on everything is not a contract check, it is an
+# outage" is its own docstring, and it was red at 5d6470308.
+tests/test_render_rust.py
+# A platform wheel's renderer must find maps fetched into the user profile;
+# bundle contents alone did not prove that the preferred executable used them.
+tests/test_render_basemap_delivery.py
+
+# Law A, the guard: a land surface with no longwave scheme is refused
+# unless the experiment declares it.  This is the config-load half.
+tests/test_radiation_off_land_surface_guard.py
+
+# Law A, the receipt: woof.runtime.downward_longwave_source, the line
+# that tells a reader whether the GLW in their run was computed, declared
+# or unused.  Guard and receipt read one classifier
+# (downward_longwave_disposition) on purpose; listing only the guard is
+# how they would be allowed to drift apart.
+tests/test_downward_longwave_source.py
+
+# Law C, the tokens: every shipped acknowledgement justified in its own
+# file, and the nocturnal token never standing in for the constant
+# longwave one.  Governance over configs/, so it goes red on a config
+# edit that no code test can see -- which is exactly what happened at
+# 5d6470308, where a frozen LES record missed the new union rule.
+tests/test_shipped_acknowledgement_justifications.py
+
+# Task #125's gate itself.  woof/provenance_gate.py is new in 1.8.8 and
+# it refuses EVERY front door when the executing tree disagrees with the
+# installed metadata; the renderer bridge clause refuses a foreign
+# engine.  A regression in either direction is a release-stopper -- too
+# strict and no source checkout runs, too loose and receipts get stamped
+# with a version that is not executing -- and the wire test
+# (test_provenance_wire.py, listed above) proves the seam is called, not
+# what it decides.
+tests/test_provenance_gate.py
+
+# The materializer's declared-physics contract: --physics-profile may not
+# silently overwrite a value the config declares.  It publishes the
+# experiment.toml every later stage binds by hash, so a regression here
+# runs a different forecast than the config describes and still passes
+# every downstream check.  Red at 5d6470308 on a cross-lane collision
+# (materialize's assertion against glw's re-specified config).
+tests/test_prepared_single_domain_forecast.py
+
+# The HRRR single-domain route.  Thirteen nodes of this file were red at
+# 5d6470308 on a real production hole -- eight shipped asymmetric
+# profiles could not build an experiment on an all-daylight window, with
+# no operator escape hatch, because the route synthesizes its config in
+# code.  The file was outside the battery, so the assembly could not see
+# it.  It is CPU-only and runs in about 5 s.
+tests/test_hrrr_single_domain_benchmark.py
+
+# The 1.8.8 fidelity audit, round 4: the two-layer radiation refusal, seen
+# from the run route.  The 1.8.8 declaration guard fires at
+# woof.experiment.load_experiment and PRE-EMPTED this file's own route
+# tests -- three of them went red at 48a88e3d5 because their fixture
+# configs stopped loading, so the route layer they name went untested
+# while the suite still looked like it covered it.  A layering change is
+# exactly the class stage 1 cannot see from outside: the guard's own
+# suite stays green, the route's suite goes red, and only running the
+# route's suite says which layer moved.  It also carries the load-layer
+# pin (token-less config refused before any route logic, preflight
+# exit 2 against exit 1) so the ORDER is a test and not a comment.
+tests/test_battery_route.py
+
+# The 1.8.8 fidelity audit, round 4: the derived-doc renderer.  The FTZ
+# statement blocks in PROVENANCE.md and docs/public/HARDWARE.md are
+# GENERATED from tools/ftz_receipt/receipt/, and this suite is what
+# compares the published bytes to a fresh render.  Its sibling
+# test_ftz_route_inventory.py is already on this list and regenerates the
+# receipt those blocks read -- which is how PROVENANCE.md came to publish
+# "the 14 compile sites" against a receipt recording 16: the receipt was
+# regenerated this release, the prose derived from it was not, and no
+# listed suite compared them.  A receipt gate without its render gate is
+# half a gate.
+tests/test_ftz_render.py
+
+# The 1.8.9 rebadge, and the reason there is one.  The wheel-staging gate
+# in tools/build_rw_wps_release.py is the only thing that proves the
+# standalone RW-WPS preprocessing wheel can be built and imported without
+# CuPy, and it ran only at a release cut.  Two imports added during the
+# 1.8.8 line pointed at modules that wheel deliberately does not carry;
+# nothing said so until the cut, the tag was already spent, and the
+# release became 1.8.9.  The WDM6 verifier's durability finding had
+# already named this suite and the one below as ungated coverage.
+tests/test_native_wrf_distribution.py
+
+# Named ungated by the same durability finding.  It pins that every
+# evidence axis a receipt publishes is one the readers agree on, which is
+# the class of drift that only shows up when a document and the tool that
+# derives it move in different commits -- exactly what stage 1 exists to
+# catch before a cut does.  The WDM6 lane's round-2 verification named
+# the same two suites independently, on the same reasoning a registry
+# edit reaches both on every cut.
+tests/test_evidence_axes.py
+
+# THE 1.9 GATE'S CLASS-KILLER.  The composition walk above measures ONE
+# gate -- woof.experiment.build_experiment -- and the memory preflight is
+# a second one that every real run reaches (woof/core/model.py calls
+# estimate_experiment unconditionally, and `woof check` is that call).
+# Its kernel-module tables are fail-closed, so a scheme the loader admits
+# and the preflight has no row for is a scheme a user can select and
+# cannot run.  Two shipped that way into the 1.9 assembly -- mp_physics=50
+# (P3) and bl_pbl_physics=2 / sf_sfclay_physics=2 (MYJ + Eta) -- both
+# recorded ACCEPTED in the walk receipt, both dead at `woof check`.  This
+# suite prices every composition that receipt accepts and allows a refusal
+# only when it matches a DECLARED composition rule, so the next scheme
+# that lands without a row fails here on the cut instead of in a user's
+# first run.  ~4 s, CPU-only.
+tests/test_composition_pricing.py
+
+# Task #168, the lake-blockiness root cause.  Water temperature was chosen
+# per cell between two differently-mapped fields, and the switch itself was
+# the artifact; the assembly that replaced it had no stage-1 gate, because
+# the defect shipped from 1.0 and was found by measuring a render rather
+# than by a suite.  These tests pin the guarantees a revert would break:
+# one provider per connected body, no ocean donor for a lake, no land donor
+# for any water cell, a total WATER_TEMP_SOURCE, and wrf_compat reproducing
+# the historical selector exactly.
+tests/test_water_temperature.py
+
+# Its neighbour: the mapped SST field stays METGRID.TBL's, fill and all,
+# because the reconciler and the parity batteries read it expecting WPS.
+tests/test_horiz.py
+
+# Its counterpart: the declared-overlay path that replaces those water
+# temperatures outright.  What it pins is CATALOG IDENTITY, not field values:
+# that the optional key stays out of ExperimentConfig, that an absent overlay
+# leaves the experiment fingerprint untouched, and that a declared one moves
+# the input-catalog identity exactly when its bytes move.  A change to the
+# DEFAULT water treatment does not move any of that, so this file is here for
+# the overlay path's own refusals and loaders, not as a tripwire for the
+# default.
+tests/test_water_overlay.py
+
+# The line-ending gate.  `.gitattributes` sets `* -text`, so a rewrite from
+# LF to CRLF is a real byte change in files the product hashes for identity
+# (_runtime_source_identity, the preparation proof's export-source set).
+# Task #168 rewrote thirteen files that way with a scripted edit and the
+# stage-1 battery stayed green through two full runs, because the gate that
+# catches it was not in this list.  It is a CPU test and it takes a second.
+tests/test_line_ending_stability.py
+
+# The release-note gate.  It reads the NEWEST changelog section and fails on a
+# branch name, an internal review verdict, a case identifier, or a development
+# log pasted in whole.  Every lane writes into that section and nothing else
+# checks it, so the first reader of a red here is whoever is cutting the
+# release.  Task #168 turned it red and the stage-1 battery stayed green, the
+# same blind spot the line-ending gate above closed.  It is a CPU test and it
+# reads one file.
+tests/test_release_notes_are_public_facing.py
+
+# 1.9.1 D1, the second accepted-but-cannot-run instance in ONE release,
+# one table over from the last one: mp_physics=9 shipped ACCEPTED by the
+# loader and PRICED by test_composition_pricing, and could not BUILD its
+# real-case workspace -- preflight's shape manifest had no mp=9 block, so
+# the state builder's rebuilt() views had no backing.  This suite is the
+# missing rung between "prices" and "steps": for EVERY mp value the
+# config loader accepts it builds the shared dycore-state workspace from
+# the preflight declarations and constructs the DomainState against it,
+# then requires the full allocated symbol closure to be declared and
+# restart-classified.  CPU-only (NumPy-backed state), under a second.
+tests/test_mp_accepted_builds.py
+
+# The tilestream port, and the reason the option surface is gated here
+# rather than on the GPU shard.  [tiles] is a front-door table: it is
+# read, validated and refused entirely on the CPU, and two of the ported
+# commits exist because that door once let a misconfiguration through in
+# silence -- the case-data route ignored the table outright, and
+# mode = "auto" declined without saying so.  This suite is the
+# parametrized refusal table for every key the option accepts, it is the
+# conformance suite the physics registry does not cover (a runtime table
+# has no WRF namelist counterpart and so takes no registry row), and it
+# needs no card.
+tests/test_streaming.py
+
+# Spawn-at-trigger under [tiles], same port.  A nest that fires mid-run
+# is default-adjacent surface: the streamed route has to decide whether
+# the child fits resident and refuse rather than window it wrong, and
+# that decision is CPU-side config resolution.  Listed separately from
+# its sibling above because the two suites fail for different reasons
+# and a reader who sees only one would not know the other exists.
+tests/test_spawn_streaming.py
+
+# The [tiles] gate list, from the same port.  The lane's gates are not
+# pytest and nothing collects them, so a gate that stops existing -- a
+# module renamed, a runner moved -- is invisible until a release cut
+# tries to run the leg.  This is the cheap hermetic half of that
+# coverage: it reads tools/battery/tiles_gates.txt, resolves every module
+# against the tree, and pins that the consolidated gate and the tile_hook
+# contract are BOTH listed, because the consolidated gate is periodic by
+# design and was 233 PASS / 0 FAIL through the whole period the lateral
+# boundary seam was broken.  No card, two file reads.
+tests/test_tiles_gate_manifest.py
+
+# The green-on-nothing preconditions in the same lane's gates, on the
+# d998bb667 / 9b1b99289 incident: four release gates reported success when
+# the thing they check was absent.  The ported gates carried all three
+# shapes -- two empty carrier maps hashing equal and reporting bit-exact,
+# a reassembly verdict of "not bad" that passes at checked == 0, and
+# verdict lines that assert totality while stating no size.  This suite
+# gates the fixes in both directions, with a positive control beside every
+# refusal so a condition that refuses everything cannot masquerade as one
+# that refuses the empty case.  numpy only, no card, 0.3 s.
+tests/test_tiles_gate_preconditions.py
+
+# The GLW seam between the same lane's harness and the release line's
+# downward-longwave rule, which is the one collision the integration map
+# predicted that no file diff could show: the gate's +Noah LSM rungs pair
+# a land-surface scheme with radiation off, the GLW lane made that a
+# refusal, and five gate cases raised it on the first run from the
+# integrated tree.  The harness now declares the constant those rungs were
+# always silently getting.  Gated here because the decision is which
+# keyword argument gets passed and that happens before any allocation, and
+# because it has to hold in BOTH directions -- a harness that declared
+# unconditionally would overwrite a longwave scheme's own field.
+tests/test_tiles_harness_glw.py
+
+# The physics allocation inventory, added on the gate that caught it: the
+# same [tiles] port moved a `cp.zeros` out of kf.update_trigger_history
+# and into the new kf.ensure_trigger_history, updated the inventory for
+# woof/core/streaming.py, and left kf.py's row describing the old code.
+# Stage 1 was green the whole time because this file was not on it; the
+# union leg is what went red.  It is a pure AST scan of the physics
+# modules -- no card, no cupy, under a second -- so there was never a cost
+# reason for it to be missing, and the class of defect it catches
+# (an allocation that moved, or a new one nobody priced) is exactly what a
+# release most often breaks.
+tests/test_physics_allocation_inventory.py
+
+# The distribution's import closure, from the gate that found the wheel
+# shipping woof/core/streaming.py without the tilestream package it calls
+# at about twenty sites.  Every one of those imports is function-local, so
+# `import woof` succeeded in a wheel that could not run [tiles] at all,
+# and every gate passed because tools/battery/tiles_gates.txt says to run
+# FROM THE REPOSITORY ROOT -- which puts the missing package on sys.path.
+# The check is the general property rather than the one fix: the shipped
+# package set must be CLOSED under importing.  AST walks plus one
+# interpreter start.
+tests/test_tiles_distribution.py
+
+# Task #144: specified lateral boundaries through the multi-GPU path.
+# The CPU-hermetic half of the forced decomposition: the non-periodic
+# plan clamp, the seam census with per-side halo widths, the per-rank
+# boundary-table windowing (real tables on true edges, inert on seams),
+# the corner-rank data path, and every named refusal.  All 25 red on
+# revert of tilestream/multigpu.py; the stepped bit-identity half is
+# tilestream.test_forced_gate on the GPU shard.
+tests/test_multigpu_specified_bc.py
+# 2.0 blocker: the streamed twin died at model second 3620 because the
+# carrier contract's produced-at ledger never rode the tile sweep's
+# clock round trip -- fresh buffers consumed hour-N fields under
+# build-time stamps.  CPU-hermetic, red on a revert of the carriers
+# entries in tilestream/physics_inventory.py; the real 2 h streamed
+# boundary crossing is the node regate's twin row on the GPU shard.
+tests/test_streamed_carrier_freshness.py
+# The 2026-08-12 project ruling ("probably we would want tests right") made
+# the Rust crate tests a release gate, at tools/battery/cargo_gates.txt.
+# This is the gate on that list, and it is on stage 1 rather than only
+# on the cargo leg because it needs no Rust toolchain and no card: it
+# reads the list against the two workspaces' Cargo.toml members in both
+# directions, so a crate that arrives in `members` without an entry --
+# which is how a crate lands already ungated -- goes red on every
+# commit rather than at a cut.
+tests/test_cargo_gate_manifest.py
+
+# The release machinery's own gates, earned by the 2.1.0 assembly.  The
+# tenth bundled artifact is vendored and deliberately unstamped, proved
+# by its contract marker instead; commit 6775e7a0a taught that to the
+# packer and not to tools/verify_release_artifacts.py, so the verifier
+# would have refused the bundle it was handed in the prepare job -- mid
+# cut, after the tag, with seven of this suite's cases already red on the
+# branch and no leg looking at them.  Release-machinery suites are
+# exactly the ones a cut cannot afford to discover late: they are
+# CPU-only, they build their fixtures through the real packer and the
+# real snapshot builder, and they are the difference between a defect
+# found on the branch and a defect found between the tag and PyPI.
+tests/test_verify_release_artifacts.py
+tests/test_release_snapshot_front_door.py
+tests/test_release_snapshot_machine_paths.py
+tests/test_release_snapshot_modes.py
+
+# ---------------------------------------------------------------------------
+# The 2026-08-13 test-estate audit's stage-1 amendments.
+# ---------------------------------------------------------------------------
+
+# THE GATE ON THIS LIST WAS NOT ON THIS LIST.  test_stage1_manifest.py is
+# what stops a tidy-up dropping an entry -- it checks every path resolves,
+# rejects duplicates, and pins the entries whose absence caused a real miss
+# -- and it ran only in the full-suite leg, which is assembled by hand each
+# cut.  The audit found it by parsing the list rather than grepping it: a
+# grep -F reported it as present, because the header names it at line 33,
+# inside a comment.  Any membership check against this file must ignore
+# comment lines, exactly as the header's own consumer snippet does.
+# 0.2 s, 138 tests.
+tests/test_stage1_manifest.py
+
+# The privileged publish workflow, executed.  This suite runs the literal
+# `run:` blocks of the publish workflow against fake GitHub and PyPI, and
+# three of its four commits are publish fixes: stranded assets on a re-run,
+# PyPI index-lag backoff, invented refusal gates.  It gates the window
+# between the tag and PyPI, which is the one window a cut cannot route
+# around -- by the time a defect there fires, the tag already exists.  It
+# sat on no leg.  The audit calls it the single most consequential addition
+# to this list, and at 23 s it is the most expensive one; it is worth it for
+# the same reason test_verify_release_artifacts.py is.
+tests/test_publish_workflow_state_machine.py
+# Prepared-packet identity, native/metadata checks and bounded retry behavior
+# moved from the old inline Bash workflow fixtures into this controller suite.
+tests/test_prepared_publication.py
+
+# Three more release-machinery suites on no leg, matching the 2.1.0
+# rationale above verbatim: CPU-only, fixtures built through the real tools,
+# and the difference between a defect found on the branch and a defect found
+# mid cut.  1 s, 0.4 s and 2 s respectively; test_doctor_da_eigensolver.py
+# carries two field failures behind it.
+tests/test_verify_source_bridge_pins.py
+# The other half of the pins story: the source tree must stay unpinned
+# (above), and no WHEEL may be built while it is (below) -- the 2.5.0
+# candidate was built with the pin step skipped and installed on a clean
+# home as FAILED bridges.  ~4 s; also on always_files.txt.
+tests/test_wheel_pin_gate.py
+tests/test_doctor_nexrad.py
+tests/test_doctor_da_eigensolver.py
+
+# Obs-DA was 5 of 63 files on this list: 58 files and about 1,900 tests
+# never ran on a cut, against a lane that is 197 s in total and 48 s
+# excluding its two big files.  These are the cheap high-value pins the
+# audit names -- about 12 s combined here, 20 real defects between them --
+# and adding them is a better use of an amendment than any deletion in the
+# audit's pruning section.  Radar ingest and the radar grid; the LETKF
+# solver and its chunk sizing; the observation operator and its moments; the
+# v1.2 integration seam; and the ensemble-product hardening.
+tests/test_obs_nexrad.py
+tests/test_obs_radar_grid.py
+tests/test_letkf.py
+tests/test_letkf_chunk_sizing.py
+tests/test_da_obsop.py
+tests/test_da_moments.py
+tests/test_v12_integration.py
+tests/test_enprod_hardening.py
+
+# The gate on the gate-PLACEMENT class, from the same audit's G1.  A
+# module-level skip below a test definition silently takes the tests above
+# it: tests/test_first_products.py had one at line 568 and collected zero of
+# its 23 tests on every cut since 1.8.7, while sitting on this list.  Two
+# more instances were found by AST sweep.  This file walks every test module
+# in tests/ and tilestream/ and fails on the shape, so the next one cannot
+# land quietly.  2 s.
+tests/test_module_skip_placement.py
+
+# The fast-fix selector's own gate.  tools/battery/fastfix.py decides which
+# suites a change must run before it is published, which makes it a thing
+# that can be silently wrong -- the failure mode the whole audit is about.
+# This pins the audit's validation commit (6e9c690f0 must still select
+# tests/test_pd_advection.py), that a non-Python change falls back to the
+# ALWAYS list rather than to nothing, that the selection stays a selection,
+# and the manifest hygiene on tools/battery/always_files.txt.  38 s, and it
+# also gates tools/battery/gpu_shard_files.txt.
+tests/test_fastfix_selector.py
+
+# Fast-fix execution rejects empty or failed evidence and keeps its scope explicit.
+tests/test_fastfix_runner.py
+
+# ---------------------------------------------------------------------------
+# The 2.2 train: lane/ingest-rust-2, appended to the restructured list above.
+# ---------------------------------------------------------------------------
+
+# Round-2 survey candidate 1: the projected-source horizontal operator
+# now runs in the Rust bridge, and the NumPy mirror it replaced is the
+# pinned authority for every nested HRRR preparation ever run.  This is
+# the bit-identity gate on the raw uint32 view -- both `oned` sweeps,
+# the zero/tiny sentinel, the clamped stencil edges, the fraction end
+# points, and the host-versus-CUDA missing-value predicate.  Red on a
+# revert of either the predicate or the sentinel in
+# tools/grib1_bridge/src/lib.rs; skips cleanly when the bridge is not
+# built, which is why it also asserts the loud fallback.
+tests/test_hrrr_projected_operator.py
+# Round-2 survey free win: the fetch engine used to degrade to the
+# Python transport in silence on the branch every install without the
+# bridges bundle takes, and that transport has no whole-file mode -- a
+# measured ~16x tax paid by default.  Covers the warning at selection
+# time, the engine_selection receipt field, and the doctor line.
+tests/test_fetch_engine_degrade_guard.py
+
+# ---------------------------------------------------------------------------
+# The 2.2.0 cut: the user-door gate's five findings against the streamed
+# front door, and the checks that would have caught them.
+# ---------------------------------------------------------------------------
+
+# THE CHECK THAT WAS MISSING.  Every streaming gate the release had
+# compared VALUES of fields both files carried; the defect was a field
+# only the RESIDENT file carried, so a streamed run published 73 of 74
+# variables with forecast validity PASS.  This is the instrument for
+# streamed-versus-resident FRAME FIELD-SET equality, validated in both
+# directions -- a pair it must call identical, and four seeded
+# corruptions it must catch (a dropped field, an invented field, one
+# flipped float bit, one changed provenance attribute), because an
+# equality checker that always answers "equal" passes every parity gate
+# ever written.
+tests/test_streamed_frame_parity.py
+# The admission gate, at the front door.  `woof go` refused a
+# 550-class config with [tiles] on the strength of a RESIDENT memory
+# estimate -- the one configuration class streaming exists to enable,
+# refused by default, with --no-memory-gate printed as the remedy.
+# Drives memory_gate with a probe standing in for the card: the
+# streamed config must be admitted, the same domain without [tiles]
+# must still be refused, and a domain too big even streamed must be
+# refused in the tile-and-window numbers a user can act on.  Also pins
+# that `woof check` stopped telling users the feature does not work.
+tests/test_streamed_admission.py
+
+# Task #204, the dead ERA5 direct door.  The wizard's own emission --
+# the exact file `woof domain --source era5` writes -- was refused by
+# the ERA5 adapter as "does not have a table 'case_data'" while the
+# table sat in the file, and no gate anywhere fed a wizard emission to
+# the adapter that must consume it.  This is that gate, for EVERY
+# source (era5, gfs, hrrr): real wizard, real adapter seam, through
+# config validation, CPU-hermetic.  It also pins the refusal-message
+# class the incident exposed: present-but-unconsumed is a caller
+# routing defect, never "absent".
+tests/test_wizard_adapter_roundtrip.py
+
+# Task #206, the crashing shipped profile.  The composed
+# Thompson/Shin-Hong suite died on a bare 12 km case because the
+# scheme's PASSENGER TKE diagnostic went non-finite and the driver
+# validated it with the same fatality as the tendencies; stock WRF ran
+# the identical initial state to completion.  This suite pins the
+# mechanism through the float32 WRF authority (the chain can fail while
+# every tendency holds), the repair policy in both directions (passenger
+# repaired and floored, consumed outputs still fatal, first-invalid
+# ordering kept), and the floor's equality with WRF's own cold start.
+# CPU-only, under a second; the failure it guards is a crash in a
+# user-selectable profile.
+tests/test_shinhong_composed_tke_guard.py
+
+# The upstream half of the same class: the ONLY input that reproduces
+# the task-#206 crash signature is entry TKE at or below zero (or
+# non-finite) reaching the chain, so the driver re-asserts WRF's
+# shinhonginit floor at the seam, in place, said once.  This suite pins
+# the hazard class through the float32 authority (zero/negative/NaN in,
+# passenger pair non-finite while every tendency holds), the driver's
+# heal (degenerate entries reach the launch AT the floor, healthy
+# values bit-untouched, the identity fast path allocates nothing), and
+# the advisory latch.  CPU-only except one gpu-marked end-to-end
+# injected-cliff micro-run.
+tests/test_shinhong_entry_floor.py
+
+# 2.3 streamed-child lane: the CPU-hermetic half of the resident-parent +
+# tile-streamed-child corridor -- the frame rule and its slice-rule
+# composition, the coupler's frame pull off the child's store (real
+# host-mirror seam, with the unpublished-store negative), the per-tile
+# packed rolling-table windows with the launch-time generation reload and
+# its disarmable stale-tables control, and the per-domain road walk's
+# budget arithmetic and receipts.  Deliberately importable without cupy.
+# The stepped bit-identity half is tilestream/test_streamed_child.py on
+# the GPU shard.
+tests/test_streamed_child.py
+
+# The stream-attach lanes: the store-direct initialization road.
+
+# Which INITIALIZATION ROAD a streamed forecast takes, and the pricing rule
+# `--stream-init auto` decides it on.  On this list because the rule decides
+# whether a run lives or dies before it allocates anything, and because the
+# way it failed once was silent: it priced the resident road from the prepared
+# cache's serialized-state manifest, called a 6.45 GiB fit at 1024x1024, and
+# the road it chose then died with 16 276 726 272 B allocated.  Every
+# assertion here is arithmetic over integers with no card anywhere, and the
+# 1024 case is pinned to the byte in both directions, so a return to the
+# manifest-only rule goes red on every commit rather than at a cut.
+tests/test_stream_init.py
+# The full-state health gate over a streamed domain's pinned HOST store.
+# CPU-hermetic by construction -- the whole point is that a gate which used
+# to need a domain-shaped DEVICE state can be held to the same per-field
+# bounds where the domain actually is.  Each rule class is tripped in the
+# store's LAST row, so a gate that quietly read one slab and reported the
+# domain goes red here rather than after a forecast.
+tests/test_store_health_gate.py
+
+# The two front-door nesting legs, graded without a card (2.3.0 round 2,
+# task #223).  The legs themselves are scripted GPU gates in
+# tools/battery/tiles_gates.txt -- they drive `woof run <config> --outdir
+# <dir>` and compare whole forecasts, which this list cannot express.  This
+# entry is the CPU half: it holds the two entries' LEG= environment (without
+# it the battery would run leg A twice and report two passes), keeps a card
+# budget out of the committed case files, and pins the two SHAPES, which are
+# written down nowhere else in the tree.
+tests/test_tiles_door_legs.py
+
+# Five files central to the 2.3.0 riders that sat on NO list (found by the
+# 2.3.0 cut gate, the same "a gate nobody can enumerate" class that earned
+# test_streaming_clock_arming.py its registration this round).  All five are
+# CPU-hermetic and about 24 s combined.
+#
+# test_doctor_cuda_headers.py holds BOTH tombstone regression guards -- the
+# guard against the very defect the doctor rider fixed ran on no leg -- plus
+# the docs guard added at the cut, after the release was found shipping a
+# public quickstart telling CUDA-12 readers to install the exact wheel names
+# the code had just stopped printing.
+tests/test_doctor_cuda_headers.py
+# The wrf-rust pin rider's core guard and its two consumers.  The pin moved
+# from four copies of `== "0.2.35"` to one window in woof/science_core.py;
+# these are what refuse a return to a hard equality pin, and what prove a
+# score file reports the version that ACTUALLY read the run.
+tests/test_obs_model_source.py
+tests/test_flagship_tools.py
+tests/test_obs_cross_reader.py
+# Isobaric height read between layer interfaces through the Rust rw-isobaric
+# seam the storm tracker, the GNSS-RO operator, the verification diagnostics
+# and the flagship products share (the 2.8.6 height fix); it pins the crate
+# against an isothermal eta column, where the layer-mean pairing is not exact.
+tests/test_isobaric_bridge.py
+# The GPU shard list's own gate: it checks every path on
+# tools/battery/gpu_shard_files.txt resolves and every entry is real.  It is
+# named in that file's comments as "the gate" and was an entry on no list,
+# so the instrument that keeps the shard list accurate was itself unrun.  CPU
+# only -- it reads the list, it does not touch a card.
+tests/test_gpu_shard_manifest.py
+# 2.3.3: 2.3.2 shipped worldwide 30 m terrain that no documented install
+# could reach -- rasterio/pyproj were an extra [all] excluded and no
+# quickstart named.  Both halves were individually correct; only holding
+# the docs against the extras that exist catches it.
+tests/test_docs_extras_agree_with_code.py
+# 2.3.3: the same defect's ORDER half -- the dependency check ran after
+# the tile fetch, so a missing library cost 160.7 MiB and a raw traceback.
+tests/test_highres_geog_stack_refusal.py
+# 2.3.3: `woof static` demanded a forcing GRIB and Vtable it never opens,
+# which put a met download in front of every terrain build.
+tests/test_static_needs_no_met_inputs.py
+# 2.3.3: four refusals that were tracebacks, false statements, or absent --
+# the DA polygon message that named a file which was on disk, the case that
+# needs a bundle nothing ships, and the two LES modules whose --help died
+# on a config that is in no wheel.  CPU only.
+tests/test_reachability_refusals.py
+# 2.4.0: every gate this release's seven lanes added, plus the three
+# pre-existing files their fixes rewrote.  They are here for the reason
+# the list exists: each one is a claim about a FRONT DOOR -- what doctor
+# reports, what a refusal offers, what the bundle carries, what a
+# document says a command takes -- and the merge that assembled them
+# broke sixteen of these rows at once while every lane's own tip was
+# green.  Stage 1 is where that gets caught before a tag is spent.
+# All CPU only.
+tests/test_certify_reachability.py
+tests/test_certify_compile_platform.py
+tests/test_dependency_declaration_parity.py
+tests/test_verification_recipe_flags.py
+tests/test_doctor_extras.py
+tests/test_doctor_route_accuracy.py
+# 2.8.6, lane/cut286-fu-doctor-probe (45d840b1a): doctor judges rw_compare
+# and rw_verify by the probe each door refuses by.  Off this list, a doctor
+# line that again restates a door's contract instead of importing it (a
+# build reported verified that render --compare or the reference panels
+# then refuse, or the reverse) would pass every leg of the battery.
+tests/test_doctor_door_probes.py
+tests/test_cli_capability_refusals.py
+tests/test_obs_front_doors_are_shipped.py
+tests/test_render_pyshp_front_door.py
+tests/test_bridge_source_rev_stamp.py
+tests/test_obs_battery_ingest.py
+# The European radar route, decoder through front door.
+tests/test_obs_cli_frontdoor.py
+tests/test_obs_opera.py
+tests/test_obs_radar_sites.py
+tests/test_obs_superob_odim.py
+tests/test_obs_surface_networks.py
+tests/test_obs_sweeps_odim_v3.py
+# Not a 2.4.0 addition: it predates this release and was never on the
+# list, and its control arm inherited PYTHONSAFEPATH from the very law
+# that says how to run it, so it failed whenever it was run correctly.
+# Fixed here, and listed so it stays fixed.
+tests/test_chain_stage_env.py
+# 2.4.1: the publish workflow's own `test` job list.  It ran on a runner
+# with no GPU extra and refused v2.4.0 on two rows this list did not
+# carry, and the tag was already public.  Stage 1 on a development box
+# cannot see those rows on its own -- GPUWM_NO_LOCAL_GPU=1 does not
+# uninstall CuPy, so `capabilities.is_installed("cupy")` is still true
+# here and the refusals that fire only where CuPy is ABSENT never fire.
+# Listing the files is half the fix; the other half is the checklist item
+# that runs them with no GPU extra installed.
+tests/test_cli.py
+tests/test_bridge_fetch.py
+tests/test_table_fetch.py
+# The fetch-geog contract: the pin table, the mirror/NCAR routes and the
+# mirror publisher's coverage of every pinned archive.  On no list until
+# 2026-09-01, when the mirror turned out to have lagged the pin table by a
+# whole archive (soilgrids) for nine days and nothing had said so.
+tests/test_fetch_geog.py
+tests/test_source_adapters.py
+tests/test_namelist_compat.py
+tests/test_bridge_bundle_adopt.py
+
+# 2.5.0: the arbitrary-input door.  This release's headline is a pipeline a
+# user drives from their own script -- their Vtable, their NetCDF, their
+# namelist -- and the two suites that gate it were not on this list.  A
+# guard added mid-cycle (mapped_authoring._require_declared_unit_scale)
+# then refused this project's OWN shipped GFS and ERA5 authorities on
+# land_fraction and volumetric_soil_moisture, which killed every compile
+# route into the door, and stage 1 reported zero failures on that tree.
+# Ten node failures, in the headline feature, invisible to the release
+# gate.  Both files are fast and CPU-only, so they belong here.
+tests/test_adapt.py
+tests/test_mapped_authoring.py
+
+# 2.5.0 integration: the nine suites that gate THIS release's headline
+# features and its cut mechanics.  Each one was written by a lane that
+# could only run it against its own branch; none of them was on this
+# list, so the battery that decides whether a cut may proceed could not
+# see the release gates themselves.  Two concrete holes this closes:
+# the packaging change that puts configs/ in the wheel (the LES cases
+# are unreachable from a plain `pip install` without it) and the
+# equivalence gate that keeps `woof go` a composition of `woof sim`
+# rather than a second implementation -- the latter BROKE on merge and
+# was caught only because integration ran the full suite.
+# All nine are CPU-only and fast; measured together at 163 tests.
+tests/test_release_version_declaration.py
+tests/test_publish_dist_shape_agreement.py
+tests/test_configs_are_packaged.py
+tests/test_stage_seams.py
+tests/test_progress_log.py
+tests/test_render_layout.py
+tests/test_chain_deep_ladder.py
+tests/test_les_mixing_default.py
+tests/test_dual_run_screen.py
+
+# ---------------------------------------------------------------------------
+# 2.5.0 release blocker #5: the tilestream pytest suites join the battery.
+# ---------------------------------------------------------------------------
+# tilestream/ carries 13 pytest suites (312 tests) beside its `python -m`
+# script gates, and NO list ran any of them: pyproject testpaths said
+# ["tests"], this file said tests/ only, and the gpu shard likewise -- so
+# 11 failures and a collection error (test_hoststore.py::test_pinning had
+# NEVER executed under pytest) sat invisible until the gating pass measured
+# them.  tilestream/conftest.py now extends tests/conftest.py's GPU-marking
+# discipline over the tree, so under this leg's GPUWM_NO_LOCAL_GPU=1 the
+# device halves skip and what runs is CPU arithmetic.  Entries below are the
+# files MEASURED to carry live coverage in that mode (Windows cut box,
+# 2026-08-16, wall seconds per isolated pytest invocation in parentheses).
+# NOT listed, deliberately: test_overlap.py and test_tile_hook_contract.py
+# -- their modules' main() runners are already per-cut cpu entries in
+# tools/battery/tiles_gates.txt and run MORE than their pytest half, so a
+# listing here would double-run the lesser form; test_gather.py,
+# test_graphcap.py, test_hoststore.py, test_exchange_pack.py -- 100% (or
+# all-but-none) skipped in this mode, they are the gpu shard's.
+#
+# The tile/window geometry contract and its validate_plan checker (2.3 s).
+tilestream/test_spec.py
+# The ring-arena dependency model: saved bands, WAR deps, patch sources (1.8 s).
+tilestream/test_rings.py
+# The planner: rungs, budgets, refusal attribution (geometry vs vram, the
+# scaling lane's smaller-arm CannotPlan inversion is pinned here), 42 CPU
+# tests; its two device tests skip here and run on the gpu shard (9.9 s).
+tilestream/test_autoplan.py
+# The [tiles] admission story on the release line: estimate mode-blindness,
+# the run/tree routes streaming instead of refusing, woof go admitting
+# mode='on' pre-fetch, and the OPEN two-VRAM-models defect pin (3.6 s).
+tilestream/test_ledger_gate.py
+# The prepared-store serialization surface, 128 tests, numpy only (1.9 s).
+tilestream/test_prepared_store.py
+# The store-direct frame road's CPU half (2.5 s).
+tilestream/test_store_direct_frame.py
+# hoststore.host_memory portable on Windows -- the box THIS leg runs on; the
+# suite lives outside test_hoststore.py precisely so the cpu leg can see it
+# (that module's helpers import cupy, so all of it skips here) (1.8 s).
+tilestream/test_hostmem.py
+
+# Task #154 (MPAS physics seam counterparty): the column-batch contract
+# is a cross-program API an external MPAS core builds against.  This
+# suite pins the published name, the orchestration-identity leaf-wrapper
+# refusal, the cadence law and the whole pre-device refusal surface.
+# ~0.4 s, CPU-only; the behavioural half is GPU-marked and runs on the
+# rented card.
+tests/test_mpas_column_batch.py
+
+# The NOAHMP_GLACIER port (MPAS collaborator, real x4 case): the
+# CPU-hermetic half pins the transcription's own WRF balance gates, the
+# dispatch partition, the 0.02-vs-0.5 threshold boundary, the
+# native-XLAND contract and the parameters' refusal surface.  ~0.5 s,
+# CPU-only; the CUDA/host bitwise parity and the full-seam behaviour
+# are GPU-marked in tests/test_noahmp_glacier_gpu.py on the rented card.
+tests/test_noahmp_glacier.py
+
+# Spectral verification v2 (additive lane beside the frozen v1 metric): the
+# CPU-only controls for physical wavelength bands, amplitude-vs-phase error
+# separation, rotational/divergent wind KE, fail-closed preregistration and
+# self-hashed receipts, calibrated-only gates, and receipt-bound plotting.
+# The v1 pin in tests/test_spectral.py is untouched and stays the frozen one;
+# these two suites are what would catch a v2 pin or band rule moving silently.
+tests/test_spectral_compare_v2.py
+tests/test_spectral_receipt_v2.py
+
+# The other two suites the same pin owner wrote, found on no leg's list by
+# the 2.6.1 spectral salvage -- the identical miss this file already
+# records for tests/test_case_token_leakage.py, and neither was even
+# priced in durations.json to leave the trace that one did.
+#
+# io_rust_only holds the Python boundary AT a shipped door: `woof
+# spectral score`/`run` decodes a whole gridded plane out of a forecast
+# history file, and until the 2026-08-18 boundary audit it did that with
+# netCDF4.Dataset while the rest of the estate had moved to rw_netcdf.
+# The breakage it prevents is TWO DECODERS reading one wrfout, so a
+# spectral receipt and the renderer can disagree about the same field --
+# and a Python-routed data path is a release gate in its own right, which
+# makes an unrun gate here a cut-blocker nobody would see.  4 tests,
+# 0.54 s, CPU-only.
+tests/test_spectral_io_rust_only.py
+
+# pins_backlog is six MEASURED guards over the v2 comparison class, its
+# receipt gate surface and its reader -- band-edge rounding, a constant
+# plane scoring as perfect correlation, leakage bounds, the float32
+# quantization limit, and the registration policy hash surviving a move
+# between boxes.  Every threshold in it was measured before it was
+# written, which is exactly the kind of constant that moves silently: the
+# suite is the only thing standing between a re-tuned margin and a
+# spectral verdict that is confidently wrong.  35 tests, 2.16 s, CPU-only.
+tests/test_spectral_pins_backlog.py
+
+# The 2.5.0 RC verify (2026-08-18) found this suite priced in
+# tools/battery/durations.json but on no leg's list, so "no case names in
+# generic code" -- one of the project's binding laws -- had no stage-1
+# gate at all.  The class of breakage is a case token reaching defaults,
+# core or a generic identifier: it killed a prior project, it is the kind
+# of thing a source-adding lane introduces without noticing, and every
+# cut ships whatever is in those files.  1.0 s, CPU-only.
+tests/test_case_token_leakage.py
+
+# The local twin of publish.yml's `test` job.  The class of breakage:
+# the replay builds its own venv, CI's 3.11 interpreter ships setuptools
+# and a 3.12+ venv does not, and two of the job's own packaging tests
+# REFUSE without it -- so on any modern box the replay went red on its
+# harness while the job it replays was fine, and a harness whose verdict
+# is about itself cannot be pointed at a public snapshot before a cut.
+# The venv-building row is network-gated and skips by default; what runs
+# here is the premise (the job's files need setuptools) and the seed
+# list.  <1 s, CPU-only.
+tests/test_ci_test_replay.py
+
+# Three 2.5.1 headline features whose suites were never enumerated here.
+# The class of breakage is the same for all three and it is the one this
+# release exists to stop: a feature ships, its door is the thing users are
+# told to reach for, and the gate that decides whether the release is
+# green never runs a line of it.  A regression in any of them reaches a
+# user before it reaches a test.
+#
+# [output] variable selection: the writer trims wrfout by preset or by
+# list, and the plan-time dependency warning is what stops a trimmed
+# history silently costing a render product.  Untested here, a selection
+# that drops a field a product needs becomes a render failure at the far
+# end of a run instead of a warning at the near end.
+tests/test_history_selection.py
+
+# The advective forcing pair: RTHFTEN/RQVFTEN leave the dycore for the
+# cumulus driver.  462 lines proving the lane WRF feeds and we used not
+# to.  Untested here, the pair silently reverts to zeros and Grell-Freitas
+# runs on half its forcing -- which is exactly the defect the lane closed,
+# and it would come back invisibly.
+#
+# tests/test_dycore_advective_forcing_export.py IS THAT GATE AND IT WAS NOT
+# RUNNING.  Measured 2026-08-28: every test in it is whole-module GPU-marked,
+# so this leg collected 0 of 9 and the entry above read as coverage that was
+# never taken.  It was on no GPU list either, so those nine tests ran on no
+# leg at all.  Moved to tools/battery/gpu_shard_files.txt SHARD 1a, which is
+# where a whole-module GPU-marked file belongs; the reason text above is kept
+# here because it is the argument for the coverage, and it now points at the
+# leg that takes it.
+
+# The speedrun door and its signed record.  Untested here, a course that
+# no longer runs, or a record whose signature stops verifying, is found by
+# whoever tries to reproduce a published number rather than by the gate.
+tests/test_speedrun.py
+
+# The 2.5.4 nest wave, verified on a development machine hardware AFTER stage 1 went
+# green.  Both defects that leg found were invisible here for one reason:
+# none of these three files was in this list.  A moved nest lost its
+# surface-radiation carriers and refused at the first move under shipped
+# radiation defaults; a prepared-tree run with a live follower could not
+# checkpoint.  Both are front-door paths on headline 2.5.4 features, and
+# both would have reached a user before they reached a test.
+tests/test_restart.py
+tests/test_prepared_domain_tree_forecast.py
+tests/test_relocation_radiation_carriers.py
+
+# 2026-08-27, lane/wif-climatology: the mp=28 WIF aerosol-climatology
+# ingest (QNWFA_QNIFA_SIGMA_MONTHLY.dat -> nwfa/nifa/nwfa2d/nifa2d),
+# oracle-measured against WRF-4.7.1 real.exe on the summer reference
+# case.  CPU-only, synthetic fixtures, sub-second; pins the fail-closed
+# admission around wif_climatology_path so the default path cannot move.
+# 22 passed, 0.42 s.
+tests/test_wif_climatology.py
+
+# 2026-08-27, lane/wif-rust: the equivalence gate between the Rust WIF
+# ingest engine (gpuwm_wps_intermediate_read, the cyclic bilinear, the
+# pre-existing vert_interp entry) and the NumPy oracle-of-record whose
+# numbers were bound against WRF-4.7.1 real.exe.  Skips itself when the
+# CPU bridge is absent; otherwise sub-second on a small global fixture.
+# Holds decode/horizontal/surface bit-exact and the vertical residual
+# inside the oracle's own 1.032e-05 margin, so a bridge change cannot
+# move mp=28 climatology numbers unnoticed.  6 passed, 0.49 s.
+tests/test_wif_climatology_equivalence.py
+
+# 2026-08-27, integration/engine-258-clean: the coverage the two lanes
+# above and the RUC soil-geometry lift NEVER put on any list.  Found by
+# asking the question the 2.5.8 membership audit was written to ask --
+# "which new test file is on no list?" -- of the extracted engine work
+# rather than of the campaign it was extracted from.  Nine files, and
+# every one of them gates a front-door path:
+#
+#   test_ruc_source_matrix          17 passed  0.74 s   every admitted
+#       soil source x both geometries, mapped layer route at 0 ULP
+#   test_soil_layer_geometry        27 passed  0.67 s   ZS/DZS at 6 and
+#       9 levels against real.exe, including DZS(7)=0.4999999
+#   test_ruc_soil_wiring            23 passed  0.60 s   the ingest seam
+#   test_physics_compat             11 passed  0.38 s   the
+#       sf_surface_physics=3 admission arms
+#   test_wif_dataset_contract        9 passed  0.40 s   the dataset pin
+#   test_physics_md_aerosol_claims  20 passed, 2 skipped  1.50 s  the
+#       public physics page's aerosol claims against the code
+#
+# 107 CPU assertions for about 4.3 s.  Measured one file at a time under
+# GPUWM_NO_LOCAL_GPU=1, which is this list's own rule.
+#
+# TWO DELIBERATE OMISSIONS, so the gaps are visible rather than silent:
+#   tests/test_ruc_runtime.py measured 24 SKIPPED on CPU -- it is device
+#     work and belongs in gpu_shard_files.txt, where it now is.
+#   tests/test_ruc_admission.py is held out because it carries a
+#     PRE-EXISTING failure inherited from this branch's base: its
+#     assertion names two RUC templates and woof/physics_registry_v2.json
+#     has carried three since before the base, the branch and the source
+#     branch tip alike (the test function is byte-identical at all three).
+#     Putting a known-red file on a per-cut list buys a red battery, not a
+#     fixed test.  It goes on this list in the commit that resolves which
+#     of the two -- the third template or the expectation -- is wrong.
+tests/test_ruc_source_matrix.py
+tests/test_soil_layer_geometry.py
+tests/test_ruc_soil_wiring.py
+tests/test_physics_compat.py
+tests/test_wif_dataset_contract.py
+tests/test_physics_md_aerosol_claims.py
+
+# 2026-08-27, carrying the RUC column {6, 9} lift and the mp=28 aerosol
+# source receipt onto this branch: nine more files that were on no list.
+#
+# The RUC estate was almost entirely unlisted.  The 2.5.8 membership audit
+# above put four of its CPU files here; these are the rest, plus the two
+# gates the {6, 9} lift brought with it and the one the aerosol receipt did.
+#
+# MEASURED on this branch, one file at a time under GPUWM_NO_LOCAL_GPU=1,
+# which is this list's own rule:
+#   test_ruc                          60 passed  16.47 s  the column itself
+#   test_ruc_nzs_tier                 39 passed  27.49 s  the RUC_NZS macro
+#       tier and the host/device soil-count resolution
+#   test_ruc_column_batching          11 passed  16.56 s
+#   test_ruc_contract                 15 passed   0.41 s  including the new
+#       admitted-set assertion over WRF's {6, 9}
+#   test_ruc_shoreline_soil_category   5 passed   0.43 s
+#   test_ruc_soil_ingest              11 passed   0.46 s
+#   test_physics_dispatch             33 passed   0.58 s  where the retired
+#       six-level blocker's replacement assertions actually live
+#   test_build_registry               82 passed  65.84 s  the gate holding
+#       tools/build_registry.py and woof/physics_registry_v2.json
+#       byte-identical.  Slowest entry here by an order of magnitude, and
+#       it earns it: it was RED while this work was being carried, because
+#       the builder had learned to say six levels and the tracked registry
+#       had never been regenerated.  A generator gate nobody runs is how a
+#       document and its source drift apart in silence.
+#   test_aerosol_source_report        26 passed   1.26 s  the mp=28 aerosol
+#       source receipt, whose subject is an ABSENCE: a scheme with no
+#       aerosol number fields must gain NO report key, and an mp=28 run
+#       that fell back to the analytic profile must gain a loud one.
+#       Untested, those two collapse into one shape and a WSM6 receipt
+#       becomes indistinguishable from a run that silently had no dataset.
+#
+# 282 CPU assertions for about 2 min 10 s.
+#
+# TWO MORE DELIBERATE OMISSIONS, measured rather than assumed, and both for
+# the reason the pair above already gives: a known-red file on a per-cut
+# list buys a red battery, not a fixed test.
+#
+#   tests/test_ruc_admission.py stays off, and the held-out note above
+#     still applies word for word.  Measured on this branch: the eleven-file
+#     RUC suite ran 1 failed, 250 passed BEFORE this work and 1 failed, 257
+#     passed after -- the same single failure both times, and it is this
+#     file's template assertion.  The registry carries three RUC-selecting
+#     templates and the test pins two.  The {6, 9} lift neither caused it
+#     nor fixed it.
+#
+#   tests/test_mp8_frozen.py stays off, which is the harder call, because
+#     this work MOVES FROZEN_MODULE_DIGESTS['ruc'] and a frozen digest
+#     nothing checks is not a freeze.  Measured here at 2 failed, 19
+#     passed, 1 skipped -- and identically so on this branch's tip BEFORE
+#     any of this work, with the same nine drifting modules: diagnostics,
+#     kf, nest, rrtmg_lw, rrtmg_sw, rrtmgp_gas, rrtmgp_mcica, rrtmgp_rte,
+#     ysu.  'ruc' is in NEITHER drift set, so the pin this work moves is
+#     correct and the red belongs to nine translation units frozen against
+#     bytes from somewhere else.  It goes on this list in the commit that
+#     re-pins them, not in this one.
+tests/test_ruc.py
+tests/test_ruc_nzs_tier.py
+tests/test_ruc_column_batching.py
+tests/test_ruc_contract.py
+tests/test_ruc_shoreline_soil_category.py
+tests/test_ruc_soil_ingest.py
+tests/test_physics_dispatch.py
+tests/test_build_registry.py
+tests/test_aerosol_source_report.py
+
+# FOUR FILES THIS BRANCH EDITS THAT RAN ON NO LIST.  Found by the rule
+# SHARD 1f and 1g of gpu_shard_files.txt already apply here -- ask which
+# file this work TOUCHES is on no list -- and then measured one at a time
+# under this list's own GPUWM_NO_LOCAL_GPU=1 rule.
+#
+# THE CONCRETE BREAKAGE, and it is not hypothetical: it had already
+# happened when this section was written.  The MYNN mixscalars lift made
+# bl_mynn_mixscalars=1 an ADMITTED value on the device DMP mass-flux
+# entry point.  Two tests asserted the old refusal.  The tendencies one
+# was updated with the lift; its DMP-MF twin in tests/test_mynn_pbl_gpu.py
+# was missed, and went red.  Nothing caught it for the length of two
+# integrations, because that file is on no list -- so the estate's answer
+# to "did the mixscalars lift break its own admission tests?" was silence.
+# A test file that co-moves with a change and runs nowhere is a test file
+# that only reports on the day somebody happens to run it by hand.
+#
+#   test_mynn_pbl                     60 passed              6.4 s
+#       The CPU twin of the file that went red, and the reference the
+#       device lane is judged against.  Its own mixscalars rows are the
+#       ones that stayed correct, which is why the divergence was
+#       invisible: the CPU half agreed with the code the whole time.
+#   test_mp28_runnable      67 passed, 10 skipped            0.8 s
+#       The mp=28 run door, which the aerosol-source default moved.
+#   test_real_init          38 passed, 12 skipped            1.3 s
+#       woof.ingest.real is where the ONE resolver is called and where
+#       the aerosol receipt is built; 284 changed lines here ran on no
+#       list.
+#   test_config_freeze                 4 passed              0.5 s
+#       Holds tests/data/config_freeze_golden.json against RunConfig.
+#       This branch adds two knobs to both, so the file and its golden
+#       moved together with nothing on a list checking that they did.
+#
+# The device half of the same gap -- tests/test_mynn_pbl_gpu.py itself --
+# is NOT here: measured 30/30 SKIPPED under GPUWM_NO_LOCAL_GPU=1, so on
+# this list it would report green on nothing.  It goes on SHARD 1h of
+# tools/battery/gpu_shard_files.txt, which is the rule shard 1f states.
+tests/test_mynn_pbl.py
+tests/test_mp28_runnable.py
+tests/test_real_init.py
+# The card preparation (lane 281-gpu-forcing-prep): the per-forcing-time host
+# cuts that change no bit, and the preparation price, whose real_columns and
+# closure terms admit or refuse the card route before anything is allocated.
+# Their device halves are GPU shard 1u.
+tests/test_host_setup_cuts.py
+tests/test_preparation_price.py
+tests/test_config_freeze.py
+
+# The P3 (mp_physics=50) CPU legs.  On NO battery list before this: the
+# CUDA port (commit 2258c85e3) added tests/test_p3_cuda.py and the restart
+# work added tests/test_p3_restart_manifest.py, and neither stage 1 nor the
+# GPU shard named either, so the whole scheme's gates ran nowhere.
+#
+# WHAT THAT COST, measured: the port's own scheme-scoping test and its
+# table-refusal tests were green only when somebody ran them by hand, and
+# the restart defect that killed EVERY mp=50 forecast
+# (state._p3_workspace unclassified) was found by a separate lane rather
+# than by the battery, because the battery was not asking.
+#
+# GPU-bound by measurement (tests/conftest.py::_cupy_scope), so that the
+# split matches the shard rule rather than the filename: both files below
+# report whole=False, functions=empty -- they open no device -- while
+# their _gpu.py twins report GPU-bound and go to gpu_shard_files.txt.
+tests/test_p3_cuda.py
+tests/test_p3_restart_manifest.py
+
+# ---------------------------------------------------------------------------
+# The 2026-08-29 verification audit's gates.  Each names the fault injection it
+# was written against, and each was proved failing before it was allowed to
+# pass; the injections and their measured before/after are in the commit.
+# ---------------------------------------------------------------------------
+
+# Every CUDA translation unit pinned by SHA-256, ONE NODE PER MODULE.  The
+# fault: `pracw = 0.0f * fminf(...)` in woof/core/kernels/wsm6.cu -- WSM6 rain
+# accretion of cloud water switched off -- and the entire stage-1 leg run twice,
+# pristine and injected: zero files differed, zero node ids differed.
+# tests/test_mp8_frozen.py holds the digests, is red, is deliberately off this
+# list because it is red, and even run directly fails with the IDENTICAL two
+# node ids clean and injected, because it asserts once over a dict.  This file
+# is the same claim per module: under the same fault it fails exactly
+# `...[wsm6]`, and a tenth red module is a new node id rather than a longer
+# message.  91 modules, 1.07 s, no compile and no device.
+tests/test_kernel_source_freeze_per_module.py
+
+# The nine hand-written copies of glibc's exp2f/logf/powf tables.  Row 1 of
+# __exp2f_data is transcribed by hand in eight .cu files and once in Python.
+# One ULP in noahmp_soilwater.cu alone is caught today only because
+# noahmp_water.cu carries a verbatim copy of the same section -- a duplication
+# artefact.  The same ULP in BOTH (so the pair agrees) and the same ULP in
+# noahmp_snow.cu were caught by nothing at all.  Cross-copy equality catches one
+# drifted transcription; the Python anchor catches all eight drifting together.
+# 37 nodes, 0.44 s, text only.
+tests/test_cuda_libm_table_copies.py
+
+# The battery lists' census.  Deleting one entry from this file stops a whole
+# suite running and nothing says so: measured at b47a400a5 for
+# tests/test_water_overlay.py, tests/test_doctor.py and tests/test_speedrun.py
+# one at a time, tests/test_stage1_manifest.py went 362 -> 360 passed and stayed
+# GREEN in all three, and test_battery_route.py, test_fastfix_selector.py and
+# test_ci_test_replay.py were green too.  The manifest gate pins four entries by
+# name and counts nothing.  This one is a bijection over every entry, both ways.
+tests/test_battery_list_census.py
+
+# The selector's cost model.  fastfix --record spawns one pytest per file and
+# the battery runs one invocation for all of them, so every recorded row carried
+# ~2.45 s of interpreter start the battery never pays -- 421 s across this leg,
+# and 50-100% of the recorded cost of the 100 files here that are under 5 s,
+# which is the end of the range where cheapest-first ordering is decided.
+# --record-from reads a batched --durations=0 report instead; this gates the
+# parser, including the three ways it can silently measure the wrong thing.
+tests/test_fastfix_batched_durations.py
+
+# The writers that land on a TRACKED file. Twenty-one call sites in ten
+# files write a path this repository tracks, and `Path.write_text` is
+# text mode: one read_text/write_text round trip over
+# woof/core/noahmp_water.py takes it from 0 CR bytes to 352. Five of
+# the ten destinations had already been flipped whole before this
+# landed. It reads ten modules with ast and round-trips their
+# destinations through tmp_path -- no import, no device, 1.4 s.
+tests/test_tracked_file_writers_keep_lf.py
+
+# The 2.6.0 P3 reachability landing: ten sibling fixes merged after their
+# verifying pass was killed, re-reviewed one by one. Their gates go on
+# the leg that runs at every cut, because a gate on no list is asked by
+# nobody -- the exact class SHARD 1i was written about.
+tests/test_p3_legacy_rrtmg_radii.py
+tests/test_p3_legacy_cloud_fraction.py
+# tests/test_n5s_toolchain.py moves to work/pretag_private_files.txt: its
+# campaign harness and the suite itself are excluded by RELEASE-EXCLUDE.txt.
+# Run that private pretag leg before snapshot assembly (48 required CPU checks
+# plus the existing optional production-handoff check); an absent file here
+# prevents public Stage 1 collecting.
+tests/test_rw_wps_stock_inventory_contract.py
+tests/test_acoustic_npref.py
+
+# The P3 mixed-edge named refusal (2.6.0) lives beside the WDM6 and
+# Thompson-aerosol ones in this module, and no leg ran it at all.
+tests/test_microphysics_transition.py
+
+# ARWEN-MCP: the MCP-over-stdio demo proof.  Speaks the real protocol to
+# the real server process, which shells out to the real CLI doors --
+# initialize/list-tools, doctor, sources, estimate on the shipped
+# quickstart config, the full job lifecycle on a cardless render, and
+# the GPU-lock refusal.  CPU-only; needs the mcp SDK (importorskip) and
+# skips without it -- which the census deselection floor then
+# names instead of letting the leg shrink.
+tests/test_mcp_server.py
+
+# Level-2 regional spectral numerics (2.6.1 salvage): the operator suite
+# (transforms, filters, budgets, receipts), the slow-step seam in its
+# off/shadow/apply modes with the streamed-domain and unrouted-config
+# refusals, and the `woof spectral-op` door.  The subsystem shipped as
+# 83 tests on no leg's list, which is the exact breakage this list's
+# discipline names: a mode knob whose "off" stops being bitwise inert,
+# or a receipt that stops binding, reaches a user before it reaches a
+# test.  CPU-only (the GPU parity rows importorskip cupy).
+tests/test_spectral_operators.py
+tests/test_spectral_seam.py
+tests/test_spectral_operator_cli.py
+
+# THE 2.6.1 FOLD WAVE (five rider merges). Every file below arrived with a
+# rider carrying its own green run, and every one was on NO list at the
+# assembly tip -- the "a test file on no list never runs" class this very
+# release exists to end, found by scoping every added file against the
+# three lists at the close. CPU-bound by conftest's detector except
+# test_p3_front_door.py, whose five device functions ride the GPU shard
+# while its CPU half runs here. tests/test_branch_dispositions.py left this
+# list when RELEASE-EXCLUDE.txt took it out of the public tree: a public
+# list naming an excluded file is what tests/test_stage1_manifest.py
+# refuses, and the gate skips outside a git checkout anyway.
+tests/test_check_nested_mixed_road.py
+tests/test_cycle_anchor.py
+tests/test_cycle_children.py
+tests/test_cycle_cli.py
+tests/test_cycle_cli_frontdoor.py
+tests/test_cycle_clock.py
+tests/test_cycle_consistency.py
+tests/test_cycle_ingestion.py
+tests/test_cycle_ledger.py
+tests/test_cycle_mpas_bridge.py
+tests/test_cycle_mpas_leg.py
+tests/test_cycle_placement.py
+tests/test_cycle_port_package.py
+tests/test_cycle_receipt_ingestion.py
+tests/test_cycle_supervisor.py
+tests/test_da_external_baseline_score.py
+tests/test_da_member_pool_dispatch.py
+tests/test_da_nowcast_daemon_argv.py
+tests/test_da_structure_metrics.py
+tests/test_letkf_all_radar.py
+tests/test_mapped_nested_streaming.py
+tests/test_obs_allradar.py
+tests/test_obs_path_bundle10.py
+tests/test_obs_radar_grid_v2.py
+tests/test_obs_superob_window.py
+tests/test_p3_front_door.py
+tests/test_p3_identity_contract.py
+tests/test_p3_table_refusals.py
+tests/test_streaming_refused_door.py
+tests/test_tree_under_test.py
+# The Morrison deposition-freezing cold trap: below the 159.4887 K POLYSVP
+# crossover the unbounded MNUCCD withdrew 1.87e-4 kg/kg of vapor from the
+# 5.55e-8 kg/kg that existed, dt-independent, and a native run aborted on
+# negative qv.  CPU-only mirror, no cupy, runs under GPUWM_NO_LOCAL_GPU=1.
+tests/test_morrison_cold_trap.py
+
+# 2.6.2: a staged bridge that is not this release's binary must never
+# reach a door.  The published 2.6.1 resolved ~/.woof/bridges/
+# rw_mpas_mesh.exe stamped with the v2.5.3 tag, doctor called it BROKEN,
+# and every ladder handed it to the routes anyway.  Listed because the
+# exemptions are the fragile half: an override, a dev build and both
+# libexec rungs must stay unjudged, or the developer path refuses on
+# every run.
+tests/test_bridge_stale_resolution.py
+tests/test_cells_doors.py
+# New Tiedtke (cu_physics = 16, d0c23dad0): the files that carry CPU-selectable
+# nodes under the stage-1 marker expression, plus the two kernel guards that were
+# on no list (the loader inventory and the per-module source freeze).
+tests/test_kernel_loader_inert.py
+tests/test_no_forecast_gate.py
+tests/test_ntiedtke_aliasing_audit.py
+tests/test_ntiedtke_call_order_vs_source.py
+tests/test_ntiedtke_capture_provenance.py
+tests/test_ntiedtke_constant_family.py
+tests/test_ntiedtke_cumastrn_ownership.py
+tests/test_ntiedtke_dead_workspace_writes.py
+tests/test_ntiedtke_launch_arity.py
+tests/test_ntiedtke_oracle_integrity.py
+tests/test_ntiedtke_oracle_single_source.py
+tests/test_ntiedtke_output_provenance.py
+tests/test_ntiedtke_pattern_controls.py
+tests/test_ntiedtke_phase2_gates.py
+tests/test_ntiedtke_stage_signature.py
+# The checkpoint pins in tests/test_restart.py ran red from the 2.6.1
+# merge until 2026-09-02, because the branch that merge brought in
+# appended one RunConfig field (ntiedtke_tiedtke_closure) and nobody
+# moved the pins with it.
+# The danger is not the red -- it is the GREEN that follows a paste: "a
+# config field was added" explains a moved digest, so a checkpoint-FORMAT
+# change riding in behind one is absorbed invisibly.  This file is the
+# per-change attribution that makes the paste unsafe, and it is worth
+# nothing unless it RUNS.  CPU-only, no cupy, ~0.6 s.
+tests/test_ntiedtke_closure_checkpoint.py
+
+# Adaptive time step (docs/ADAPTIVE-TIMESTEP.md): the surface, the WRF
+# calc_dt oracle, the checkpoint attribution, and the executor's
+# varying-step walk.  All CPU-only, no cupy, ~2 s for the four.
+# The oracle suite is 1728 parametrised comparisons against captured
+# WRF output and is the reason a calc_dt edit cannot land unnoticed.
+tests/test_adaptive_timestep_surface.py
+tests/test_adaptive_timestep_oracle.py
+tests/test_adaptive_timestep_checkpoint.py
+tests/test_adaptive_timestep_executor.py
+# The other two CPU-only members of the same lane.  The controller suite
+# reproduces upstream's vertical last_max_vert_cfl clobber
+# (adapt_timestep_em.F:406) deliberately, so a later "tidy-up" of that
+# asymmetry diverges from WRF on every adaptive run and is caught here.
+# The driver suite walks the eleven uniform-step assumptions the port had
+# to break, including the one that under-delivered frames and exited
+# ZERO -- an exit-status gate would have shipped it.
+tests/test_adaptive_timestep_controller.py
+tests/test_adaptive_clock_driver.py
+# The step log declares gpuwm.step-log/v4 and carries `dt` ONLY under an
+# adaptive clock; a fixed run must still emit v3 with no dt or every
+# existing consumer of the stream breaks.  Both directions are pinned
+# here.  CPU-only, no cupy.
+tests/test_step_log_adaptive_dt.py
+# The two suites the second contributed cut brought.  The first pins the
+# single-sourced set of RunConfig fields the clock DERIVES at run time:
+# the driver wrote `dt` and `time_step_sound` every root step while the
+# restart walk exempted only `dt`, so an adaptive run could not resume a
+# checkpoint of its own the moment its step moved the sound-step count --
+# a three-domain run wrote five checkpoint sets and could use none.  It
+# also pins the half that must NOT move: a resume that retunes a target
+# or a clamp is allowed and WARNED about, one that flips
+# use_adaptive_time_step is still refused, and a fixed clock still binds
+# every one of them exactly.  The second pins the nest divide: a parent
+# tick count poor in factors handed a 3:1 nest 373 substeps in one parent
+# step, which did not fail and cost 50x throughput in silence.  Both are
+# arithmetic and dataclass work, CPU-only, no cupy, ~1 s together.
+tests/test_adaptive_restart_sound_steps.py
+tests/test_nest_divide_collapse.py
+# The end-of-run implementation recheck.  A four-hour forecast wrote all
+# its frames and then died on "forecast implementation changed during
+# execution" because the final `git rev-parse` failed to spawn: None
+# against a real commit is a difference a bare equality test cannot tell
+# from a real one.  These two pin that the digest half is compared always
+# and the git half only when both ends resolved it.  CPU-only, no cupy.
+tests/test_runtime_source_identity_recheck.py
+tests/test_single_domain_runtime_source_identity_recheck.py
+# One netCDF4/HDF5 session at a time across the whole process.  The
+# shipped HDF5 is not thread-safe and netCDF4 drops the GIL around it, so
+# two threads inside it is a crash: a two-domain run with a relocating
+# child died with SIGSEGV or SIGBUS at the same relocation in 3 of 8 full
+# runs, nine frames of fourteen on disk, with the main thread opening an
+# RRTMGP table for the rebuilt child while a writer thread revalidated
+# the tape it had just published.  The writer's lock was private to its
+# own module, so it guarded the writer against itself and nothing else.
+# This pins that the two share one lock, that the lock serializes, and
+# that no Dataset open in woof/core/rrtmgp.py sits outside it -- a
+# source audit rather than a race, because 3 in 8 is green most of the
+# time for the wrong reason.  CPU-only, no cupy, ~1 s.
+tests/test_netcdf_session_serialization.py
+# The per-domain wrfout writers.  The adaptive-timestep cut added
+# `configured_dt` to the writer's global attributes -- the only place the
+# step a run was ASKED for survives, since the live one moves every root
+# step -- and no battery file covered that constructor, so the suite sat
+# red on the release line until the next cut ran it by hand.  CPU-only,
+# no cupy, under a second.
+tests/test_wrfout.py
+
+# The three LES-enabler lanes merged 2026-09-03.  All CPU-only, all under
+# a few seconds, and none of them was on any battery list when it landed,
+# so a cut would have run none of this new coverage.
+#
+#   vertical_remap / offline_child_vertical / downscale_child_levels /
+#   inline_vertical_refusals -- the conservative dry-mass rebinning
+#   operator and the `--child-levels` door onto it.  Two things a cut must
+#   not ship broken: the operator's conservation bounds, and the
+#   OFF-trajectory bitwise lock
+#   (test_matched_ladder_offline_child_is_bitwise_unchanged), which is
+#   what says a run that asked for NO ladder is byte-for-byte the run it
+#   always was.  test_downscale_child_levels also holds the two doors the
+#   flag has to reach: the auto-sizer prices on the CHILD's level count
+#   (it priced a 128-level child as a 49-level one, 6.554 GiB against the
+#   real 10.980), and --child-levels is refused rather than dropped when
+#   the caller supplies their own child config.
+#
+#   inflow_perturbation / shipped_configs_inflow_applicability -- the
+#   refresh cadence under a breathing parent step (356 backward index
+#   moves in 1,910 forces before the fix), and the screen for inflow
+#   seeding declared under a PBL-off parent.  The screen caught a shipped
+#   config that could not run, in the flagship LES file.
+tests/test_vertical_remap.py
+tests/test_offline_child_vertical.py
+tests/test_downscale_child_levels.py
+tests/test_inline_vertical_refusals_name_the_door.py
+tests/test_inflow_perturbation.py
+tests/test_shipped_configs_inflow_applicability.py
+
+# CAM carrier ownership, parent lookup, configuration and identity.
+tests/test_cam_ozone.py
+
+# Independent spectrum composition, memory and selected gas controls.
+tests/test_radiation_composition.py
+
+# Acoustic persistent-carrier inventory and allocation accounting.
+tests/test_acoustic_carrier_lifetime.py
+
+# Health reads canonical host/device storage after initialization releases state.
+tests/test_attached_store_health.py
+
+# Fixed tracking-window state restore validates every sibling before applying.
+tests/test_streamed_lifecycle_restart.py
+
+# Ordinary single-domain execution routes through the shared adaptive scheduler.
+tests/test_single_adaptive_runtime.py
+
+# Visual launcher uses the shared wizard/schema and preserves exact user settings.
+tests/test_launchpad_api.py
+
+# Configured automatic admission retains shared allocations and explicit settings.
+tests/test_auto_admission.py
+
+# Impossible host stores are pruned while valid resident and mixed choices remain.
+tests/test_auto_search_host_floor.py
+
+# Fast feasible planning retains the complete nonprefix mixed-road fallback.
+tests/test_auto_search_feasible.py
+
+# Cold device-wide observation follows the selected CUDA PCI identity.
+tests/test_device_wide_planning_budget.py
+
+# Declared missing-field donors retain verified live and sealed source authority.
+tests/test_native_supplements.py
+
+# Every kernel frame recording names its compiler and covers its declared source set.
+tests/test_kernel_frame_recordings.py
+
+# Boundary-time local-memory growth must enter runtime pricing.
+tests/test_lbc_time_frame.py
+
+# Public prepared hierarchy restart forwards exact checkpoint and forcing authority.
+tests/test_sim_restart.py
+
+# Omitted wizard clocks preserve exact geometry, event times and active physics periods.
+tests/test_domain_wizard_default_clock.py
+
+# Independent declared follower windows retain storage, cadence and ordered move receipts.
+tests/test_follow_window_transport.py
+
+# Cargo lock/config/vendor edits have no Python import edge; require complete
+# offline sources, source-file hashes and safe release build instructions.
+tests/test_vendored_cargo_registry.py
+
+# Prepared follower corridors, independent ownership and public restart receipts.
+tests/test_prepared_followers.py
+
+# Explicit polygons preserve coverage using the selected operations, not point-preset size.
+tests/test_polygon_operation_bounds.py
+
+# Existing prepared launch preserves checkpoint authority and requested operations.
+tests/test_go_prepared_restart.py
+
+# First-use help and next commands retain exact user settings and complete advanced help.
+tests/test_cli_first_use.py
+
+# Guided domain prompts use the canonical parser and current physics recommendations.
+tests/test_domain_interactive.py
+
+# First-launch New/Fit must use measured available GPU memory, while declared
+# card sizing remains independent of local hardware and explicit polygons
+# keep their requested footprint when available memory requires a refusal.
+tests/test_wizard_sizing_authority.py
+tests/test_domain_polygon.py
+
+# Single prepared checkpoints retain strict authority, canonical stores and refusal cleanup.
+tests/test_single_prepared_restart.py
+
+# Editable starters are fully priced before fitting and preserve scientific settings and file ownership.
+tests/test_starter_template.py
+
+# Verified mapped stream ownership preserves exact bytes, validation and consumer lifetime.
+tests/test_mapped_owned_field.py
+
+# Declared gas operands preserve defaults, selected spectra and restart identity.
+tests/test_trace_gas_overrides.py
+
+# Temporary tiled owners drain on success/failure and preserve primary errors.
+tests/test_tiled_run_close.py
+
+# Supplied scalar forcing and exact atmospheric support retain source identity.
+tests/test_analyzed_scalar_boundaries.py
+tests/test_atmospheric_window.py
+
+# Radiation selector partitions are CPU checks, independent of CUDA tests.
+tests/test_rrtmgp_coupling.py
+
+# Native atmospheric publication validates all source bytes before retaining support.
+tests/test_mapped_atmospheric_writer.py
+
+# Moving-store ownership, dated child activation and analyzed scalar consumers.
+tests/test_nest_bounded_operands.py
+tests/test_nest_window.py
+tests/test_prepared_delayed_activation.py
+tests/test_streamed_relocation_capture.py
+tests/test_streamed_relocation_owner.py
+tests/test_streamed_state.py
+tests/test_qnn_specified_inflow.py
+tests/test_wrfinput_physics_fields.py
+tests/test_metgrid_number_initialization.py
+tests/test_tui_cli.py
+
+# Reported GPU-preflight and ERA5 mask failures have permanent CPU coverage.
+tests/test_supervisor.py
+tests/test_ingest_preflight.py
+
+# TUI plot selections and reviewed, durable remote jobs retain their CLI contracts.
+tests/test_tui_products.py
+tests/test_tui_sim_products.py
+tests/test_remote_cli.py
+tests/test_remote_snapshot.py
+tests/test_remote_worker_linux.py
+
+# Research recipes, native attributes and supplied archives retain scientific intent.
+tests/test_research_catalog.py
+tests/test_research_workspaces.py
+tests/test_attribute_tracking.py
+tests/test_gfs_initial_perturbation.py
+tests/test_downscale_archive_guards.py
+tests/test_downscale_auto_vram.py
+tests/test_downscale_adaptive_parent.py
+tests/test_offline_child_geography.py
+tests/test_case_catalog.py
+
+# 2.8.4 old physics profile IDs at every door. Prevents an old ID (sent by
+# WOOF and by saved 2.8.3 plans, catalogs, drafts and receipts) from being
+# refused after a whole HRRR preparation by run-plan or stream, refused by
+# case-catalog, recorded with no physics components, or dropped by New forecast.
+tests/test_profile_alias_doors.py
+
+tests/test_source_availability.py
+tests/test_cli_memory_admission.py
+tests/test_go_supplements.py
+tests/test_hrrr_soil_choice.py
+
+# Static qualification may report comparison deltas, never broken execution.
+tests/test_static_platform_ci.py
+
+# Source installers must install the companion and build the terminal workspace.
+tests/test_install_scripts.py
+
+# Concise Check output must retain the full report's budget verdict and remedy.
+tests/test_check_display.py
+
+# New catalogue/forcing and native lake-state routes must remain reachable
+# from a clean installation, with credential readiness and exact source intent.
+tests/test_cds_acquisition_readiness.py
+tests/test_companion_domains.py
+tests/test_companion_forcing.py
+tests/test_companion_schedule.py
+tests/test_companion_setups.py
+tests/test_configuration_recovery.py
+tests/test_lake_acquisition.py
+tests/test_lake_temperature.py
+
+# Reviewed remote inputs, raw frame integrity, exact target-device estimates,
+# stable domain identities and native outer-event relay own the new UI routes.
+tests/test_remote_artifact_cache.py
+tests/test_remote_artifacts.py
+tests/test_remote_input_transfer.py
+tests/test_remote_plan.py
+tests/test_runplan_estimate_device.py
+tests/test_runplan_native_parent.py
+tests/test_wps_domain_ids.py
+
+# Remote processed-frame transport must preserve exact request identity and
+# native render receipts must count completed output frames without truncation.
+tests/test_remote_processed.py
+tests/test_render_receipts.py
+
+# Desktop v1 retains Build68 preparation, domain sizing and restart behavior;
+# compact completed-frame delivery must remain bounded and byte-verified.
+tests/test_prepared_tile_memory.py
+tests/test_preprocess_policy.py
+tests/test_tiled_gfs_preprocess_routing.py
+tests/test_cyclone_setup.py
+tests/test_domain_target_hardware.py
+tests/test_lifecycle_reflectivity_restart.py
+tests/test_remote_processed_v2.py
+tests/test_capability_gates.py
+tests/test_noah_mosaic_config.py
+tests/test_noah_mosaic_doors.py
+tests/test_noah_mosaic_init_wrf471.py
+tests/test_noah_mosaic_oracle_controls.py
+tests/test_noah_mosaic_urban_canopy_rule.py
+tests/test_noahmp_no_consumer_knobs.py
+tests/test_banned_words.py
+
+# The 2026-09-30 speed lanes' suites that have a CPU half.  Fifteen more
+# files the lanes appended here are device-only: under this leg's marker
+# expression each collected 0 tests (in the 74a4374af Stage 1 run 952 of
+# their rows skipped and test_physics_fused_block skipped whole at
+# collection), so they moved to tools/battery/gpu_shard_files.txt SHARD 1m,
+# the leg that runs them, the way test_anisotropic_mixing_w_stability did on
+# 2026-08-28.  Six of the seven kept here also have device rows, and those
+# run on SHARD 1m.
+#
+# Legacy RRTMG speed gates: the batched longwave engine's workspace, address
+# twin and constant-cache rows, and the non-MYNN radiation paths' identity.
+tests/test_rrtmg_lw_speed_identity.py
+tests/test_mynn_radiation_coupling.py
+
+# RTE-RRTMGP speed gates: the reserved col_dry slot and the retained gas
+# reference source.
+tests/test_rrtmgp_optics.py
+
+# Bounded nest FORCE coupling (window, frame, four-side launch) must keep
+# every coupled and boundary-table word and leave the exterior untouched.
+tests/test_nest_coupler.py
+tests/test_nest_interp.py
+
+# Fused held heating must match the eager FP32 operation chain word for word;
+# the custom-mass-provider row, which keeps the eager path, runs here.
+tests/test_held_heating_fused.py
+
+# The opt-in adaptive nest lattice: default off leaves the clock untouched,
+# the root step never exceeds the controller's proposal, landings and restart
+# identity hold, and a checkpoint refuses a flipped mode.
+tests/test_adaptive_nest_lattice.py
+
+# Thompson speed lane: the CPU half of the single-read table load test (the
+# in-memory record parser against the streamed one, its refusals, the staged
+# set parsed both ways).  Its device rows run on gpu_shard_files.txt.
+tests/test_thompson_speed_tables.py
+# Default-pieces speed lane (Noah-MP caches, New Tiedtke chunks and fused
+# group, GF early exit): the three suites with CPU rows.  GF's module imports
+# with no CUDA runtime, and New Tiedtke's tile budget and fused-group
+# threshold are priced on the host.  The lane's other thirteen suites are
+# device-only and run on tools/battery/gpu_shard_files.txt (SHARD 1p, or the
+# SHARD-2 rows test_gf_engine_smoke and test_ntiedtke_prep_parity already
+# held).
+tests/test_gf_import_runtime_free.py
+tests/test_ntiedtke_tile_budget.py
+tests/test_ntiedtke_fused.py
+
+# A146's source scan: no float division by a compile-time constant outside
+# __fdiv_rn in any -ftz=true kernel source or inline Python kernel string.
+# NVRTC compiles such a division as a multiply by the rounded reciprocal on
+# every Blackwell card, one ULP off for up to 65 percent of inputs.  A .cu
+# edit has no import edge for fastfix to follow, and this file imports no
+# CuPy; its first version sat in a module that imported CuPy's NVRTC, so it
+# collected 0 of 5 under GPUWM_NO_LOCAL_GPU on every CPU leg (review of
+# 4810400f1).
+# The compiler census half is on the GPU shard (SHARD 1r).
+tests/test_literal_division_source_gate.py
+# A160: every direct NVRTC compile carries its options in its source,
+# because NVRTC's cache key ignores -ftz for a fixed program name.  The
+# stamp and the source scan; the card rows are on the GPU shard (1r).
+tests/test_nvrtc_cache_key.py
+
+# The UW moist-turbulence PBL (bl_pbl_physics=9, WRF v4.7.1 CAMUWPBL).  Its
+# doors (RunConfig, namelist import, registry option), WRF's BEP/BEM fatal
+# and the named ArWen refusals, the dispatch row, the checkpoint identity
+# and default-off; the packaged oracle fixtures' pins and the saturation
+# table; and the binary64 CPU reference against every output word of the
+# fixtures of record (on a glibc x86-64 host with FMA, whose libm is the
+# oracle's; it skips elsewhere and says why).  CPU-only by construction:
+# the card rows are tests/test_uwpbl_launcher_wrf471_parity.py and
+# tests/test_uwpbl_driver_seam.py, in gpu_shard_files.txt.
+tests/test_uwpbl_integration.py
+tests/test_uwpbl_wrf471_parity.py
+# Its float32 flush-to-zero lanes: the 63 boundary sites counted in source,
+# the subnormal fixture's pins and the unflushed CPU reference against it.
+tests/test_uwpbl_ftz_wrf471_parity.py
+
+# Terrain-smoothing options: prevent ignored per-domain policies and altered default terrain.
+tests/test_terrain_smoothing.py
+# The urban canopy models (sf_urban_physics 1-3), CPU legs: the selector's
+# door and refusals, URBPARM parsing and the urban cold start against WRF
+# v4.7.1's urban_param_init/urban_var_init (0 ULP), the urban land-use
+# legend, the registry rows and namelist import, the UCM's reference, and the
+# fixture halves of the oracles whose device halves are on SHARD 1q of
+# tools/battery/gpu_shard_files.txt.
+tests/test_urban_config.py
+tests/test_urban_tables.py
+tests/test_urban_init_wrf471_parity.py
+tests/test_urban_geog.py
+tests/test_urban_registry.py
+tests/test_urban_ucm_ref.py
+# These two open their device inside a helper, which conftest's detector
+# reads as CPU-covered; their fixture checks run here.
+tests/test_urban_ucm_wrf471_parity.py
+tests/test_urban_ucm_noahmp_wrf471_parity.py
+# Lane 281-lcz-import (the Central Europe proof's WUDAPT namelist imported
+# use_wudapt_lcz = 1 and then built MODIS land cover): num_land_cat = 61 is
+# admitted where the LCZ legend is built, geog_data_res's cglc_modis_lcz
+# becomes the [static.highres] land cover, a token nothing builds is
+# refused by name, and the contract table carries both rules.
+tests/test_namelist_lcz_import.py
+# Lane 281-namelist-gaps (a free WOOF run refused four times, one setting
+# per booted box): the importer answers every refusal at once, maps WRF's
+# history window, gwd_opt, slope_rad/topo_shading/shadlen and smooth_cg_topo,
+# and exports the namelist contract a site checks uploads against; the
+# smooth_cg_topo blend is held bit for bit to WRF's blend_terrain; the
+# slope/shadow port's CPU rows (fixture, libm seam, health and restart class).
+tests/test_namelist_gaps.py
+tests/test_smooth_cg_topo.py
+tests/test_topo_radiation.py
+# A158 (lane 281-zadvect-implicit): WRF's implicit-explicit vertical
+# advection, zadvect_implicit.  Its CPU rows: the namelist import, the named
+# refusals and the memory pricing; the WRF 4.7.1 kernel check and the
+# uniform-theta guard (4.17 K before the fix) run on gpu_shard_files.txt.
+tests/test_zadvect_implicit.py
+# The implicit-advection split must survive every tiled config copy.
+# Losing it silently replaces implicit vertical transport with the explicit
+# path on ranks. Device seam and rank-count identity rows run on the GPU shard.
+tests/test_zadvect_tiled.py
+# The older WRF split has different Courant and mass-weighting arithmetic.
+# Its fixture and config guards prevent selecting the modern split under the
+# older identity. Compiled-Fortran kernel comparisons run on the GPU shard.
+tests/test_zadvect_legacy.py
+# Changing the implicit-advection generation across a restart changes the
+# operator. Its validation, experiment and checkpoint identities must carry
+# that choice, including the default used by older prepared runs.
+tests/test_zadvect_variant_config.py
+
+# woof run's preparation backend pin (A157): prevents a config run on a busy card
+# silently preparing on the CPU while the arm it is compared with prepared on the card.
+tests/test_run_preprocess_backend.py
+
+# CPU devices table, identity, route refusals, forecast seam and per-card admission.
+tests/test_devices_door.py
+# Ranked geometry, transport choice, clock refusals and CFL host arithmetic.
+tests/test_ranked_domain.py
+# A165 (lane 281-w-crit-cfl): WRF's w_crit_cfl.  Its CPU rows: the option
+# and its named refusals, the namelist import, the restart and tree
+# identity, and the WRF 4.7.1 fixture checked in WRF's own float32 order;
+# the device kernel against WRF runs on gpu_shard_files.txt SHARD 1s.
+tests/test_w_crit_cfl.py
+# A167: the per-toolchain row rule of tests/_toolchain_rows.py on every
+# Blackwell part (compute-capability major 10 and above), CPU only.  It was
+# keyed on 10.0 and 12.0 alone, so a 10.3, 11.0 or 12.1 card read the sm_86/89
+# default row of the MYNN tables instead of failing or skipping by name.
+tests/test_toolchain_rows.py
+
+# A163 (lane 281-memory-gate): the forecast memory gate counts each headroom
+# once.  Prevents a CUDA out-of-memory mid-run (every measured battery row
+# stays under its envelope, the margin is the measured worst row) and the
+# refusal of runs that fit (the urban arrays at their allocated size, the
+# 750 m city trees inside a 24 GiB card's budget).
+tests/test_memory_gate_a163.py
+# A176 (lane 281-bem-workspace-price): the prepared doors price BEP+BEM's
+# column workspace from the land cover's urban columns.  Prevents a price
+# below the plan the run allocates (a CUDA out-of-memory) and the refusal of
+# a prepared run at the configuration's every-column bound although it fits.
+tests/test_urban_workspace_price.py
+# A176 prepared admission counts at live heads, CUDA producer sharing and
+# prepared multi-run reservations. Prevents all-urban bounds delaying a
+# prepared forecast whose actual column workspace fits, while keeping an
+# oversized workspace refused and unknown or changing ground at its bound.
+tests/test_prepared_bem_auto_price.py
+tests/test_chained_bem_workspace_price.py
+tests/test_multi_run_bem_workspace_price.py
+
+# REASON: A186 tile checkpoints hash only prepared forcing before the seal;
+# restored prefixes retain all carriers and reject changed heads or forcing.
+tests/test_streamed_restart_boundary_prefix.py
+
+# REASON: A186 root tile buffers attach only the first prepared interval;
+# later intervals retain their checks and reuse the forcing slot at seams.
+tests/test_streamed_root_factory.py
+
+# REASON: A186 sends a streamed parent's feedback through bounded windows;
+# this file holds that a streamed child still restricts no species owing a
+# conversion (it failed at the first A186 tip and no stage-1 file saw it).
+tests/test_nest_feedback_reverse_edge.py
+
+# A181 (lane 281-child-acoustic-adaptation): the offline child and DA nested doors
+# take the acoustic adaptation, and checkpoints keep a parent's auto epssm.
+tests/test_child_acoustic_adaptation.py
+tests/test_da_nested_acoustic_adaptation.py
+# Fixed-clock and ensemble checkpoints preserve the automatic choice inherited
+# by downscale children; actual checkpoint serializers and the CLI are covered.
+tests/test_fixed_parent_acoustic_inheritance.py
+
+# A136 L10 (lane a136-l10-wiring): the as-posted fetch (its lead markers,
+# schedule rows and their last answers, exit 75 and the verified prefix) and
+# the mapped engine's lead-batch preparation ran on no stage-1 leg while every
+# door now runs them by default; and the staged chain (run-plan and go on a
+# mapped source) preparing beside its fetch, the mapped door forwarding
+# --as-posted and the forecast binding a mapped as-posted head.
+tests/test_posted_mapped_preparation.py
+# test_fetch_as_posted.py also holds (A136 L7c(b)) that a complete source hour
+# publishes once before its transfer batch ends and that repeated prefix checks
+# keep the marker a preparation has bound.
+tests/test_fetch_as_posted.py
+tests/test_staged_chain_as_posted.py
+
+# A136 L7c (b): native HRRR single domains and trees
+# prepares as its leads post.  Prevents a sealed native cache that binds a
+# bridge or source manifest no lead's marker or decode named, a decoder that
+# reads a lead before its files are its posted marker's, and a preparation
+# that waits a lead's whole lateness budget beside a decoder that had died.
+tests/test_native_hrrr_posted.py
+# A native tree must hold child and runner document identities to the
+# root's admitted leads, even when its manifests exist only at the seal.
+tests/test_native_hrrr_posted_tree.py
+tests/test_posted_tree_identity.py
+tests/test_native_posted_tree_identity.py
+tests/test_native_posted_tree_recovery.py
+# A136 native posted proof: a finishing download must not overtake older
+# leads waiting on the same host and delay their posting markers.
+tests/test_fetch_pool_host_order.py
+
+# A174: the Noah WRF 4.6.1 parity file's CPU rows (fixture receipts, branch
+# coverage, the baseline table, the mirror) and A167's compiler-row guard,
+# test_a_compiler_row_moves_only_what_the_compiler_reaches, which holds an
+# (architecture, NVRTC build) row to moving only the fields a compiler
+# reaches.  The file was on no battery list, so no leg ran the guard: the
+# GPU pin set names only the file's device row.
+tests/test_noah_wrf461_parity.py
+
+# A180: every door that answers "which suite does this draft run" (the physics
+# check, New forecast's draft, the assistant's planner, woof domain, the run)
+# and the local DA rungs read one default row.  Prevents a plan the run refuses
+# after the download and the preparation (cu_physics selected 0 expected 1 on
+# d02), and an auto ladder that stops naming the source's own suite: the
+# planner case went red at A163's gate (fc8aee7b9e) and no list ran this file.
+tests/test_physics_default_agreement.py
+
+# A136 L9 (lane a136-l9-sources): the transfer pool hands a capped host's
+# slots out in submission order.  Prevents a window fetched as it posts
+# moving its first boundary lead last on NOMADS (GEFS 2026-10-01 06Z: f003
+# and f006 after f024), which held every as-posted start to the whole window.
+tests/test_fetch_pool.py
+# A dataclass default Python 3.11 refuses breaks import woof on 3.11 (requires-python >=3.11); found by the 2.8.1 pre-cut gate (fetch_routes LegacyPosting.providers).
+tests/test_dataclass_defaults_hashable.py
+
+# Compiled WRF v4.7.1 bigstep oracles: provenance in CPU legs, word comparisons in GPU legs.
+tests/test_bigstep_coupling_wrf471_parity.py
+tests/test_bigstep_momentum_wrf471_parity.py
+tests/test_bigstep_prep_wrf471_parity.py
+tests/test_bigstep_rk_wrf471_parity.py
+
+# Compiled WRF v4.7.1 advection and smallstep fixture, ABI and word-metric
+# contracts must run without a card; device comparisons are GPU-marked.
+tests/test_advect_wrf471_parity.py
+tests/test_smallstep_bookkeeping_wrf471_parity.py
+tests/test_smallstep_horizontal_wrf471_parity.py
+tests/test_smallstep_vertical_wrf471_parity.py
+tests/test_smallstep_oracle_contract.py
+
+# WRF vert_order 5 (lane 286-vadv5, v_sca_adv_order / v_mom_adv_order).  Its
+# CPU rows: the orders are refused by name outside 3 and 5, bind restarts
+# and leave prepared bundles alone; the route namelist writes a moved order;
+# the float64 mirror equals the Fortran loops on short columns and on the 51
+# operational eta levels; every forecast launch names its order.  Losing
+# this entry lets a launch left on order 3 ship under an order 5
+# configuration.  The fork fixture's pins, the fork-versus-4.7.1 reference
+# identity and the declared positive-definite low-order divergence run here
+# too; kernel words against the mirror and the compiled fork run on
+# gpu_shard_files.txt.
+tests/test_advect_vertical_order.py
+tests/test_advect_wrf_legacy_parity.py
+# The RK advection attribution's spliced kernel text against the helper
+# signatures it calls (rk_advection_diagnostic.py).  Losing this entry lets
+# a helper signature change strand the splice again: the tool runs only by
+# hand on a GPU, so its NVRTC failure surfaces when someone next needs it.
+tests/test_rk_advection_diagnostic_sources.py
+# The advection receipt recapture rules (recapture_receipt.py settle) on
+# synthetic captures, and the committed gpu-receipts.json indexes the device
+# tests select through.  Losing this entry lets a receipt move on a rented
+# card without its production words reproducing.
+tests/test_advect_recapture_receipt.py
+
+# Compiled WRF diffusion fixture integrity runs on the CPU cut leg. Device
+# word comparisons run in the release GPU pin stage; losing these entries
+# would leave changed Fortran sources or stale receipts unchecked on CPU.
+tests/test_diff6_wrf471_parity.py
+tests/test_deformation_wrf471_parity.py
+tests/test_horizontal_diffusion_wrf471_parity.py
+tests/test_vertical_diffusion_wrf471_parity.py
+tests/test_constant_diffusion_wrf471_parity.py
+tests/test_diffusion_drivers_wrf471_parity.py
+
+# Actual WRF post-surface Q2 words and native cold-start carriers.
+tests/test_wrfinput_surface_native.py
+
+# woof ml-export (lane 282-ml-export): the level and variable tables, the
+# argument-to-request door, the binary's contract markers and, where rw_mlexport
+# is built, a history file through the door into xarray and the levels against
+# GeoCAT above and below ground.  Prevents a table row the binary cannot make, a
+# machine path in a dataset's provenance, and pressure-level values that differ
+# from an independent implementation of the same column arithmetic.
+tests/test_ml_export.py
+# Lane 282-terrain-drag: WRF's topo_wind and gwd_opt.  Prevents a terrain-drag
+# option that silently does nothing (topo_wind outside YSU, gwd_opt without a
+# PBL scheme, a child whose statics lack the orographic statistics), a default
+# run whose identity or checkpoint moves, and a WRF namelist carrying either
+# key being refused or mistranslated. Pure CPU fixture, activation and frame
+# receipts run here; device parity and mutation tests run only on
+# gpu_shard_files.txt SHARD 1t.
+tests/test_terrain_drag_config.py
+tests/test_terrain_drag_receipts.py
+# Active drag caches bind the native WPS arithmetic revision so earlier
+# mixed-precision orography is refused; inactive cache identity stays exact.
+tests/test_terrain_drag_static_identity.py
+# Saved-child own geography must request drag statistics and pass them to
+# physics; otherwise an accepted downscale option stops during initialization.
+tests/test_terrain_drag_offline_child.py
+# Tiled terrain drag must gather every coefficient and statistic before use.
+# Prevents neutral tile statics silently disabling drag and obsolete tile
+# refusals stopping an otherwise complete prepared-domain forecast.
+tests/test_terrain_drag_tiles.py
+# Resident ranks must walk the exact MYNN width admitted per physical card.
+# Prevents repeated IDs overspending one card, workspace shapes changing
+# after allocation, and rank threads inheriting a reused tile's small chunk.
+tests/test_mynn_rank_chunk_policy.py
+
+# Device ranks must receive every orographic statistic and topo_wind input,
+# with the same halo and edge mapping as the state. Prevents accepted drag
+# options failing at rank construction or reading the wrong terrain column.
+tests/test_terrain_drag_devices.py
+
+# Hosted AWS transport policy (lane/282-aws-transport).  Prevents a hosted
+# run under the AWS policy falling through to NOMADS after a failed AWS
+# transfer, "latest" settling on a cycle that is complete only on NOMADS,
+# and an ordinary install losing its NOMADS-first walk when the policy is
+# unset.  A production HRRR run spent about 45 minutes on NOMADS before its
+# worker died; the same files came from AWS in 59.5 s.
+tests/test_fetch_aws_policy.py
+
+# A191: the resident, streamed and out-of-core store checkpoint writers echo
+# one run configuration.  Prevents two checkpoints of one state, one per
+# writer, comparing unequal with identical arrays: the streamed and store
+# writers echoed nine default keys the resident writer drops, and the 2.8.1
+# bench's streamed relocation rebuild test failed on both datacenter cards.
+tests/test_checkpoint_config_echo.py
+
+# A193: the literal-division census and source scan read kernel sources only
+# from the tree they gate.  Prevents the gate reading an installed woof
+# beside a source tests tree (the 2.8.1 B200 bench: three compiler-census
+# failures that were no division defect) and a root with no kernel sources
+# passing on nothing.
+tests/test_literal_division_scan_root.py
+
+# 2.8.2 fixes that shipped without a battery entry (found by the 2.8.2
+# release-input review).  Each prevents the named defect returning unseen:
+# diff_opt = 1 config, refusal and restart rows (a coordinate-diffusion run
+# admitted with an operator it cannot run, or resumed from a metric
+# checkpoint); the wrfinput reader's soil-water and cold-start carriers
+# (Noah SH2O restored from wrfinput's zeros); the coordinate thermal
+# reference priming before a streamed inventory (reused tiles losing the
+# initial theta field); the Noah initialization guard (a cold start
+# re-initializing a restarted column); and the compiled-WRF diff_opt = 1
+# oracle's fixture and receipt rows (changed Fortran sources or stale
+# receipts going unchecked).  Device rows of the last are on the GPU shard.
+tests/test_diff_opt1.py
+tests/test_wrfinput_reader_contract.py
+tests/test_coordinate_reference_prime.py
+tests/test_noah_initialization_guard.py
+tests/test_diff_opt1_wrf471.py
+
+# Native WRF longwave buffer-grid words and the shallow-column guard.
+# Prevents ordinary 50-hPa tops losing their prescribed 4-hPa spacing.
+tests/test_rrtmg_lw_buffer_grid.py
+
+# woof go --cycle against existing inputs: an equal assertion is a recorded
+# no-op and a different one is refused.  Prevents the 2.8.1 production
+# breakage (every ERA5 worker run refused at prep for passing its bundle's
+# own cycle) and a cycle that nothing reads silently naming the wrong start.
+tests/test_go_cycle.py
+# Existing inputs must agree with an asserted cycle. Prevents silently
+# relabelling a prepared analysis or restart with another initialization time.
+tests/test_input_cycle.py
+
+# The front door refuses a CuPy older than the extras' floor by name.  Prevents
+# a box still holding CuPy 13 passing the door and dying at its first model
+# step on the by-value numpy.void tables ("Unsupported type", 2026-10-02).
+tests/test_gpu_runtime_floor.py
+
+# Legacy RRTMG shortwave with no layer above the troposphere switch
+# (laytrop == nlayers, a model top below ~191 hPa).  Prevents the NumPy
+# reference drifting from WRF on the columns whose bands 16, 17, 27, 28 and
+# 29 keep a zero solar source (fixtures_shallow.npz, recorded by the
+# unmodified Fortran), and rsw_sfluxzen_body regaining a return before its
+# store: the batched sflux slot is recycled scratch, and that return fed
+# leftover GPU memory to spcvmc on shallow and idealized domains.  The
+# card half is tests/test_rrtmg_sw_no_upper_flux_gpu.py on the GPU shard.
+tests/test_rrtmg_sw_no_upper_flux.py
+
+# Simulated-radar config, CLI metadata and per-history orchestration. Prevents
+# an accepted option being dropped by a forecast door, geometry requests
+# exhausting native allocations, or a failed requested product being hidden.
+tests/test_simulated_radar.py
+
+# Public capability metadata must identify executable model routes and their
+# required atmospheric fields. Prevents a displayed option being accepted by
+# a worker whose forecast route silently ignores it.
+tests/test_simulated_radar_capabilities.py
+
+# The compiled common-atmosphere adapter must preserve physical temperature,
+# wind masks and source provenance. Prevents hex/global columns producing
+# plausible radar values after a changed vertical or thermodynamic convention.
+tests/test_canonical_radar_scene.py
+
+# Native geometry pricing and refusal execute before allocating or sampling.
+# Prevents tiny positive gate/ray spacing from requesting unbounded arrays
+# and keeps worker quotes tied to the native sample and byte calculation.
+tests/test_simulated_radar_resources.py
+
+# Vendored source notices and packaged license texts must travel together.
+# Prevents a wheel carrying compiled donor code while omitting the license
+# and NOTICE files required for redistribution.
+tests/test_licence_notices_ship.py
+
+# MYNN option 2 and post-PBL scalar diffusion: prevent selecting option 1
+# at initialization, treating local diffusion as plume transport, or dropping
+# the nc/ni/nwfa/nifa tendency between the wrapper and RK3. WRF column
+# fixtures ship; GPU checks for the same paths are on gpu_shard_files.txt.
+tests/test_mynn_options.py
+tests/test_mynn_mixlength2.py
+tests/test_scalar_pblmix.py
+# Price both solve and coupling live sets so enabled scalar mixing cannot
+# pass memory admission using an estimate for the default-off path.
+tests/test_scalar_pblmix_memory.py
+
+# Explicit preparation workers must override inherited library defaults.
+# Prevents a 24-worker request silently decoding or initializing on one core.
+tests/test_preparation_workers.py
+# Host admission must include CPU preparation and native worker scratch.
+# Prevents starting initialization whose retained arrays exhaust available RAM.
+tests/test_cpu_preparation_host_ram.py
+# Large CUDA preparation must retain completed arrays on the host.
+# Prevents an own-grid preparation allocating a whole state on a smaller card.
+tests/test_bounded_cuda_preparation.py
+# Ranked forecasts must consume a checked head and stop before an absent seam.
+# Prevents seal-only startup, wrong-card reserves and unpriced later decodes.
+tests/test_ranked_boundary_stream.py
+# A newly sealed mapped proof must remain readable by the public forecast.
+# Prevents worker and stage telemetry rejecting a completed run at its seal.
+tests/test_cross_source_sim_stage.py
+# Parallel prepared-array writes must publish the original bytes atomically.
+# Prevents early ready markers, changed hashes and deletion of foreign files.
+tests/test_prepared_writer.py
+# Native FP64 host functions must retain scalar-library words and edge cases.
+# Prevents threading changing pow results, signed zeros or NaN payload behavior.
+tests/test_host_libm.py
+# Native cold-start seeding must retain each mixed-precision operation.
+# Prevents changed Thompson numbers, partial state writes or lost refusals.
+tests/test_cold_start_cpu.py
+# Parallel setup copies must preserve float32 residuals and owned caches.
+# Prevents altered geopotential words or aliasing a cached base-state array.
+tests/test_host_setup_arrays.py
+# Native receipt hashing must preserve source bytes and field correspondence.
+# Prevents changed preparation identities, reordered receipts or unbounded copies.
+tests/test_preparation_fingerprints.py
+
+# RUC mosaic input and WRF column controls prevent silently falling back to
+# dominant categories, losing irrigation, or misindexing rank fractions.
+tests/test_ruc_mosaic.py
+tests/test_ruc_mosaic_options.py
+tests/test_ruc_mosaic_doors.py
+
+# Lake controls prevent changed defaults, omitted bathymetry, restart setting
+# drift and non-horizontal lake state that the resident-rank copier cannot carry.
+tests/test_lake_options.py
+tests/test_lake_physics_doors.py
+tests/test_surface_rank_carriers.py
+
+# WPS bathymetry must retain its area mean, bounded search and land mask;
+# an old native bridge must not silently ignore the new interpolation row.
+tests/test_lake_static.py
+
+# Pin all WRF lake statements, layer bounds, defaults and 300-step oracle
+# words so a reduced lake substitute or changed source cannot pass unnoticed.
+tests/test_lake_contract.py
+
+# Rank physics memory must price actual allocations and live aliases once.
+# Prevents fitting multi-card forecasts being refused by duplicate MYNN
+# output pricing, and admitted forecasts exhausting the card through omitted
+# RUC workspaces or atmosphere density. The output staging cap stays priced.
+tests/test_devices_memory_pools.py
+# The RUC inventory counts the full-width soil/snow workspaces, output pools
+# and pinned host mirrors. Prevents these live allocations disappearing from
+# device or host admission while the full-column solve still allocates them.
+tests/test_ruc_memory.py
+
+# A free-threaded command line must re-execute once with PYTHON_GIL=0, never on
+# a GIL build, on Windows, under an explicit PYTHON_GIL or as its own child, and
+# doctor must name a locked interpreter without blocking. Prevents netCDF4's
+# import putting every [devices] slab thread back on one interpreter lock.
+tests/test_free_threading.py
+# Slab threads bind to card-local CPUs only on multi-node hosts and never
+# outside the allowed set; auto stages every seam when cards span NUMA nodes.
+# Prevents threads floating across sockets, the mixed peer-copy collapse
+# (245 ms against 15 ms per exchange) and a silent locked-interpreter run.
+tests/test_rank_placements.py
+
+# Prevents a native mass-level top being confused with its model-top interface,
+# pressure rounding refusing the source's own eta ladder, aerosol numbers
+# silently replaced by climatology, and a separate analysis replacing RAP f00
+# boundaries or escaping the prepared bundle's source and time bindings.
+tests/test_native_pressure_top.py
+tests/test_native_source_profiles.py
+tests/test_aerosol_analysis_input.py
+tests/test_initial_source.py
+
+# The time-lagged and multi-model ensemble door (2.8.5), run on a CPU: the
+# real request, member plan, member configs, chain plans, flag handling,
+# gates, receipts and failure handling of `woof ensemble / go / run
+# --recipe`, with only the paid stages replaced (a member's fetch and
+# preparation, the card gates, the forecast runner).  Before it was listed
+# the door body ran on no battery leg: every CPU test replaced
+# run_recipe_ensemble, so the body could be broken with all of them green.
+# Prevents --readiness starting the members' downloads, --cycle and the
+# other go flags being dropped, a member its chain cannot prepare being
+# found after earlier members were fetched, one model run counted as several
+# members, and a stage failure leaving a traceback and a stale receipt.
+tests/test_ensemble_recipe_door.py
+
+# 2.8.5 ensemble lines (lanes 283-ensemble-batch and 283-ens-perturb): the
+# CPU halves.  Found by the 2.8.5 ensemble reviews: none of the two lanes'
+# test files was on this list, so neither public CI nor a cut ran the
+# calibration refusal's own gate, the batch kernel adapter's source audits
+# or the member admission pricing.  Measured on a development machine at 75950cec9 with
+# CUDA hidden and the tip build's native libraries loaded, every file below
+# together (-n 6 --dist loadfile): 1,310 passed, 4 skipped by design
+# (tests/test_ensemble_calibration_admission.py covers the native doors'
+# one request descriptor once), 0 failed.
+#
+# The batch kernel adapter and its packing.  The adapter rewrites CUDA text
+# under audits; these read the installed kernels on a CPU, so an audit that
+# went stale against a kernel edit fails here and not on a card nobody ran.
+# tests/test_ensemble_batch_acoustic_fusion_audit.py is that check for the
+# fusion trial, whose stale audit left 21 device tests red at the 2.8.5
+# staging tip.  The three files that also carry device rows are on
+# tools/battery/gpu_shard_files.txt SHARD 1w and 1y for those.
+tests/test_ensemble_batch_acoustic_fusion_audit.py
+tests/test_ensemble_batch_kernel.py
+tests/test_ensemble_batch_advection_family_gpu.py
+tests/test_ensemble_batch_layout_trials_gpu.py
+tests/test_ensemble_batch_state.py
+tests/test_ensemble_batch_storage.py
+tests/test_ensemble_batch_health.py
+tests/test_ensemble_batch_mixing.py
+tests/test_ensemble_batch_physics.py
+tests/test_ensemble_batch_physics_init.py
+tests/test_ensemble_batch_products.py
+tests/test_ensemble_batch_product_spool.py
+tests/test_ensemble_batch_profile.py
+tests/test_ensemble_admission_packing.py
+tests/test_ensemble_prepared_batch.py
+tests/test_ensemble_identity_compare.py
+tests/test_rustwx_resident_ensemble.py
+# The ensemble run path: the production door and session, ordinary and
+# native execution, member capture, progress, counters and member products.
+# A regression here is a --members run that stops, mislabels a member or
+# drops a member's output.
+tests/test_ensemble_production_door.py
+tests/test_ensemble_production_request.py
+tests/test_ensemble_production_sizing.py
+tests/test_ensemble_production_execution.py
+tests/test_ensemble_prepared_execution.py
+tests/test_ensemble_prepared_source_binding.py
+tests/test_ensemble_ordinary_execution.py
+tests/test_ensemble_physics_execution.py
+tests/test_ensemble_posted_execution.py
+tests/test_ensemble_posted_native.py
+tests/test_ensemble_native_forecast.py
+tests/test_ensemble_native_review.py
+tests/test_ensemble_supervised_devices.py
+tests/test_ensemble_runtime_context.py
+tests/test_ensemble_runtime_capture_lifecycle.py
+tests/test_ensemble_runtime_counters.py
+tests/test_ensemble_runtime_preparation.py
+tests/test_ensemble_progress.py
+tests/test_ensemble_output_counters.py
+tests/test_ensemble_radar_output.py
+tests/test_ensemble_reconstruction.py
+tests/test_ensemble_member_diagnostics.py
+tests/test_prepared_history_capture_receipt.py
+# Member sources, recipes and the calibration refusal.
+# tests/test_ensemble_calibration_admission.py is the gate on the refusal
+# of uncalibrated random perturbation at every door; unlisted, the refusal
+# could be removed with nothing red.
+tests/test_ensemble_calibration_admission.py
+tests/test_ensemble_calibration_score.py
+tests/test_ensemble_campaign_run.py
+tests/test_ensemble_campaign_score.py
+tests/test_ensemble_campaign_retention.py
+tests/test_ensemble_amplitude_select.py
+tests/test_ensemble_recipe_time_axes.py
+tests/test_ensemble_source_recipes.py
+tests/test_ensemble_source_routes.py
+tests/test_ensemble_source_preparation.py
+tests/test_ensemble_automatic_sources.py
+tests/test_ensemble_automatic_preparation.py
+tests/test_ensemble_acquisition_binding.py
+tests/test_ensemble_member_preparation.py
+tests/test_ensemble_posted_preparation.py
+# Stochastic patterns and SPP: seeds, restart and streaming authority, the
+# config contract, and the SPP consumers against unmodified WRF v4.6.1
+# captures (the device halves are on gpu_shard_files.txt SHARD 1x).
+tests/test_ensemble_stochastic_authority.py
+tests/test_ensemble_stochastic_config_contract.py
+tests/test_ensemble_stochastic_execution.py
+tests/test_ensemble_stochastic_model.py
+tests/test_ensemble_stochastic_restart.py
+tests/test_ensemble_stochastic_seeds.py
+tests/test_ensemble_stochastic_streamed_restart.py
+tests/test_ensemble_stochastic_streaming.py
+tests/test_spp_config.py
+tests/test_spp_consumers.py
+tests/test_spp_restart.py
+tests/test_ruc_spp.py
+tests/test_preprocess_math_binding.py
+# Physical member stores and posted preparation: units, pressure alignment,
+# recentring through the native preparation library and the store's own
+# reader.  Five files on this list (four in this block and
+# tests/test_ensemble_source_preparation.py above) read
+# WOOF_ENSEMBLE_PREPARATION_BRIDGE (the gpuwm_preprocess_cpu library) and
+# skip 56 tests without it, so the leg must export it.  The
+# native-dependent files are also on tools/battery/stage1_native_files.txt.
+tests/test_ensemble_physical_preparation.py
+tests/test_ensemble_physical_boundary.py
+tests/test_ensemble_physical_review.py
+tests/test_ensemble_physical_units.py
+tests/test_ensemble_mapped_physical.py
+tests/test_ensemble_posted_physical.py
+tests/test_gfs_physical_store.py
+tests/test_gfs_posted_physical.py
+tests/test_hrrr_physical_contract.py
+tests/test_hrrr_physical_store.py
+tests/test_hrrr_posted_physical.py
+tests/test_mapped_posted_engine.py
+tests/test_mapped_posted_physical.py
+tests/test_mapped_posted_reuse.py
+tests/test_mapped_posted_tree.py
+tests/test_posted_prep_handoff.py
+tests/test_prep_handoff_directory.py
+tests/test_source_cli_physical_stores.py
+
+# 2.8.5 ensemble run control (lane fix/285-ens-runcontrol): the CPU half.
+# Ctrl-C was held until every member in flight had finished its whole
+# forecast, a failed member was not named, and a native run closed its
+# log with "0 steps".  This file drives the real wave executor and
+# session: the stop must be back before half of a 6 s member and a queued
+# wave must never start, every failure of a wave is named by its member,
+# and a source-audit refusal before any pack began declines to the
+# ordinary runner while one after a pack began still fails the run.  The
+# device halves are on gpu_shard_files.txt beside the recipe door and in
+# SHARD 1w0.
+tests/test_ensemble_run_control.py
+# The table law for the ensemble line (lane fix/285-ens-tables; the
+# project ruling that a new model is table work).  The line branched on
+# source and runner names in code (a runner id in the shared geography
+# build, a set of runner ids at the physical store door, a source and
+# mode pair in the decoder resolver).  This reads the ensemble package
+# and tools with ast and fails on any source id, alias or runner id
+# outside a docstring, and runs a synthetic row through every generic
+# door.  Run against the recipe door lane it caught `chain ==
+# "prepared:hrrr"` in woof/ensemble/recipe_door.py before the merge.
+tests/test_ensemble_table_law.py
+
+# 2.8.5 ensemble admission (lane fix/285-ens-admission) and the RUC soil
+# property selector (lane 286-ruc-soilprop-285).  A plain member count used
+# to run N copies of one forecast and publish spread and probabilities from
+# them, and an imported WRF &stoch namelist reached random perturbations the
+# release refuses; tests/test_ensemble_member_inputs.py holds every N > 1
+# door to real member inputs and tests/test_namelist_stochastic.py holds the
+# importer to the calibration refusal.  tests/test_ruc_soilprop.py holds the
+# default soil diffusivity to the HRRR form and "wrf_461" to the old bytes.
+tests/test_ensemble_member_inputs.py
+tests/test_namelist_stochastic.py
+tests/test_ruc_soilprop.py
+
+# Registered parameter binding, source isolation and default identity.
+tests/test_physics_params.py
+tests/test_physics_params_kernel_isolation.py
+tests/test_physics_params_restart.py
+tests/test_physics_params_gpu.py
+tests/test_physics_params_checkpoint_echo.py
+tests/test_physics_params_preparation_identity.py
+tests/test_physics_params_python_api.py
+
+# WRF radiation-driver options as operational HRRR runs them (lane
+# 286-aer-swint): swint_opt = 1 (the surface shortwave between radiation
+# calls) and aer_opt = 3 (Thompson aerosol optics into the legacy RRTMG
+# shortwave).  The NumPy float32 twins are held word for word to stored
+# NOAA-EMC/HRRR v4.1.21 fork oracles (tests/data/swint_oracle,
+# tests/data/aer3_oracle); a twin that drifts by one ULP from the fork, an
+# option value the engine does not implement reaching a run, or a fixture
+# swapped without its SHA256 fails here.  The device halves are on
+# gpu_shard_files.txt.
+tests/test_radiation_driver_options.py
+tests/test_swint_interpolation.py
+tests/test_rrtmg_aerosol_optics.py
+
+# Named source radiation generation, recipe planning and scalar/batch cloud
+# wrapper forms. Prevents the operational aerosol selection from being
+# rejected by an unintended modern default or silently using old cloud radii.
+tests/test_shortwave_source_doors.py
+tests/test_rrtmg_source_cloud_form.py
+
+# Coupled source cloud generation and prescribed smoke metadata. Prevents
+# incompatible cloud conventions, unbound source files and inert prep refusal.
+tests/test_mynn_gsd41_selection.py
+tests/test_mynn_massflux_gsd41.py
+tests/test_mynn_water_gsd41.py
+tests/test_rrtmg_smoke_source_doors.py
+tests/test_rrtmg_smoke_manifest.py
+tests/test_rrtmg_smoke_input.py
+
+# Solar albedo and source selection on the current staged prefix. These CPU
+# gates retain disabled-option bytes, preparation reuse, active restart
+# identity, parsed-namelist defaults and the prescribed source controls.
+# Device-only solar execution remains on the GPU test tier.
+tests/test_solar_albedo.py
+tests/test_solar_albedo_integration.py
+tests/test_albsol_config.py
+tests/test_albsol_historical_bytes.py
+tests/test_albsol_source_doors.py
+tests/test_checkpoint_radiation_defaults.py
+tests/test_radiation_driver_identity.py
+tests/test_namelist_parsed_carrier.py
+tests/test_physics_source_defaults.py
+
+# Local CPU preparation policy. CUDA imports and probes are replaced with
+# failing sentinels while the local-device prohibition remains enabled.
+tests/test_preprocess_no_local_gpu.py
+
+# Current RUC and MYNN selectors: measured CPU contracts and numerical checks.
+tests/test_ruc_2m_diagnostic.py
+tests/test_ruc_default_selection.py
+tests/test_ruc_fork_configuration_doors.py
+tests/test_ruc_fork_oracle.py
+tests/test_ruc_irrigation.py
+tests/test_ruc_public_identity.py
+tests/test_ruc_qvg_cold_start.py
+tests/test_ruc_selector_comment.py
+tests/test_ruc_snow.py
+tests/test_thompson_mynn_ruc_profiles.py
+tests/test_mynn_dmp_sibling.py
+
+# c9f4efeee, lane/286-staging-repair: execute the CPU source/hash receipt
+# guard for the two measured b0556bd76, lane/286-fork-thompson, powf sites.
+# The device bodies remain GPU work; dynamic loading needs ALWAYS coverage.
+tests/test_thompson_fork_plain_powf_receipt.py
+
+# 75daa3892, lane/286-staging-repair: keep canonical fork table acquisition,
+# wrong-byte refusal, atomic cache publication and standalone harness shipping
+# in the CPU cut. These 13 cases use fixtures and local loopback transport.
+tests/test_thompson_fork_assets.py
+
+# 2.8.6: the plan-time advisory for an adaptive nest whose step may grow
+# faster than 5 percent (d146bd14d).  Breakage it prevents: a 51 percent
+# nest that went non-finite hours into a nested forecast with nothing in
+# `woof check` naming the setting.  Five CPU cases, no fixtures.
+tests/test_nest_step_growth_advisory.py
+
+# lane/kernel-levers bc0e38cdc: the 32-bit index dispatch of the 2-D
+# Smagorinsky kernel.  Fourteen CPU cases with both compilers stubbed; a cut
+# that does not run them would not see the dispatch choose the wrong arm.
+tests/test_smag2d_index32_dispatch.py

@@ -1,0 +1,9 @@
+// Generated from kernel_signatures.json; layout b473c1f92582b87145a7b5dc367a69bd1179d211ee003b7d02025d143460d7b1.
+struct NoahmpLeafAtmResources {
+    device const float *xs [[id(0)]];
+    device float *ys [[id(1)]];
+};
+struct NoahmpLeafAtmParams {
+    int ncase;
+};
+static_assert(sizeof(NoahmpLeafAtmParams) == 4, "noahmp_leaf_atm parameter ABI size changed");

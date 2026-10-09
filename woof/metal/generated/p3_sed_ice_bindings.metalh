@@ -1,0 +1,27 @@
+// Generated from kernel_signatures.json; layout 571d5c8638261bee084d375d3fe8e6adf9791c5c4da573a0bad02657a5850530.
+struct P3SedIceResources {
+    device float *qi [[id(0)]];
+    device float *qir [[id(1)]];
+    device float *ni [[id(2)]];
+    device float *qib [[id(3)]];
+    device const float *dz [[id(4)]];
+    device const float *rho [[id(5)]];
+    device const float *inv_rho [[id(6)]];
+    device const float *rhofaci [[id(7)]];
+    device float *vq [[id(8)]];
+    device float *vn [[id(9)]];
+    device float *fq [[id(10)]];
+    device float *fn [[id(11)]];
+    device float *fqir [[id(12)]];
+    device float *fbir [[id(13)]];
+    device const float *itab [[id(14)]];
+    device float *prt_sol [[id(15)]];
+    device const float *flags [[id(16)]];
+};
+struct P3SedIceParams {
+    int nz;
+    int ny;
+    int nx;
+    float dt;
+};
+static_assert(sizeof(P3SedIceParams) == 16, "p3_sed_ice parameter ABI size changed");

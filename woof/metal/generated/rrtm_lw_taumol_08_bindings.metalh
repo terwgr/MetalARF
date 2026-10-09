@@ -1,0 +1,47 @@
+// Generated from kernel_signatures.json; layout c98fd0b89151529b4f81304979c7b229a3d0b273b6f25389e01e57c60d157f99.
+struct RrtmLwTaumol08Resources {
+    device const float *colh2o [[id(0)]];
+    device const float *colo3 [[id(1)]];
+    device const float *coln2o [[id(2)]];
+    device const float *co2mult [[id(3)]];
+    device const float *fac00 [[id(4)]];
+    device const float *fac01 [[id(5)]];
+    device const float *fac10 [[id(6)]];
+    device const float *fac11 [[id(7)]];
+    device const float *selffac [[id(8)]];
+    device const float *selffrac [[id(9)]];
+    device const int *jp [[id(10)]];
+    device const int *jt [[id(11)]];
+    device const int *jt1 [[id(12)]];
+    device const int *indself [[id(13)]];
+    device const int *layswtch [[id(14)]];
+    device const float *wx [[id(15)]];
+    device const float *tables [[id(16)]];
+    device const int *table_index [[id(17)]];
+    device float *taug [[id(18)]];
+    device float *pfrac [[id(19)]];
+};
+struct RrtmLwTaumol08Params {
+    int ncol;
+    int nlay;
+    int ncell;
+    int nspa;
+    int nspb;
+    int nrowa;
+    int nrowb;
+    int id_absa;
+    int id_absb;
+    int id_self;
+    int id_n2oref;
+    int id_h2oref;
+    int id_o3ref;
+    int id_cfc12;
+    int id_cfc22;
+    int id_co2a;
+    int id_co2b;
+    int id_n2oa;
+    int id_n2ob;
+    int id_fraca;
+    int id_fracb;
+};
+static_assert(sizeof(RrtmLwTaumol08Params) == 84, "rrtm_lw_taumol_08 parameter ABI size changed");

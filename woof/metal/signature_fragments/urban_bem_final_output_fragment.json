@@ -1,0 +1,53 @@
+{
+  "kernels": [{
+    "name": "urban_bem_final_output_fragment",
+    "module": "urban_bem_final_output_fragment",
+    "source": "woof/metal/shaders/urban_bem_final_output_fragment.metal",
+    "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+    "cuda_symbol": "module_sf_bep_bem.F:1052-1144, final BEM diagnostics and PBL output scatter",
+    "resources": [
+      ["active_cols", "int32", "read"],
+      ["fraction", "float", "read"], ["utype", "int32", "read"],
+      ["class_float", "float", "read"], ["bs", "float", "read"], ["ws", "float", "read"],
+      ["building_nlev", "int32", "read"], ["d_urb", "float", "read"],
+      ["sflev", "float", "read"], ["lflev", "float", "read"],
+      ["consum", "float", "read"], ["sfvlev", "float", "read"], ["lfvlev", "float", "read"],
+      ["sf", "float", "read"], ["vl", "float", "read"],
+      ["a_u", "float", "read"], ["a_v", "float", "read"], ["a_t", "float", "read"], ["a_e", "float", "read"],
+      ["b_u", "float", "read"], ["b_v", "float", "read"], ["b_t", "float", "read"], ["b_e", "float", "read"], ["b_q", "float", "read"],
+      ["dlg", "float", "read"], ["dl_u", "float", "read"],
+      ["rl_up_in", "float", "read"], ["rs_abs_in", "float", "read"], ["emiss_in", "float", "read"], ["grdflx_in", "float", "read"],
+      ["sf_ac", "float", "read_write"], ["lf_ac", "float", "read_write"], ["cm_ac", "float", "read_write"],
+      ["sf_vent", "float", "read_write"], ["lf_vent", "float", "read_write"], ["ep_pv", "float", "read_write"],
+      ["drain_green", "float", "read_write"], ["qgr", "float", "read_write"], ["tgr", "float", "read_write"],
+      ["rl_up", "float", "read_write"], ["rs_abs", "float", "read_write"], ["emiss", "float", "read_write"], ["grdflx", "float", "read_write"],
+      ["out_sf", "float", "read_write"], ["out_vl", "float", "read_write"],
+      ["out_a_u", "float", "read_write"], ["out_a_v", "float", "read_write"], ["out_a_t", "float", "read_write"], ["out_a_e", "float", "read_write"],
+      ["out_b_u", "float", "read_write"], ["out_b_v", "float", "read_write"], ["out_b_t", "float", "read_write"], ["out_b_e", "float", "read_write"], ["out_b_q", "float", "read_write"],
+      ["out_dlg", "float", "read_write"], ["out_dl_u", "float", "read_write"]
+    ],
+    "shapes": {
+      "active_cols": [["ncol"]], "fraction": [["ncol"]], "utype": [["ncol"]],
+      "class_float": [["class_float_len"]], "bs": [["ncol", 2]], "ws": [["ncol", 2]],
+      "building_nlev": [["ncol", 15]], "d_urb": [["ncol", 18]],
+      "sflev": [["ncol", 15, 18]], "lflev": [["ncol", 15, 18]], "consum": [["ncol", 15, 18]],
+      "sfvlev": [["ncol", 15, 18]], "lfvlev": [["ncol", 15, 18]],
+      "sf": [["ncol", "nz_plus_one"]], "vl": [["ncol", "nz"]],
+      "a_u": [["ncol", "nz"]], "a_v": [["ncol", "nz"]], "a_t": [["ncol", "nz"]], "a_e": [["ncol", "nz"]],
+      "b_u": [["ncol", "nz"]], "b_v": [["ncol", "nz"]], "b_t": [["ncol", "nz"]], "b_e": [["ncol", "nz"]], "b_q": [["ncol", "nz"]],
+      "dlg": [["ncol", "nz"]], "dl_u": [["ncol", "nz"]],
+      "rl_up_in": [["ncol"]], "rs_abs_in": [["ncol"]], "emiss_in": [["ncol"]], "grdflx_in": [["ncol"]],
+      "sf_ac": [["ncol"]], "lf_ac": [["ncol"]], "cm_ac": [["ncol"]], "sf_vent": [["ncol"]], "lf_vent": [["ncol"]],
+      "ep_pv": [["ncol"]], "drain_green": [["ncol"]], "qgr": [["ncol"]], "tgr": [["ncol"]],
+      "rl_up": [["ncol"]], "rs_abs": [["ncol"]], "emiss": [["ncol"]], "grdflx": [["ncol"]],
+      "out_sf": [["nz_plus_one", "ncol"]], "out_vl": [["nz", "ncol"]],
+      "out_a_u": [["nz", "ncol"]], "out_a_v": [["nz", "ncol"]], "out_a_t": [["nz", "ncol"]], "out_a_e": [["nz", "ncol"]],
+      "out_b_u": [["nz", "ncol"]], "out_b_v": [["nz", "ncol"]], "out_b_t": [["nz", "ncol"]], "out_b_e": [["nz", "ncol"]], "out_b_q": [["nz", "ncol"]],
+      "out_dlg": [["nz", "ncol"]], "out_dl_u": [["nz", "ncol"]]
+    },
+    "parameters": [["ncol", "int32"], ["nz", "int32"], ["nz_plus_one", "int32"], ["class_float_len", "int32"]],
+    "threads_per_group": 64,
+    "layout_version": 1,
+    "arithmetic_policies": ["soft32"]
+  }]
+}

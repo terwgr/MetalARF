@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout dee5bcaaf7f7166cb5915b1ac733a96e09b76dc63bae1b2bc460a90cf59a5bc4.
+struct MynnPblhScaleColumnsResources {
+    device const float *thetav [[id(0)]];
+    device const float *qke [[id(1)]];
+    device const float *zw [[id(2)]];
+    device const float *dz [[id(3)]];
+    device const float *landsea [[id(4)]];
+    device const float *dx [[id(5)]];
+    device float *zi [[id(6)]];
+    device int *kzi [[id(7)]];
+    device float *psig_bl [[id(8)]];
+    device float *psig_shcu [[id(9)]];
+};
+struct MynnPblhScaleColumnsParams {
+    int nz;
+    int ncol;
+};
+static_assert(sizeof(MynnPblhScaleColumnsParams) == 8, "mynn_pblh_scale_columns parameter ABI size changed");

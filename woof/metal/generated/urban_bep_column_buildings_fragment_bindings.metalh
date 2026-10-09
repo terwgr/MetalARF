@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout 93de30f43f913941d112643124dc065542d6b2b5d2b19ce1d3dd9624179a355e.
+struct UrbanBepColumnBuildingsFragmentResources {
+    device const float *column_param [[id(0)]];
+    device const int *column_param_ix [[id(1)]];
+    device const float *column_interp_x [[id(2)]];
+    device const float *surface_x [[id(3)]];
+    device float *column_building_x [[id(4)]];
+};
+struct UrbanBepColumnBuildingsFragmentParams {
+    int ncol;
+    float dt;
+};
+static_assert(sizeof(UrbanBepColumnBuildingsFragmentParams) == 8, "urban_bep_column_buildings_fragment parameter ABI size changed");

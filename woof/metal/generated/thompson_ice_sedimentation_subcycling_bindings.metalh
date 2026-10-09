@@ -1,0 +1,23 @@
+// Generated from kernel_signatures.json; layout 5bf2ccb414a190e6f4242a935dda9c8c4e0a831ddc08c55ac50b88244e955cf9.
+struct ThompsonIceSedimentationSubcyclingResources {
+    device const float *dz [[id(0)]];
+    device const float *density [[id(1)]];
+    device float *ice_mass [[id(2)]];
+    device float *ice_number [[id(3)]];
+    device const float *mass_velocity [[id(4)]];
+    device const float *number_velocity [[id(5)]];
+    device float *mass_flux [[id(6)]];
+    device float *number_flux [[id(7)]];
+    device float *qi_tendency [[id(8)]];
+    device float *ni_tendency [[id(9)]];
+    device const int *sediment_top [[id(10)]];
+    device const int *nstep [[id(11)]];
+    device float *exported [[id(12)]];
+};
+struct ThompsonIceSedimentationSubcyclingParams {
+    float dt;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonIceSedimentationSubcyclingParams) == 16, "thompson_ice_sedimentation_subcycling parameter ABI size changed");

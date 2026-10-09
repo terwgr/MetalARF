@@ -1,0 +1,291 @@
+# tests/test_cli.py
+"""CLI verify-driver tests.
+
+The gate plumbing is CPU-only: the single-sourced GATES exports (each case
+module owns its gate intervals; cli._GATES and the benchmark tests consume
+that one export), the _failing_gate semantics (strict bounds, None =
+unbounded on EITHER side, NaN fails), and the exit-0/exit-1 paths via a
+stubbed case runner.  The end-to-end straka subprocess run stays a GPU
+test.
+"""
+import os
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from conftest import requires_gpu
+
+import woof.cli as cli
+
+
+def _passing_straka() -> dict:
+    """Metrics inside every straka gate (measured Phase 1 values)."""
+    return {"nan": False, "theta_min": -9.58, "front_km": 15.34,
+            "symmetry_err": 0.014, "w_max": 20.0}
+
+
+def test_gates_single_sourced_from_case_modules():
+    """cli._GATES holds each case module's own GATES export (identical
+    object, not a copy), for every discovered case.
+
+    Asserted as a SUPERSET, not an exact set: the case tables are now
+    discovery-driven, so dropping a module into woof/verify/cases/ must
+    not turn into a failing driver test.  What is pinned is that the cases
+    that were registered by hand are still reachable, and that every
+    discovered case's gate table is well formed."""
+    assert {"straka", "igw", "hill2d", "moist_bubble", "wk82",
+            "real74_d01"} <= set(cli._CASES)
+    assert set(cli._GATES) == set(cli._CASES)
+    for name, mod in cli._CASES.items():
+        assert cli._GATES[name] is mod.GATES, name
+        for metric, (lo, hi) in mod.GATES.items():
+            assert lo is not None or hi is not None, (name, metric)
+            if lo is not None and hi is not None:
+                assert lo < hi, (name, metric)
+
+
+def test_failing_gate_passes_and_names_failures():
+    m = _passing_straka()
+    assert cli._failing_gate("straka", m) is None
+    assert cli._failing_gate("straka", {**m, "nan": True}) == "nan"
+    assert cli._failing_gate("straka", {**m, "theta_min": -7.9}) \
+        == "theta_min"
+    # bounds are strict: landing exactly on a bound fails
+    assert cli._failing_gate("straka", {**m, "front_km": 17.0}) == "front_km"
+    # NaN metric values compare False and fail their gate
+    assert cli._failing_gate("straka", {**m, "front_km": float("nan")}) \
+        == "front_km"
+
+
+def test_failing_gate_none_unbounded_on_either_side():
+    """None means unbounded on THAT side: (None, hi) has no lower bound
+    and (lo, None) no upper bound.  The Phase 1 implementation only
+    handled lo=None and raised TypeError on (lo, None) gates."""
+    m = _passing_straka()
+    # straka symmetry_err is (None, 0.05): arbitrarily low passes
+    assert cli._failing_gate("straka", {**m, "symmetry_err": -1.0e9}) is None
+    # hill2d w_corr is (0.95, None): arbitrarily high passes
+    hm = {"nan": False, "w_corr": 1.0e9, "mflux_dev": 0.05,
+          "mflux_mean": -0.01, "mflux_ratio": 1.0}
+    assert cli._failing_gate("hill2d", hm) is None
+    assert cli._failing_gate("hill2d", {**hm, "w_corr": 0.5}) == "w_corr"
+
+
+def test_cli_exit_codes(monkeypatch, capsys):
+    """main() returns 0 when every gate passes and 1 naming the failing
+    gate on stderr -- exercised CPU-only through a stubbed case runner
+    (the real gate table stays in force)."""
+    # This box's GPU estate is not this test's subject.  `woof verify`
+    # and `woof run` take a capability preflight from
+    # woof.capabilities and refuse at exit 2 without CuPy, which is
+    # correct and is what tests/test_cli_capability_refusals.py proves.
+    # Here it would measure the runner instead of the code: green on a
+    # development box, red on every CI runner and every user install
+    # without a GPU extra.  Declaring the estate satisfied is the seam
+    # that lane uses for exactly this.
+    from woof import capabilities
+
+    monkeypatch.setattr(capabilities, "is_installed", lambda module: True)
+    good = _passing_straka()
+    monkeypatch.setitem(cli._CASES, "straka",
+                        SimpleNamespace(run=lambda outdir: dict(good)))
+    assert cli.main(["verify", "straka"]) == 0
+    captured = capsys.readouterr()
+    assert "theta_min" in captured.out
+    assert "FAIL" not in captured.err
+
+    bad = {**good, "w_max": 55.0}                 # w_max gate is (None, 40)
+    monkeypatch.setitem(cli._CASES, "straka",
+                        SimpleNamespace(run=lambda outdir: bad))
+    assert cli.main(["verify", "straka"]) == 1
+    err = capsys.readouterr().err
+    assert "FAIL" in err and "w_max" in err
+
+
+def test_cli_case_choices():
+    """The Phase 2 cases are wired into the verify subcommand; an unknown
+    case is an argparse usage error (exit 2)."""
+    for case in ("straka", "igw", "hill2d", "moist_bubble", "wk82",
+                 "real74_d01"):
+        assert case in cli._GATES, case
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["verify", "nosuchcase"])
+    assert exc.value.code == 2
+
+
+def test_real_case_subcommands_dispatch_loaded_config(monkeypatch, tmp_path,
+                                                       capsys):
+    """static/ingest/run are config-driven and dispatch to the named real
+    case without duplicating case-specific pipeline logic in the CLI."""
+    calls = []
+    cfg = SimpleNamespace(case="real74_d01")
+    fake = SimpleNamespace(
+        write_static=lambda loaded, output: calls.append(
+            ("static", loaded, output)) or output,
+        write_ingest=lambda loaded, output: calls.append(
+            ("ingest", loaded, output)) or output,
+        run_config=lambda loaded, outdir, restart=None: calls.append(
+            ("run", loaded, outdir, restart)) or SimpleNamespace(
+                wrfout_paths=(), completed_seconds=3600.0, nan_free=True),
+    )
+    monkeypatch.setattr(cli, "load_config", lambda path: cfg)
+    monkeypatch.setitem(cli._REAL_CASES, "real74_d01", fake)
+    # This box's GPU estate is not this test's subject.  `woof verify`
+    # and `woof run` take a capability preflight from
+    # woof.capabilities and refuse at exit 2 without CuPy, which is
+    # correct and is what tests/test_cli_capability_refusals.py proves.
+    # Here it would measure the runner instead of the code: green on a
+    # development box, red on every CI runner and every user install
+    # without a GPU extra.  Declaring the estate satisfied is the seam
+    # that lane uses for exactly this.
+    from woof import capabilities
+
+    monkeypatch.setattr(capabilities, "is_installed", lambda module: True)
+    config_path = tmp_path / "real74.toml"
+    # A real regular file, because the CLI now decides the KIND of a
+    # config path before anything opens it: a path that is not a
+    # readable regular file is refused in one sentence at exit 2 rather
+    # than falling through to the legacy loader's traceback.  This test
+    # is about DISPATCH -- `load_config` is monkeypatched above, so the
+    # bytes are never parsed -- and it used a path that was never
+    # created only because the old code reached the loader regardless.
+    config_path.write_text("[grid]\n", encoding="utf-8")
+    static_path = tmp_path / "static.npz"
+    ingest_path = tmp_path / "initial.npz"
+    run_dir = tmp_path / "run"
+
+    assert cli.main(["static", str(config_path),
+                     "--output", str(static_path)]) == 0
+    assert cli.main(["ingest", str(config_path),
+                     "--output", str(ingest_path)]) == 0
+    assert cli.main(["run", str(config_path),
+                     "--outdir", str(run_dir)]) == 0
+
+    assert calls == [
+        ("static", cfg, static_path),
+        ("ingest", cfg, ingest_path),
+        ("run", cfg, run_dir, None),
+    ]
+    output = capsys.readouterr().out
+    assert str(static_path) in output
+    assert str(ingest_path) in output
+    assert "real74_d01" in output
+
+
+def test_real_case_config_name_is_required(monkeypatch, tmp_path, capsys):
+    # User-facing config refusals follow the uniform CLI boundary: the
+    # ValueError message is printed, exit 2, no traceback.
+    monkeypatch.setattr(
+        cli, "load_config", lambda path: SimpleNamespace(case=""))
+    rc = cli.main(["static", str(tmp_path / "missing-case.toml")])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert err.startswith("woof static:") and "case" in err
+
+
+@pytest.mark.parametrize("failed_query", ["identity", "processes", "pmon"])
+@pytest.mark.parametrize("failure", ["signal", "missing", "timeout"])
+def test_run_reports_failed_gpu_preflight_before_launching_worker(
+        monkeypatch, tmp_path, capsys, failed_query, failure):
+    """Exercise the public run door, real selection, and exclusivity checks."""
+    from woof import capabilities, case_data, provenance_gate, supervisor
+
+    config = tmp_path / "run64.toml"
+    config.write_text("[experiment]\nname = 'preflight-control'\n",
+                      encoding="utf-8")
+    outdir = tmp_path / "out"
+    monkeypatch.setattr(capabilities, "require_for_command", lambda _: None)
+    monkeypatch.setattr(provenance_gate, "announce", lambda _: None)
+    monkeypatch.setattr(case_data, "load_experiment_case",
+                        lambda *args, **kwargs: (object(), object()))
+    monkeypatch.setattr(supervisor, "resolved_input_hashes",
+                        lambda *args, **kwargs: {})
+    monkeypatch.setattr(supervisor, "default_lock_path",
+                        lambda _: tmp_path / "gpu.lock")
+    calls = []
+
+    def run(command, **kwargs):
+        assert command[0] == "nvidia-smi"
+        query = ("pmon" if command[1] == "pmon" else
+                 "processes" if command[1].startswith("--query-compute-apps=")
+                 else "identity")
+        calls.append(query)
+        if query == failed_query:
+            if failure == "missing":
+                raise FileNotFoundError("missing nvidia-smi")
+            if failure == "timeout":
+                raise subprocess.TimeoutExpired(command, 20)
+            return subprocess.CompletedProcess(command, -11, "", "")
+        output = "0, GPU-test, 610.74, RTX 5090\n" if query == "identity" else ""
+        return subprocess.CompletedProcess(command, 0, output, "")
+
+    def forbidden_worker(*args, **kwargs):
+        pytest.fail("a failed GPU query must prevent forecast worker launch")
+
+    # Replace only the supervisor's subprocess reference. CLI provenance and
+    # other unrelated modules retain their own real subprocess implementation.
+    process_api = SimpleNamespace(**vars(subprocess))
+    process_api.run = run
+    process_api.Popen = forbidden_worker
+    monkeypatch.setattr(supervisor, "subprocess", process_api)
+    code = cli.main(["run", str(config), "--outdir", str(outdir),
+                     "--allow-shared-gpu"])
+    captured = capsys.readouterr()
+    assert code == 1
+    assert "woof run: GPU preflight failed closed" in captured.err
+    assert "nvidia-smi in the same shell" in captured.err
+    assert "Traceback" not in captured.err
+    assert "Forecast complete" not in captured.out
+    assert {"signal": "SIGSEGV" if os.name == "posix" else "status -11",
+            "missing": "not found on PATH",
+            "timeout": "timed out after 20 seconds"}[failure] in captured.err
+    expected_calls = {
+        "identity": ["identity"],
+        "processes": ["identity", "identity", "processes"],
+        "pmon": ["identity", "identity", "processes", "pmon"],
+    }
+    assert calls == expected_calls[failed_query]
+    assert not list(outdir.glob("worker-*.log"))
+    assert not (outdir / supervisor.HEARTBEAT_NAME).exists()
+
+
+def test_missing_cupy_is_a_clean_install_gap_message(monkeypatch,
+                                                     tmp_path, capsys):
+    """Base-install users (no [gpu] extra) hitting a GPU-needing command
+    get the exact pip remedy at exit 2, never a raw ModuleNotFoundError
+    traceback (acceptance F3)."""
+    import woof.domain_wizard as domain_wizard
+
+    def missing_cupy(**kwargs):
+        raise ModuleNotFoundError("No module named 'cupy'", name="cupy")
+
+    monkeypatch.setattr(domain_wizard, "fit_ladder", missing_cupy)
+    rc = cli.main(["domain", "--point", "35.2,-97.4",
+                   "--cycle", "2026-07-28T06",
+                   "--out", str(tmp_path / "area.toml")])
+    assert rc == 2
+    err = capsys.readouterr().err
+    # Both CUDA majors, neither offered as the default: this message
+    # cannot see which one the box serves, and the version that led with
+    # the cu12 extra was read as the recommendation by CUDA-13 owners.
+    assert "recast-woof[gpu-cu12]" in err and "recast-woof[gpu-cu13]" in err
+    assert "woof doctor" in err and "Traceback" not in err
+
+
+def test_committed_real74_config_matches_case_defaults():
+    from woof.config import load_config
+    from woof.verify.cases.real74_d01 import phase3_config
+
+    assert load_config(Path("configs/real74_d01.toml")) == phase3_config()
+
+
+@pytest.mark.gpu
+@requires_gpu
+def test_cli_straka(tmp_path):
+    r = subprocess.run([sys.executable, "-m", "woof.cli", "verify", "straka",
+                        "--outdir", str(tmp_path)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "theta_min" in r.stdout
+    assert any(p.name.startswith("wrfout_") for p in tmp_path.iterdir())

@@ -1,0 +1,41 @@
+{
+  "kernels": [
+    {
+      "name": "set_surface_w",
+      "module": "surface_w",
+      "source": "woof/metal/shaders/surface_w.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_set_w_surface_eager",
+      "resources": [
+        ["u", "float", "read"],
+        ["v", "float", "read"],
+        ["ht", "float", "read"],
+        ["msft", "float", "read"],
+        ["w", "float", "read_write"]
+      ],
+      "shapes": {
+        "u": [["nz", "ny", "nx+1"]],
+        "v": [["nz", "ny+1", "nx"]],
+        "ht": [["ny", "nx"]],
+        "msft": [["ny", "nx"]],
+        "w": [["nz+1", "ny", "nx"]]
+      },
+      "parameters": [
+        ["cf1", "float32"],
+        ["cf2", "float32"],
+        ["cf3", "float32"],
+        ["half_rdx", "float32"],
+        ["half_rdy", "float32"],
+        ["has_msf", "int32"],
+        ["boundary_x", "int32"],
+        ["boundary_y", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

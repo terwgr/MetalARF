@@ -1,0 +1,36 @@
+[global_spectral]
+schema = "gpuwm.global-spectral-run/v1"
+name = "williamson-test-2-t15"
+model = "shallow-water"
+acknowledgement = "research-only-global-spectral-v1"
+backend = "numpy"
+precision = "float64"
+
+[grid]
+truncation = 15
+dealias_factor = 1.5
+
+[time]
+dt_s = 600.0
+duration_s = 432000.0       # five days
+output_interval_s = 86400.0
+integrator = "rk4"
+maximum_cfl = 0.95
+
+[diffusion]
+enabled = false
+order = 4
+e_folding_time_s_at_truncation = 21600.0
+preserve_degree = 1
+divergence_strength = 1.0
+pressure_strength = 0.0
+
+[shallow_water]
+alpha_rad = 0.0
+mean_geopotential_m2_s2 = 29400.0
+
+[gates]
+transform_roundtrip_relative_linf = 5.0e-11
+transform_parseval_relative_error = 5.0e-12
+mass_relative_drift = 1.0e-11
+williamson_normalized_l2 = 1.0e-9

@@ -1,0 +1,42 @@
+// Generated from kernel_signatures.json; layout 91f8435e72a51b92cf37b7259b7baff1c1afa8e1692fd1b9493a1b3ed15994fa.
+struct SlowGeopotentialResources {
+    device float *rph_t [[id(0)]];
+    device const float *ww [[id(1)]];
+    device const float *w [[id(2)]];
+    device const float *u [[id(3)]];
+    device const float *v [[id(4)]];
+    device const float *php [[id(5)]];
+    device const float *phb [[id(6)]];
+    device const float *mup [[id(7)]];
+    device const float *mub2d [[id(8)]];
+    device const float *rdnw [[id(9)]];
+    device const float *fnm [[id(10)]];
+    device const float *fnp [[id(11)]];
+    device const float *c1f [[id(12)]];
+    device const float *c2f [[id(13)]];
+    device const float *msft [[id(14)]];
+    device const float *msfu [[id(15)]];
+    device const float *msfv [[id(16)]];
+    device const float *mux [[id(17)]];
+    device const float *muy [[id(18)]];
+};
+struct SlowGeopotentialParams {
+    int mode;
+    int order;
+    int add_vertical;
+    int has_msf;
+    int boundary_x;
+    int boundary_y;
+    int open_x;
+    int open_y;
+    int specified;
+    int base3d;
+    int nz;
+    int ny;
+    int nx;
+    float quarter_rdx;
+    float quarter_rdy;
+    float cfn;
+    float cfn1;
+};
+static_assert(sizeof(SlowGeopotentialParams) == 68, "slow_geopotential parameter ABI size changed");

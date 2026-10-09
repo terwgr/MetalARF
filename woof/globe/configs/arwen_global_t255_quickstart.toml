@@ -1,0 +1,137 @@
+# WOOF Global quickstart -- one 24 h T255 global forecast from a single GDAS
+# f000 analysis, reference physics, nine render-ready history times.
+#
+#   source     gdas -- NCEP GDAS pgrb2 0.25 degree, public, no credentials.
+#              f000 is the assimilation cycle's own analysis rather than a
+#              forecast field, which is the whole reason a global cold start
+#              wants it.  ONE object initializes this run; there are no
+#              lateral boundaries to feed.
+#   grid       T255 triangular, dealias 1.5 -> a 384 x 768 Gaussian quadrature
+#              grid, 52.1 km at the equator, 40 surface-stretched hybrid
+#              layers to 100 Pa (the analysis ladder's own top, so nothing is
+#              extrapolated above it; the lowest full level sits about 23 m
+#              up, which is what every surface scheme assumes).
+#   clock      dt 300 s on the semi-Lagrangian core (the shipped default
+#              core), 86400 s -> 288 whole steps; history every 10800 s is
+#              a whole 36 steps, so the nine checkpoints (step 0 through
+#              step 288) land exactly on output times.
+#   step       a semi-Lagrangian step has no advective CFL limit; the runner
+#              gates on the Lipschitz number of the trajectory map, dt times
+#              the flow deformation, at 0.75 (the day of record reads 0.23).
+#              integrator = "imex_ssp3" selects the Eulerian core instead,
+#              whose step the wind bounds: it gates on
+#              dt * |V|max * sqrt(N(N+1)) / a, so dt = 60 s at T255 holds a
+#              ceiling of 0.75 * 6371220 / (60 * sqrt(255*256)) = 312 m/s.
+#   backend    cupy/float32: this truncation wants a CUDA card.  It is a
+#              smaller problem than configs/verify/arwen_global_gdas_t533_24h
+#              .toml, which is the largest truncation this model has run.
+#              Without a card, rehearse the three doors on
+#              configs/verify/arwen_global_moist_smoke.toml, which runs on
+#              numpy in well under a second and exports and renders through
+#              exactly the same commands.
+#
+# THE ACQUISITION FACT THIS CONFIGURATION DEPENDS ON, and it is not the fetch
+# door's default:
+#   --mode full-file    the default GDAS transport is the NOMADS grib-filter
+#                       AREA CROP, and a regional crop cannot initialize a
+#                       global model -- the initializer refuses a longitude
+#                       ring that does not close (gpuwm/arwen_global/
+#                       analysis_initial.py).  --mode full-file takes the
+#                       whole-globe pgrb2.0p25 object instead, and there
+#                       --area is optional request identity.  About 500 MB
+#                       for the one valid time.
+#
+#   woof fetch --source gdas --cycle 2026-08-30T18 --hours 0 \
+#       --mode full-file --out data/gdas-analysis
+#   woof global run "$(woof global configs --paths | grep t255_quickstart)" \
+#       --outdir out/arwen-global-24h
+#   woof global render out/arwen-global-24h \
+#       --outdir out/arwen-global-png --start-date 2026-08-30_18:00:00
+#
+# TO MOVE TO A CURRENT CYCLE, exactly two spellings travel together: the
+# --cycle you fetch and the tHHz in initial.analysis_grib below (and the
+# --start-date you export with, which is that same cycle instant).  GDAS
+# publishes on the 00/06/12/18 UTC grid and lags its cycle by about seven
+# hours.  Older cycles still fetch: the routes table sends anything past the
+# operational window straight to the unbounded AWS Open Data archive.
+#
+# WHAT IS MEASURED HERE: the run -> export -> render chain composes through
+# these three doors and the Rust renderer draws the global frame -- exercised
+# end to end at smoke truncation by tests/test_arwen_global_quickstart.py.
+# WHAT IS NOT: a wall clock for this truncation, and any forecast skill.
+# WOOF Global is a research model; see docs/public/ARWEN_GLOBAL_FULL.md's
+# non-claims.
+
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-t255-quickstart"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 255
+dealias_factor = 1.5
+
+# The semi-Lagrangian core at its 300 s step: 288 whole steps a day and a
+# checkpoint every 36 of them.  It is the shipped default core at every
+# truncation (config.DEFAULT_TIME_INTEGRATOR); integrator = "imex_ssp3"
+# selects the Eulerian core, whose step the wind bounds (60 s here).
+[time]
+dt_s = 300.0
+duration_s = 86400.0
+output_interval_s = 10800.0
+integrator = "sl_si"
+maximum_lipschitz = 0.75
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+# analysis_mapping is the packaged authority's BARE ID, not a path: the
+# resolver globs rw-wps-<id>-*.mapping.json under gpuwm/authorities and
+# requires exactly one match, so this spelling works from an installed wheel
+# as well as from a checkout.  "gdas" alone matches three and is refused --
+# say which GDAS mapping.
+[initial]
+mode = "analysis"
+analysis_grib = "data/gdas-analysis/gdas.t18z.pgrb2.0p25.f000"
+analysis_mapping = "gdas-global"
+surface_water_kg_m2 = 500.0
+
+# The compact reference suite, which needs no target-device qualification.
+# The native WOOF CUDA column suite is the next step from here and carries
+# its own admission receipt: configs/verify/arwen_global_gdas_t255_native_24h
+# .toml is that same grid and clock with physics.mode = "arwen-native".
+[physics]
+mode = "reference"
+
+# The semi-Lagrangian core's own drain (config.SEMILAG_DIFFUSION_ORDER,
+# 2026-09-07): order 16 at 12 min at the truncation on the six-point
+# gather, which keeps the Eulerian core's 500 hPa vorticity power above
+# n = 60 to within 0.03 to 0.09 on a dry T255 day where the cubic gather at
+# order 8 and 36 min kept 0.47 to 0.84 of it.  The Eulerian core's own drain
+# is order 8 at 36 min (config.DEFAULT_DIFFUSION_ORDER).
+[diffusion]
+enabled = true
+order = 16
+e_folding_time_s_at_truncation = 720.0
+preserve_degree = 1
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+off_centring_weight = 0.55
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+# float32 sizing, the same envelope the T533 reference configuration carries.
+[gates]
+transform_roundtrip_relative_linf = 1.0e-6
+transform_parseval_relative_error = 5.0e-7
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-3

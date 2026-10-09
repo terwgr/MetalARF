@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 770a62438efb1ea47fd865c49c53ddd5650841e9dc3680f8cc69afb15fae5920.
+struct GlobalTurbulenceGeometryFragmentResources {
+    device const ulong *geopotential [[id(0)]];
+    device const ulong *constants [[id(1)]];
+    device ulong *height [[id(2)]];
+    device ulong *diffusivity [[id(3)]];
+};
+struct GlobalTurbulenceGeometryFragmentParams {
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalTurbulenceGeometryFragmentParams) == 8, "global_turbulence_geometry_fragment parameter ABI size changed");

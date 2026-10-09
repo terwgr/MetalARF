@@ -1,0 +1,38 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_cloud_sediment_with_density_and_masks",
+      "module": "thompson_cloud_sedimentation",
+      "source": "woof/metal/shaders/thompson_cloud_sedimentation.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_cloud_sediment_64_with_density_and_masks",
+      "source_symbol_variants": ["thompson_cloud_sediment_256_with_density_and_masks"],
+      "resources": [
+        ["qc", "float", "read_write"],
+        ["temperature", "float", "read"],
+        ["pressure", "float", "read"],
+        ["qv", "float", "read"],
+        ["reference_density", "float", "read"],
+        ["rain_active_columns", "float", "read"],
+        ["cloud_active_columns", "float", "read"],
+        ["vertical_velocity", "float", "read"],
+        ["dz", "float", "read"]
+      ],
+      "shapes": {
+        "qc": [["nz", "ny", "nx"]],
+        "temperature": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]],
+        "qv": [["nz", "ny", "nx"]],
+        "reference_density": [["nz", "ny", "nx"]],
+        "rain_active_columns": [["ny", "nx"]],
+        "cloud_active_columns": [["ny", "nx"]],
+        "vertical_velocity": [["nz", "ny", "nx"]],
+        "dz": [["nz", "ny", "nx"]]
+      },
+      "parameters": [["dt", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-precise-libm", "soft64-rn-bit-ops", "cuda-libm-identity-unverified"]
+    }
+  ]
+}

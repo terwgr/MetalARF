@@ -1,0 +1,61 @@
+{
+  "kernels": [
+    {
+      "name": "nssl2_runtime_prepare", "module": "nssl2_runtime",
+      "source": "woof/metal/shaders/nssl2_runtime.metal",
+      "cuda_source": "woof/core/nssl2_runtime.py",
+      "cuda_symbol": "_prepare_fields",
+      "origin_kind": "python_fp32_expression",
+      "origin_expression": "theta=thb+thp; rho=1/alt; pii=(p/P0)**RCP; dz=diff((phb+php)/G); save theta",
+      "resources": [
+        ["thb", "float", "read"], ["thp", "float", "read"],
+        ["alt", "float", "read"], ["pressure", "float", "read"],
+        ["phb", "float", "read"], ["php", "float", "read"],
+        ["theta", "float", "write"], ["rho", "float", "write"],
+        ["pii", "float", "write"], ["dz", "float", "write"],
+        ["h_diabatic", "float", "write"]
+      ],
+      "shapes": {
+        "thb": [["nz"], ["nz", "ny", "nx"]],
+        "thp": [["nz", "ny", "nx"]], "alt": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]],
+        "phb": [["nz+1"], ["nz+1", "ny", "nx"]],
+        "php": [["nz+1", "ny", "nx"]],
+        "theta": [["nz", "ny", "nx"]], "rho": [["nz", "ny", "nx"]],
+        "pii": [["nz", "ny", "nx"]], "dz": [["nz", "ny", "nx"]],
+        "h_diabatic": [["nz", "ny", "nx"]]
+      },
+      "parameters": [["nz", "int32"], ["ncol", "int32"],
+        ["ny", "int32"], ["nx", "int32"],
+        ["thb_3d", "int32"], ["phb_3d", "int32"],
+        ["p0", "float32"], ["rcp", "float32"], ["gravity", "float32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["fp32-output", "fp32-rn-add", "fp32-rn-divide", "fp32-pow"]
+    },
+    {
+      "name": "nssl2_runtime_finish", "module": "nssl2_runtime",
+      "source": "woof/metal/shaders/nssl2_runtime.metal",
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "moist_physics_finish",
+      "origin_kind": "python_fp32_expression",
+      "origin_expression": "mpten=clamp(theta-saved, -lim, lim); thp+=mpten; heating=mpten/dt; no_mp_heating zeros",
+      "resources": [["theta", "float", "read"], ["heating", "float", "read_write"], ["theta_perturbation", "float", "read_write"]],
+      "shapes": {"theta": [["nz", "ny", "nx"]], "heating": [["nz", "ny", "nx"]], "theta_perturbation": [["nz", "ny", "nx"]]},
+      "parameters": [["n", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"], ["dt", "float32"], ["limit", "float32"], ["no_mp_heating", "int32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["fp32-output", "fp32-rn-subtract", "fp32-rn-add", "fp32-rn-divide"]
+    },
+    {
+      "name": "nssl2_radius_microns", "module": "nssl2_runtime",
+      "source": "woof/metal/shaders/nssl2_runtime.metal",
+      "cuda_source": "woof/core/nssl2_runtime.py",
+      "cuda_symbol": "_convert_radii_to_microns",
+      "origin_kind": "python_fp32_expression",
+      "origin_expression": "radius_m *= 1e6f for cloud, ice and snow",
+      "resources": [["cloud", "float", "read_write"], ["ice", "float", "read_write"], ["snow", "float", "read_write"]],
+      "shapes": {"cloud": [["nz", "ny", "nx"]], "ice": [["nz", "ny", "nx"]], "snow": [["nz", "ny", "nx"]]},
+      "parameters": [["n", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]], "threads_per_group": 256,
+      "layout_version": 1, "arithmetic_policies": ["fp32-output", "fp32-rn-multiply"]
+    }
+  ]
+}

@@ -1,0 +1,464 @@
+{
+  "kernels": [
+    {
+      "name": "pd_fluxes",
+      "module": "moist_pd",
+      "source": "woof/metal/shaders/moist_pd.metal",
+      "cuda_source": "woof/core/kernels/pd_advection.cu",
+      "cuda_symbol": "pd_fluxes",
+      "resources": [
+        [
+          "q",
+          "float",
+          "read"
+        ],
+        [
+          "q0",
+          "float",
+          "read"
+        ],
+        [
+          "ru",
+          "float",
+          "read"
+        ],
+        [
+          "rv",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read"
+        ],
+        [
+          "mut",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "fnm",
+          "float",
+          "read"
+        ],
+        [
+          "fnp",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "fxl",
+          "float",
+          "read_write"
+        ],
+        [
+          "fxc",
+          "float",
+          "read_write"
+        ],
+        [
+          "fyl",
+          "float",
+          "read_write"
+        ],
+        [
+          "fyc",
+          "float",
+          "read_write"
+        ],
+        [
+          "fzl",
+          "float",
+          "read_write"
+        ],
+        [
+          "fzc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "q": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "q0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ru": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "rv": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "rw": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mut": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "fxl": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "fxc": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "fyl": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fyc": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fzl": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fzc": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "pd_renorm_apply",
+      "module": "moist_pd",
+      "source": "woof/metal/shaders/moist_pd.metal",
+      "cuda_source": "woof/core/kernels/pd_advection.cu",
+      "cuda_symbol": "pd_renorm_apply",
+      "resources": [
+        [
+          "q0",
+          "float",
+          "read"
+        ],
+        [
+          "mu_old",
+          "float",
+          "read"
+        ],
+        [
+          "fxl",
+          "float",
+          "read"
+        ],
+        [
+          "fxc",
+          "float",
+          "read"
+        ],
+        [
+          "fyl",
+          "float",
+          "read"
+        ],
+        [
+          "fyc",
+          "float",
+          "read"
+        ],
+        [
+          "fzl",
+          "float",
+          "read"
+        ],
+        [
+          "fzc",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "rdnw",
+          "float",
+          "read"
+        ],
+        [
+          "msft",
+          "float",
+          "read"
+        ],
+        [
+          "tend",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "q0": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "mu_old": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "fxl": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "fxc": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "fyl": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fyc": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fzl": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fzc": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tend": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dx_inv",
+          "float32"
+        ],
+        [
+          "dy_inv",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

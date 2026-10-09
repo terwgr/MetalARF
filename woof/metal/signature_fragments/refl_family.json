@@ -1,0 +1,90 @@
+{
+  "kernels": [
+    {
+      "name": "refl_temperature_product",
+      "module": "refl_family",
+      "source": "woof/metal/shaders/refl_family.metal",
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "_apply_kessler",
+      "origin_kind": "python_fp32_expression",
+      "origin_expression": "refl_t[...] = th * pii",
+      "resources": [
+        ["theta", "float", "read"], ["pii", "float", "read"],
+        ["temperature", "float", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["nz", "ny", "nx"]],
+        "pii": [["nz", "ny", "nx"]],
+        "temperature": [["nz", "ny", "nx"]]
+      },
+      "parameters": [["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-output", "fp32-rn-multiply"]
+    },
+    {
+      "name": "refl10cm_kessler_cell",
+      "module": "refl_family",
+      "source": "woof/metal/shaders/refl_family.metal",
+      "cuda_source": "woof/core/kernels/refl.cu",
+      "cuda_symbol": "refl10cm_kessler_cell",
+      "resources": [
+        ["qv", "float", "read"], ["qr", "float", "read"],
+        ["t", "float", "read"], ["p", "float", "read"],
+        ["refl", "float", "read_write"]
+      ],
+      "shapes": {
+        "qv": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]],
+        "t": [["nz", "ny", "nx"]],
+        "p": [["nz", "ny", "nx"]],
+        "refl": [["nz", "ny", "nx"]]
+      },
+      "parameters": [["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "software-binary64", "fp32-output",
+        "software-libm-approximation-unverified"
+      ]
+    },
+    {
+      "name": "refl10cm_morrison_column",
+      "module": "morrison_refl",
+      "source": "woof/metal/shaders/morrison_refl.metal",
+      "cuda_source": "woof/core/kernels/refl.cu",
+      "cuda_symbol": "refl10cm_morrison_column",
+      "resources": [
+        ["qv", "float", "read"], ["qr", "float", "read"],
+        ["nr", "float", "read"], ["qs", "float", "read"],
+        ["ns", "float", "read"], ["qg", "float", "read"],
+        ["ng", "float", "read"], ["theta", "float", "read"],
+        ["pii", "float", "read"], ["p", "float", "read"],
+        ["refl", "float", "read_write"], ["tables", "uint64", "read"]
+      ],
+      "shapes": {
+        "qv": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]],
+        "nr": [["nz", "ny", "nx"]],
+        "qs": [["nz", "ny", "nx"]],
+        "ns": [["nz", "ny", "nx"]],
+        "qg": [["nz", "ny", "nx"]],
+        "ng": [["nz", "ny", "nx"]],
+        "theta": [["nz", "ny", "nx"]],
+        "pii": [["nz", "ny", "nx"]],
+        "p": [["nz", "ny", "nx"]],
+        "refl": [["nz", "ny", "nx"]],
+        "tables": [[275]]
+      },
+      "parameters": [["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "software-binary64",
+        "software-complex128",
+        "fp32-output",
+        "software-libm-approximation-unverified"
+      ]
+    }
+  ]
+}

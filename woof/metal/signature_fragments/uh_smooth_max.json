@@ -1,0 +1,59 @@
+{
+  "name": "uh_smooth_max",
+  "module": "uh_diag",
+  "source": "woof/metal/shaders/uh_diag_family.metal",
+  "cuda_source": "woof/core/kernels/uh_diag.cu",
+  "cuda_symbol": "uh_smooth_max",
+  "resources": [
+    [
+      "uh",
+      "float",
+      "read"
+    ],
+    [
+      "usecol",
+      "float",
+      "read"
+    ],
+    [
+      "up_heli_max",
+      "float",
+      "read_write"
+    ]
+  ],
+  "shapes": {
+    "uh": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "usecol": [
+      [
+        "ny",
+        "nx"
+      ]
+    ],
+    "up_heli_max": [
+      [
+        "ny",
+        "nx"
+      ]
+    ]
+  },
+  "parameters": [
+    [
+      "ny",
+      "int32"
+    ],
+    [
+      "nx",
+      "int32"
+    ]
+  ],
+  "threads_per_group": 128,
+  "layout_version": 1,
+  "arithmetic_policies": [
+    "wrf-exact"
+  ]
+}

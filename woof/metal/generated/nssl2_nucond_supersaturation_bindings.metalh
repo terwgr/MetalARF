@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 9caea9e4d805cb67578ec3a0d6bc8b6ba4c920e1c62179f427c0797eb2edaee9.
+struct Nssl2NucondSupersaturationResources {
+    device const float *full_theta [[id(0)]];
+    device const float *pressure_pa [[id(1)]];
+    device const float *exner [[id(2)]];
+    device const float *qv [[id(3)]];
+    device float *supersaturation_percent [[id(4)]];
+};
+struct Nssl2NucondSupersaturationParams {
+    int n;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Nssl2NucondSupersaturationParams) == 16, "nssl2_nucond_supersaturation parameter ABI size changed");

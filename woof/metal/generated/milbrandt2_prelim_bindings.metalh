@@ -1,0 +1,37 @@
+// Generated from kernel_signatures.json; layout c8049480e3a2807a61066637ec55a3f1ef60c00bd8e6980b45e2a71a8eec76cb.
+struct Milbrandt2PrelimResources {
+    device float *T [[id(0)]];
+    device float *Q [[id(1)]];
+    device float *QC [[id(2)]];
+    device float *QR [[id(3)]];
+    device float *QI [[id(4)]];
+    device float *QN [[id(5)]];
+    device float *QG [[id(6)]];
+    device float *QH [[id(7)]];
+    device float *NC [[id(8)]];
+    device float *NR [[id(9)]];
+    device float *NY [[id(10)]];
+    device float *NN [[id(11)]];
+    device float *NG [[id(12)]];
+    device float *NH [[id(13)]];
+    device const float *p_eos [[id(14)]];
+    device const float *psfc [[id(15)]];
+    device float *pres [[id(16)]];
+    device float *DE [[id(17)]];
+    device float *iDE [[id(18)]];
+    device float *gamfact [[id(19)]];
+    device float *QSW [[id(20)]];
+    device float *QSI [[id(21)]];
+    device float *QC_in [[id(22)]];
+    device float *QR_in [[id(23)]];
+    device float *NC_in [[id(24)]];
+    device float *NR_in [[id(25)]];
+    device const float *ck [[id(26)]];
+};
+struct Milbrandt2PrelimParams {
+    int nz;
+    int ny;
+    int nx;
+    int nck;
+};
+static_assert(sizeof(Milbrandt2PrelimParams) == 16, "milbrandt2_prelim parameter ABI size changed");

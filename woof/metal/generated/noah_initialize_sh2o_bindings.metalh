@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout 7375dc237156607c5bf51d22bf4d116ca21360a70166320dcb181848d3c3a4f2.
+struct NoahInitializeSh2OResources {
+    device const int *isltyp [[id(0)]];
+    device const float *smois [[id(1)]];
+    device const float *tslb [[id(2)]];
+    device float *sh2o [[id(3)]];
+    device const float *soiltbl [[id(4)]];
+};
+struct NoahInitializeSh2OParams {
+    int slcats;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(NoahInitializeSh2OParams) == 12, "noah_initialize_sh2o parameter ABI size changed");

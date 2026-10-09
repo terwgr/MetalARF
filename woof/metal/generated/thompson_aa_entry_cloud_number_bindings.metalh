@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout a03676c8b3ffb92728496eb842c550ac987be15fb8dc0d0b80a759d7a0ab35c9.
+struct ThompsonAaEntryCloudNumberResources {
+    device float *qc [[id(0)]];
+    device float *nc [[id(1)]];
+    device const float *rho [[id(2)]];
+    device float *rc_out [[id(3)]];
+    device float *nc_entry_m3 [[id(4)]];
+    device int *nu_c_out [[id(5)]];
+    device int *l_qc_out [[id(6)]];
+};
+struct ThompsonAaEntryCloudNumberParams {
+    int n;
+};
+static_assert(sizeof(ThompsonAaEntryCloudNumberParams) == 4, "thompson_aa_entry_cloud_number parameter ABI size changed");

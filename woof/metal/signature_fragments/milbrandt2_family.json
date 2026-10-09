@@ -1,0 +1,1986 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/milbrandt2.cu",
+      "cuda_symbol": "milbrandt2_cold",
+      "layout_version": 1,
+      "module": "milbrandt2_family",
+      "name": "milbrandt2_cold",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nck",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "T",
+          "float",
+          "read_write"
+        ],
+        [
+          "Q",
+          "float",
+          "read_write"
+        ],
+        [
+          "QC",
+          "float",
+          "read_write"
+        ],
+        [
+          "QR",
+          "float",
+          "read_write"
+        ],
+        [
+          "QI",
+          "float",
+          "read_write"
+        ],
+        [
+          "QN",
+          "float",
+          "read_write"
+        ],
+        [
+          "QG",
+          "float",
+          "read_write"
+        ],
+        [
+          "QH",
+          "float",
+          "read_write"
+        ],
+        [
+          "NC",
+          "float",
+          "read_write"
+        ],
+        [
+          "NR",
+          "float",
+          "read_write"
+        ],
+        [
+          "NY",
+          "float",
+          "read_write"
+        ],
+        [
+          "NN",
+          "float",
+          "read_write"
+        ],
+        [
+          "NG",
+          "float",
+          "read_write"
+        ],
+        [
+          "NH",
+          "float",
+          "read_write"
+        ],
+        [
+          "WZ",
+          "float",
+          "read"
+        ],
+        [
+          "pres",
+          "float",
+          "read"
+        ],
+        [
+          "DE",
+          "float",
+          "read"
+        ],
+        [
+          "iDE",
+          "float",
+          "read"
+        ],
+        [
+          "gamfact",
+          "float",
+          "read"
+        ],
+        [
+          "QSW",
+          "float",
+          "read"
+        ],
+        [
+          "QSI",
+          "float",
+          "read"
+        ],
+        [
+          "ck",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "DE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NY": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "Q": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QI": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QSI": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QSW": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "T": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "WZ": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ck": [
+          [
+            "nck"
+          ]
+        ],
+        "gamfact": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "iDE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pres": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/milbrandt2_family.metal",
+      "threads_per_group": 64
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/milbrandt2.cu",
+      "cuda_symbol": "milbrandt2_diagnostics",
+      "layout_version": 1,
+      "module": "milbrandt2_family",
+      "name": "milbrandt2_diagnostics",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nck",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "T",
+          "float",
+          "read"
+        ],
+        [
+          "Q",
+          "float",
+          "read_write"
+        ],
+        [
+          "QC",
+          "float",
+          "read"
+        ],
+        [
+          "QR",
+          "float",
+          "read"
+        ],
+        [
+          "QI",
+          "float",
+          "read"
+        ],
+        [
+          "QN",
+          "float",
+          "read"
+        ],
+        [
+          "QG",
+          "float",
+          "read"
+        ],
+        [
+          "QH",
+          "float",
+          "read"
+        ],
+        [
+          "NC",
+          "float",
+          "read_write"
+        ],
+        [
+          "NR",
+          "float",
+          "read_write"
+        ],
+        [
+          "NY",
+          "float",
+          "read_write"
+        ],
+        [
+          "NN",
+          "float",
+          "read_write"
+        ],
+        [
+          "NG",
+          "float",
+          "read_write"
+        ],
+        [
+          "NH",
+          "float",
+          "read_write"
+        ],
+        [
+          "pres",
+          "float",
+          "read"
+        ],
+        [
+          "ZET",
+          "float",
+          "read_write"
+        ],
+        [
+          "ck",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "NC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NY": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "Q": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QI": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "T": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ZET": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ck": [
+          [
+            "nck"
+          ]
+        ],
+        "pres": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/milbrandt2_family.metal",
+      "threads_per_group": 64
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/milbrandt2.cu",
+      "cuda_symbol": "milbrandt2_geometry",
+      "layout_version": 1,
+      "module": "milbrandt2_family",
+      "name": "milbrandt2_geometry",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "pres",
+          "float",
+          "read"
+        ],
+        [
+          "psfc",
+          "float",
+          "read"
+        ],
+        [
+          "DE",
+          "float",
+          "read"
+        ],
+        [
+          "DZ",
+          "float",
+          "read_write"
+        ],
+        [
+          "iDZ",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "DE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "DZ": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "iDZ": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pres": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "psfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/milbrandt2_family.metal",
+      "threads_per_group": 64
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/milbrandt2.cu",
+      "cuda_symbol": "milbrandt2_prelim",
+      "layout_version": 1,
+      "module": "milbrandt2_family",
+      "name": "milbrandt2_prelim",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nck",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "T",
+          "float",
+          "read_write"
+        ],
+        [
+          "Q",
+          "float",
+          "read_write"
+        ],
+        [
+          "QC",
+          "float",
+          "read_write"
+        ],
+        [
+          "QR",
+          "float",
+          "read_write"
+        ],
+        [
+          "QI",
+          "float",
+          "read_write"
+        ],
+        [
+          "QN",
+          "float",
+          "read_write"
+        ],
+        [
+          "QG",
+          "float",
+          "read_write"
+        ],
+        [
+          "QH",
+          "float",
+          "read_write"
+        ],
+        [
+          "NC",
+          "float",
+          "read_write"
+        ],
+        [
+          "NR",
+          "float",
+          "read_write"
+        ],
+        [
+          "NY",
+          "float",
+          "read_write"
+        ],
+        [
+          "NN",
+          "float",
+          "read_write"
+        ],
+        [
+          "NG",
+          "float",
+          "read_write"
+        ],
+        [
+          "NH",
+          "float",
+          "read_write"
+        ],
+        [
+          "p_eos",
+          "float",
+          "read"
+        ],
+        [
+          "psfc",
+          "float",
+          "read"
+        ],
+        [
+          "pres",
+          "float",
+          "read_write"
+        ],
+        [
+          "DE",
+          "float",
+          "read_write"
+        ],
+        [
+          "iDE",
+          "float",
+          "read_write"
+        ],
+        [
+          "gamfact",
+          "float",
+          "read_write"
+        ],
+        [
+          "QSW",
+          "float",
+          "read_write"
+        ],
+        [
+          "QSI",
+          "float",
+          "read_write"
+        ],
+        [
+          "QC_in",
+          "float",
+          "read_write"
+        ],
+        [
+          "QR_in",
+          "float",
+          "read_write"
+        ],
+        [
+          "NC_in",
+          "float",
+          "read_write"
+        ],
+        [
+          "NR_in",
+          "float",
+          "read_write"
+        ],
+        [
+          "ck",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "DE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NC_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NR_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NY": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "Q": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QC_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QI": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QR_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QSI": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QSW": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "T": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ck": [
+          [
+            "nck"
+          ]
+        ],
+        "gamfact": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "iDE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_eos": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pres": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "psfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/milbrandt2_family.metal",
+      "threads_per_group": 64
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/milbrandt2.cu",
+      "cuda_symbol": "milbrandt2_sediment_256",
+      "layout_version": 1,
+      "module": "milbrandt2_family",
+      "name": "milbrandt2_sediment_256",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nck",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "T",
+          "float",
+          "read"
+        ],
+        [
+          "Q",
+          "float",
+          "read_write"
+        ],
+        [
+          "QC",
+          "float",
+          "read_write"
+        ],
+        [
+          "QR",
+          "float",
+          "read_write"
+        ],
+        [
+          "QI",
+          "float",
+          "read_write"
+        ],
+        [
+          "QN",
+          "float",
+          "read_write"
+        ],
+        [
+          "QG",
+          "float",
+          "read_write"
+        ],
+        [
+          "QH",
+          "float",
+          "read_write"
+        ],
+        [
+          "NC",
+          "float",
+          "read_write"
+        ],
+        [
+          "NR",
+          "float",
+          "read_write"
+        ],
+        [
+          "NY",
+          "float",
+          "read_write"
+        ],
+        [
+          "NN",
+          "float",
+          "read_write"
+        ],
+        [
+          "NG",
+          "float",
+          "read_write"
+        ],
+        [
+          "NH",
+          "float",
+          "read_write"
+        ],
+        [
+          "DE",
+          "float",
+          "read"
+        ],
+        [
+          "iDE",
+          "float",
+          "read"
+        ],
+        [
+          "DZ",
+          "float",
+          "read"
+        ],
+        [
+          "iDZ",
+          "float",
+          "read"
+        ],
+        [
+          "gamfact",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "ck",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "DE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "DZ": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NY": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "Q": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QI": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "T": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ck": [
+          [
+            "nck"
+          ]
+        ],
+        "gamfact": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "iDE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "iDZ": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/milbrandt2_family.metal",
+      "threads_per_group": 64
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/milbrandt2.cu",
+      "cuda_symbol": "milbrandt2_sediment_64",
+      "layout_version": 1,
+      "module": "milbrandt2_family",
+      "name": "milbrandt2_sediment_64",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nck",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "T",
+          "float",
+          "read"
+        ],
+        [
+          "Q",
+          "float",
+          "read_write"
+        ],
+        [
+          "QC",
+          "float",
+          "read_write"
+        ],
+        [
+          "QR",
+          "float",
+          "read_write"
+        ],
+        [
+          "QI",
+          "float",
+          "read_write"
+        ],
+        [
+          "QN",
+          "float",
+          "read_write"
+        ],
+        [
+          "QG",
+          "float",
+          "read_write"
+        ],
+        [
+          "QH",
+          "float",
+          "read_write"
+        ],
+        [
+          "NC",
+          "float",
+          "read_write"
+        ],
+        [
+          "NR",
+          "float",
+          "read_write"
+        ],
+        [
+          "NY",
+          "float",
+          "read_write"
+        ],
+        [
+          "NN",
+          "float",
+          "read_write"
+        ],
+        [
+          "NG",
+          "float",
+          "read_write"
+        ],
+        [
+          "NH",
+          "float",
+          "read_write"
+        ],
+        [
+          "DE",
+          "float",
+          "read"
+        ],
+        [
+          "iDE",
+          "float",
+          "read"
+        ],
+        [
+          "DZ",
+          "float",
+          "read"
+        ],
+        [
+          "iDZ",
+          "float",
+          "read"
+        ],
+        [
+          "gamfact",
+          "float",
+          "read"
+        ],
+        [
+          "rainnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "snownc",
+          "float",
+          "read_write"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "hailncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ],
+        [
+          "ck",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "DE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "DZ": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NY": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "Q": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QG": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QH": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QI": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QN": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "T": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ck": [
+          [
+            "nck"
+          ]
+        ],
+        "gamfact": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hailncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "iDE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "iDZ": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainnc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snownc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/milbrandt2_family.metal",
+      "threads_per_group": 64
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/milbrandt2.cu",
+      "cuda_symbol": "milbrandt2_warm",
+      "layout_version": 1,
+      "module": "milbrandt2_family",
+      "name": "milbrandt2_warm",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nck",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "T",
+          "float",
+          "read_write"
+        ],
+        [
+          "Q",
+          "float",
+          "read_write"
+        ],
+        [
+          "QC",
+          "float",
+          "read_write"
+        ],
+        [
+          "QR",
+          "float",
+          "read_write"
+        ],
+        [
+          "QI",
+          "float",
+          "read_write"
+        ],
+        [
+          "NC",
+          "float",
+          "read_write"
+        ],
+        [
+          "NR",
+          "float",
+          "read_write"
+        ],
+        [
+          "NY",
+          "float",
+          "read_write"
+        ],
+        [
+          "WZ",
+          "float",
+          "read"
+        ],
+        [
+          "pres",
+          "float",
+          "read"
+        ],
+        [
+          "DE",
+          "float",
+          "read_write"
+        ],
+        [
+          "iDE",
+          "float",
+          "read_write"
+        ],
+        [
+          "QSW",
+          "float",
+          "read_write"
+        ],
+        [
+          "QC_in",
+          "float",
+          "read"
+        ],
+        [
+          "QR_in",
+          "float",
+          "read"
+        ],
+        [
+          "NC_in",
+          "float",
+          "read"
+        ],
+        [
+          "NR_in",
+          "float",
+          "read_write"
+        ],
+        [
+          "ck",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "DE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NC_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NR_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "NY": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "Q": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QC": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QC_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QI": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QR": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QR_in": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "QSW": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "T": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "WZ": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ck": [
+          [
+            "nck"
+          ]
+        ],
+        "iDE": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pres": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/milbrandt2_family.metal",
+      "threads_per_group": 64
+    }
+  ]
+}

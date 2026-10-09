@@ -1,0 +1,22 @@
+// Generated from kernel_signatures.json; layout 32f0e3064aedc868fbe746bd56052f031c28b11b023b3f93ae97b78a6fb11358.
+struct UrbanBepRadiosityFragmentResources {
+    device const float *column_param [[id(0)]];
+    device const int *column_param_ix [[id(1)]];
+    device const float *column_view_x [[id(2)]];
+    device const float *column_state [[id(3)]];
+    device const float *class_x [[id(4)]];
+    device const int *utype_urb [[id(5)]];
+    device const int *active_cols [[id(6)]];
+    device const float *glw [[id(7)]];
+    device const float *direct_rsg [[id(8)]];
+    device const float *direct_rsw [[id(9)]];
+    device float *rlw [[id(10)]];
+    device float *rlg [[id(11)]];
+    device float *rsw [[id(12)]];
+    device float *rsg [[id(13)]];
+    device int *error [[id(14)]];
+};
+struct UrbanBepRadiosityFragmentParams {
+    int ncol;
+};
+static_assert(sizeof(UrbanBepRadiosityFragmentParams) == 4, "urban_bep_radiosity_fragment parameter ABI size changed");

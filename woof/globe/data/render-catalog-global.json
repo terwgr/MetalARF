@@ -1,0 +1,3247 @@
+{
+  "host": "windows-amd64",
+  "instrument": "gpuwm.rustwx.list_products / list_products_series, the renderer's own import-time catalog",
+  "measured_utc": "2026-09-10T04:13:55+00:00",
+  "platform": "Windows-11",
+  "renderer": {
+    "bytes": 13004288,
+    "name": "rw_wrfbatch.exe",
+    "sha256": "eb47cb8228dac32657cf3dab631400fe3aabaee7efd73f52e5cee46773575415"
+  },
+  "schema": "arwen-global-render-catalog-measurement-v1",
+  "series": {
+    "products": [
+      {
+        "detail": "200mb Height / Winds [fill: geopotential_height_200hpa]",
+        "kind": "direct",
+        "name": "200mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "300mb Height / Winds [fill: geopotential_height_300hpa]",
+        "kind": "direct",
+        "name": "300mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "250mb Height / Winds [fill: geopotential_height_250hpa]",
+        "kind": "direct",
+        "name": "250mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "500mb Height / Winds [fill: geopotential_height_500hpa]",
+        "kind": "direct",
+        "name": "500mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "700mb Height / Winds [fill: geopotential_height_700hpa]",
+        "kind": "direct",
+        "name": "700mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb Height / Winds [fill: geopotential_height_850hpa]",
+        "kind": "direct",
+        "name": "850mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "200mb Temperature / Height / Winds [fill: temperature_200hpa]",
+        "kind": "direct",
+        "name": "200mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "300mb Temperature / Height / Winds [fill: temperature_300hpa]",
+        "kind": "direct",
+        "name": "300mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "250mb Temperature / Height / Winds [fill: temperature_250hpa]",
+        "kind": "direct",
+        "name": "250mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "500mb Temperature / Height / Winds [fill: temperature_500hpa]",
+        "kind": "direct",
+        "name": "500mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb Temperature / Height / Winds [fill: temperature_850hpa]",
+        "kind": "direct",
+        "name": "850mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "700mb Temperature / Height / Winds [fill: temperature_700hpa]",
+        "kind": "direct",
+        "name": "700mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Relative Humidity [fill: relative_humidity_2m_agl]",
+        "kind": "direct",
+        "name": "2m_relative_humidity",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Relative Humidity / 10m Winds [fill: relative_humidity_2m_agl]",
+        "kind": "direct",
+        "name": "2m_relative_humidity_10m_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Temperature [fill: temperature_2m_agl]",
+        "kind": "direct",
+        "name": "2m_temperature",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Temperature / 10m Winds [fill: temperature_2m_agl]",
+        "kind": "direct",
+        "name": "2m_temperature_10m_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Dewpoint [fill: dewpoint_2m_agl]",
+        "kind": "direct",
+        "name": "2m_dewpoint",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Dewpoint / 10m Winds [fill: dewpoint_2m_agl]",
+        "kind": "direct",
+        "name": "2m_dewpoint_10m_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "MSLP / 10m Winds [fill: pressure_reduced_to_mean_sea_level_mean_sea_level]",
+        "kind": "direct",
+        "name": "mslp_10m_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "Terrain Height [fill: geopotential_height_surface]",
+        "kind": "direct",
+        "name": "terrain_height",
+        "status": "renderable"
+      },
+      {
+        "detail": "10m AGL Wind Speed and Direction [fill: wind_speed_10m_agl]",
+        "kind": "direct",
+        "name": "10m_wind_speed_and_direction",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: wind_gust_10m_agl",
+        "kind": "direct",
+        "name": "10m_wind_gusts",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "Precipitable Water [fill: precipitable_water_entire_atmosphere]",
+        "kind": "direct",
+        "name": "precipitable_water",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: total_cloud_cover_entire_atmosphere",
+        "kind": "direct",
+        "name": "cloud_cover",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "Low Cloud Cover [fill: low_cloud_cover_entire_atmosphere]",
+        "kind": "direct",
+        "name": "low_cloud_cover",
+        "status": "renderable"
+      },
+      {
+        "detail": "Middle Cloud Cover [fill: middle_cloud_cover_entire_atmosphere]",
+        "kind": "direct",
+        "name": "middle_cloud_cover",
+        "status": "renderable"
+      },
+      {
+        "detail": "High Cloud Cover [fill: high_cloud_cover_entire_atmosphere]",
+        "kind": "direct",
+        "name": "high_cloud_cover",
+        "status": "renderable"
+      },
+      {
+        "detail": "Cloud Cover, Levels [fill: low_cloud_cover_entire_atmosphere]",
+        "kind": "direct",
+        "name": "cloud_cover_levels",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: visibility_surface",
+        "kind": "direct",
+        "name": "visibility",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: simulated_infrared_brightness_temperature_nominal_top",
+        "kind": "direct",
+        "name": "simulated_ir_satellite",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: lightning_flash_density (no canonical store selector exists for this field)",
+        "kind": "direct",
+        "name": "lightning_flash_density",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "Total QPF [fill: total_precipitation_surface]",
+        "kind": "direct",
+        "name": "total_qpf",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: probability_of_precipitation_surface",
+        "kind": "direct",
+        "name": "probability_of_precipitation",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_rain_surface",
+        "kind": "direct",
+        "name": "categorical_rain",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_freezing_rain_surface",
+        "kind": "direct",
+        "name": "categorical_freezing_rain",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_ice_pellets_surface",
+        "kind": "direct",
+        "name": "categorical_ice_pellets",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_snow_surface",
+        "kind": "direct",
+        "name": "categorical_snow",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_rain_surface, categorical_freezing_rain_surface, categorical_ice_pellets_surface, categorical_snow_surface",
+        "kind": "direct",
+        "name": "precipitation_type",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "700mb Dewpoint / Height / Winds [fill: dewpoint_700hpa]",
+        "kind": "direct",
+        "name": "700mb_dewpoint_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb Dewpoint / Height / Winds [fill: dewpoint_850hpa]",
+        "kind": "direct",
+        "name": "850mb_dewpoint_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "200mb RH / Height / Winds [fill: relative_humidity_200hpa]",
+        "kind": "direct",
+        "name": "200mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "300mb RH / Height / Winds [fill: relative_humidity_300hpa]",
+        "kind": "direct",
+        "name": "300mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "500mb RH / Height / Winds [fill: relative_humidity_500hpa]",
+        "kind": "direct",
+        "name": "500mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "700mb RH / Height / Winds [fill: relative_humidity_700hpa]",
+        "kind": "direct",
+        "name": "700mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb RH / Height / Winds [fill: relative_humidity_850hpa]",
+        "kind": "direct",
+        "name": "850mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "200mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_200hpa]",
+        "kind": "direct",
+        "name": "200mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "300mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_300hpa]",
+        "kind": "direct",
+        "name": "300mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "500mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_500hpa]",
+        "kind": "direct",
+        "name": "500mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "700mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_700hpa]",
+        "kind": "direct",
+        "name": "700mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_850hpa]",
+        "kind": "direct",
+        "name": "850mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "1km AGL Reflectivity [fill: radar_reflectivity_1000m_agl]",
+        "kind": "direct",
+        "name": "1km_reflectivity",
+        "status": "renderable"
+      },
+      {
+        "detail": "Composite Reflectivity [fill: composite_reflectivity_entire_atmosphere]",
+        "kind": "direct",
+        "name": "composite_reflectivity",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: updraft_helicity_2000m_to_5000m_agl",
+        "kind": "direct",
+        "name": "composite_reflectivity_uh",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: updraft_helicity_2000m_to_5000m_agl",
+        "kind": "direct",
+        "name": "uh_2to5km",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: smoke_mass_density_8m_agl",
+        "kind": "direct",
+        "name": "smoke_pm25_native",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: column_integrated_smoke_entire_atmosphere",
+        "kind": "direct",
+        "name": "smoke_column",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "SBCAPE",
+        "kind": "derived",
+        "name": "sbcape",
+        "status": "renderable"
+      },
+      {
+        "detail": "SBCIN",
+        "kind": "derived",
+        "name": "sbcin",
+        "status": "renderable"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "sblcl",
+        "status": "excluded"
+      },
+      {
+        "detail": "MLCAPE",
+        "kind": "derived",
+        "name": "mlcape",
+        "status": "renderable"
+      },
+      {
+        "detail": "MLCIN",
+        "kind": "derived",
+        "name": "mlcin",
+        "status": "renderable"
+      },
+      {
+        "detail": "MUCAPE",
+        "kind": "derived",
+        "name": "mucape",
+        "status": "renderable"
+      },
+      {
+        "detail": "MUCIN",
+        "kind": "derived",
+        "name": "mucin",
+        "status": "renderable"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "dcape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sbecape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "mlecape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "muecape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sb_ecape_derived_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ml_ecape_derived_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "mu_ecape_derived_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sb_ecape_native_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ml_ecape_native_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "mu_ecape_native_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sbncape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sbecin",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "mlecin",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ecape_scp",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ecape_ehi_0_1km",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ecape_ehi_0_3km",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ecape_stp",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "theta_e_2m_10m_winds",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "vpd_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "dewpoint_depression_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "wetbulb_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "fire_weather_composite",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "apparent_temperature_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "heat_index_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "wind_chill_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "lifted_index",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "lapse_rate_700_500",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "lapse_rate_0_3km",
+        "status": "excluded"
+      },
+      {
+        "detail": "0-1 km Bulk Shear",
+        "kind": "derived",
+        "name": "bulk_shear_0_1km",
+        "status": "renderable"
+      },
+      {
+        "detail": "0-6 km Bulk Shear",
+        "kind": "derived",
+        "name": "bulk_shear_0_6km",
+        "status": "renderable"
+      },
+      {
+        "detail": "0-1 km SRH",
+        "kind": "derived",
+        "name": "srh_0_1km",
+        "status": "renderable"
+      },
+      {
+        "detail": "0-3 km SRH",
+        "kind": "derived",
+        "name": "srh_0_3km",
+        "status": "renderable"
+      },
+      {
+        "detail": "EHI 0-1 km",
+        "kind": "derived",
+        "name": "ehi_0_1km",
+        "status": "renderable"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "ehi_0_3km",
+        "status": "excluded"
+      },
+      {
+        "detail": "STP (FIXED)",
+        "kind": "derived",
+        "name": "stp_fixed",
+        "status": "renderable"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "scp_mu_0_3km_0_6km_proxy",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "temperature_advection_700mb",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "temperature_advection_850mb",
+        "status": "excluded"
+      },
+      {
+        "detail": "requires mixed-layer CAPE/CIN/LCL plus effective SRH and effective bulk wind difference; rustwx-products does not yet derive effective SRH or EBWD from HRRR profiles",
+        "kind": "derived",
+        "name": "stp_effective",
+        "status": "excluded"
+      },
+      {
+        "detail": "requires effective SRH and effective bulk wind difference; rustwx-products does not yet derive those effective-layer kinematics from HRRR profiles",
+        "kind": "derived",
+        "name": "scp",
+        "status": "excluded"
+      },
+      {
+        "detail": "requires effective SRH and effective bulk wind difference; rustwx-products does not yet derive those effective-layer kinematics from HRRR profiles",
+        "kind": "derived",
+        "name": "scp_effective",
+        "status": "excluded"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_200hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_250hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_300hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_500hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_700hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_850hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_200hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_250hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_300hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_500hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_700hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_850hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'el' [m]",
+        "kind": "generic",
+        "name": "var:el",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_200hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_250hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_300hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_500hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_700hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_850hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'lcl' [m]",
+        "kind": "generic",
+        "name": "var:lcl",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'lfc' [m]",
+        "kind": "generic",
+        "name": "var:lfc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'mslp' [Pa]",
+        "kind": "generic",
+        "name": "var:mslp",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_200hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_250hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_300hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_500hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_700hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_850hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'scp' [dimensionless]",
+        "kind": "generic",
+        "name": "var:scp",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'stp' [dimensionless]",
+        "kind": "generic",
+        "name": "var:stp",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'stp_effective' [dimensionless]",
+        "kind": "generic",
+        "name": "var:stp_effective",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'surface_pressure' [Pa]",
+        "kind": "generic",
+        "name": "var:surface_pressure",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'tehi' [dimensionless]",
+        "kind": "generic",
+        "name": "var:tehi",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_200hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_250hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_300hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_500hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_700hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_850hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'tts' [dimensionless]",
+        "kind": "generic",
+        "name": "var:tts",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_10m' [m/s]",
+        "kind": "generic",
+        "name": "var:u_10m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_200hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_250hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_300hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_500hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_700hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_850hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_10m' [m/s]",
+        "kind": "generic",
+        "name": "var:v_10m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_200hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_250hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_300hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_500hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_700hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_850hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'vtp_mod' [dimensionless]",
+        "kind": "generic",
+        "name": "var:vtp_mod",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wind_speed_10m' [m/s]",
+        "kind": "generic",
+        "name": "var:wind_speed_10m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bri' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_bri",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bulk_shear' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bulk_shear",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bunkers_lm_u' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bunkers_lm_u",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bunkers_lm_v' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bunkers_lm_v",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bunkers_rm_u' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bunkers_rm_u",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bunkers_rm_v' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bunkers_rm_v",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cape' [J/kg]",
+        "kind": "generic",
+        "name": "var:wrf_cape",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cin' [J/kg]",
+        "kind": "generic",
+        "name": "var:wrf_cin",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cloudfrac_high' [%]",
+        "kind": "generic",
+        "name": "var:wrf_cloudfrac_high",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cloudfrac_low' [%]",
+        "kind": "generic",
+        "name": "var:wrf_cloudfrac_low",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cloudfrac_mid' [%]",
+        "kind": "generic",
+        "name": "var:wrf_cloudfrac_mid",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_critical_angle' [degrees]",
+        "kind": "generic",
+        "name": "var:wrf_critical_angle",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_ctt' [degC]",
+        "kind": "generic",
+        "name": "var:wrf_ctt",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_dp2m' [degC]",
+        "kind": "generic",
+        "name": "var:wrf_dp2m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_ebwd' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_ebwd",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_effective_cape' [J/kg]",
+        "kind": "generic",
+        "name": "var:wrf_effective_cape",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_effective_inflow_base' [m]",
+        "kind": "generic",
+        "name": "var:wrf_effective_inflow_base",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_effective_inflow_top' [m]",
+        "kind": "generic",
+        "name": "var:wrf_effective_inflow_top",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_effective_srh' [m2/s2]",
+        "kind": "generic",
+        "name": "var:wrf_effective_srh",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_fosberg' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_fosberg",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_freezing_level' [m]",
+        "kind": "generic",
+        "name": "var:wrf_freezing_level",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_graupelnc' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_graupelnc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_haines' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_haines",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_hdw' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_hdw",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_hgt' [m]",
+        "kind": "generic",
+        "name": "var:wrf_hgt",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_icedepth' []",
+        "kind": "generic",
+        "name": "var:wrf_icedepth",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_landmask' []",
+        "kind": "generic",
+        "name": "var:wrf_landmask",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_lapse_rate' [degC/km]",
+        "kind": "generic",
+        "name": "var:wrf_lapse_rate",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_lapse_rate_0_3km' [degC/km]",
+        "kind": "generic",
+        "name": "var:wrf_lapse_rate_0_3km",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_lapse_rate_700_500' [degC/km]",
+        "kind": "generic",
+        "name": "var:wrf_lapse_rate_700_500",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_mean_wind_0_6km_1' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_mean_wind_0_6km_1",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_mean_wind_0_6km_2' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_mean_wind_0_6km_2",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_mean_wind_1' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_mean_wind_1",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_mean_wind_2' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_mean_wind_2",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_psfc' [Pa]",
+        "kind": "generic",
+        "name": "var:wrf_psfc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_pw' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_pw",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_q2' [kg kg-1]",
+        "kind": "generic",
+        "name": "var:wrf_q2",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_rainc' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_rainc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_rainnc' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_rainnc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_rh2m' [%]",
+        "kind": "generic",
+        "name": "var:wrf_rh2m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_seaice' []",
+        "kind": "generic",
+        "name": "var:wrf_seaice",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_ship' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_ship",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_slp' [hPa]",
+        "kind": "generic",
+        "name": "var:wrf_slp",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_snow' [kg m-2]",
+        "kind": "generic",
+        "name": "var:wrf_snow",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_snowc' []",
+        "kind": "generic",
+        "name": "var:wrf_snowc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_snowh' [m]",
+        "kind": "generic",
+        "name": "var:wrf_snowh",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_snownc' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_snownc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_srh' [m2/s2]",
+        "kind": "generic",
+        "name": "var:wrf_srh",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_t2' [K]",
+        "kind": "generic",
+        "name": "var:wrf_t2",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_terrain' [m]",
+        "kind": "generic",
+        "name": "var:wrf_terrain",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_tsk' [K]",
+        "kind": "generic",
+        "name": "var:wrf_tsk",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_tv2m' [K]",
+        "kind": "generic",
+        "name": "var:wrf_tv2m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_u10' [m s-1]",
+        "kind": "generic",
+        "name": "var:wrf_u10",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_uvmet10_u' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_uvmet10_u",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_uvmet10_v' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_uvmet10_v",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_v10' [m s-1]",
+        "kind": "generic",
+        "name": "var:wrf_v10",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_wdir10' [degrees]",
+        "kind": "generic",
+        "name": "var:wrf_wdir10",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_wet_bulb_0' [m]",
+        "kind": "generic",
+        "name": "var:wrf_wet_bulb_0",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_wspd10' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_wspd10",
+        "status": "renderable"
+      },
+      {
+        "detail": "6 h APCP differenced from stored run-total accumulations (F012 minus F006); this store carries no native apcp_1h plane",
+        "kind": "windowed",
+        "name": "qpf_6h",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored run-total APCP accumulation (apcp_run_total, 0-12 h) at F012",
+        "kind": "windowed",
+        "name": "qpf_total",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored sub-hourly 1 h max 10 m wind speed (wind_speed_10m_max_1h) at F012 (top-of-hour instantaneous fallback at F012: no stored sub-hourly max field \u00e2\u20ac\u201d a lower bound on the native sub-hourly max)",
+        "kind": "windowed",
+        "name": "10m_wind_1h_max",
+        "status": "renderable"
+      },
+      {
+        "detail": "missing stored hour(s) F011 (window F011-F012 is differenced from the stored run totals at F011 and F012, both required; gaps are never skipped)",
+        "kind": "windowed",
+        "name": "qpf_1h",
+        "status": "blocked"
+      },
+      {
+        "detail": "missing stored hour(s) F000 (window F000-F012 is differenced from the stored run totals at F000 and F012, both required; gaps are never skipped)",
+        "kind": "windowed",
+        "name": "qpf_12h",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-h QPF requires forecast hour >= 24",
+        "kind": "windowed",
+        "name": "qpf_24h",
+        "status": "blocked"
+      },
+      {
+        "detail": "stored hour F012 has no 'uh_2to5km_max_1h' variable; hourly 'uh_2to5km' and wrfout-lane 'updraft_helicity_2to5km' fallbacks also unavailable: stored hour F012 has no 'updraft_helicity_2to5km' variable",
+        "kind": "windowed",
+        "name": "uh_2to5km_1h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "missing stored hour(s) F010, F011 (window F010-F012 needs every hour; gaps are never skipped)",
+        "kind": "windowed",
+        "name": "uh_2to5km_3h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "missing stored hour(s) F001, F002, F003, F004, F005, F007, F008, F009, F010, F011 (window F001-F012 needs every hour; gaps are never skipped)",
+        "kind": "windowed",
+        "name": "uh_2to5km_run_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "missing stored hour(s) F001, F002, F003, F004, F005, F007, F008, F009, F010, F011 (window F001-F012 needs every hour; gaps are never skipped)",
+        "kind": "windowed",
+        "name": "10m_wind_run_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 10 m wind max requires forecast hour >= 24",
+        "kind": "windowed",
+        "name": "10m_wind_0_24h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 10 m wind max requires forecast hour >= 48",
+        "kind": "windowed",
+        "name": "10m_wind_24_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 10 m wind max requires forecast hour >= 48",
+        "kind": "windowed",
+        "name": "10m_wind_0_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_temp_0_24h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_temp_24_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_temp_0_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_temp_0_24h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_temp_24_48h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_temp_0_48h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_temp_0_24h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_temp_24_48h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_temp_0_48h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_rh_0_24h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_rh_24_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_rh_0_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_rh_0_24h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_rh_24_48h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_rh_0_48h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_rh_0_24h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_rh_24_48h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_rh_0_48h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_24h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_dewpoint_24_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_24h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_dewpoint_24_48h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_48h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_24h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_dewpoint_24_48h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_48h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_vpd_0_24h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_vpd_24_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_vpd_0_48h_max",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_vpd_0_24h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_vpd_24_48h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_vpd_0_48h_min",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-24 h 2 m surface snapshot window requires forecast hour >= 24; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_vpd_0_24h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "24-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_vpd_24_48h_range",
+        "status": "blocked"
+      },
+      {
+        "detail": "0-48 h 2 m surface snapshot window requires forecast hour >= 48; use a HRRR extended cycle for 24-48 h products",
+        "kind": "windowed",
+        "name": "2m_vpd_0_48h_range",
+        "status": "blocked"
+      }
+    ],
+    "summary": "total=268 blocked=46 excluded=36 missing-fields=15 renderable=171"
+  },
+  "single_frame": {
+    "products": [
+      {
+        "detail": "200mb Height / Winds [fill: geopotential_height_200hpa]",
+        "kind": "direct",
+        "name": "200mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "300mb Height / Winds [fill: geopotential_height_300hpa]",
+        "kind": "direct",
+        "name": "300mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "250mb Height / Winds [fill: geopotential_height_250hpa]",
+        "kind": "direct",
+        "name": "250mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "500mb Height / Winds [fill: geopotential_height_500hpa]",
+        "kind": "direct",
+        "name": "500mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "700mb Height / Winds [fill: geopotential_height_700hpa]",
+        "kind": "direct",
+        "name": "700mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb Height / Winds [fill: geopotential_height_850hpa]",
+        "kind": "direct",
+        "name": "850mb_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "200mb Temperature / Height / Winds [fill: temperature_200hpa]",
+        "kind": "direct",
+        "name": "200mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "300mb Temperature / Height / Winds [fill: temperature_300hpa]",
+        "kind": "direct",
+        "name": "300mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "250mb Temperature / Height / Winds [fill: temperature_250hpa]",
+        "kind": "direct",
+        "name": "250mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "500mb Temperature / Height / Winds [fill: temperature_500hpa]",
+        "kind": "direct",
+        "name": "500mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb Temperature / Height / Winds [fill: temperature_850hpa]",
+        "kind": "direct",
+        "name": "850mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "700mb Temperature / Height / Winds [fill: temperature_700hpa]",
+        "kind": "direct",
+        "name": "700mb_temperature_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Relative Humidity [fill: relative_humidity_2m_agl]",
+        "kind": "direct",
+        "name": "2m_relative_humidity",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Relative Humidity / 10m Winds [fill: relative_humidity_2m_agl]",
+        "kind": "direct",
+        "name": "2m_relative_humidity_10m_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Temperature [fill: temperature_2m_agl]",
+        "kind": "direct",
+        "name": "2m_temperature",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Temperature / 10m Winds [fill: temperature_2m_agl]",
+        "kind": "direct",
+        "name": "2m_temperature_10m_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Dewpoint [fill: dewpoint_2m_agl]",
+        "kind": "direct",
+        "name": "2m_dewpoint",
+        "status": "renderable"
+      },
+      {
+        "detail": "2m AGL Dewpoint / 10m Winds [fill: dewpoint_2m_agl]",
+        "kind": "direct",
+        "name": "2m_dewpoint_10m_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "MSLP / 10m Winds [fill: pressure_reduced_to_mean_sea_level_mean_sea_level]",
+        "kind": "direct",
+        "name": "mslp_10m_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "Terrain Height [fill: geopotential_height_surface]",
+        "kind": "direct",
+        "name": "terrain_height",
+        "status": "renderable"
+      },
+      {
+        "detail": "10m AGL Wind Speed and Direction [fill: wind_speed_10m_agl]",
+        "kind": "direct",
+        "name": "10m_wind_speed_and_direction",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: wind_gust_10m_agl",
+        "kind": "direct",
+        "name": "10m_wind_gusts",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "Precipitable Water [fill: precipitable_water_entire_atmosphere]",
+        "kind": "direct",
+        "name": "precipitable_water",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: total_cloud_cover_entire_atmosphere",
+        "kind": "direct",
+        "name": "cloud_cover",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "Low Cloud Cover [fill: low_cloud_cover_entire_atmosphere]",
+        "kind": "direct",
+        "name": "low_cloud_cover",
+        "status": "renderable"
+      },
+      {
+        "detail": "Middle Cloud Cover [fill: middle_cloud_cover_entire_atmosphere]",
+        "kind": "direct",
+        "name": "middle_cloud_cover",
+        "status": "renderable"
+      },
+      {
+        "detail": "High Cloud Cover [fill: high_cloud_cover_entire_atmosphere]",
+        "kind": "direct",
+        "name": "high_cloud_cover",
+        "status": "renderable"
+      },
+      {
+        "detail": "Cloud Cover, Levels [fill: low_cloud_cover_entire_atmosphere]",
+        "kind": "direct",
+        "name": "cloud_cover_levels",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: visibility_surface",
+        "kind": "direct",
+        "name": "visibility",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: simulated_infrared_brightness_temperature_nominal_top",
+        "kind": "direct",
+        "name": "simulated_ir_satellite",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: lightning_flash_density (no canonical store selector exists for this field)",
+        "kind": "direct",
+        "name": "lightning_flash_density",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "Total QPF [fill: total_precipitation_surface]",
+        "kind": "direct",
+        "name": "total_qpf",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: probability_of_precipitation_surface",
+        "kind": "direct",
+        "name": "probability_of_precipitation",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_rain_surface",
+        "kind": "direct",
+        "name": "categorical_rain",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_freezing_rain_surface",
+        "kind": "direct",
+        "name": "categorical_freezing_rain",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_ice_pellets_surface",
+        "kind": "direct",
+        "name": "categorical_ice_pellets",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_snow_surface",
+        "kind": "direct",
+        "name": "categorical_snow",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: categorical_rain_surface, categorical_freezing_rain_surface, categorical_ice_pellets_surface, categorical_snow_surface",
+        "kind": "direct",
+        "name": "precipitation_type",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "700mb Dewpoint / Height / Winds [fill: dewpoint_700hpa]",
+        "kind": "direct",
+        "name": "700mb_dewpoint_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb Dewpoint / Height / Winds [fill: dewpoint_850hpa]",
+        "kind": "direct",
+        "name": "850mb_dewpoint_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "200mb RH / Height / Winds [fill: relative_humidity_200hpa]",
+        "kind": "direct",
+        "name": "200mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "300mb RH / Height / Winds [fill: relative_humidity_300hpa]",
+        "kind": "direct",
+        "name": "300mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "500mb RH / Height / Winds [fill: relative_humidity_500hpa]",
+        "kind": "direct",
+        "name": "500mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "700mb RH / Height / Winds [fill: relative_humidity_700hpa]",
+        "kind": "direct",
+        "name": "700mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb RH / Height / Winds [fill: relative_humidity_850hpa]",
+        "kind": "direct",
+        "name": "850mb_rh_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "200mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_200hpa]",
+        "kind": "direct",
+        "name": "200mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "300mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_300hpa]",
+        "kind": "direct",
+        "name": "300mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "500mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_500hpa]",
+        "kind": "direct",
+        "name": "500mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "700mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_700hpa]",
+        "kind": "direct",
+        "name": "700mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "850mb Absolute Vorticity / Height / Winds [fill: absolute_vorticity_850hpa]",
+        "kind": "direct",
+        "name": "850mb_absolute_vorticity_height_winds",
+        "status": "renderable"
+      },
+      {
+        "detail": "1km AGL Reflectivity [fill: radar_reflectivity_1000m_agl]",
+        "kind": "direct",
+        "name": "1km_reflectivity",
+        "status": "renderable"
+      },
+      {
+        "detail": "Composite Reflectivity [fill: composite_reflectivity_entire_atmosphere]",
+        "kind": "direct",
+        "name": "composite_reflectivity",
+        "status": "renderable"
+      },
+      {
+        "detail": "not stored: updraft_helicity_2000m_to_5000m_agl",
+        "kind": "direct",
+        "name": "composite_reflectivity_uh",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: updraft_helicity_2000m_to_5000m_agl",
+        "kind": "direct",
+        "name": "uh_2to5km",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: smoke_mass_density_8m_agl",
+        "kind": "direct",
+        "name": "smoke_pm25_native",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "not stored: column_integrated_smoke_entire_atmosphere",
+        "kind": "direct",
+        "name": "smoke_column",
+        "status": "missing-fields"
+      },
+      {
+        "detail": "SBCAPE",
+        "kind": "derived",
+        "name": "sbcape",
+        "status": "renderable"
+      },
+      {
+        "detail": "SBCIN",
+        "kind": "derived",
+        "name": "sbcin",
+        "status": "renderable"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "sblcl",
+        "status": "excluded"
+      },
+      {
+        "detail": "MLCAPE",
+        "kind": "derived",
+        "name": "mlcape",
+        "status": "renderable"
+      },
+      {
+        "detail": "MLCIN",
+        "kind": "derived",
+        "name": "mlcin",
+        "status": "renderable"
+      },
+      {
+        "detail": "MUCAPE",
+        "kind": "derived",
+        "name": "mucape",
+        "status": "renderable"
+      },
+      {
+        "detail": "MUCIN",
+        "kind": "derived",
+        "name": "mucin",
+        "status": "renderable"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "dcape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sbecape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "mlecape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "muecape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sb_ecape_derived_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ml_ecape_derived_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "mu_ecape_derived_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sb_ecape_native_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ml_ecape_native_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "mu_ecape_native_cape_ratio",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sbncape",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "sbecin",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "mlecin",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ecape_scp",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ecape_ehi_0_1km",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ecape_ehi_0_3km",
+        "status": "excluded"
+      },
+      {
+        "detail": "heavy grid not computed at import; re-run with --heavy to compute the ECAPE family",
+        "kind": "heavy",
+        "name": "ecape_stp",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "theta_e_2m_10m_winds",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "vpd_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "dewpoint_depression_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "wetbulb_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "fire_weather_composite",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "apparent_temperature_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "heat_index_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "wind_chill_2m",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "lifted_index",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "lapse_rate_700_500",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "lapse_rate_0_3km",
+        "status": "excluded"
+      },
+      {
+        "detail": "0-1 km Bulk Shear",
+        "kind": "derived",
+        "name": "bulk_shear_0_1km",
+        "status": "renderable"
+      },
+      {
+        "detail": "0-6 km Bulk Shear",
+        "kind": "derived",
+        "name": "bulk_shear_0_6km",
+        "status": "renderable"
+      },
+      {
+        "detail": "0-1 km SRH",
+        "kind": "derived",
+        "name": "srh_0_1km",
+        "status": "renderable"
+      },
+      {
+        "detail": "0-3 km SRH",
+        "kind": "derived",
+        "name": "srh_0_3km",
+        "status": "renderable"
+      },
+      {
+        "detail": "EHI 0-1 km",
+        "kind": "derived",
+        "name": "ehi_0_1km",
+        "status": "renderable"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "ehi_0_3km",
+        "status": "excluded"
+      },
+      {
+        "detail": "STP (FIXED)",
+        "kind": "derived",
+        "name": "stp_fixed",
+        "status": "renderable"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "scp_mu_0_3km_0_6km_proxy",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "temperature_advection_700mb",
+        "status": "excluded"
+      },
+      {
+        "detail": "not realized by the wrfout import lane (no matching wrf-core diagnostic is stored under this recipe slug)",
+        "kind": "derived",
+        "name": "temperature_advection_850mb",
+        "status": "excluded"
+      },
+      {
+        "detail": "requires mixed-layer CAPE/CIN/LCL plus effective SRH and effective bulk wind difference; rustwx-products does not yet derive effective SRH or EBWD from HRRR profiles",
+        "kind": "derived",
+        "name": "stp_effective",
+        "status": "excluded"
+      },
+      {
+        "detail": "requires effective SRH and effective bulk wind difference; rustwx-products does not yet derive those effective-layer kinematics from HRRR profiles",
+        "kind": "derived",
+        "name": "scp",
+        "status": "excluded"
+      },
+      {
+        "detail": "requires effective SRH and effective bulk wind difference; rustwx-products does not yet derive those effective-layer kinematics from HRRR profiles",
+        "kind": "derived",
+        "name": "scp_effective",
+        "status": "excluded"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_200hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_250hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_300hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_500hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_700hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'absolute_vorticity_850hpa' [s-1]",
+        "kind": "generic",
+        "name": "var:absolute_vorticity_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_200hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_250hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_300hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_500hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_700hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'dewpoint_850hpa' [K]",
+        "kind": "generic",
+        "name": "var:dewpoint_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'el' [m]",
+        "kind": "generic",
+        "name": "var:el",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_200hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_250hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_300hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_500hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_700hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'geopotential_height_850hpa' [gpm]",
+        "kind": "generic",
+        "name": "var:geopotential_height_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'lcl' [m]",
+        "kind": "generic",
+        "name": "var:lcl",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'lfc' [m]",
+        "kind": "generic",
+        "name": "var:lfc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'mslp' [Pa]",
+        "kind": "generic",
+        "name": "var:mslp",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_200hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_250hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_300hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_500hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_700hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'relative_humidity_850hpa' [%]",
+        "kind": "generic",
+        "name": "var:relative_humidity_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'scp' [dimensionless]",
+        "kind": "generic",
+        "name": "var:scp",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'stp' [dimensionless]",
+        "kind": "generic",
+        "name": "var:stp",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'stp_effective' [dimensionless]",
+        "kind": "generic",
+        "name": "var:stp_effective",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'surface_pressure' [Pa]",
+        "kind": "generic",
+        "name": "var:surface_pressure",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'tehi' [dimensionless]",
+        "kind": "generic",
+        "name": "var:tehi",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_200hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_250hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_300hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_500hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_700hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'temperature_850hpa' [K]",
+        "kind": "generic",
+        "name": "var:temperature_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'tts' [dimensionless]",
+        "kind": "generic",
+        "name": "var:tts",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_10m' [m/s]",
+        "kind": "generic",
+        "name": "var:u_10m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_200hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_250hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_300hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_500hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_700hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'u_wind_850hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:u_wind_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_10m' [m/s]",
+        "kind": "generic",
+        "name": "var:v_10m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_200hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_200hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_250hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_250hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_300hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_300hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_500hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_500hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_700hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_700hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'v_wind_850hpa' [m/s]",
+        "kind": "generic",
+        "name": "var:v_wind_850hpa",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'vtp_mod' [dimensionless]",
+        "kind": "generic",
+        "name": "var:vtp_mod",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wind_speed_10m' [m/s]",
+        "kind": "generic",
+        "name": "var:wind_speed_10m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bri' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_bri",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bulk_shear' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bulk_shear",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bunkers_lm_u' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bunkers_lm_u",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bunkers_lm_v' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bunkers_lm_v",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bunkers_rm_u' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bunkers_rm_u",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_bunkers_rm_v' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_bunkers_rm_v",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cape' [J/kg]",
+        "kind": "generic",
+        "name": "var:wrf_cape",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cin' [J/kg]",
+        "kind": "generic",
+        "name": "var:wrf_cin",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cloudfrac_high' [%]",
+        "kind": "generic",
+        "name": "var:wrf_cloudfrac_high",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cloudfrac_low' [%]",
+        "kind": "generic",
+        "name": "var:wrf_cloudfrac_low",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_cloudfrac_mid' [%]",
+        "kind": "generic",
+        "name": "var:wrf_cloudfrac_mid",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_critical_angle' [degrees]",
+        "kind": "generic",
+        "name": "var:wrf_critical_angle",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_ctt' [degC]",
+        "kind": "generic",
+        "name": "var:wrf_ctt",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_dp2m' [degC]",
+        "kind": "generic",
+        "name": "var:wrf_dp2m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_ebwd' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_ebwd",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_effective_cape' [J/kg]",
+        "kind": "generic",
+        "name": "var:wrf_effective_cape",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_effective_inflow_base' [m]",
+        "kind": "generic",
+        "name": "var:wrf_effective_inflow_base",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_effective_inflow_top' [m]",
+        "kind": "generic",
+        "name": "var:wrf_effective_inflow_top",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_effective_srh' [m2/s2]",
+        "kind": "generic",
+        "name": "var:wrf_effective_srh",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_fosberg' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_fosberg",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_freezing_level' [m]",
+        "kind": "generic",
+        "name": "var:wrf_freezing_level",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_graupelnc' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_graupelnc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_haines' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_haines",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_hdw' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_hdw",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_hgt' [m]",
+        "kind": "generic",
+        "name": "var:wrf_hgt",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_icedepth' []",
+        "kind": "generic",
+        "name": "var:wrf_icedepth",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_landmask' []",
+        "kind": "generic",
+        "name": "var:wrf_landmask",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_lapse_rate' [degC/km]",
+        "kind": "generic",
+        "name": "var:wrf_lapse_rate",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_lapse_rate_0_3km' [degC/km]",
+        "kind": "generic",
+        "name": "var:wrf_lapse_rate_0_3km",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_lapse_rate_700_500' [degC/km]",
+        "kind": "generic",
+        "name": "var:wrf_lapse_rate_700_500",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_mean_wind_0_6km_1' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_mean_wind_0_6km_1",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_mean_wind_0_6km_2' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_mean_wind_0_6km_2",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_mean_wind_1' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_mean_wind_1",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_mean_wind_2' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_mean_wind_2",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_psfc' [Pa]",
+        "kind": "generic",
+        "name": "var:wrf_psfc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_pw' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_pw",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_q2' [kg kg-1]",
+        "kind": "generic",
+        "name": "var:wrf_q2",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_rainc' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_rainc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_rainnc' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_rainnc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_rh2m' [%]",
+        "kind": "generic",
+        "name": "var:wrf_rh2m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_seaice' []",
+        "kind": "generic",
+        "name": "var:wrf_seaice",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_ship' [dimensionless]",
+        "kind": "generic",
+        "name": "var:wrf_ship",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_slp' [hPa]",
+        "kind": "generic",
+        "name": "var:wrf_slp",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_snow' [kg m-2]",
+        "kind": "generic",
+        "name": "var:wrf_snow",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_snowc' []",
+        "kind": "generic",
+        "name": "var:wrf_snowc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_snowh' [m]",
+        "kind": "generic",
+        "name": "var:wrf_snowh",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_snownc' [mm]",
+        "kind": "generic",
+        "name": "var:wrf_snownc",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_srh' [m2/s2]",
+        "kind": "generic",
+        "name": "var:wrf_srh",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_t2' [K]",
+        "kind": "generic",
+        "name": "var:wrf_t2",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_terrain' [m]",
+        "kind": "generic",
+        "name": "var:wrf_terrain",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_tsk' [K]",
+        "kind": "generic",
+        "name": "var:wrf_tsk",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_tv2m' [K]",
+        "kind": "generic",
+        "name": "var:wrf_tv2m",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_u10' [m s-1]",
+        "kind": "generic",
+        "name": "var:wrf_u10",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_uvmet10_u' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_uvmet10_u",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_uvmet10_v' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_uvmet10_v",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_v10' [m s-1]",
+        "kind": "generic",
+        "name": "var:wrf_v10",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_wdir10' [degrees]",
+        "kind": "generic",
+        "name": "var:wrf_wdir10",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_wet_bulb_0' [m]",
+        "kind": "generic",
+        "name": "var:wrf_wet_bulb_0",
+        "status": "renderable"
+      },
+      {
+        "detail": "stored 2-D variable 'wrf_wspd10' [m/s]",
+        "kind": "generic",
+        "name": "var:wrf_wspd10",
+        "status": "renderable"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "qpf_1h",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "qpf_6h",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "qpf_12h",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "qpf_24h",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "qpf_total",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "uh_2to5km_1h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "uh_2to5km_3h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "uh_2to5km_run_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "10m_wind_1h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "10m_wind_run_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "10m_wind_0_24h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "10m_wind_24_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "10m_wind_0_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_temp_0_24h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_temp_24_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_temp_0_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_temp_0_24h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_temp_24_48h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_temp_0_48h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_temp_0_24h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_temp_24_48h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_temp_0_48h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_rh_0_24h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_rh_24_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_rh_0_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_rh_0_24h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_rh_24_48h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_rh_0_48h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_rh_0_24h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_rh_24_48h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_rh_0_48h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_24h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_dewpoint_24_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_24h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_dewpoint_24_48h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_48h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_24h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_dewpoint_24_48h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_dewpoint_0_48h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_vpd_0_24h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_vpd_24_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_vpd_0_48h_max",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_vpd_0_24h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_vpd_24_48h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_vpd_0_48h_min",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_vpd_0_24h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_vpd_24_48h_range",
+        "status": "excluded"
+      },
+      {
+        "detail": "windowed accumulations need more than one stored whole-hour frame",
+        "kind": "windowed",
+        "name": "2m_vpd_0_48h_range",
+        "status": "excluded"
+      }
+    ],
+    "summary": "total=268 excluded=85 missing-fields=15 renderable=168"
+  },
+  "tape": {
+    "experiment": "arwen_global_t21_baroclinic_ten_day",
+    "export_nlat": 360,
+    "export_nlon": 720,
+    "exporter": "arwen_global.wrfout_export.export_wrfout",
+    "frames_series": 2,
+    "frames_single": 1,
+    "truncation": 21
+  }
+}

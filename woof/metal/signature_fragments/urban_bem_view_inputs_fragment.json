@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_view_inputs_fragment",
+      "module": "urban_bem_view_inputs_fragment",
+      "source": "woof/metal/shaders/urban_bem_view_inputs_fragment.metal",
+      "cuda_source": "woof/core/urban_bem.py",
+      "cuda_symbol": "init_state BEM canyon view-factor geometry gather",
+      "resources": [
+        ["utype", "int32", "read"],
+        ["street_direction_table", "float", "read"],
+        ["street_width_table", "float", "read"],
+        ["z", "float", "read_write"],
+        ["dxy", "float", "read_write"],
+        ["street_width", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "utype": [["ncol"]],
+        "street_direction_table": [["nd", "nclasses"]],
+        "street_width_table": [["nd", "nclasses"]],
+        "z": [["ncol", 19]],
+        "dxy": [["ncol", "nd"]],
+        "street_width": [["ncol", "nd"]],
+        "error": [["ncol", "nd"]]
+      },
+      "parameters": [["ncol", "int32"], ["nclasses", "int32"], ["nd", "int32"]],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

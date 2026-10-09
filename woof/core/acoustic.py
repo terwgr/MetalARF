@@ -1,0 +1,976 @@
+"""Launchers for the split-explicit acoustic substeps (ARW sec. 3.1.2).
+
+``acoustic_substep`` drives one complete substep: the explicit forward
+steps of the perturbation horizontal momenta (``advance_uv``) and of
+mu''/Omega''/(mu*theta)'' (``advance_mu_th``), the vertically implicit
+Crank-Nicolson w''-phi'' solve (``calc_coefs`` + ``advance_w_phi``, which
+also applies the terrain kinematic lower BC and the damp_opt=3 implicit
+w damper), with the linearized-EOS p''/alpha'' diagnosis fused into the
+column solve and specified-frame handling.
+All kernels take the general hybrid/terrain arguments (2-D ``mub2d``,
+c1/c2 coefficient arrays, 1-D or 3-D base profiles via ``base3d``).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import numpy as np
+
+from woof.config import RunConfig
+from woof.wrf_exact import ENABLED as WRF_EXACT
+from woof.core import constants as c
+from woof.core.kernels import (get_kernel, get_kernel_int_defines,
+                                module_source, module_source_int_defines)
+from woof.core.state import DTYPE, DomainState
+
+_THREADS = 256
+
+
+@dataclass(frozen=True)
+class _AcousticSubstepTopology:
+    """Immutable dispatch order/geometry for one acoustic substep shape."""
+
+    entrypoints: tuple[str, ...]
+    cache_identities: tuple[str, ...]
+    grid_sizes: tuple[int, ...]
+    exact_policy: bool
+    label: str
+
+
+def prepare_upper_wind_limiter(state, cfg, dtau):
+    """Bind the fork's advance_w limiter on the saved physical stage winds.
+
+    state.u/v are u_save/v_save during the acoustic loop, consumed by
+    small_step_finish. state.php is ph_save. The fork's column recurrence
+    runs after advance_mu_t and before small_step_finish on each substep.
+    """
+    if (getattr(cfg, "upper_wind_limiter_form", "wrf_461") != "noaa_wrf39"
+            or cfg.damp_opt != 3):
+        return None
+    if cfg.nz < 3:
+        raise ValueError("the upper-wind limiter reads three top mass levels; nz must be at least 3")
+    kernel = get_kernel("upper_wind_limiter", "upper_wind_limiter")
+    args = (state.u, state.v, state.php, state.phb, DTYPE(dtau),
+            DTYPE(cfg.zdamp), _base3d(state),
+            np.int32(_mass_w_boundary_zone(cfg)), np.int32(cfg.nz),
+            np.int32(cfg.ny), np.int32(cfg.nx))
+    grid = ((cfg.ny * cfg.nx + _THREADS - 1) // _THREADS,)
+    return lambda: kernel(grid, (_THREADS,), args)
+
+
+def _base3d(state: DomainState) -> np.int32:
+    """1 when the base profiles are per-column 3-D fields (terrain)."""
+    return np.int32(state.thb.ndim == 3)
+
+
+def _boundary_forced(cfg: RunConfig) -> bool:
+    """True for specified or parent-forced nested lateral frames."""
+    return bool(getattr(cfg, "specified", False)
+                or getattr(cfg, "nested", False))
+
+
+def _boundary_x(cfg: RunConfig) -> bool:
+    return cfg.open_x or _boundary_forced(cfg)
+
+
+def _boundary_y(cfg: RunConfig) -> bool:
+    return cfg.open_y or _boundary_forced(cfg)
+
+
+def _spec_zone(cfg: RunConfig) -> int:
+    return int(cfg.spec_zone) if _boundary_forced(cfg) else 0
+
+
+def _frame_takes_table_w(cfg: RunConfig) -> bool:
+    """Whether the specified/nested frame integrates ``w`` from its table.
+
+    A nest always does (solve_em.F:1602-1611, ``spec_bdyupdate(w_2,
+    rw_tend)``); a specified domain does when it relaxes w
+    (``RunConfig.relax_w``).  Every other specified domain takes WRF's
+    root-domain zero-gradient copy.  The phi update and the pressure
+    diagnosis on the frame are the same either way, which is why the two
+    frame kernels differ in their ``w`` line alone.
+    """
+    from woof.ingest.lateral_bc import specified_relaxes_w
+
+    return bool(getattr(cfg, "nested", False)) or specified_relaxes_w(cfg)
+
+
+def _mass_w_boundary_zone(cfg: RunConfig) -> int:
+    """WRF advance_mu_t/advance_w omit only the physical outer row.
+
+    ``advance_uv`` deliberately narrows by the full configured specified
+    zone, but WRF's mass/theta and implicit w/phi loops use ids+1/ide-2 and
+    jds+1/jde-2 regardless of ``spec_zone``.  The wider frame is overwritten
+    by ``spec_bdyupdate`` only after those provisional dynamics (and MUDF)
+    have been formed.
+    """
+    return 1 if _boundary_forced(cfg) else 0
+
+
+def prepare_moist_cq(state: DomainState, cfg: RunConfig) -> tuple:
+    """Build WRF ``cqu/cqv/cqw`` once from the RK-stage moisture state.
+
+    WRF ``calc_cq`` sums the active ``moist`` Registry package selected by
+    ``mp_physics``: qv only for 0, qv/qc/qr for Kessler, and additionally
+    qi/qs/qg for Morrison.  Number moments live in WRF's separate ``scalar``
+    registry and are not mass loading.  The returned face arrays are
+    scratch-arena views.  A dry state or the falsification-only
+    ``moist_cq=False`` path returns harmless existing pointers plus a false
+    flag, allocating and launching nothing.
+    """
+    use_cq = bool(getattr(cfg, "moist_cq", True)
+                  and getattr(state, "qv", None) is not None)
+    if not use_cq:
+        return state.p, state.p, state.p, False
+
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    cqu = state.scratch((nz, ny, nx + 1), "acoustic_cqu")
+    cqv = state.scratch((nz, ny + 1, nx), "acoustic_cqv")
+    cqw = state.scratch((nz + 1, ny, nx), "acoustic_cqw")
+    if cfg.mp_physics == 0:
+        qi = qs = qg = state.qv              # placeholders are never read
+        n_mass = 1
+    elif cfg.mp_physics == 1:
+        qi = qs = qg = state.qv              # ice placeholders are never read
+        n_mass = 3
+    elif getattr(state, "qi", None) is not None \
+            and getattr(state, "qs", None) is None:
+        # P3 one-category (Registry.EM_COMMON:3038): moist:qv,qc,qr,qi --
+        # ONE ice mass, no snow, no graupel.  calc_cq's mass arms are
+        # 1/3/6/7 and 4 is not one of them, so the absent qs/qg take the
+        # shared zero plane at n_mass=6; see moist.absent_mass_plane for
+        # why that is exact and why the kernel is not reopened.
+        #
+        # Selected on PRESENCE, matching the identical guard in
+        # dycore._launch_slow_buoyancy and the predicate
+        # preflight.scratch_slot_registry prices the plane under.  mp=50 is
+        # the only scheme here today; a cfg-keyed arm would send the next
+        # one-ice-category port back to the AttributeError this replaced.
+        #
+        # qir/qib stay out for the same reason the number moments do --
+        # Registry ``scalar``, not ``moist`` -- and qir would be double
+        # counting besides: it is a COMPONENT of qi, not extra mass.
+        from woof.core.moist import absent_mass_plane
+        qi = state.qi
+        qs = qg = absent_mass_plane(state)
+        n_mass = 6
+    elif cfg.mp_physics in (6, 8, 9, 10, 16, 18, 28):
+        # mp=28 is numerically IDENTICAL to mp=8 here.  WRF's calc_cq sums
+        # the Registry ``moist`` package only, and Registry.EM_COMMON:3036
+        # gives aerosol-aware Thompson
+        #     moist:qv,qc,qr,qi,qs,qg
+        #     scalar:qni,qnr,qnc,qnwfa,qnifa,qnbca
+        # -- six masses, exactly mp=8's, with every number moment in the
+        # separate ``scalar`` package.  They must therefore stay out of cq
+        # AND out of the w-equation buoyancy loading; a droplet number of
+        # order 1e8 entering q_tot would be a catastrophic, not a subtle,
+        # error.
+        #
+        # mp=9 (Milbrandt-Yau) carries hail in the MOIST package exactly
+        # like NSSL: Registry.EM_COMMON:469 declares qh with package
+        # ``moist`` and the milbrandt2mom package binds
+        # moist:qv,qc,qr,qi,qs,qg,qh with all six number moments in
+        # ``scalar``, so its cq is NSSL's seven-mass sum (1.9.1 D1's
+        # route: this arm was cfg-keyed and mp=9 was missing, so an
+        # ACCEPTED Milbrandt-Yau real case refused at its first RK stage
+        # -- unlike slow_buoyancy, whose presence-keyed dispatch already
+        # ran mode 3).
+        qi = state.qi
+        qs, qg = state.qs, state.qg
+        n_mass = 7 if cfg.mp_physics in (9, 18) else 6
+    else:
+        raise ValueError(f"unsupported mp_physics={cfg.mp_physics} for cq")
+    qh = state.qh if cfg.mp_physics in (9, 18) else state.qv
+    if getattr(state, "_metal_setup_state", False):
+        state._array_module.context.submit_kernel(
+            "calc_cq",
+            {
+                "qv": state.qv, "qc": state.qc, "qr": state.qr,
+                "qi": qi, "qs": qs, "qg": qg, "qh": qh,
+                "cqu": cqu, "cqv": cqv, "cqw": cqw,
+            },
+            {"n_mass": n_mass, "nz": nz, "ny": ny, "nx": nx},
+            exact_policy=WRF_EXACT,
+            grid_size=max(nz * ny * (nx + 1),
+                          nz * (ny + 1) * nx,
+                          (nz + 1) * ny * nx),
+        )
+        return cqu, cqv, cqw, True
+    n = (nz + 1) * (ny + 1) * (nx + 1)
+    blocks = (n + _THREADS - 1) // _THREADS
+    get_kernel("acoustic", "calc_cq")(
+        (blocks,), (_THREADS,),
+        (state.qv, state.qc, state.qr, qi, qs, qg, qh, cqu, cqv, cqw,
+         np.int32(n_mass), np.int32(nz), np.int32(ny), np.int32(nx)))
+    return cqu, cqv, cqw, True
+
+
+def acoustic_substep_explicit(state: DomainState, cfg: RunConfig,
+                              dtau: float, first: bool, cq=None,
+                              mudf=None) -> None:
+    """Explicit part of one acoustic substep of length ``dtau``.
+
+    Advances ``u_pp``/``v_pp`` with the damped pressure gradient (the
+    gradient sees ``p_pp + smdiv*(p_pp - p_pp_old)``; on the ``first``
+    substep there is no history and the damping is dropped), saves
+    the pre-update ``p_pp``/``mu_pp``/``th_pp`` histories while traversing
+    those fields, then advances ``mu_pp``, ``ww_pp`` and ``th_pp`` from the
+    updated momenta.
+
+    Open lateral boundaries (Task 9): with ``cfg.open_x``/``open_y`` the
+    boundary-normal momentum at the two boundary faces skips the pressure
+    gradient and advances by the large-step tendency alone, WRF
+    ``advance_uv``'s ``i_start_up``/``j_start_vp`` loop-bound exclusions
+    (module_small_step_em.F).  The kernel computes the periodic update
+    everywhere (the seam gradient is meaningless there) and the boundary
+    faces are then rebuilt from their saved pre-substep values plus
+    ``dtau * ru_t`` (the radiative tendency installed by
+    ``dycore.apply_open_radiative_bc``).
+    """
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    smdiv = 0.0 if first else cfg.smdiv
+    if cq is None:
+        cq = prepare_moist_cq(state, cfg)
+    cqu, cqv, _cqw, use_cq = cq
+    mudf_arg = state.mup if mudf is None else mudf
+    write_mudf = np.int32(mudf is not None)
+    mu_old = state.scratch((ny, nx), "acoustic_mu_pp_old")
+    th_old = state.scratch((nz, ny, nx), "acoustic_th_pp_old")
+
+    radiative_x = cfg.open_x and not _boundary_forced(cfg)
+    radiative_y = cfg.open_y and not _boundary_forced(cfg)
+    if radiative_x:
+        sx = state.scratch((nz, ny, 2), "openbc_upp_faces")
+        sx[..., 0] = state.u_pp[:, :, 0]
+        sx[..., 1] = state.u_pp[:, :, -1]
+    if radiative_y:
+        sy = state.scratch((nz, 2, nx), "openbc_vpp_faces")
+        sy[:, 0, :] = state.v_pp[:, 0, :]
+        sy[:, 1, :] = state.v_pp[:, -1, :]
+
+    kernel = get_kernel("acoustic", "advance_uv")
+    n = nz * (ny + 1) * (nx + 1)
+    blocks = (n + _THREADS - 1) // _THREADS
+    kernel((blocks,), (_THREADS,),
+           (state.u_pp, state.v_pp, state.ru_t, state.rv_t,
+            state.p_pp, state.p_pp_old, state.ph_pp, state.php, state.phb,
+            state.alt, state.al_pp, state.pb,
+             state.mup, state.mu_pp, state.mub2d,
+             state.c1h, state.c2h, state.fnm, state.fnp, state.rdnw,
+             cqu, cqv, np.int32(use_cq),
+             state.cf1, state.cf2, state.cf3,
+            np.int32(cfg.top_lid),
+            DTYPE(1.0 / cfg.dx), DTYPE(1.0 / cfg.dy),
+            DTYPE(dtau), DTYPE(smdiv),
+            np.int32(_spec_zone(cfg)), _base3d(state),
+            np.int32(nz), np.int32(ny), np.int32(nx)))
+
+    if radiative_x:
+        state.u_pp[:, :, 0] = sx[..., 0] + DTYPE(dtau) * state.ru_t[:, :, 0]
+        state.u_pp[:, :, -1] = (sx[..., 1]
+                                + DTYPE(dtau) * state.ru_t[:, :, -1])
+    if radiative_y:
+        state.v_pp[:, 0, :] = sy[:, 0, :] + DTYPE(dtau) * state.rv_t[:, 0, :]
+        state.v_pp[:, -1, :] = (sy[:, 1, :]
+                                + DTYPE(dtau) * state.rv_t[:, -1, :])
+    # Open boundaries: the kernel's cross-boundary neighbour reads clamp
+    # (WRF's zero-gradient ghosts) instead of wrapping.  Map factors
+    # (Task 3) select the _msf kernel variant: the msf==1 kernel stays
+    # byte-identical to Phase 2 so its codegen cannot drift off the pinned
+    # bitwise regression.
+    blocks = (ny * nx + _THREADS - 1) // _THREADS
+    if state.has_msf:
+        kernel = get_kernel("acoustic", "advance_mu_th_msf")
+        kernel((blocks,), (_THREADS,),
+               (state.u_pp, state.v_pp, state.u, state.v,
+                 state.mup, state.mu_pp, mu_old, state.rmu_t,
+                 mudf_arg, write_mudf,
+                 state.thp, state.thb, state.th_pp, th_old, state.rth_t,
+                 state.ww_pp,
+                 *((state.scratch((nz + 1, ny, nx), "rk_ww"),) if WRF_EXACT else ()),
+                 state.p_pp, state.p_pp_old,
+                 state.dnw, state.rdnw, state.fnm, state.fnp,
+                state.c1h, state.c2h, state.mub2d,
+                state.msft, state.msfu, state.msfv,
+                DTYPE(1.0 / cfg.dx), DTYPE(1.0 / cfg.dy), DTYPE(dtau),
+                _base3d(state), np.int32(nz), np.int32(ny), np.int32(nx),
+                np.int32(_boundary_x(cfg)), np.int32(_boundary_y(cfg)),
+                np.int32(_mass_w_boundary_zone(cfg))))
+
+    else:
+        kernel = get_kernel("acoustic", "advance_mu_th")
+        kernel((blocks,), (_THREADS,),
+               (state.u_pp, state.v_pp, state.u, state.v,
+                 state.mup, state.mu_pp, mu_old, state.rmu_t,
+                 mudf_arg, write_mudf,
+                 state.thp, state.thb, state.th_pp, th_old, state.rth_t,
+                 state.ww_pp,
+                 *((state.scratch((nz + 1, ny, nx), "rk_ww"),) if WRF_EXACT else ()),
+                 state.p_pp, state.p_pp_old,
+                 state.dnw, state.rdnw, state.fnm, state.fnp,
+                state.c1h, state.c2h, state.mub2d,
+                DTYPE(1.0 / cfg.dx), DTYPE(1.0 / cfg.dy), DTYPE(dtau),
+                _base3d(state), np.int32(nz), np.int32(ny), np.int32(nx),
+                np.int32(_boundary_x(cfg)), np.int32(_boundary_y(cfg)),
+                np.int32(_mass_w_boundary_zone(cfg))))
+
+    if WRF_EXACT and _mass_w_boundary_zone(cfg):
+        get_kernel("acoustic", "advance_exact_frame_mu_t")(
+            (blocks,), (_THREADS,),
+            (state.mu_pp, state.th_pp, state.rmu_t, state.rth_t,
+             DTYPE(dtau), np.int32(_mass_w_boundary_zone(cfg)),
+             np.int32(not _boundary_x(cfg)), np.int32(nz),
+             np.int32(ny), np.int32(nx)))
+
+
+#: ``WPHI_MAX_LEV`` tiers ``kernels/acoustic.cu`` is compiled at, ascending.
+#: The bound sizes the one per-thread RHS column in ``advance_w_phi`` and
+#: ``advance_w_phi_msf`` and nothing else, so a tier costs 4 B of per-thread
+#: local frame per admitted full level and moves no arithmetic.
+#:
+#: 129 is the literal the source keeps when nothing overrides it.  Every
+#: ``nz <= 128`` configuration therefore compiles the UNSPECIALIZED module
+#: -- :func:`woof.core.kernels.get_kernel`, no define injected, the exact
+#: string NVRTC received before this ladder existed -- which is what makes
+#: the below-ceiling kernel identical by construction rather than by
+#: measurement.  Higher tiers exist only to admit deeper columns; they are
+#: coarse on purpose, so a sweep over nz does not compile a module per nz.
+WPHI_LEVEL_TIERS = (129, 193, 257)
+
+#: The tier compiled with no define injected (the literal in acoustic.cu).
+UNSPECIALIZED_WPHI_LEVEL_TIER = WPHI_LEVEL_TIERS[0]
+
+#: Deepest ``nz`` the in-thread tridiagonal solve admits, from the top tier.
+#: Mirrored by ``woof.physics_vertical_contract`` for front doors that must
+#: refuse a grid without importing CuPy.
+MAX_ACOUSTIC_LEVELS = WPHI_LEVEL_TIERS[-1] - 1
+
+
+def wphi_level_tier(nz: int) -> int:
+    """The ``WPHI_MAX_LEV`` this ``nz`` compiles the w''-phi'' solve at.
+
+    The solve indexes full levels ``0..nz``, so a configuration needs
+    ``nz + 1`` entries and takes the smallest tier that holds them.
+    """
+    nz = int(nz)
+    if nz < 1:
+        raise ValueError(f"nz must be positive, got {nz}")
+    for tier in WPHI_LEVEL_TIERS:
+        if nz + 1 <= tier:
+            return tier
+    raise ValueError(f"nz={nz} exceeds the in-thread solve limit "
+                     f"({MAX_ACOUSTIC_LEVELS} half levels)")
+
+
+def wphi_module_defines(nz: int) -> tuple[tuple[str, int], ...]:
+    """Integer defines the w''-phi'' module compiles with at this ``nz``.
+
+    EMPTY at the shipped tier.  That emptiness is the whole mechanism: it
+    routes the launcher to the unspecialized loader, which assembles the
+    same string it assembled before the ladder existed, so no ``nz <= 128``
+    configuration can see a different translation unit.  Both the launcher
+    and :func:`wphi_kernel_source` branch here and nowhere else, so the
+    source a test digests is the source the driver compiles.
+    """
+    tier = wphi_level_tier(nz)
+    if tier == UNSPECIALIZED_WPHI_LEVEL_TIER:
+        return ()
+    return (("WPHI_MAX_LEV", tier),)
+
+
+def wphi_kernel_source(nz: int) -> str:
+    """The exact string NVRTC receives for the w''-phi'' solve at ``nz``.
+
+    CPU-only mirror of what :func:`_w_phi_kernel` compiles, so the
+    below-ceiling identity is testable on a host with no device.
+    """
+    defines = wphi_module_defines(nz)
+    if not defines:
+        return module_source("acoustic")
+    return module_source_int_defines("acoustic", defines)
+
+
+def _w_phi_kernel(name: str, nz: int):
+    """The w''-phi'' solve compiled at this configuration's tier.
+
+    At the shipped tier this is :func:`get_kernel` -- the same call, on the
+    same module, that every other acoustic kernel makes -- so a
+    below-ceiling run compiles exactly one acoustic translation unit and it
+    is the pre-ladder one.
+    """
+    defines = wphi_module_defines(nz)
+    if not defines:
+        return get_kernel("acoustic", name)
+    return get_kernel_int_defines("acoustic", name, defines)
+
+
+def prepare_acoustic_coefficients(state: DomainState, cfg: RunConfig,
+                                  dtau: float, cq=None) -> tuple:
+    """Prepare the fixed-reference implicit coefficients for one RK stage.
+
+    ``p``, ``alt`` and ``mup`` are the stage-reference diagnostics/state;
+    acoustic substeps update only the perturbation ``*_pp`` fields.  The
+    returned persistent buffers therefore remain valid until the stage is
+    folded back by ``dycore._finish_small_steps``.
+    """
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    wphi_level_tier(nz)   # refuse a too-deep column before allocating
+    c2a = state.scratch((nz, ny, nx), "acoustic_c2a")
+    a = state.scratch((nz + 1, ny, nx), "acoustic_a")
+    alpha = state.scratch((nz + 1, ny, nx), "acoustic_alpha")
+    gam = state.scratch((nz + 1, ny, nx), "acoustic_gamma")
+    if cq is None:
+        cq = prepare_moist_cq(state, cfg)
+    cqu, cqv, cqw, use_cq = cq
+    if getattr(state, "_metal_setup_state", False):
+        arrays = (state.p, state.alt, state.mup, c2a, a, alpha, gam,
+                  state.rdn, state.rdnw, state.c1h, state.c2h,
+                  state.c1f, state.c2f, state.mub2d, cqw)
+        state._array_module.context.submit_acoustic_calc_coefs(
+            arrays, nz=nz, ny=ny, nx=nx, moist_cq=bool(use_cq),
+            top_lid=bool(cfg.top_lid), wrf_exact=WRF_EXACT,
+            dtau=float(DTYPE(dtau)), epssm=float(DTYPE(cfg.epssm)),
+            gravity=c.G, gamma=c.GAMMA)
+        base = (c2a, a, alpha, gam)
+        return base + cq if use_cq else base
+    blocks = (ny * nx + _THREADS - 1) // _THREADS
+    kernel = get_kernel("acoustic", "calc_coefs")
+    kernel((blocks,), (_THREADS,),
+           (state.p, state.alt, state.mup, c2a, a, alpha, gam,
+            state.rdn, state.rdnw,
+            state.c1h, state.c2h, state.c1f, state.c2f, state.mub2d,
+            cqw, np.int32(use_cq),
+            DTYPE(dtau), DTYPE(cfg.epssm), np.int32(cfg.top_lid),
+            np.int32(nz), np.int32(ny), np.int32(nx)))
+    base = (c2a, a, alpha, gam)
+    return base + cq if use_cq else base
+
+
+def submit_metal_acoustic_advance_uv(state: DomainState, cfg: RunConfig,
+                                    dtau: float, smdiv: float, *, cq=None,
+                                    _prepare: bool = False):
+    """Submit the generated wide Metal binding for an acoustic UV step.
+
+    This is an internal port seam while the remaining acoustic kernels are
+    being moved; it does not make ``dycore.step`` available on Metal.
+    """
+    if not getattr(state, "_metal_setup_state", False):
+        raise TypeError("the Metal UV submission requires a Metal DomainState")
+    if cq is None:
+        if getattr(state, "qv", None) is not None:
+            raise NotImplementedError(
+                "Metal acoustic moisture coefficients are not ported yet")
+        cq = (state.p, state.p, state.p, False)
+    cqu, cqv, _, use_cq = cq
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    arrays = {
+        "u_pp": state.u_pp, "v_pp": state.v_pp,
+        "ru_t": state.ru_t, "rv_t": state.rv_t,
+        "p_pp": state.p_pp, "p_pp_old": state.p_pp_old,
+        "ph_pp": state.ph_pp, "php": state.php, "phb": state.phb,
+        "alt": state.alt, "al_pp": state.al_pp, "pb": state.pb,
+        "mup": state.mup, "mu_pp": state.mu_pp, "mub2d": state.mub2d,
+        "c1h": state.c1h, "c2h": state.c2h,
+        "fnm": state.fnm, "fnp": state.fnp, "rdnw": state.rdnw,
+        "cqu": cqu, "cqv": cqv,
+    }
+    params = {
+        "moist_cq": int(bool(use_cq)), "cf1": float(state.cf1),
+        "cf2": float(state.cf2), "cf3": float(state.cf3),
+        "top_lid": int(bool(cfg.top_lid)),
+        "rdx": 1.0 / cfg.dx, "rdy": 1.0 / cfg.dy,
+        "dtau": float(DTYPE(dtau)), "smdiv": float(DTYPE(smdiv)),
+        "spec_zone": _spec_zone(cfg), "base3d": int(_base3d(state)),
+        "radiative_x": int(bool(cfg.open_x and not _boundary_forced(cfg))),
+        "radiative_y": int(bool(cfg.open_y and not _boundary_forced(cfg))),
+        "nz": nz, "ny": ny, "nx": nx,
+    }
+    grid_size = nz * (ny + 1) * (nx + 1)
+    context = state._array_module.context
+    if _prepare:
+        return context.prepare_kernel_call(
+            "advance_uv", arrays, params, exact_policy=WRF_EXACT,
+            grid_size=grid_size)
+    return context.submit_kernel("advance_uv", arrays, params,
+                                 exact_policy=WRF_EXACT,
+                                 grid_size=grid_size)
+
+
+def submit_metal_acoustic_advance_mu_th(state: DomainState, cfg: RunConfig,
+                                       dtau: float, *, mudf=None,
+                                       _prepare: bool = False):
+    """Submit the generated Metal column-mass/theta acoustic kernel.
+
+    The map-factor resources are present in the generated layout for both
+    variants. Flat-grid states bind unit factors so the kernel has one stable
+    per-entry-point ABI; exact mode also binds the reference omega workspace.
+    """
+    if not getattr(state, "_metal_setup_state", False):
+        raise TypeError("the Metal mu/theta submission requires a Metal DomainState")
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    module = state._array_module
+    write_mudf = mudf is not None
+    if mudf is None:
+        mudf = state.scratch((ny, nx), "acoustic_mudf_unused")
+    msft, msfu, msfv = state.msft, state.msfu, state.msfv
+    mapped = int(bool(state.has_msf))
+    ww_ref = (state.scratch((nz + 1, ny, nx), "rk_ww")
+              if WRF_EXACT else state.ww_pp)
+    arrays = {
+        "u_pp": state.u_pp, "v_pp": state.v_pp, "u": state.u, "v": state.v,
+        "mup": state.mup, "mu_pp": state.mu_pp,
+        "mu_pp_old": state.scratch((ny, nx), "acoustic_mu_pp_old"),
+        "rmu_t": state.rmu_t, "mudf": mudf,
+        "thp": state.thp, "thb": state.thb, "th_pp": state.th_pp,
+        "th_pp_old": state.scratch((nz, ny, nx), "acoustic_th_pp_old"),
+        "rth_t": state.rth_t, "ww_pp": state.ww_pp, "ww_ref": ww_ref,
+        "p_pp": state.p_pp, "p_pp_old": state.p_pp_old,
+        "dnw": state.dnw, "rdnw": state.rdnw, "fnm": state.fnm,
+        "fnp": state.fnp, "c1h": state.c1h, "c2h": state.c2h,
+        "mub2d": state.mub2d, "msft": msft, "msfu": msfu, "msfv": msfv,
+    }
+    params = {
+        "write_mudf": int(write_mudf), "rdx": 1.0 / cfg.dx,
+        "rdy": 1.0 / cfg.dy, "dtau": float(DTYPE(dtau)),
+        "base3d": int(_base3d(state)), "mapped": mapped,
+        "nz": nz, "ny": ny, "nx": nx,
+        "open_x": int(_boundary_x(cfg)), "open_y": int(_boundary_y(cfg)),
+        "spec_zone": _mass_w_boundary_zone(cfg),
+    }
+    if _prepare:
+        return module.context.prepare_kernel_call(
+            "advance_mu_th", arrays, params, exact_policy=WRF_EXACT,
+            grid_size=ny * nx)
+    return module.context.submit_kernel(
+        "advance_mu_th", arrays, params, exact_policy=WRF_EXACT,
+        grid_size=ny * nx)
+
+
+def submit_metal_acoustic_advance_w_phi(
+        state: DomainState, cfg: RunConfig, dtau: float,
+        coefficients: tuple, *, cq=None, _prepare: bool = False):
+    """Submit the implicit W/phi solve and pressure diagnosis on Metal."""
+    if not getattr(state, "_metal_setup_state", False):
+        raise TypeError("the Metal w/phi submission requires a Metal DomainState")
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    wphi_level_tier(nz)
+    module = state._array_module
+    if cq is None:
+        if getattr(state, "qv", None) is not None:
+            raise NotImplementedError("Metal acoustic moisture coefficients are not ported yet")
+        cq = (state.p, state.p, state.p, False)
+    cqw, use_cq = cq[2], bool(cq[3])
+    c2a, a, alpha, gam = coefficients[:4]
+    arrays = {
+        "w_pp": state.w_pp, "ph_pp": state.ph_pp,
+        "rw_t": state.rw_t, "rph_t": state.rph_t,
+        "ww_pp": state.ww_pp, "mu_pp": state.mu_pp,
+        "mu_pp_old": state.scratch((ny, nx), "acoustic_mu_pp_old"),
+        "th_pp": state.th_pp,
+        "th_pp_old": state.scratch((nz, ny, nx), "acoustic_th_pp_old"),
+        "thp": state.thp, "thb": state.thb, "php": state.php,
+        "phb": state.phb, "alt": state.alt, "c2a": c2a,
+        "a": a, "alpha": alpha, "gam": gam, "mup": state.mup,
+        "u_pp": state.u_pp, "v_pp": state.v_pp, "w_ref": state.w,
+        "ht": state.ht, "rdn": state.rdn, "rdnw": state.rdnw,
+        "fnm": state.fnm, "fnp": state.fnp, "c1h": state.c1h,
+        "c2h": state.c2h, "c1f": state.c1f, "c2f": state.c2f,
+        "mub2d": state.mub2d, "cqw": cqw,
+        "p_pp": state.p_pp, "al_pp": state.al_pp, "msft": state.msft,
+    }
+    dampmag = dtau * cfg.dampcoef if cfg.damp_opt == 3 else 0.0
+    params = {
+        "moist_cq": int(use_cq), "cf1": float(state.cf1),
+        "cf2": float(state.cf2), "cf3": float(state.cf3),
+        "rdx": 1.0 / cfg.dx, "rdy": 1.0 / cfg.dy,
+        "dtau": float(DTYPE(dtau)), "epssm": float(DTYPE(cfg.epssm)),
+        "dampmag": float(DTYPE(dampmag)), "zdamp": float(DTYPE(cfg.zdamp)),
+        "boundary_x": int(_boundary_x(cfg)), "boundary_y": int(_boundary_y(cfg)),
+        "spec_zone": _mass_w_boundary_zone(cfg),
+        "base3d": int(_base3d(state)), "top_lid": int(bool(cfg.top_lid)),
+        "mapped": int(bool(state.has_msf)), "nz": nz, "ny": ny, "nx": nx,
+    }
+    if _prepare:
+        return module.context.prepare_kernel_call(
+            "advance_w_phi", arrays, params, exact_policy=WRF_EXACT,
+            grid_size=ny * nx)
+    return module.context.submit_kernel(
+        "advance_w_phi", arrays, params, exact_policy=WRF_EXACT,
+        grid_size=ny * nx)
+
+
+def submit_metal_acoustic_boundary_frame(state: DomainState,
+                                        cfg: RunConfig, dtau: float,
+                                        coefficients: tuple, *,
+                                        _prepare: bool = False):
+    """Apply the ordinary specified/nested frame after the interior solve."""
+    if WRF_EXACT:
+        raise NotImplementedError(
+            "Metal acoustic boundary frames support ordinary arithmetic only")
+    if not getattr(state, "_metal_setup_state", False):
+        raise TypeError("the Metal boundary-frame submission needs Metal state")
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    c2a = coefficients[0]
+    params = {
+        "dtau": float(DTYPE(dtau)),
+        "spec_zone": _spec_zone(cfg),
+        "base3d": int(_base3d(state)),
+        "table_w": int(_frame_takes_table_w(cfg)),
+        "nz": nz, "ny": ny, "nx": nx,
+    }
+    arrays = {
+        "ph_pp": state.ph_pp, "w_pp": state.w_pp,
+        "p_pp": state.p_pp, "al_pp": state.al_pp,
+        "rph_t": state.rph_t, "rw_t": state.rw_t,
+        "th_pp": state.th_pp, "mup": state.mup,
+        "mu_pp": state.mu_pp, "mub2d": state.mub2d,
+        "rmu_t": state.rmu_t, "php": state.php,
+        "thp": state.thp, "thb": state.thb, "alt": state.alt,
+        "c2a": c2a, "rdnw": state.rdnw,
+        "c1h": state.c1h, "c2h": state.c2h,
+        "c1f": state.c1f, "c2f": state.c2f,
+    }
+    context = state._array_module.context
+    if _prepare:
+        return context.prepare_kernel_call(
+            "acoustic_boundary_frame", arrays, params, exact_policy=False,
+            grid_size=ny * nx)
+    return context.submit_kernel("acoustic_boundary_frame", arrays, params,
+                                 exact_policy=False, grid_size=ny * nx)
+
+
+def prepare_acoustic_substep_launch(state: DomainState, cfg: RunConfig,
+                                    dtau: float, coefficients: tuple, *,
+                                    mudf=None, label: str = "acoustic"):
+    """Bind one stage's invariant acoustic launch metadata once.
+
+    The returned callable submits the same raw kernels, grids, blocks and
+    argument values as :func:`acoustic_substep`.  Device arrays are retained
+    by reference and continue to expose their in-place updates; only the
+    immutable Python launch containers and scalar wrappers are reused.
+    """
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    upper_wind_limiter = prepare_upper_wind_limiter(state, cfg, dtau)
+    wphi_level_tier(nz)   # refuse a too-deep column before allocating
+
+    if getattr(state, "_metal_setup_state", False):
+        cq = (coefficients[4:] if len(coefficients) > 4 else
+              (state.p, state.p, state.p, False))
+        entrypoints = ["advance_uv", "advance_mu_th", "advance_w_phi"]
+        grid_sizes = [nz * (ny + 1) * (nx + 1), ny * nx, ny * nx]
+        if _boundary_forced(cfg):
+            entrypoints.append("acoustic_boundary_frame")
+            grid_sizes.append(ny * nx)
+        from woof.metal.generated import kernel_specs
+        cache_identities = tuple(
+            f"{getattr(kernel_specs, name.upper() + '_SHADER_HASH')}"
+            f":{getattr(kernel_specs, name.upper() + '_LAYOUT_HASH')}"
+            f":{'wrf-exact' if WRF_EXACT else 'default'}"
+            for name in entrypoints)
+        topology = _AcousticSubstepTopology(
+            tuple(entrypoints), cache_identities, tuple(grid_sizes),
+            bool(WRF_EXACT), label)
+        substep_index = 0
+
+        def launch_metal(*, first: bool) -> None:
+            nonlocal substep_index
+            # Resolve current arrays and stage scalars at execution time,
+            # then freeze this invocation's descriptors before native enqueue.
+            calls = [submit_metal_acoustic_advance_uv(
+                state, cfg, dtau, 0.0 if first else cfg.smdiv, cq=cq,
+                _prepare=True)]
+            calls.append(submit_metal_acoustic_advance_mu_th(
+                state, cfg, dtau, mudf=mudf, _prepare=True))
+            calls.append(submit_metal_acoustic_advance_w_phi(
+                state, cfg, dtau, coefficients, cq=cq, _prepare=True))
+            if _boundary_forced(cfg):
+                calls.append(submit_metal_acoustic_boundary_frame(
+                    state, cfg, dtau, coefficients, _prepare=True))
+            if (tuple(call.entrypoint for call in calls)
+                    != topology.entrypoints
+                    or tuple(call.cache_identity for call in calls)
+                    != topology.cache_identities
+                    or tuple(call.grid_size for call in calls)
+                    != topology.grid_sizes
+                    or any(call.exact_policy != topology.exact_policy
+                           for call in calls)):
+                raise RuntimeError(
+                    "acoustic substep execution no longer matches its "
+                    "immutable Metal dispatch topology")
+            context = state._array_module.context
+            batch_label = (
+                f"{topology.label} substep {substep_index + 1}: "
+                + " -> ".join(topology.entrypoints))
+            if context.batch_kernel_calls:
+                context.submit_kernel_batch(tuple(calls), label=batch_label)
+            else:
+                for call in calls:
+                    context.submit_prepared_kernel_call(
+                        call, label=f"{batch_label}; direct {call.entrypoint}")
+            substep_index += 1
+
+        return launch_metal
+
+    mu_old = state.scratch((ny, nx), "acoustic_mu_pp_old")
+    th_old = state.scratch((nz, ny, nx), "acoustic_th_pp_old")
+    c2a, a, alpha, gam = coefficients[:4]
+    if len(coefficients) == 4:
+        cq = (state.p, state.p, state.p, False)
+    else:
+        cq = coefficients[4:]
+    cqu, cqv, cqw, use_cq = cq
+    mudf_arg = state.mup if mudf is None else mudf
+    write_mudf = np.int32(mudf is not None)
+
+    block = (_THREADS,)
+    uv_n = nz * (ny + 1) * (nx + 1)
+    uv_grid = ((uv_n + _THREADS - 1) // _THREADS,)
+    column_grid = ((ny * nx + _THREADS - 1) // _THREADS,)
+    rdx = DTYPE(1.0 / cfg.dx)
+    rdy = DTYPE(1.0 / cfg.dy)
+    dtau_arg = DTYPE(dtau)
+    base3d = _base3d(state)
+    nz_arg, ny_arg, nx_arg = np.int32(nz), np.int32(ny), np.int32(nx)
+    spec_zone = np.int32(_spec_zone(cfg))
+    mass_w_zone = np.int32(_mass_w_boundary_zone(cfg))
+    boundary_x = np.int32(_boundary_x(cfg))
+    boundary_y = np.int32(_boundary_y(cfg))
+
+    uv_kernel = get_kernel("acoustic", "advance_uv")
+    uv_prefix = (
+        state.u_pp, state.v_pp, state.ru_t, state.rv_t,
+        state.p_pp, state.p_pp_old, state.ph_pp, state.php, state.phb,
+        state.alt, state.al_pp, state.pb,
+        state.mup, state.mu_pp, state.mub2d,
+        state.c1h, state.c2h, state.fnm, state.fnp, state.rdnw,
+        cqu, cqv, np.int32(use_cq),
+        state.cf1, state.cf2, state.cf3, np.int32(cfg.top_lid),
+        rdx, rdy, dtau_arg,
+    )
+    uv_suffix = (spec_zone, base3d, nz_arg, ny_arg, nx_arg)
+    uv_first_args = uv_prefix + (DTYPE(0.0),) + uv_suffix
+    uv_later_args = uv_prefix + (DTYPE(cfg.smdiv),) + uv_suffix
+
+    if state.has_msf:
+        mu_name = "advance_mu_th_msf"
+        mu_map_args = (state.msft, state.msfu, state.msfv)
+    else:
+        mu_name = "advance_mu_th"
+        mu_map_args = ()
+    mu_kernel = get_kernel("acoustic", mu_name)
+    mu_args = (
+        state.u_pp, state.v_pp, state.u, state.v,
+        state.mup, state.mu_pp, mu_old, state.rmu_t,
+        mudf_arg, write_mudf,
+        state.thp, state.thb, state.th_pp, th_old, state.rth_t,
+        state.ww_pp,
+                 *((state.scratch((nz + 1, ny, nx), "rk_ww"),) if WRF_EXACT else ()),
+                 state.p_pp, state.p_pp_old,
+        state.dnw, state.rdnw, state.fnm, state.fnp,
+        state.c1h, state.c2h, state.mub2d,
+    ) + mu_map_args + (
+        rdx, rdy, dtau_arg, base3d, nz_arg, ny_arg, nx_arg,
+        boundary_x, boundary_y, mass_w_zone,
+    )
+
+    exact_frame_kernel = None
+    exact_frame_args = None
+    if WRF_EXACT and int(mass_w_zone):
+        exact_frame_kernel = get_kernel("acoustic", "advance_exact_frame_mu_t")
+        exact_frame_args = (
+            state.mu_pp, state.th_pp, state.rmu_t, state.rth_t,
+            dtau_arg, mass_w_zone, np.int32(not int(boundary_x)),
+            nz_arg, ny_arg, nx_arg,
+        )
+
+    dampmag = dtau * cfg.dampcoef if cfg.damp_opt == 3 else 0.0
+    w_name = "advance_w_phi_msf" if state.has_msf else "advance_w_phi"
+    w_kernel = _w_phi_kernel(w_name, nz)
+    w_map_args = (state.msft,) if state.has_msf else ()
+    w_args = (
+        state.w_pp, state.ph_pp, state.rw_t, state.rph_t, state.ww_pp,
+        state.mu_pp, mu_old, state.th_pp, th_old,
+        state.thp, state.thb, state.php, state.phb, state.alt, c2a,
+        a, alpha, gam, state.mup,
+        state.u_pp, state.v_pp, state.w, state.ht,
+        state.rdn, state.rdnw, state.fnm, state.fnp,
+        state.c1h, state.c2h, state.c1f, state.c2f, state.mub2d,
+        cqw, np.int32(use_cq),
+    ) + w_map_args + (
+        state.p_pp, state.al_pp, state.cf1, state.cf2, state.cf3,
+        rdx, rdy, dtau_arg, DTYPE(cfg.epssm), DTYPE(dampmag),
+        DTYPE(cfg.zdamp), boundary_x, boundary_y, mass_w_zone, base3d,
+        np.int32(cfg.top_lid), nz_arg, ny_arg, nx_arg,
+    )
+
+    frame_kernel = None
+    frame_args = None
+    if cfg.specified and not _frame_takes_table_w(cfg):
+        frame_kernel = get_kernel("acoustic", "advance_specified_phi_w")
+        frame_args = (
+            state.ph_pp, state.w_pp, state.p_pp, state.al_pp, state.rph_t,
+            state.th_pp, state.mup, state.mu_pp, state.mub2d, state.rmu_t,
+            state.php, state.thp, state.thb, state.alt, c2a, state.rdnw,
+            state.c1h, state.c2h, state.c1f, state.c2f, dtau_arg,
+            np.int32(cfg.spec_zone), base3d, nz_arg, ny_arg, nx_arg,
+        )
+    elif _frame_takes_table_w(cfg):
+        frame_kernel = get_kernel("acoustic", "advance_nested_phi_w")
+        frame_args = (
+            state.ph_pp, state.w_pp, state.p_pp, state.al_pp, state.rph_t,
+            state.rw_t, state.th_pp, state.mup, state.mu_pp, state.mub2d,
+            state.rmu_t, state.php, state.thp, state.thb, state.alt, c2a,
+            state.rdnw, state.c1h, state.c2h, state.c1f, state.c2f,
+            dtau_arg, np.int32(cfg.spec_zone), base3d,
+            nz_arg, ny_arg, nx_arg,
+        )
+
+    radiative_x = cfg.open_x and not _boundary_forced(cfg)
+    radiative_y = cfg.open_y and not _boundary_forced(cfg)
+    sx = (state.scratch((nz, ny, 2), "openbc_upp_faces")
+          if radiative_x else None)
+    sy = (state.scratch((nz, 2, nx), "openbc_vpp_faces")
+          if radiative_y else None)
+
+    def launch(*, first: bool) -> None:
+        if radiative_x:
+            sx[..., 0] = state.u_pp[:, :, 0]
+            sx[..., 1] = state.u_pp[:, :, -1]
+        if radiative_y:
+            sy[:, 0, :] = state.v_pp[:, 0, :]
+            sy[:, 1, :] = state.v_pp[:, -1, :]
+
+        uv_kernel(uv_grid, block,
+                  uv_first_args if first else uv_later_args)
+
+        if radiative_x:
+            state.u_pp[:, :, 0] = (sx[..., 0]
+                                   + dtau_arg * state.ru_t[:, :, 0])
+            state.u_pp[:, :, -1] = (sx[..., 1]
+                                    + dtau_arg * state.ru_t[:, :, -1])
+        if radiative_y:
+            state.v_pp[:, 0, :] = (sy[:, 0, :]
+                                   + dtau_arg * state.rv_t[:, 0, :])
+            state.v_pp[:, -1, :] = (sy[:, 1, :]
+                                    + dtau_arg * state.rv_t[:, -1, :])
+
+        mu_kernel(column_grid, block, mu_args)
+        if exact_frame_kernel is not None:
+            exact_frame_kernel(column_grid, block, exact_frame_args)
+        w_kernel(column_grid, block, w_args)
+        if upper_wind_limiter is not None:
+            upper_wind_limiter()
+        if frame_kernel is not None:
+            frame_kernel(column_grid, block, frame_args)
+
+    return launch
+
+
+def acoustic_substep(state: DomainState, cfg: RunConfig,
+                     dtau: float, first: bool, coefficients=None,
+                     mudf=None) -> None:
+    """One complete acoustic substep of length ``dtau``.
+
+    Explicit part (Task 10), then the vertically implicit w''-phi'' solve
+    off-centered by ``cfg.epssm`` (WRF ``calc_coef_w``/``advance_w``,
+    kinematic terrain bottom BC, and WRF's configurable open/rigid top), then
+    the linearized-EOS p''/alpha'' diagnosis.  The pre-substep
+    mu''/(mu*theta)'' are saved first: the implicit solve's buoyancy needs
+    their epssm averages (WRF ``muave``/``t_2ave``).
+    """
+    nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
+    wphi_level_tier(nz)   # refuse a too-deep column before allocating
+
+    if coefficients is None:
+        cq = prepare_moist_cq(state, cfg)
+    elif len(coefficients) == 4:
+        cq = (state.p, state.p, state.p, False)
+    else:
+        cq = coefficients[4:]
+    acoustic_substep_explicit(state, cfg, dtau, first, cq=cq, mudf=mudf)
+    mu_old = state.scratch((ny, nx), "acoustic_mu_pp_old")
+    th_old = state.scratch((nz, ny, nx), "acoustic_th_pp_old")
+
+    # Standalone callers may omit a prepared tuple; dycore prepares exactly
+    # once per stage and supplies it to every substep.
+    if coefficients is None:
+        coefficients = prepare_acoustic_coefficients(state, cfg, dtau, cq=cq)
+    c2a, a, alpha, gam = coefficients[:4]
+    cqu, cqv, cqw, use_cq = cq
+    blocks = (ny * nx + _THREADS - 1) // _THREADS
+
+    dampmag = dtau * cfg.dampcoef if cfg.damp_opt == 3 else 0.0
+    # Map factors (Task 3): the _msf variant carries WRF advance_w's msfty
+    # factors; the msf==1 kernel stays byte-identical to Phase 2.
+    name = "advance_w_phi_msf" if state.has_msf else "advance_w_phi"
+    kernel = _w_phi_kernel(name, nz)
+    args = [state.w_pp, state.ph_pp, state.rw_t, state.rph_t, state.ww_pp,
+            state.mu_pp, mu_old, state.th_pp, th_old,
+             state.thp, state.thb, state.php, state.phb, state.alt, c2a,
+             a, alpha, gam, state.mup,
+            state.u_pp, state.v_pp, state.w, state.ht,
+            state.rdn, state.rdnw, state.fnm, state.fnp,
+             state.c1h, state.c2h, state.c1f, state.c2f, state.mub2d,
+             cqw, np.int32(use_cq)]
+    if state.has_msf:
+        args.append(state.msft)
+    args += [state.p_pp, state.al_pp,
+             state.cf1, state.cf2, state.cf3,
+             DTYPE(1.0 / cfg.dx), DTYPE(1.0 / cfg.dy),
+              DTYPE(dtau), DTYPE(cfg.epssm),
+              DTYPE(dampmag), DTYPE(cfg.zdamp),
+              np.int32(_boundary_x(cfg)), np.int32(_boundary_y(cfg)),
+              np.int32(_mass_w_boundary_zone(cfg)), _base3d(state),
+              np.int32(cfg.top_lid),
+              np.int32(nz), np.int32(ny), np.int32(nx)]
+    kernel((blocks,), (_THREADS,), tuple(args))
+
+    upper_wind_limiter = prepare_upper_wind_limiter(state, cfg, dtau)
+    if upper_wind_limiter is not None:
+        upper_wind_limiter()
+
+    if cfg.specified and not _frame_takes_table_w(cfg):
+        # The raw frame kernel preserves every eager FP32 round point in
+        # spec_bdyupdate_ph and combines its independent zero-gradient w copy.
+        n = ny * nx
+        blocks = (n + _THREADS - 1) // _THREADS
+        get_kernel("acoustic", "advance_specified_phi_w")(
+            (blocks,), (_THREADS,),
+            (state.ph_pp, state.w_pp, state.p_pp, state.al_pp, state.rph_t,
+             state.th_pp, state.mup, state.mu_pp, state.mub2d, state.rmu_t,
+             state.php, state.thp, state.thb, state.alt, c2a, state.rdnw,
+             state.c1h, state.c2h, state.c1f, state.c2f, DTYPE(dtau),
+             np.int32(cfg.spec_zone), _base3d(state), np.int32(nz),
+             np.int32(ny), np.int32(nx)))
+    elif _frame_takes_table_w(cfg):
+        # solve_em.F:1577-1611 ELSE: spec_bdyupdate_ph followed by
+        # spec_bdyupdate(w_2, rw_tend, dts_rk).  A specified domain that
+        # relaxes w (relax_w) takes this same frame.  This child-only raw kernel
+        # also repeats dyn's fused pressure diagnosis on the changed frame.
+        n = ny * nx
+        blocks = (n + _THREADS - 1) // _THREADS
+        get_kernel("acoustic", "advance_nested_phi_w")(
+            (blocks,), (_THREADS,),
+            (state.ph_pp, state.w_pp, state.p_pp, state.al_pp, state.rph_t,
+             state.rw_t, state.th_pp, state.mup, state.mu_pp, state.mub2d,
+             state.rmu_t, state.php, state.thp, state.thb, state.alt, c2a,
+             state.rdnw, state.c1h, state.c2h, state.c1f, state.c2f,
+             DTYPE(dtau), np.int32(cfg.spec_zone), _base3d(state),
+             np.int32(nz), np.int32(ny), np.int32(nx)))
+
+
+def run_acoustic_only(state: DomainState, cfg: RunConfig,
+                      dtau: float, n: int) -> None:
+    """Drive ``n`` acoustic substeps around the frozen reference state.
+
+    With zero large-step tendencies this integrates the pure (linearized)
+    acoustic system: used by the sound-wave-speed test.
+    """
+    if n <= 0:
+        return
+    coefficients = prepare_acoustic_coefficients(state, cfg, dtau)
+    launch_substep = prepare_acoustic_substep_launch(
+        state, cfg, dtau, coefficients)
+    for i in range(n):
+        launch_substep(first=(i == 0))

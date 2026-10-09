@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 88069d0cee6ec29ab72a77cf371e0cfdbfb15d66b00e4e27efea3013f0a5f09a.
+struct Nssl2SedimentAll256Resources {
+    device const float *air_density [[id(0)]];
+    device const float *temperature_k [[id(1)]];
+    device float *state [[id(2)]];
+    device const float *dz [[id(3)]];
+    device float *ignored_accumulator [[id(4)]];
+    device float *category_export [[id(5)]];
+};
+struct Nssl2SedimentAll256Params {
+    float dt;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Nssl2SedimentAll256Params) == 16, "nssl2_sediment_all_256 parameter ABI size changed");

@@ -1,0 +1,9 @@
+// Generated from kernel_signatures.json; layout c2da02ec9212bce9ce7503a7d25e9bc94a998235ff3f24c0d2117e2fa3bb31c7.
+struct BoundTkeResources {
+    device float *tke [[id(0)]];
+};
+struct BoundTkeParams {
+    int n;
+    float upper;
+};
+static_assert(sizeof(BoundTkeParams) == 8, "bound_tke parameter ABI size changed");

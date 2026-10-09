@@ -1,0 +1,23 @@
+// Generated from kernel_signatures.json; layout b46a42e550793529493e34ca2ac605b43e2a0a768ddb02d05d04ebbbb000fe08.
+struct UrbanBepSurfaceTemperatureFragmentResources {
+    device const float *column_param [[id(0)]];
+    device const int *column_param_ix [[id(1)]];
+    device const float *class_x [[id(2)]];
+    device const int *utype_urb [[id(3)]];
+    device const int *active_cols [[id(4)]];
+    device float *column_state [[id(5)]];
+    device const float *column_interp_x [[id(6)]];
+    device const float *swdown [[id(7)]];
+    device const float *glw [[id(8)]];
+    device const float *rlw [[id(9)]];
+    device const float *rlg [[id(10)]];
+    device const float *rsw [[id(11)]];
+    device const float *rsg [[id(12)]];
+    device float *surface_x [[id(13)]];
+    device int *error [[id(14)]];
+};
+struct UrbanBepSurfaceTemperatureFragmentParams {
+    int ncol;
+    float dt;
+};
+static_assert(sizeof(UrbanBepSurfaceTemperatureFragmentParams) == 8, "urban_bep_surface_temperature_fragment parameter ABI size changed");

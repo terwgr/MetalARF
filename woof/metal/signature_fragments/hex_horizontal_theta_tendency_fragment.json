@@ -1,0 +1,41 @@
+{
+  "kernels": [
+    {
+      "name": "hex_horizontal_theta_tendency_fragment",
+      "module": "hex_horizontal_theta_tendency_fragment",
+      "source": "woof/metal/shaders/hex_horizontal_theta_tendency_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_rho_theta_tendency horizontal transport",
+      "resources": [
+        ["theta", "float", "read"], ["theta_saved", "float", "read"],
+        ["rho_u", "float", "read"], ["rho_u_saved", "float", "read"],
+        ["adv_coefs", "float", "read"], ["adv_coefs_3rd", "float", "read"],
+        ["adv_cells_for_edge", "int32", "read"],
+        ["n_adv_cells_for_edge", "int32", "read"],
+        ["edges_on_cell", "int32", "read"], ["edge_counts", "int32", "read"],
+        ["edge_signs", "float", "read"], ["cells_on_edge", "int32", "read"],
+        ["dv_edge", "float", "read"], ["inv_area_cell", "float", "read"],
+        ["skip_cell", "int32", "read"], ["tendency", "float", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["any_1d"]], "theta_saved": [["any_1d"]],
+        "rho_u": [["any_1d"]], "rho_u_saved": [["any_1d"]],
+        "adv_coefs": [["any_1d"]], "adv_coefs_3rd": [["any_1d"]],
+        "adv_cells_for_edge": [["any_1d"]],
+        "n_adv_cells_for_edge": [["any_1d"]],
+        "edges_on_cell": [["any_1d"]], "edge_counts": [["any_1d"]],
+        "edge_signs": [["any_1d"]], "cells_on_edge": [["any_1d"]],
+        "dv_edge": [["any_1d"]], "inv_area_cell": [["any_1d"]],
+        "skip_cell": [["any_1d"]], "tendency": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlev", "int32"], ["ncells", "int32"], ["nedges", "int32"],
+        ["max_cell_edges", "int32"], ["max_adv_cells", "int32"],
+        ["rk_step", "int32"], ["third_order_coefficient", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

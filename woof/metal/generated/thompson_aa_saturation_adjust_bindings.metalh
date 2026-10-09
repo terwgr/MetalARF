@@ -1,0 +1,27 @@
+// Generated from kernel_signatures.json; layout be54d33745a1ba38231a12415f43fc9abe9dc466ef3861c057122dd0f9fb84e7.
+struct ThompsonAaSaturationAdjustResources {
+    device float *temperature [[id(0)]];
+    device const float *pressure [[id(1)]];
+    device float *qv [[id(2)]];
+    device float *qc [[id(3)]];
+    device const float *nc_entry [[id(4)]];
+    device float *ncten [[id(5)]];
+    device float *nwfaten [[id(6)]];
+    device const float *nwfa_work_m3 [[id(7)]];
+    device const float *w [[id(8)]];
+    device const ulong *tnccn_act_bits [[id(9)]];
+    device const ulong *tnc_wev_bits [[id(10)]];
+    device float *reference_density [[id(11)]];
+    device float *reference_temperature [[id(12)]];
+    device float *condensation_rate [[id(13)]];
+    device float *cloud_presence [[id(14)]];
+};
+struct ThompsonAaSaturationAdjustParams {
+    float dt;
+    int size;
+    int has_reference_density;
+    int has_reference_temperature;
+    int has_condensation_rate;
+    int has_cloud_presence;
+};
+static_assert(sizeof(ThompsonAaSaturationAdjustParams) == 24, "thompson_aa_saturation_adjust parameter ABI size changed");

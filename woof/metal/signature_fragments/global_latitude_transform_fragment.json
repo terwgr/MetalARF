@@ -1,0 +1,32 @@
+{
+  "kernels": [
+    {
+      "name": "global_latitude_transform_fragment",
+      "module": "global_spectral",
+      "source": "woof/metal/shaders/global_latitude_transform_fragment.metal",
+      "cuda_source": "woof/globe/spectral/transform.py",
+      "cuda_symbol": "SphericalHarmonicTransform._analyze_latitude",
+      "resources": [
+        ["real_values", "float64_bits", "read"],
+        ["imag_values", "float64_bits", "read"],
+        ["legendre", "float64_bits", "read"],
+        ["real_spectral", "float64_bits", "read_write"],
+        ["imag_spectral", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "real_values": [["any_1d"]],
+        "imag_values": [["any_1d"]],
+        "legendre": [["any_1d"]],
+        "real_spectral": [["any_1d"]],
+        "imag_spectral": [["any_1d"]]
+      },
+      "parameters": [
+        ["norder", "int32"], ["batch", "int32"],
+        ["ninput", "int32"], ["noutput", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout a7d04e58f12971532f9504c7210547eefeee1c9344a462df987a06361f7e7606.
+struct SaseZiColumnResources {
+    device const float *u [[id(0)]];
+    device const float *v [[id(1)]];
+    device const float *theta [[id(2)]];
+    device const float *t [[id(3)]];
+    device float *zi [[id(4)]];
+};
+struct SaseZiColumnParams {
+    float dz;
+    int t_mode;
+    float rib_crit;
+    float wspd2_floor;
+    float g_accel;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseZiColumnParams) == 32, "sase_zi_column parameter ABI size changed");

@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout 329997a974754b330fdb39bae3b6bbc37e8e999dbb00fef684f1975c09e757cc.
+struct RealTotalGeopotentialResources {
+    device const float *phb [[id(0)]];
+    device const float *php [[id(1)]];
+    device float *total_phi [[id(2)]];
+};
+struct RealTotalGeopotentialParams {
+    int nz;
+    int ny;
+    int nx;
+    int phb_3d;
+};
+static_assert(sizeof(RealTotalGeopotentialParams) == 16, "real_total_geopotential parameter ABI size changed");

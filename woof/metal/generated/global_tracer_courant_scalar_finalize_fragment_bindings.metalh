@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout d9f16bf9f8a0bf2b872f01b5fda8678d2ca5acf9dd8d4d9b2693dc704b444c53.
+struct GlobalTracerCourantScalarFinalizeFragmentResources {
+    device const ulong *partial [[id(0)]];
+    device const ulong *limit [[id(1)]];
+    device ulong *summary [[id(2)]];
+};
+struct GlobalTracerCourantScalarFinalizeFragmentParams {
+    int npartial;
+};
+static_assert(sizeof(GlobalTracerCourantScalarFinalizeFragmentParams) == 4, "global_tracer_courant_scalar_finalize_fragment parameter ABI size changed");

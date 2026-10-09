@@ -1,0 +1,30 @@
+// Generated from kernel_signatures.json; layout 1bf5dc47d90b7b2dbf9ccdcde89bed043e536f996ce57858b1df02ed3b8767a1.
+struct UhColumnsResources {
+    device const float *u [[id(0)]];
+    device const float *v [[id(1)]];
+    device const float *w [[id(2)]];
+    device const float *ph [[id(3)]];
+    device const float *phb [[id(4)]];
+    device const float *msfu [[id(5)]];
+    device const float *msfv [[id(6)]];
+    device const float *ht [[id(7)]];
+    device const float *dn [[id(8)]];
+    device const float *dnw [[id(9)]];
+    device const float *fnm [[id(10)]];
+    device const float *fnp [[id(11)]];
+    device float *uh [[id(12)]];
+    device float *usecol [[id(13)]];
+};
+struct UhColumnsParams {
+    float cf1;
+    float cf2;
+    float cf3;
+    float rdx;
+    float rdy;
+    int phb3d;
+    int nz;
+    int ny;
+    int nx;
+    int ncol;
+};
+static_assert(sizeof(UhColumnsParams) == 40, "uh_columns parameter ABI size changed");

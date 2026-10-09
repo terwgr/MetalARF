@@ -1,0 +1,15 @@
+// Generated from kernel_signatures.json; layout 5999f6349b0e44914b5f2c177bac76a284bc87fb627ad2ac5d371bb5e7771aee.
+struct ThompsonAaEntrySnapshotResources {
+    device const float *temperature [[id(0)]];
+    device const float *pressure [[id(1)]];
+    device const float *qv [[id(2)]];
+    device const float *nwfa [[id(3)]];
+    device const float *nifa [[id(4)]];
+    device float *rho_out [[id(5)]];
+    device float *nwfa_entry_m3 [[id(6)]];
+    device float *nifa_entry_m3 [[id(7)]];
+};
+struct ThompsonAaEntrySnapshotParams {
+    int n;
+};
+static_assert(sizeof(ThompsonAaEntrySnapshotParams) == 4, "thompson_aa_entry_snapshot parameter ABI size changed");

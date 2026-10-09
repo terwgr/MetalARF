@@ -1,0 +1,22 @@
+// Generated from kernel_signatures.json; layout 21a9211a482e44869e40d79e3a462ce633118441b88f101e12810b61b7213a51.
+struct RrtmgLegacyLwSetcoefGasResources {
+    device const float *pavel [[id(0)]];
+    device const float *tavel [[id(1)]];
+    device const float *coldry [[id(2)]];
+    device const float *wkl [[id(3)]];
+    device const float *wbrodl [[id(4)]];
+    device const float *chi_mls [[id(5)]];
+    device const int *jp [[id(6)]];
+    device const int *jt [[id(7)]];
+    device const int *jt1 [[id(8)]];
+    device const float *fp [[id(9)]];
+    device const float *ft [[id(10)]];
+    device const float *ft1 [[id(11)]];
+    device float *fs [[id(12)]];
+    device int *isv [[id(13)]];
+};
+struct RrtmgLegacyLwSetcoefGasParams {
+    int ncol;
+    int nl;
+};
+static_assert(sizeof(RrtmgLegacyLwSetcoefGasParams) == 8, "rrtmg_legacy_lw_setcoef_gas parameter ABI size changed");

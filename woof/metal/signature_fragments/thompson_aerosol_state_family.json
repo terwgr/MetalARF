@@ -1,0 +1,716 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_aa_entry_snapshot",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_entry_snapshot",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "nwfa",
+          "float",
+          "read"
+        ],
+        [
+          "nifa",
+          "float",
+          "read"
+        ],
+        [
+          "rho_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "nwfa_entry_m3",
+          "float",
+          "read_write"
+        ],
+        [
+          "nifa_entry_m3",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "n"
+          ]
+        ],
+        "pressure": [
+          [
+            "n"
+          ]
+        ],
+        "qv": [
+          [
+            "n"
+          ]
+        ],
+        "nwfa": [
+          [
+            "n"
+          ]
+        ],
+        "nifa": [
+          [
+            "n"
+          ]
+        ],
+        "rho_out": [
+          [
+            "n"
+          ]
+        ],
+        "nwfa_entry_m3": [
+          [
+            "n"
+          ]
+        ],
+        "nifa_entry_m3": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "thompson_aa_micro_columns",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_micro_columns",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "micro_columns",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "micro_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "thompson_aa_entry_cloud_number",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_entry_cloud_number",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "nc",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "rc_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "nc_entry_m3",
+          "float",
+          "read_write"
+        ],
+        [
+          "nu_c_out",
+          "int32",
+          "read_write"
+        ],
+        [
+          "l_qc_out",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "n"
+          ]
+        ],
+        "nc": [
+          [
+            "n"
+          ]
+        ],
+        "rho": [
+          [
+            "n"
+          ]
+        ],
+        "rc_out": [
+          [
+            "n"
+          ]
+        ],
+        "nc_entry_m3": [
+          [
+            "n"
+          ]
+        ],
+        "nu_c_out": [
+          [
+            "n"
+          ]
+        ],
+        "l_qc_out": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "thompson_aa_tau1_density",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_tau1_density",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "rho_out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "n"
+          ]
+        ],
+        "pressure": [
+          [
+            "n"
+          ]
+        ],
+        "qv": [
+          [
+            "n"
+          ]
+        ],
+        "rho_out": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "thompson_aa_surface_emission",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_surface_emission",
+      "resources": [
+        [
+          "nwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "nifa",
+          "float",
+          "read_write"
+        ],
+        [
+          "nwfa2d",
+          "float",
+          "read"
+        ],
+        [
+          "nifa2d",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "nwfa": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nifa": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nwfa2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "nifa2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "ncolumns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "thompson_aa_working_number",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_working_number",
+      "resources": [
+        [
+          "nwfa",
+          "float",
+          "read"
+        ],
+        [
+          "nwfaten",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "nwfa_work_m3",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "nwfa": [
+          [
+            "n"
+          ]
+        ],
+        "nwfaten": [
+          [
+            "n"
+          ]
+        ],
+        "rho": [
+          [
+            "n"
+          ]
+        ],
+        "nwfa_work_m3": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "thompson_aa_profile_needs_fill",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_init_profile",
+      "resources": [
+        [
+          "field",
+          "float",
+          "read"
+        ],
+        [
+          "needs_fill",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "field": [
+          [
+            "size"
+          ]
+        ],
+        "needs_fill": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "size",
+          "int32"
+        ],
+        [
+          "threshold",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_aa_profile_height",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_init_profile",
+      "resources": [
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "z8w",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "z8w": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "phb_full",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "thompson_aa_surface_rain_fraction",
+      "module": "thompson_aerosol_state_family",
+      "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_symbol": "thompson_aa_surface_rain_fraction",
+      "resources": [
+        [
+          "rainncv",
+          "float",
+          "read"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rainncv": [
+          [
+            "ncolumns"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ncolumns"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ncolumns"
+          ]
+        ],
+        "sr": [
+          [
+            "ncolumns"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncolumns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

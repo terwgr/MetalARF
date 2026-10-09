@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout de898955f175ce7c2501e525a08294e85d093e0b73cde85491c4f4a4a1718f57.
+struct UrbanBepBemHiProfileGatherFragmentResources {
+    device const float *hi_domain [[id(0)]];
+    device float *hi_column [[id(1)]];
+    device int *error [[id(2)]];
+};
+struct UrbanBepBemHiProfileGatherFragmentParams {
+    int ncol;
+    int num_urban_hi;
+};
+static_assert(sizeof(UrbanBepBemHiProfileGatherFragmentParams) == 8, "urban_bep_bem_hi_profile_gather_fragment parameter ABI size changed");

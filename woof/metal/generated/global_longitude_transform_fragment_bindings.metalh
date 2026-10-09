@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout c4e0e9215b68ca07c290fb211cad3f3ffe9286993bd795cc8e020085118e4cde.
+struct GlobalLongitudeTransformFragmentResources {
+    device const ulong *grid [[id(0)]];
+    device const ulong *twiddles [[id(1)]];
+    device ulong *spectrum [[id(2)]];
+    device const ulong *scale [[id(3)]];
+};
+struct GlobalLongitudeTransformFragmentParams {
+    int nlat;
+    int nlon;
+    int nfreq;
+    int batch;
+};
+static_assert(sizeof(GlobalLongitudeTransformFragmentParams) == 16, "global_longitude_transform_fragment parameter ABI size changed");

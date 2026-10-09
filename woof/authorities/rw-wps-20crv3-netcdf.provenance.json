@@ -1,0 +1,21 @@
+{
+  "schema": "gpuwm-20crv3-netcdf-published-invariant-provenance-v1",
+  "source": "NOAA-CIRES-DOE 20th Century Reanalysis version 3, NOAA PSL ensemble mean sub-daily NetCDF (SI before 1981, MO from 1981)",
+  "field": "terrain_height",
+  "selector": {
+    "format": "netcdf",
+    "name": [
+      "orog"
+    ],
+    "standard_name": "surface_altitude"
+  },
+  "why_a_supplement_exists": "The published timeInvariantSI/hgt.sfc.nc and land.nc files each contain one invariant plane. The native fetch binds their exact coordinate subset to every primary valid time in Rust. The stable supplement role also accepts previously authored recovered supplements with their own receipts.",
+  "orography_method": "published surface geopotential height, exact coordinate subset without interpolation",
+  "orography_divergence": "No pressure-level reconstruction is used by native fetch. Older staged recovered supplements retain the vertical interpolation divergence stated in their per-run receipt.",
+  "land_mask_method": "published land fraction, exact coordinate subset without thresholding",
+  "builder": "rw_netcdf bind-invariants, with per-run input SHA-256 and valid-time receipt",
+  "time_policy": "The invariant plane is repeated identically at the primary valid times.",
+  "member_policy": "PSL NetCDF is the Ensemble Mean analysis, never one of the 80 members. The every-member GRIB2 route remains --source 20crv3.",
+  "surface_policy": "Published tsoil and soilw supply all four Noah layers. No separate sub-daily SST variable is published in this collection; water initialization uses published skin temperature as its source boundary proxy. No synthetic soil or SST climatology is substituted.",
+  "input_identity": "Dynamic paths and SHA-256 values are owned by the mapped input manifest gpuwm-mapped-source-inputs-v1."
+}

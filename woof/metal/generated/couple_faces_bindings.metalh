@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout 51de6c43ef5ccb65b4a3804f0d6d2b5d06ed606ee2aba8d6d9cd24602e446c92.
+struct CoupleFacesResources {
+    device const float *mass_u [[id(0)]];
+    device const float *mass_v [[id(1)]];
+    device const float *msfu [[id(2)]];
+    device const float *msfv [[id(3)]];
+    device float *ru [[id(4)]];
+    device float *rv [[id(5)]];
+};
+struct CoupleFacesParams {
+    int mask_ring;
+    int open_x;
+    int open_y;
+    int has_msf;
+    int wrf_exact;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(CoupleFacesParams) == 32, "couple_faces parameter ABI size changed");

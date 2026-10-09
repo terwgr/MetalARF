@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout bdf02670c660e65cd55d98e47cece917aec21ad714c3cfb1b3280bfd0696bcf9.
+struct ThompsonAdapterEntryResources {
+    device const float *qc [[id(0)]];
+    device const float *qi [[id(1)]];
+    device const float *qr [[id(2)]];
+    device const float *qs [[id(3)]];
+    device const float *qg [[id(4)]];
+    device const float *temperature [[id(5)]];
+    device const float *pressure [[id(6)]];
+    device const float *qv [[id(7)]];
+    device float *graupel_number_per_kg [[id(8)]];
+    device float *micro_columns [[id(9)]];
+};
+struct ThompsonAdapterEntryParams {
+    int size;
+    int columns;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonAdapterEntryParams) == 20, "thompson_adapter_entry parameter ABI size changed");

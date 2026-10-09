@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout bba52418152ec5133c164420c7a47c9de99165d60105dc4c68a4dcd95ceba840.
+struct GlobalLongitudeTransformResidentFragmentResources {
+    device const ulong *grid [[id(0)]];
+    device const ulong *twiddles [[id(1)]];
+    device ulong *spectrum [[id(2)]];
+    device const ulong *scale [[id(3)]];
+};
+struct GlobalLongitudeTransformResidentFragmentParams {
+    int nlat;
+    int nlon;
+    int nfreq;
+    int batch;
+    int full_nlat;
+    int start_row;
+};
+static_assert(sizeof(GlobalLongitudeTransformResidentFragmentParams) == 24, "global_longitude_transform_resident_fragment parameter ABI size changed");

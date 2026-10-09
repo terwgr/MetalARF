@@ -1,0 +1,114 @@
+{
+  "kernels": [
+    {
+      "name": "noahmp_driver_snow_init",
+      "module": "noahmp_driver_family",
+      "source": "woof/metal/shaders/noahmp_driver_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_driver.cu",
+      "cuda_symbol": "noahmp_driver_snow_init",
+      "resources": [
+        [
+          "x",
+          "float",
+          "read"
+        ],
+        [
+          "ix",
+          "int32",
+          "read"
+        ],
+        [
+          "y",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "x": [
+          [
+            "ncase",
+            33
+          ]
+        ],
+        "ix": [
+          [
+            "ncase",
+            2
+          ]
+        ],
+        "y": [
+          [
+            "ncase",
+            22
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncase",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "noahmp_driver_noahmp_init",
+      "module": "noahmp_driver_family",
+      "source": "woof/metal/shaders/noahmp_driver_family.metal",
+      "cuda_source": "woof/core/kernels/noahmp_driver.cu",
+      "cuda_symbol": "noahmp_driver_noahmp_init",
+      "resources": [
+        [
+          "x",
+          "float",
+          "read"
+        ],
+        [
+          "ix",
+          "int32",
+          "read"
+        ],
+        [
+          "y",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "x": [
+          [
+            "ncase",
+            58
+          ]
+        ],
+        "ix": [
+          [
+            "ncase",
+            21
+          ]
+        ],
+        "y": [
+          [
+            "ncase",
+            93
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncase",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

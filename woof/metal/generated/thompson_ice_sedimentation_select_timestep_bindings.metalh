@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout f858cdaa5054a8a7eafac3a54614f739b4e98a3af84f5f8f0be38b83d108e7cd.
+struct ThompsonIceSedimentationSelectTimestepResources {
+    device const float *dz [[id(0)]];
+    device float *mass_velocity [[id(1)]];
+    device float *number_velocity [[id(2)]];
+    device const float *active_marker [[id(3)]];
+    device int *sediment_top [[id(4)]];
+    device int *nstep [[id(5)]];
+};
+struct ThompsonIceSedimentationSelectTimestepParams {
+    float dt;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonIceSedimentationSelectTimestepParams) == 16, "thompson_ice_sedimentation_select_timestep parameter ABI size changed");

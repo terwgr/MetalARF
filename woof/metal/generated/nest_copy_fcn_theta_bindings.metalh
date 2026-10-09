@@ -1,0 +1,33 @@
+// Generated from kernel_signatures.json; layout 2d5c5b381a895bb6376c7fae0ff60dc2d556123205374d87e9878f8a13184702.
+struct NestCopyFcnThetaResources {
+    device float *parent [[id(0)]];
+    device const float *child [[id(1)]];
+    device const float *parent_thb [[id(2)]];
+    device const float *child_thb [[id(3)]];
+};
+struct NestCopyFcnThetaParams {
+    int ipos;
+    int jpos;
+    int nri;
+    int nrj;
+    int spec_zone;
+    int xstag;
+    int ystag;
+    int nz;
+    int nyp;
+    int nxp;
+    int nyc;
+    int nxc;
+    int parent_i0;
+    int parent_j0;
+    int child_i0;
+    int child_j0;
+    int loop_i0;
+    int loop_j0;
+    int loop_ni;
+    int loop_nj;
+    int child_thb_3d;
+    int parent_thb_3d;
+    int transform_child;
+};
+static_assert(sizeof(NestCopyFcnThetaParams) == 92, "nest_copy_fcn_theta parameter ABI size changed");

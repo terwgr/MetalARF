@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout d939f7bd6348b032906d32a9afd6abbb618f2ad80a6e5447043ea080131893cf.
+struct HexAcousticPostsolveDampingResources {
+    device float *rw_p [[id(0)]];
+    device const float *rw_save [[id(1)]];
+    device const float *rw [[id(2)]];
+    device const float *dss [[id(3)]];
+    device const float *w [[id(4)]];
+    device const float *rho_zz [[id(5)]];
+    device const float *zz [[id(6)]];
+    device const float *fzm [[id(7)]];
+    device const float *fzp [[id(8)]];
+};
+struct HexAcousticPostsolveDampingParams {
+    int nlev;
+    int ncells;
+    float dts;
+};
+static_assert(sizeof(HexAcousticPostsolveDampingParams) == 12, "hex_acoustic_postsolve_damping parameter ABI size changed");

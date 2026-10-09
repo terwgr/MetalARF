@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout b400aba5dd9fa317ea768396790ff1e9d58c8f275b9e61b72a7ac1e8156485a5.
+struct GlobalInsituLedgerFinalizeFragmentResources {
+    device const ulong *partial [[id(0)]];
+    device ulong *row [[id(1)]];
+};
+struct GlobalInsituLedgerFinalizeFragmentParams {
+    int nterm;
+    int nchunk;
+};
+static_assert(sizeof(GlobalInsituLedgerFinalizeFragmentParams) == 8, "global_insitu_ledger_finalize_fragment parameter ABI size changed");

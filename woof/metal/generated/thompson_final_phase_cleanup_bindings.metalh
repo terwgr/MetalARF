@@ -1,0 +1,2 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "thompson_final_phase_cleanup_with_columns_bindings.metalh"

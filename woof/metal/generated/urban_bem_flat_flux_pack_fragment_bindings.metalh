@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout 71f6d20f0cbf12ec9c79f046cf507cef24d43ef0153f3808367113fa22cea631.
+struct UrbanBemFlatFluxPackFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const int *building_nlev [[id(1)]];
+    device const float *sf [[id(2)]];
+    device const float *lf [[id(3)]];
+    device float *sfr [[id(4)]];
+    device float *lfr [[id(5)]];
+    device float *sfg [[id(6)]];
+    device float *lfg [[id(7)]];
+    device float *hsrof [[id(8)]];
+    device float *lsrof [[id(9)]];
+    device int *error [[id(10)]];
+};
+struct UrbanBemFlatFluxPackFragmentParams {
+    int ncol;
+};
+static_assert(sizeof(UrbanBemFlatFluxPackFragmentParams) == 4, "urban_bem_flat_flux_pack_fragment parameter ABI size changed");

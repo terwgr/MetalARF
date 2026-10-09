@@ -1,0 +1,479 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_ops/scalar.py",
+      "cuda_symbol": "even_extension",
+      "layout_version": 1,
+      "module": "spectral_scalar",
+      "name": "spectral_reflect_extend",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "batches",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ey",
+          "int32"
+        ],
+        [
+          "ex",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "input",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "input": [
+          [
+            "count"
+          ]
+        ],
+        "output": [
+          [
+            "batches",
+            "ey",
+            "ex"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/spectral_scalar.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_ops/scalar.py",
+      "cuda_symbol": "Hyperdiffusion.transfer",
+      "layout_version": 1,
+      "module": "spectral_scalar",
+      "name": "spectral_transfer",
+      "parameters": [
+        [
+          "batches",
+          "int32"
+        ],
+        [
+          "ey",
+          "int32"
+        ],
+        [
+          "ex",
+          "int32"
+        ],
+        [
+          "half_width",
+          "int32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "reference_wavelength",
+          "float32"
+        ],
+        [
+          "efold",
+          "float32"
+        ],
+        [
+          "protect_wavelength",
+          "float32"
+        ],
+        [
+          "max_damping",
+          "float32"
+        ],
+        [
+          "order",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "coefficients",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "coefficients": [
+          [
+            "batches",
+            "ey",
+            "half_width",
+            2
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/spectral_scalar.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_ops/scalar.py",
+      "cuda_symbol": "mean",
+      "layout_version": 1,
+      "module": "spectral_scalar",
+      "name": "spectral_pair_stats",
+      "parameters": [
+        [
+          "plane_count",
+          "int32"
+        ],
+        [
+          "batches",
+          "int32"
+        ],
+        [
+          "partial_count",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ey",
+          "int32"
+        ],
+        [
+          "ex",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "original",
+          "float",
+          "read"
+        ],
+        [
+          "filtered",
+          "float",
+          "read"
+        ],
+        [
+          "stats",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "filtered": [
+          [
+            "batches",
+            "ey",
+            "ex"
+          ]
+        ],
+        "original": [
+          [
+            "batches",
+            "plane_count"
+          ]
+        ],
+        "stats": [
+          [
+            "batches",
+            "partial_count",
+            3
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/spectral_scalar.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_ops/scalar.py",
+      "cuda_symbol": "crop_even_extension",
+      "layout_version": 1,
+      "module": "spectral_scalar",
+      "name": "spectral_recenter_crop",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "batches",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ey",
+          "int32"
+        ],
+        [
+          "ex",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "filtered",
+          "float",
+          "read"
+        ],
+        [
+          "corrections",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "corrections": [
+          [
+            "batches"
+          ]
+        ],
+        "filtered": [
+          [
+            "batches",
+            "ey",
+            "ex"
+          ]
+        ],
+        "output": [
+          [
+            "count"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/spectral_scalar.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_ops/scalar.py",
+      "cuda_symbol": "ScalarResult metrics",
+      "layout_version": 1,
+      "module": "spectral_scalar",
+      "name": "spectral_final_stats",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "partial_count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "original",
+          "float",
+          "read"
+        ],
+        [
+          "output",
+          "float",
+          "read"
+        ],
+        [
+          "stats",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "original": [
+          [
+            "count"
+          ]
+        ],
+        "output": [
+          [
+            "count"
+          ]
+        ],
+        "stats": [
+          [
+            1,
+            "partial_count",
+            7
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/spectral_scalar.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_ops/scalar.py",
+      "cuda_symbol": "ScalarResult metrics reduction",
+      "layout_version": 1,
+      "module": "spectral_scalar",
+      "name": "spectral_stats_reduce",
+      "parameters": [
+        [
+          "batches",
+          "int32"
+        ],
+        [
+          "input_count",
+          "int32"
+        ],
+        [
+          "output_count",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "partials",
+          "float",
+          "read"
+        ],
+        [
+          "reduced",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "partials": [
+          [
+            "batches",
+            "input_count",
+            "width"
+          ]
+        ],
+        "reduced": [
+          [
+            "batches",
+            "output_count",
+            "width"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/spectral_scalar.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/spectral_ops/scalar.py",
+      "cuda_symbol": "per-plane reflect mean recenter",
+      "layout_version": 1,
+      "module": "spectral_scalar",
+      "name": "spectral_plane_correction",
+      "parameters": [
+        [
+          "plane_count",
+          "int32"
+        ],
+        [
+          "batches",
+          "int32"
+        ],
+        [
+          "preserve_mean",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "partial_sums",
+          "float",
+          "read"
+        ],
+        [
+          "corrections",
+          "float",
+          "read_write"
+        ],
+        [
+          "status",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "corrections": [
+          [
+            "batches"
+          ]
+        ],
+        "partial_sums": [
+          [
+            "batches",
+            3
+          ]
+        ],
+        "status": [
+          [
+            1
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/spectral_scalar.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

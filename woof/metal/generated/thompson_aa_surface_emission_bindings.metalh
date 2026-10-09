@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 7bfc593770cfe0c63860170903b4f968b503a0e732f7ce50f14a91d92ba140c5.
+struct ThompsonAaSurfaceEmissionResources {
+    device float *nwfa [[id(0)]];
+    device float *nifa [[id(1)]];
+    device const float *nwfa2d [[id(2)]];
+    device const float *nifa2d [[id(3)]];
+};
+struct ThompsonAaSurfaceEmissionParams {
+    float dt;
+    int ncolumns;
+};
+static_assert(sizeof(ThompsonAaSurfaceEmissionParams) == 8, "thompson_aa_surface_emission parameter ABI size changed");

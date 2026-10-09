@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "myj_driver_wspd_bindings.metalh"
+#include "myjsfc_column_bindings.metalh"

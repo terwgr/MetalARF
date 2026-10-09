@@ -1,0 +1,1311 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_class_init",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_class_init",
+      "resources": [
+        [
+          "table_x",
+          "float",
+          "read"
+        ],
+        [
+          "table_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "class_x",
+          "float",
+          "read_write"
+        ],
+        [
+          "class_ix",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "table_x": [
+          [
+            "ncase",
+            1386
+          ]
+        ],
+        "table_ix": [
+          [
+            "ncase",
+            23
+          ]
+        ],
+        "class_x": [
+          [
+            "ncase",
+            1085
+          ]
+        ],
+        "class_ix": [
+          [
+            "ncase",
+            23
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncase",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_view_init",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_view_init",
+      "resources": [
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "class_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "view_x",
+          "float",
+          "read_write"
+        ],
+        [
+          "view_ix",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "class_x": [
+          [
+            "ncase",
+            1085
+          ]
+        ],
+        "class_ix": [
+          [
+            "ncase",
+            23
+          ]
+        ],
+        "view_x": [
+          [
+            "ncase",
+            11,
+            794
+          ]
+        ],
+        "view_ix": [
+          [
+            "ncase",
+            11
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncase",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_gather",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "frc_urb",
+          "float",
+          "read"
+        ],
+        [
+          "dz8w",
+          "float",
+          "read"
+        ],
+        [
+          "u_phy",
+          "float",
+          "read"
+        ],
+        [
+          "v_phy",
+          "float",
+          "read"
+        ],
+        [
+          "th_phy",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "p_phy",
+          "float",
+          "read"
+        ],
+        [
+          "column_x",
+          "float",
+          "read_write"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "frc_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "dz8w": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "u_phy": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "v_phy": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "th_phy": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "rho": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "p_phy": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "column_x": [
+          [
+            "ncol",
+            15,
+            "nz+1"
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_profile",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "class_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "hi_urb",
+          "float",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "urban_profile",
+          "float",
+          "read_write"
+        ],
+        [
+          "urban_profile_ix",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "class_x": [
+          [
+            1,
+            1085
+          ]
+        ],
+        "class_ix": [
+          [
+            1,
+            23
+          ]
+        ],
+        "hi_urb": [
+          [
+            18,
+            "ncol"
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "urban_profile": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "urban_profile_ix": [
+          [
+            "ncol",
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "num_urban_hi",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_params",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "class_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "urban_profile",
+          "float",
+          "read"
+        ],
+        [
+          "urban_profile_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "utype_urb",
+          "int32",
+          "read"
+        ],
+        [
+          "frc_urb",
+          "float",
+          "read"
+        ],
+        [
+          "lp_urb",
+          "float",
+          "read"
+        ],
+        [
+          "lb_urb",
+          "float",
+          "read"
+        ],
+        [
+          "hgt_urb",
+          "float",
+          "read"
+        ],
+        [
+          "column_param",
+          "float",
+          "read_write"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "class_x": [
+          [
+            1,
+            1085
+          ]
+        ],
+        "class_ix": [
+          [
+            1,
+            23
+          ]
+        ],
+        "urban_profile": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "urban_profile_ix": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "utype_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "frc_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "lp_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "lb_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "hgt_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_param": [
+          [
+            "ncol",
+            140
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_views",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "column_param",
+          "float",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "column_view_x",
+          "float",
+          "read_write"
+        ],
+        [
+          "column_view_ix",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "class_x": [
+          [
+            1,
+            1085
+          ]
+        ],
+        "column_param": [
+          [
+            "ncol",
+            140
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_view_x": [
+          [
+            "ncol",
+            794
+          ]
+        ],
+        "column_view_ix": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_state_gather",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "trb_urb",
+          "float",
+          "read"
+        ],
+        [
+          "tw1_urb",
+          "float",
+          "read"
+        ],
+        [
+          "tw2_urb",
+          "float",
+          "read"
+        ],
+        [
+          "tgb_urb",
+          "float",
+          "read"
+        ],
+        [
+          "sfw1_urb",
+          "float",
+          "read"
+        ],
+        [
+          "sfw2_urb",
+          "float",
+          "read"
+        ],
+        [
+          "sfr_urb",
+          "float",
+          "read"
+        ],
+        [
+          "sfg_urb",
+          "float",
+          "read"
+        ],
+        [
+          "column_state",
+          "float",
+          "read_write"
+        ],
+        [
+          "column_state_ix",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "trb_urb": [
+          [
+            18,
+            10,
+            2,
+            "ncol"
+          ]
+        ],
+        "tw1_urb": [
+          [
+            18,
+            10,
+            2,
+            "ncol"
+          ]
+        ],
+        "tw2_urb": [
+          [
+            18,
+            10,
+            2,
+            "ncol"
+          ]
+        ],
+        "tgb_urb": [
+          [
+            10,
+            2,
+            "ncol"
+          ]
+        ],
+        "sfw1_urb": [
+          [
+            18,
+            2,
+            "ncol"
+          ]
+        ],
+        "sfw2_urb": [
+          [
+            18,
+            2,
+            "ncol"
+          ]
+        ],
+        "sfr_urb": [
+          [
+            18,
+            2,
+            "ncol"
+          ]
+        ],
+        "sfg_urb": [
+          [
+            2,
+            "ncol"
+          ]
+        ],
+        "column_state": [
+          [
+            "ncol",
+            1210
+          ]
+        ],
+        "column_state_ix": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_state_scatter",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "column_state_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "column_state",
+          "float",
+          "read"
+        ],
+        [
+          "trb_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "tw1_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "tw2_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "tgb_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfw1_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfw2_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfr_urb",
+          "float",
+          "read_write"
+        ],
+        [
+          "sfg_urb",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_state_ix": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_state": [
+          [
+            "ncol",
+            1210
+          ]
+        ],
+        "trb_urb": [
+          [
+            18,
+            10,
+            2,
+            "ncol"
+          ]
+        ],
+        "tw1_urb": [
+          [
+            18,
+            10,
+            2,
+            "ncol"
+          ]
+        ],
+        "tw2_urb": [
+          [
+            18,
+            10,
+            2,
+            "ncol"
+          ]
+        ],
+        "tgb_urb": [
+          [
+            10,
+            2,
+            "ncol"
+          ]
+        ],
+        "sfw1_urb": [
+          [
+            18,
+            2,
+            "ncol"
+          ]
+        ],
+        "sfw2_urb": [
+          [
+            18,
+            2,
+            "ncol"
+          ]
+        ],
+        "sfr_urb": [
+          [
+            18,
+            2,
+            "ncol"
+          ]
+        ],
+        "sfg_urb": [
+          [
+            2,
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_interp",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "column_x",
+          "float",
+          "read"
+        ],
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "column_interp_x",
+          "float",
+          "read_write"
+        ],
+        [
+          "column_interp_ix",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "column_x": [
+          [
+            "ncol",
+            15,
+            "nz+1"
+          ]
+        ],
+        "class_x": [
+          [
+            1,
+            1085
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_interp_x": [
+          [
+            "ncol",
+            6,
+            18
+          ]
+        ],
+        "column_interp_ix": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_lengths",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "column_x",
+          "float",
+          "read"
+        ],
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "column_param",
+          "float",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "column_state_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "column_lengths",
+          "float",
+          "read_write"
+        ],
+        [
+          "column_lengths_ix",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "column_x": [
+          [
+            "ncol",
+            15,
+            "nz+1"
+          ]
+        ],
+        "class_x": [
+          [
+            1,
+            1085
+          ]
+        ],
+        "column_param": [
+          [
+            "ncol",
+            140
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_state_ix": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_lengths": [
+          [
+            "ncol",
+            2,
+            "nz"
+          ]
+        ],
+        "column_lengths_ix": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_meso",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "column_x",
+          "float",
+          "read"
+        ],
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "column_param",
+          "float",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "column_building_x",
+          "float",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "column_state_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "column_meso_x",
+          "float",
+          "read_write"
+        ],
+        [
+          "column_meso_ix",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "column_x": [
+          [
+            "ncol",
+            15,
+            "nz+1"
+          ]
+        ],
+        "class_x": [
+          [
+            1,
+            1085
+          ]
+        ],
+        "column_param": [
+          [
+            "ncol",
+            140
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "column_building_x": [
+          [
+            "ncol",
+            648
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_state_ix": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_meso_x": [
+          [
+            "ncol",
+            10,
+            "nz+1"
+          ]
+        ],
+        "column_meso_ix": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_buildings_fragment",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "bep_buildings",
+      "resources": [
+        [
+          "column_param",
+          "float",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "column_interp_x",
+          "float",
+          "read"
+        ],
+        [
+          "surface_x",
+          "float",
+          "read"
+        ],
+        [
+          "column_building_x",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "column_param": [
+          [
+            "ncol",
+            140
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "column_interp_x": [
+          [
+            "ncol",
+            108
+          ]
+        ],
+        "surface_x": [
+          [
+            "ncol",
+            330
+          ]
+        ],
+        "column_building_x": [
+          [
+            "ncol",
+            648
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

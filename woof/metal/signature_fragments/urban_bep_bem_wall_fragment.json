@@ -1,0 +1,172 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_bem_wall_fragment",
+      "module": "urban_bep_bem_wall_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_wall_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bem.cuh",
+      "cuda_symbol": "bem_wall",
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "k",
+          "float",
+          "read"
+        ],
+        [
+          "cs",
+          "float",
+          "read"
+        ],
+        [
+          "flux",
+          "float",
+          "read"
+        ],
+        [
+          "temp",
+          "float",
+          "read_write"
+        ],
+        [
+          "k1",
+          "float",
+          "read_write"
+        ],
+        [
+          "k2",
+          "float",
+          "read_write"
+        ],
+        [
+          "kc",
+          "float",
+          "read_write"
+        ],
+        [
+          "swwall",
+          "int32",
+          "read_write"
+        ],
+        [
+          "green_roof",
+          "int32",
+          "read"
+        ],
+        [
+          "green_fraction",
+          "float",
+          "read"
+        ],
+        [
+          "hfgr",
+          "float",
+          "read"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dz": [
+          [
+            "nitem",
+            20
+          ]
+        ],
+        "k": [
+          [
+            "nitem",
+            21
+          ]
+        ],
+        "cs": [
+          [
+            "nitem",
+            20
+          ]
+        ],
+        "flux": [
+          [
+            "nitem",
+            2
+          ]
+        ],
+        "temp": [
+          [
+            "nitem",
+            20
+          ]
+        ],
+        "k1": [
+          [
+            "nitem",
+            20
+          ]
+        ],
+        "k2": [
+          [
+            "nitem",
+            20
+          ]
+        ],
+        "kc": [
+          [
+            "nitem",
+            20
+          ]
+        ],
+        "swwall": [
+          [
+            "nitem"
+          ]
+        ],
+        "green_roof": [
+          [
+            "nitem"
+          ]
+        ],
+        "green_fraction": [
+          [
+            "nitem"
+          ]
+        ],
+        "hfgr": [
+          [
+            "nitem"
+          ]
+        ],
+        "error": [
+          [
+            "nitem"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nitem",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

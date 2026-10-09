@@ -1,0 +1,45 @@
+{
+  "schema": "woof-metal-fft-contract-v1",
+  "status": "executed-numerically-compared",
+  "provider": "MPSGraph",
+  "provider_minimum_macos": "14.0",
+  "operations": {
+    "rfft2": {
+      "input": "contiguous base MetalArray float32, rank 2 through 16, every extent positive",
+      "axes": "last two axes",
+      "normalization": "backward (unscaled forward transform)",
+      "output": "complex64 with trailing shape (ny, nx//2+1)"
+    },
+    "irfft2": {
+      "input": "contiguous base MetalArray complex64, rank 2 through 16, every extent positive",
+      "axes": "last two axes",
+      "normalization": "backward (inverse divided by ny*nx)",
+      "output": "float32 with trailing shape (ny, nx); odd nx is passed explicitly with s"
+    }
+  },
+  "execution": {
+    "queue": "existing serial MetalContext queue",
+    "completion": "MPSGraphExecutionDescriptor completionHandler",
+    "ownership": "native submission retains plan, tensor data, dictionaries, buffers and execution descriptor until completion",
+    "plan_cache_capacity": 8,
+    "graph_options": "MPSGraphOptionsNone",
+    "ordering_boundary": "Python serializes all enqueue methods; graph submissions drain all prior submissions, and every later custom/fill/bookkeeping/acoustic submission waits for outstanding graph callbacks",
+    "ordering_cost": "graph/custom alternation synchronously waits for graph completion at each boundary; this is intentionally conservative and limits overlap until native queue ordering is proven"
+  },
+  "unsupported": [
+    "nonzero MetalArray byte offsets or arbitrary strides",
+    "dtype conversions and non-float32/complex64 FFT arithmetic",
+    "resize or pad through rfft2 s; rfft2 s must match input's final two dimensions",
+    "irfft2 norms other than None or backward",
+    "axes other than the last two",
+    "empty dimensions",
+    "Global Float64/Complex128 transforms",
+    "bitwise identity with NumPy or CUDA"
+  ],
+  "verification": {
+    "sdk_signature_probe": "passed on Apple M2 with MPSGraph runAsyncWithMTLCommandQueue and caller-provided MTLBuffer-backed resultsDictionary",
+    "numerical_probe": "a disposable 2x8 forward transform matched a direct DFT oracle; max absolute error 3.80024222e-07",
+    "end_to_end": "MetalContext/MetalArrayModule xp.fft.rfft2 then xp.fft.irfft2; four batched/unbatched even/odd shapes compared to NumPy after deleting Python source and spectrum references before readback; maximum absolute errors were 1.78813934e-07, 1.43423676e-07, 3.57627869e-07, and 4.76837158e-07, respectively",
+    "custom_graph_ordering": "passed on Apple M2 through custom complex64_add -> MPSGraph rfft2 -> custom complex64_add -> MPSGraph irfft2. Two changed input/scalar cases (2,4), bias 3.25 and (3,5), bias -1.75 were compared to NumPy; maximum absolute errors were 5.96046448e-08 and 2.38418579e-07. Python input/intermediate references were deleted before readback. Enqueue gates wait for all submissions before graph calls and graph-only submissions before custom calls."
+  }
+}

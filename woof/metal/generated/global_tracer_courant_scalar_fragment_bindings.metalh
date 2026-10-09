@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout c4dce3734bb388f0227eb0966562925c569ea46d0491e925bb17ada879739360.
+struct GlobalTracerCourantScalarFragmentResources {
+    device const ulong *density [[id(0)]];
+    device const ulong *psi [[id(1)]];
+    device const ulong *inv_width [[id(2)]];
+    device const ulong *dt [[id(3)]];
+    device ulong *partial [[id(4)]];
+};
+struct GlobalTracerCourantScalarFragmentParams {
+    int nlevel;
+    int nlatitude;
+    int nlongitude;
+    int axis;
+    int chunk;
+    int count;
+    int nblock;
+};
+static_assert(sizeof(GlobalTracerCourantScalarFragmentParams) == 28, "global_tracer_courant_scalar_fragment parameter ABI size changed");

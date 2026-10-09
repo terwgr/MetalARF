@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout 85d7aa5838d8ff8b8d9f8358a943df0d20bc4f93091d0476fe3f18f4bd9f0b21.
+struct GlobalSaturationPairMaxFragmentResources {
+    device const ulong *first [[id(0)]];
+    device const ulong *second [[id(1)]];
+    device ulong *partial_max [[id(2)]];
+};
+struct GlobalSaturationPairMaxFragmentParams {
+    int count;
+    int chunk_size;
+    int partial_count;
+};
+static_assert(sizeof(GlobalSaturationPairMaxFragmentParams) == 12, "global_saturation_pair_max_fragment parameter ABI size changed");

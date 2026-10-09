@@ -1,0 +1,53 @@
+{
+  "kernels": [
+    {
+      "name": "moist_scalar_update",
+      "module": "moist",
+      "source": "woof/metal/shaders/moist_scalar_update.metal",
+      "cuda_source": "woof/core/moist.py",
+      "cuda_symbol": "_update_scalar_kernel",
+      "resources": [
+        ["q0", "float", "read"],
+        ["tend", "float", "read"],
+        ["c1h", "float", "read"],
+        ["c2h", "float", "read"],
+        ["mu0", "float", "read"],
+        ["mu", "float", "read"],
+        ["msft", "float", "read"],
+        ["physics", "float", "read"],
+        ["fixed", "float", "read"],
+        ["lbc", "float", "read"],
+        ["q", "float", "read_write"]
+      ],
+      "shapes": {
+        "q0": [["nz", "ny", "nx"]],
+        "tend": [["nz", "ny", "nx"]],
+        "c1h": [["nz"]],
+        "c2h": [["nz"]],
+        "mu0": [["ny", "nx"]],
+        "mu": [["ny", "nx"]],
+        "msft": [["ny", "nx"]],
+        "physics": [["nz", "ny", "nx"]],
+        "fixed": [["nz", "ny", "nx"]],
+        "lbc": [["nz", "ny", "nx"]],
+        "q": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["has_msf", "int32"],
+        ["has_physics", "int32"],
+        ["has_fixed", "int32"],
+        ["has_lbc", "int32"],
+        ["spec_zone", "int32"],
+        ["clear_specified_advection", "int32"],
+        ["clamp", "int32"],
+        ["dt_eff", "float32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

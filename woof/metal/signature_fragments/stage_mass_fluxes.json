@@ -1,0 +1,132 @@
+{
+  "kernels": [
+    {
+      "name": "stage_face_masses",
+      "module": "dycore",
+      "source": "woof/metal/shaders/stage_mass_fluxes.metal",
+      "cuda_source": "woof/core/ieva.py",
+      "cuda_symbol": "stage_face_masses",
+      "resources": [
+        ["mup", "float", "read"],
+        ["mub2d", "float", "read"],
+        ["mux", "float", "read_write"],
+        ["muy", "float", "read_write"]
+      ],
+      "shapes": {
+        "mup": [["ny", "nx"]],
+        "mub2d": [["ny", "nx"]],
+        "mux": [["ny", "nx+1"]],
+        "muy": [["ny+1", "nx"]]
+      },
+      "parameters": [
+        ["wrf_exact", "int32"],
+        ["boundary_x", "int32"],
+        ["boundary_y", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "couple_ru",
+      "module": "dycore",
+      "source": "woof/metal/shaders/stage_mass_fluxes.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_couple_momentum_kernel",
+      "resources": [
+        ["u", "float", "read"],
+        ["c1h", "float", "read"],
+        ["c2h", "float", "read"],
+        ["mux", "float", "read"],
+        ["msfu", "float", "read"],
+        ["ru", "float", "read_write"]
+      ],
+      "shapes": {
+        "u": [["nz", "ny", "nx+1"]],
+        "c1h": [["nz"]],
+        "c2h": [["nz"]],
+        "mux": [["ny", "nx+1"]],
+        "msfu": [["ny", "nx+1"]],
+        "ru": [["nz", "ny", "nx+1"]]
+      },
+      "parameters": [
+        ["has_msf", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "couple_rv",
+      "module": "dycore",
+      "source": "woof/metal/shaders/stage_mass_fluxes.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_couple_momentum_kernel",
+      "resources": [
+        ["v", "float", "read"],
+        ["c1h", "float", "read"],
+        ["c2h", "float", "read"],
+        ["muy", "float", "read"],
+        ["msfv", "float", "read"],
+        ["rv", "float", "read_write"]
+      ],
+      "shapes": {
+        "v": [["nz", "ny+1", "nx"]],
+        "c1h": [["nz"]],
+        "c2h": [["nz"]],
+        "muy": [["ny+1", "nx"]],
+        "msfv": [["ny+1", "nx"]],
+        "rv": [["nz", "ny+1", "nx"]]
+      },
+      "parameters": [
+        ["has_msf", "int32"],
+        ["reciprocal", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    },
+    {
+      "name": "omega_column_scan",
+      "module": "dycore",
+      "source": "woof/metal/shaders/stage_mass_fluxes.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_omega_column_kernel",
+      "resources": [
+        ["ru", "float", "read"],
+        ["rv", "float", "read"],
+        ["dnw", "float", "read"],
+        ["c1h", "float", "read"],
+        ["msft", "float", "read"],
+        ["ww", "float", "read_write"]
+      ],
+      "shapes": {
+        "ru": [["nz", "ny", "nx+1"]],
+        "rv": [["nz", "ny+1", "nx"]],
+        "dnw": [["nz"]],
+        "c1h": [["nz"]],
+        "msft": [["ny", "nx"]],
+        "ww": [["nz+1", "ny", "nx"]]
+      },
+      "parameters": [
+        ["rdx", "float32"],
+        ["rdy", "float32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["has_msf", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default", "wrf-exact"]
+    }
+  ]
+}

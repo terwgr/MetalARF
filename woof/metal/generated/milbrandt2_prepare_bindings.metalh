@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout d843f8f212c7367e64047b8aa6e2c385abba7229453c125f5616ba39bf5f4eff.
+struct Milbrandt2PrepareResources {
+    device const float *thb [[id(0)]];
+    device const float *thp [[id(1)]];
+    device const float *p [[id(2)]];
+    device const float *phb [[id(3)]];
+    device const float *php [[id(4)]];
+    device float *theta [[id(5)]];
+    device float *pii [[id(6)]];
+    device float *temperature [[id(7)]];
+    device float *psfc [[id(8)]];
+    device float *h_diabatic [[id(9)]];
+};
+struct Milbrandt2PrepareParams {
+    int nz;
+    int ny;
+    int nx;
+    int nzi;
+    int thb_3d;
+    int phb_3d;
+    float p0;
+    float rcp;
+    float gravity;
+};
+static_assert(sizeof(Milbrandt2PrepareParams) == 36, "milbrandt2_prepare parameter ABI size changed");

@@ -1,0 +1,34 @@
+// Generated from kernel_signatures.json; layout dc8976347c25430e1dc65a4af60bcfde17ec186443d47232f057e2cf49cc0225.
+struct SaseSolvePartialResources {
+    device const float *e [[id(0)]];
+    device const float *sc0 [[id(1)]];
+    device const float *sc1 [[id(2)]];
+    device const float *sc2 [[id(3)]];
+    device const float *sc3 [[id(4)]];
+    device const float *sc4 [[id(5)]];
+    device const float *sc5 [[id(6)]];
+    device const float *rf0 [[id(7)]];
+    device const float *rf1 [[id(8)]];
+    device const float *rf2 [[id(9)]];
+    device const float *rf3 [[id(10)]];
+    device const float *rf4 [[id(11)]];
+    device const float *rf5 [[id(12)]];
+    device const float *l0 [[id(13)]];
+    device const float *l1 [[id(14)]];
+    device const float *l2 [[id(15)]];
+    device const float *l3 [[id(16)]];
+    device const float *l4 [[id(17)]];
+    device const float *l5 [[id(18)]];
+    device ulong *partials [[id(19)]];
+};
+struct SaseSolvePartialParams {
+    float delta_a;
+    float delta_b;
+    float e_min;
+    int nz;
+    int ny;
+    int nx;
+    int bw;
+    int nblocks;
+};
+static_assert(sizeof(SaseSolvePartialParams) == 32, "sase_solve_partial parameter ABI size changed");

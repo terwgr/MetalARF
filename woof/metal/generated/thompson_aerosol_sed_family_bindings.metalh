@@ -1,0 +1,5 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "thompson_aa_cloud_sediment_64_source_bindings.metalh"
+#include "thompson_aa_cloud_sediment_levels_64_source_bindings.metalh"
+#include "thompson_aa_cloud_sediment_256_source_bindings.metalh"
+#include "thompson_aa_final_phase_cleanup_source_bindings.metalh"

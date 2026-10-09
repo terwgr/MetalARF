@@ -1,0 +1,45 @@
+// Generated from kernel_signatures.json; layout c2e3fc8c119ef2619389d29c1b45f1f79744e66b5e8ad597cece6177bce3e7ab.
+struct ThompsonAaWarmSourceNetworkResources {
+    device float *qc [[id(0)]];
+    device float *qr [[id(1)]];
+    device float *nr [[id(2)]];
+    device float *qs [[id(3)]];
+    device float *qg [[id(4)]];
+    device float *graupel_number_per_kg [[id(5)]];
+    device float *graupel_melt_marker [[id(6)]];
+    device float *snow_melt_marker [[id(7)]];
+    device float *temperature [[id(8)]];
+    device const float *pressure [[id(9)]];
+    device float *qv [[id(10)]];
+    device const float *nc_entry [[id(11)]];
+    device const float *nwfa_entry [[id(12)]];
+    device const float *nifa_entry [[id(13)]];
+    device float *ncten [[id(14)]];
+    device float *nwfaten [[id(15)]];
+    device float *nifaten [[id(16)]];
+    device const ulong *rain_cloud_efficiency [[id(17)]];
+    device const ulong *snow_cloud_efficiency [[id(18)]];
+    device const ulong *tcs_racs1 [[id(19)]];
+    device const ulong *tmr_racs1 [[id(20)]];
+    device const ulong *tcs_racs2 [[id(21)]];
+    device const ulong *tmr_racs2 [[id(22)]];
+    device const ulong *tcr_sacr1 [[id(23)]];
+    device const ulong *tms_sacr1 [[id(24)]];
+    device const ulong *tcr_sacr2 [[id(25)]];
+    device const ulong *tms_sacr2 [[id(26)]];
+    device const ulong *tnr_racs1 [[id(27)]];
+    device const ulong *tnr_racs2 [[id(28)]];
+    device const ulong *tnr_sacr1 [[id(29)]];
+    device const ulong *tnr_sacr2 [[id(30)]];
+    device const ulong *tcg_racg [[id(31)]];
+    device const ulong *tmr_racg [[id(32)]];
+    device const ulong *tcr_gacr [[id(33)]];
+    device const ulong *tnr_racg [[id(34)]];
+    device const ulong *tnr_gacr [[id(35)]];
+};
+struct ThompsonAaWarmSourceNetworkParams {
+    float dt;
+    int n;
+    int wrf39;
+};
+static_assert(sizeof(ThompsonAaWarmSourceNetworkParams) == 12, "thompson_aa_warm_source_network parameter ABI size changed");

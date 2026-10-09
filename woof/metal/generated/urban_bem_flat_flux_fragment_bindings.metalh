@@ -1,0 +1,33 @@
+// Generated from kernel_signatures.json; layout e41e9ec345746d51f8f8a5eed789aa6ff9f9c9339c9384b6e5cab5f78af8a2aa.
+struct UrbanBemFlatFluxFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const float *interp [[id(1)]];
+    device const float *z0 [[id(2)]];
+    device const float *ss [[id(3)]];
+    device const float *ptg [[id(4)]];
+    device const float *tr [[id(5)]];
+    device const float *dg [[id(6)]];
+    device const float *dgr [[id(7)]];
+    device float *uhb [[id(8)]];
+    device float *vhb [[id(9)]];
+    device float *sf [[id(10)]];
+    device float *lf [[id(11)]];
+    device float *ehb [[id(12)]];
+    device float *thb [[id(13)]];
+    device float *qhb [[id(14)]];
+    device int *error [[id(15)]];
+};
+struct UrbanBemFlatFluxFragmentParams {
+    int ncol;
+    int nitem;
+    float g_u;
+    float vk;
+    float p0;
+    float rcp_u;
+    float cp_u;
+    float latent;
+    float dz_u;
+    float dgmax;
+    float drmax;
+};
+static_assert(sizeof(UrbanBemFlatFluxFragmentParams) == 44, "urban_bem_flat_flux_fragment parameter ABI size changed");

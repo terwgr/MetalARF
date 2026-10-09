@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semilag/tracers.py",
+      "cuda_symbol": "resident Global semi-Lagrangian tracer mass readings",
+      "layout_version": 1,
+      "module": "global_semilag_tracer_fix_fragment",
+      "name": "global_semilag_tracer_mass_fragment",
+      "parameters": [["columns", "int32"], ["nlevel", "int32"], ["nlon", "int32"]],
+      "resources": [
+        ["before", "float64_bits", "read"],
+        ["dp_before", "float64_bits", "read"],
+        ["advected", "float64_bits", "read"],
+        ["dp_after", "float64_bits", "read"],
+        ["cell_weight", "float64_bits", "read"],
+        ["target_partial", "float64_bits", "read_write"],
+        ["after_partial", "float64_bits", "read_write"],
+        ["clamp_partial", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "before": [["any_1d"]], "dp_before": [["any_1d"]],
+        "advected": [["any_1d"]], "dp_after": [["any_1d"]],
+        "cell_weight": [["any_1d"]], "target_partial": [["any_1d"]],
+        "after_partial": [["any_1d"]], "clamp_partial": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_tracer_fix_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semilag/tracers.py",
+      "cuda_symbol": "resident Global semi-Lagrangian tracer positivity and mass scaling",
+      "layout_version": 1,
+      "module": "global_semilag_tracer_fix_fragment",
+      "name": "global_semilag_tracer_scale_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["advected", "float64_bits", "read"],
+        ["scale", "float64_bits", "read"],
+        ["fixed", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "advected": [["any_1d"]], "scale": [[1]], "fixed": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_tracer_fix_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

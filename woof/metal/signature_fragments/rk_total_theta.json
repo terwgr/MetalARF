@@ -1,0 +1,30 @@
+{
+  "kernels": [
+    {
+      "name": "rk_total_theta",
+      "module": "dycore",
+      "source": "woof/metal/shaders/rk_total_theta.metal",
+      "cuda_source": "woof/core/bandwidth_glue.py",
+      "cuda_symbol": "total_theta",
+      "resources": [["thb", "float", "read"], ["thp", "float", "read"], ["out", "float", "read_write"]],
+      "shapes": {"thb": [["nz"], ["nz", "ny", "nx"]], "thp": [["nz", "ny", "nx"]], "out": [["nz", "ny", "nx"]]},
+      "parameters": [["base3d", "int32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rk_total_mu",
+      "module": "dycore",
+      "source": "woof/metal/shaders/rk_total_theta.metal",
+      "cuda_source": "woof/core/state.py",
+      "cuda_symbol": "total_mu",
+      "resources": [["mub2d", "float", "read"], ["mup", "float", "read"], ["out", "float", "read_write"]],
+      "shapes": {"mub2d": [["ny", "nx"]], "mup": [["ny", "nx"]], "out": [["ny", "nx"]]},
+      "parameters": [["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

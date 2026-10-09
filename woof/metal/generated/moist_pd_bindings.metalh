@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "pd_fluxes_bindings.metalh"
+#include "pd_renorm_apply_bindings.metalh"

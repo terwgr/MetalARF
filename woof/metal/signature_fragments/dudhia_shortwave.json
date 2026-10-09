@@ -1,0 +1,58 @@
+{
+  "kernels": [
+    {
+      "name": "dudhia_shortwave_columns",
+      "module": "dudhia_shortwave",
+      "source": "woof/metal/shaders/dudhia_shortwave.metal",
+      "cuda_source": "woof/core/dudhia.py",
+      "cuda_symbol": "dudhia_shortwave_columns",
+      "resources": [
+        ["temperature", "float", "read"],
+        ["pressure", "float", "read"],
+        ["qv", "float", "read"],
+        ["qc", "float", "read"],
+        ["qr", "float", "read"],
+        ["qi", "float", "read"],
+        ["qs", "float", "read"],
+        ["qg", "float", "read"],
+        ["dz", "float", "read"],
+        ["exner", "float", "read"],
+        ["cosine_zenith", "float", "read"],
+        ["albedo", "float", "read"],
+        ["heating", "float", "read_write"],
+        ["swdown", "float", "read_write"],
+        ["gsw", "float", "read_write"],
+        ["coszen", "float", "read_write"]
+      ],
+      "shapes": {
+        "temperature": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]],
+        "qv": [["nz", "ny", "nx"]],
+        "qc": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]],
+        "qi": [["nz", "ny", "nx"]],
+        "qs": [["nz", "ny", "nx"]],
+        "qg": [["nz", "ny", "nx"]],
+        "dz": [["nz", "ny", "nx"]],
+        "exner": [["nz", "ny", "nx"]],
+        "cosine_zenith": [["ny", "nx"]],
+        "albedo": [["ny", "nx"]],
+        "heating": [["nz", "ny", "nx"]],
+        "swdown": [["ny", "nx"]],
+        "gsw": [["ny", "nx"]],
+        "coszen": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["solcon", "float32"],
+        ["swrad_scat", "float32"],
+        ["icloud", "int32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

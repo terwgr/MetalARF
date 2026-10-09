@@ -1,0 +1,34 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._metal_column_water",
+      "layout_version": 1,
+      "module": "global_column_water_before_fragment",
+      "name": "global_column_water_before_fragment",
+      "parameters": [["nlevel", "int32"], ["ncolumn", "int32"]],
+      "resources": [
+        ["qv", "float64_bits", "read"],
+        ["qc", "float64_bits", "read"],
+        ["qr", "float64_bits", "read"],
+        ["qi", "float64_bits", "read"],
+        ["qs", "float64_bits", "read"],
+        ["qg", "float64_bits", "read"],
+        ["dp", "float64_bits", "read"],
+        ["surface_water", "float64_bits", "read"],
+        ["gravity", "float64_bits", "read"],
+        ["before_water", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "qv": [["any_1d"]], "qc": [["any_1d"]],
+        "qr": [["any_1d"]], "qi": [["any_1d"]],
+        "qs": [["any_1d"]], "qg": [["any_1d"]],
+        "dp": [["any_1d"]], "surface_water": [["any_1d"]],
+        "gravity": [[1]], "before_water": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_column_water_before_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

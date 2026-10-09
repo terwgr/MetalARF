@@ -1,0 +1,37 @@
+// Generated from kernel_signatures.json; layout ccab57986ad11210471045c42c778c8b32c4b10d233428e928504f689dbe7d44.
+struct NtiedtkeAdjustResources {
+    device const int *ldcum [[id(0)]];
+    device const int *loddraf [[id(1)]];
+    device const int *idtop [[id(2)]];
+    device const int *kctop [[id(3)]];
+    device const int *kcbot [[id(4)]];
+    device const float *paph [[id(5)]];
+    device const float *pqen [[id(6)]];
+    device const float *pmfu [[id(7)]];
+    device const float *pmfuq [[id(8)]];
+    device const float *pmful [[id(9)]];
+    device float *pmfd [[id(10)]];
+    device float *pmfds [[id(11)]];
+    device float *pmfdq [[id(12)]];
+    device float *plude [[id(13)]];
+    device float *pdmfup [[id(14)]];
+    device float *pdmfdp [[id(15)]];
+    device float *pmfdde_rate [[id(16)]];
+    device float *pmfude_rate [[id(17)]];
+    device float *pmflxr [[id(18)]];
+    device float *pmflxs [[id(19)]];
+    device float *prsfc [[id(20)]];
+    device float *pssfc [[id(21)]];
+};
+struct NtiedtkeAdjustParams {
+    int ncol;
+    int klev;
+    float ztmst;
+    float cp;
+    float rd;
+    float rv;
+    float xlv;
+    float xlf;
+    float grav;
+};
+static_assert(sizeof(NtiedtkeAdjustParams) == 36, "ntiedtke_adjust parameter ABI size changed");

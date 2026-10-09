@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout f98ab1f0fd5c53e183ee49dcb0e6f4f3ac00188206092621c30090b25f9b4457.
+struct MynnWrapperFromSpecificResources {
+    device const float *sqv [[id(0)]];
+    device float *rqvblten [[id(1)]];
+    device float *rqcblten [[id(2)]];
+    device float *rqiblten [[id(3)]];
+    device float *qc_bl [[id(4)]];
+    device float *qi_bl [[id(5)]];
+};
+struct MynnWrapperFromSpecificParams {
+    int count;
+};
+static_assert(sizeof(MynnWrapperFromSpecificParams) == 4, "mynn_wrapper_from_specific parameter ABI size changed");

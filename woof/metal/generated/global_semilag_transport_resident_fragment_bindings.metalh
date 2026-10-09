@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout 7f45b246455f74b5e4e69c5d7edf6cd7c2338faab35cf9163cf89aac824e805a.
+struct GlobalSemilagTransportResidentFragmentResources {
+    device const ulong *vx [[id(0)]];
+    device const ulong *vy [[id(1)]];
+    device const ulong *vz [[id(2)]];
+    device const ulong *xi [[id(3)]];
+    device const ulong *phi [[id(4)]];
+    device const ulong *dlam [[id(5)]];
+    device const ulong *sin_lat [[id(6)]];
+    device const ulong *cos_lat [[id(7)]];
+    device const ulong *sin_lon [[id(8)]];
+    device const ulong *cos_lon [[id(9)]];
+    device ulong *u_arrival [[id(10)]];
+    device ulong *v_arrival [[id(11)]];
+};
+struct GlobalSemilagTransportResidentFragmentParams {
+    int count;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalSemilagTransportResidentFragmentParams) == 12, "global_semilag_transport_resident_fragment parameter ABI size changed");

@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout baddd15b62e99343be510513271d88dbd8c1e475830772984ce89f7e71db07de.
+struct GlobalSemilagWaterColumnFragmentResources {
+    device const ulong *qv [[id(0)]];
+    device const ulong *qc [[id(1)]];
+    device const ulong *qr [[id(2)]];
+    device const ulong *qi [[id(3)]];
+    device const ulong *qs [[id(4)]];
+    device const ulong *qg [[id(5)]];
+    device const ulong *dp [[id(6)]];
+    device const ulong *gravity [[id(7)]];
+    device ulong *water_column [[id(8)]];
+};
+struct GlobalSemilagWaterColumnFragmentParams {
+    int nlevel;
+    int nlat;
+    int nlon;
+};
+static_assert(sizeof(GlobalSemilagWaterColumnFragmentParams) == 12, "global_semilag_water_column_fragment parameter ABI size changed");

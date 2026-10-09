@@ -1,0 +1,41 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bep_bem_flat_roof_flux_fragment",
+      "module": "urban_bep_bem_flat_roof_flux_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_flat_roof_flux_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_flux_flat_roof",
+      "resources": [
+        ["dz", "float", "read"], ["z0", "float", "read"],
+        ["ua", "float", "read"], ["va", "float", "read"],
+        ["pt", "float", "read"], ["pt0", "float", "read"], ["ptg", "float", "read"],
+        ["da", "float", "read"], ["qv", "float", "read"], ["pr", "float", "read"],
+        ["rsg", "float", "read"], ["qr", "float", "read"],
+        ["pv_frac_roof", "float", "read"], ["gr_type", "int32", "read"],
+        ["uhb", "float", "read_write"], ["vhb", "float", "read_write"],
+        ["sf", "float", "read_write"], ["lf", "float", "read_write"], ["ehb", "float", "read_write"],
+        ["resg", "float", "read_write"], ["rsveg", "float", "read_write"],
+        ["f1", "float", "read_write"], ["f2", "float", "read_write"],
+        ["f3", "float", "read_write"], ["f4", "float", "read_write"], ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "dz": [["nitem"]], "z0": [["nitem"]], "ua": [["nitem"]], "va": [["nitem"]],
+        "pt": [["nitem"]], "pt0": [["nitem"]], "ptg": [["nitem"]],
+        "da": [["nitem"]], "qv": [["nitem"]], "pr": [["nitem"]], "rsg": [["nitem"]],
+        "qr": [["nitem", 10]], "pv_frac_roof": [["nitem"]], "gr_type": [["nitem"]],
+        "uhb": [["nitem"]], "vhb": [["nitem"]], "sf": [["nitem"]], "lf": [["nitem"]],
+        "ehb": [["nitem"]], "resg": [["nitem"]], "rsveg": [["nitem"]],
+        "f1": [["nitem"]], "f2": [["nitem"]], "f3": [["nitem"]], "f4": [["nitem"]],
+        "error": [["nitem"]]
+      },
+      "parameters": [
+        ["nitem", "int32"], ["g_u", "float32"], ["vk", "float32"],
+        ["p0", "float32"], ["rcp_u", "float32"], ["cp_u", "float32"], ["latent", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

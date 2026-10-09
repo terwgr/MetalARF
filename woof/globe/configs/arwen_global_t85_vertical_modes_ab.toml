@@ -1,0 +1,87 @@
+# A/B of the semi-implicit schemes on the card: the vertical-mode default
+# against the external-only proxy (scheme = "external"), same grid, same
+# clock, same analytic start.  T85 on the 40-level surface_stretched
+# default at dt = 300 s: the advective gate at 25 m/s allows 2200 s here,
+# the external proxy's linearized rest ceiling on this stack sits far
+# below dt = 300 (the internal modes it leaves explicit; audit 2026-09-01
+# DN-1), and every mode of the vertical-mode operator is implicit.
+# Three hours = 36 steps, checkpoints hourly.
+#
+# Run on the 16 GB host (RTX 5070 Ti, cupy float32, 2026-09-02): both arms complete
+# the 36 steps in ~6 s wall.  Vertical modes: max wind 25.1 -> 32.9 m/s,
+# ps 951.6..1038.5 hPa, max semi-implicit divergence increment 2.4e-7 1/s,
+# spectral CFL 0.133; external proxy: 32.8 m/s, 950.6..1039.4 hPa, 4.2e-7,
+# 0.132.  The proxy's slow rest-state growth on this stack (7.1e-6 per
+# step at T533 dt = 30 s in the linearized instrument) does not separate
+# the arms inside three hours.  Mass-fixer gate: measured relative drift
+# 3.1e-7 (vertical modes) and 4.4e-7 (external) in float32 on this
+# 40-level grid, so the gate is the shipped float32 configs' 1e-4, not the
+# float64 smoke config's 1e-7 that the first launch copied and tripped.
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-t85-vertical-modes-ab"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 85
+dealias_factor = 1.5
+
+[time]
+dt_s = 300.0
+duration_s = 10800.0
+output_interval_s = 3600.0
+maximum_cfl = 0.75
+integrator = "ssprk3"
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+[initial]
+surface_pressure_pa = 100000.0
+surface_temperature_k = 292.0
+top_temperature_k = 210.0
+qv_surface = 0.012
+zonal_wind_m_s = 25.0
+perturbation_amplitude = 0.004
+zonal_wavenumber = 5
+terrain_amplitude_m = 800.0
+surface_water_kg_m2 = 500.0
+
+[physics]
+mode = "reference"
+
+[reference_physics]
+radiation = true
+surface_fluxes = true
+turbulence = true
+convection = true
+saturation_adjustment = true
+microphysics = true
+
+[diffusion]
+enabled = true
+order = 4
+e_folding_time_s_at_truncation = 14400.0
+preserve_degree = 1
+divergence_strength = 1.5
+pressure_strength = 0.25
+water_strength = 0.5
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 5.0e-5
+transform_parseval_relative_error = 5.0e-5
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-6

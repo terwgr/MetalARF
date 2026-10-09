@@ -1,0 +1,33 @@
+// Generated from kernel_signatures.json; layout 5d171b61933c483e541e607bdc0dd0def5fdd1ee55eb1917ceb60e3529c5a9de.
+struct NtiedtkeCududvnResources {
+    device const int *ldcum [[id(0)]];
+    device const int *ktype [[id(1)]];
+    device const int *kcbot [[id(2)]];
+    device const float *paph [[id(3)]];
+    device const float *puen [[id(4)]];
+    device const float *pven [[id(5)]];
+    device const float *pmfu [[id(6)]];
+    device const float *pmfd [[id(7)]];
+    device const float *puu [[id(8)]];
+    device const float *pud [[id(9)]];
+    device const float *pvu [[id(10)]];
+    device const float *pvd [[id(11)]];
+    device float *ptenu [[id(12)]];
+    device float *ptenv [[id(13)]];
+    device float *zmfuu [[id(14)]];
+    device float *zmfuv [[id(15)]];
+    device float *zmfdu [[id(16)]];
+    device float *zmfdv [[id(17)]];
+};
+struct NtiedtkeCududvnParams {
+    int ncol;
+    int klev;
+    int ktopm2;
+    float cp;
+    float rd;
+    float rv;
+    float xlv;
+    float xlf;
+    float grav;
+};
+static_assert(sizeof(NtiedtkeCududvnParams) == 36, "ntiedtke_cududvn parameter ABI size changed");

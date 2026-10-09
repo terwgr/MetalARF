@@ -1,0 +1,29 @@
+{
+  "kernels": [
+    {
+      "name": "close_periodic_alias",
+      "module": "dycore",
+      "source": "woof/metal/shaders/close_periodic_alias.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "close_periodic_alias",
+      "resources": [
+        ["u", "float", "read_write"],
+        ["v", "float", "read_write"]
+      ],
+      "shapes": {
+        "u": [["nz", "ny", "nx+1"]],
+        "v": [["nz", "ny+1", "nx"]]
+      },
+      "parameters": [
+        ["boundary_x", "int32"],
+        ["boundary_y", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout c89003cec514508f72cd23c3df15a39ae02163678f88e6f04b648cd29ba3d625.
+struct GlobalTracerZonalFragmentResources {
+    device const ulong *mass [[id(0)]];
+    device const ulong *density [[id(1)]];
+    device const ulong *psi [[id(2)]];
+    device ulong *new_mass [[id(3)]];
+    device ulong *new_density [[id(4)]];
+    device const ulong *dt [[id(5)]];
+};
+struct GlobalTracerZonalFragmentParams {
+    int ntracer;
+    int nlevel;
+    int nlatitude;
+    int nlongitude;
+};
+static_assert(sizeof(GlobalTracerZonalFragmentParams) == 16, "global_tracer_zonal_fragment parameter ABI size changed");

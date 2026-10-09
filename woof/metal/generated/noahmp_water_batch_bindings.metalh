@@ -1,0 +1,12 @@
+// Generated from kernel_signatures.json; layout a79b378d952980f7e34e82b78343f3c06a7b5bb60c3699f09398bbc46aedffe9.
+struct NoahmpWaterBatchResources {
+    device const float *par [[id(0)]];
+    device const float *fin [[id(1)]];
+    device const int *iin [[id(2)]];
+    device float *fout [[id(3)]];
+    device int *iout [[id(4)]];
+};
+struct NoahmpWaterBatchParams {
+    int n;
+};
+static_assert(sizeof(NoahmpWaterBatchParams) == 4, "noahmp_water_batch parameter ABI size changed");

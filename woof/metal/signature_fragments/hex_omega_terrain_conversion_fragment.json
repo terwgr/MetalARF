@@ -1,0 +1,40 @@
+{
+  "kernels": [
+    {
+      "name": "hex_omega_terrain_conversion_fragment",
+      "module": "hex_omega_terrain_conversion_fragment",
+      "source": "woof/metal/shaders/hex_omega_terrain_conversion_fragment.metal",
+      "cuda_source": "woof/hex/acoustic.py",
+      "cuda_symbol": "convert_w_tendency_to_omega",
+      "resources": [
+        ["w_tendency", "float", "read"],
+        ["u_tendency", "float", "read"],
+        ["zz", "float", "read"],
+        ["fzm", "float", "read"],
+        ["fzp", "float", "read"],
+        ["zb_cell", "float", "read"],
+        ["zb3_cell", "float", "read"],
+        ["edges_on_cell", "int32", "read"],
+        ["edge_counts", "int32", "read"],
+        ["edge_signs", "float", "read"],
+        ["boundary_mask", "int32", "read"],
+        ["omega_tendency", "float", "read_write"]
+      ],
+      "shapes": {
+        "w_tendency": [["any_1d"]], "u_tendency": [["any_1d"]],
+        "zz": [["any_1d"]], "fzm": [["any_1d"]], "fzp": [["any_1d"]],
+        "zb_cell": [["any_1d"]], "zb3_cell": [["any_1d"]],
+        "edges_on_cell": [["any_1d"]], "edge_counts": [["any_1d"]],
+        "edge_signs": [["any_1d"]], "boundary_mask": [["any_1d"]],
+        "omega_tendency": [["any_1d"]]
+      },
+      "parameters": [
+        ["nlev", "int32"], ["ncells", "int32"], ["nedges", "int32"],
+        ["max_edges", "int32"], ["relaxation_zone", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

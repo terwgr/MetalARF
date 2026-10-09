@@ -1,0 +1,27 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semilag/rhs.py",
+      "cuda_symbol": "resident Global semi-Lagrangian pressure-gradient force",
+      "layout_version": 1,
+      "module": "global_semilag_force_fragment",
+      "name": "global_semilag_force_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["virtual_temperature", "float64_bits", "read"],
+        ["factor", "float64_bits", "read"],
+        ["gas_constant", "float64_bits", "read"],
+        ["force", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "factor": [["any_1d"]],
+        "force": [["any_1d"]],
+        "gas_constant": [[1]],
+        "virtual_temperature": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_force_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

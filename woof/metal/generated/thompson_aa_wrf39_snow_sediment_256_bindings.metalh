@@ -1,0 +1,27 @@
+// Generated from kernel_signatures.json; layout 1ceb7dac391faceff567fcbeae5c49f27362c5c7c3655dbc372aafc3ef77e43a.
+struct ThompsonAaWrf39SnowSediment256Resources {
+    device float *qs [[id(0)]];
+    device const float *snow_melt_marker [[id(1)]];
+    device const float *melt_rain_qr [[id(2)]];
+    device const float *melt_rain_nr [[id(3)]];
+    device const float *temperature [[id(4)]];
+    device const float *pressure [[id(5)]];
+    device const float *qv [[id(6)]];
+    device const float *reference_density [[id(7)]];
+    device const float *reference_temperature [[id(8)]];
+    device const float *velocity_boost [[id(9)]];
+    device const float *melt_rain_density [[id(10)]];
+    device const float *dz [[id(11)]];
+    device float *rainnc [[id(12)]];
+    device float *rainncv [[id(13)]];
+    device float *snownc [[id(14)]];
+    device float *snowncv [[id(15)]];
+};
+struct ThompsonAaWrf39SnowSediment256Params {
+    int singular_fall;
+    float dt;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(ThompsonAaWrf39SnowSediment256Params) == 20, "thompson_aa_wrf39_snow_sediment_256 parameter ABI size changed");

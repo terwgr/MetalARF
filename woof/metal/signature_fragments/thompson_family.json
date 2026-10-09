@@ -1,0 +1,2428 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_warm_saturation_adjust",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_warm_saturation_adjust",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_cloud_saturation_adjust",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_cloud_saturation_adjust",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_cloud_saturation_adjust_with_density",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_cloud_saturation_adjust_with_density",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_cloud_saturation_adjust_with_state",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_cloud_saturation_adjust_with_state",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read_write"
+        ],
+        [
+          "reference_temperature",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_cloud_saturation_adjust_with_history",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_cloud_saturation_adjust_with_history",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read_write"
+        ],
+        [
+          "reference_temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "condensation_marker",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "condensation_marker": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_cloud_saturation_adjust_with_presence",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_cloud_saturation_adjust_with_presence",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read_write"
+        ],
+        [
+          "reference_temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "condensation_marker",
+          "float",
+          "read_write"
+        ],
+        [
+          "cloud_presence",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "condensation_marker": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cloud_presence": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_graupel_fallout_column_mask",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_graupel_fallout_column_mask",
+      "resources": [
+        [
+          "entry_active",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "active_columns",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "entry_active": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "active_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_hydrometeor_column_mask",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_hydrometeor_column_mask",
+      "resources": [
+        [
+          "mixing_ratio",
+          "float",
+          "read"
+        ],
+        [
+          "active_columns",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mixing_ratio": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "active_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_microphysics_columns",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_microphysics_columns",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "micro_columns",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "micro_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_adapter_masks",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_adapter_masks",
+      "resources": [
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "entry_graupel",
+          "float",
+          "read"
+        ],
+        [
+          "rain_columns",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupel_columns",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "entry_graupel": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rain_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupel_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_adapter_finish",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_adapter_finish",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "th",
+          "float",
+          "read_write"
+        ],
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "h_diabatic",
+          "float",
+          "read_write"
+        ],
+        [
+          "rainncv",
+          "float",
+          "read"
+        ],
+        [
+          "snowncv",
+          "float",
+          "read"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read"
+        ],
+        [
+          "sr",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "th": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_diabatic": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rainncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snowncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "limit",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "no_mp_heating",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "size",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_adapter_prepare",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_adapter_prepare",
+      "resources": [
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "th",
+          "float",
+          "read_write"
+        ],
+        [
+          "pii",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz",
+          "float",
+          "read_write"
+        ],
+        [
+          "saved_theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "entry_graupel",
+          "float",
+          "read_write"
+        ],
+        [
+          "warm_entry",
+          "float",
+          "read_write"
+        ],
+        [
+          "graupelncv",
+          "float",
+          "read_write"
+        ],
+        [
+          "micro_columns",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "th": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pii": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "saved_theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "entry_graupel": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "warm_entry": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupelncv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "micro_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "size",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "thb_full",
+          "int32"
+        ],
+        [
+          "phb_full",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_cloud_saturation_adjust_history_marker_only",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_cloud_saturation_adjust_with_history",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "condensation_marker",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "condensation_marker": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_cloud_saturation_adjust_history_density_marker",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_cloud_saturation_adjust_with_history",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "reference_density",
+          "float",
+          "read_write"
+        ],
+        [
+          "condensation_marker",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "reference_density": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "condensation_marker": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "thompson_classic_graupel_number_init",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_classic_graupel_number_init",
+      "resources": [
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qg": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "precise-metal-fp32-math",
+        "cuda-device-libm-identity-unverified",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "thompson_classic_graupel_number_finalize",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_classic_graupel_number_finalize",
+      "resources": [
+        [
+          "qg",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qg": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "precise-metal-fp32-math",
+        "cuda-device-libm-identity-unverified",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "thompson_adapter_entry",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_adapter_entry",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "graupel_number_per_kg",
+          "float",
+          "read_write"
+        ],
+        [
+          "micro_columns",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "graupel_number_per_kg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "micro_columns": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "size",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "precise-metal-fp32-math",
+        "cuda-device-libm-identity-unverified",
+        "soft64-rn-bit-ops"
+      ]
+    },
+    {
+      "name": "thompson_exner_power",
+      "module": "thompson_family",
+      "source": "woof/metal/shaders/thompson_family.metal",
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "cp.power(state.p / DTYPE(c.P0), DTYPE(c.RCP))",
+      "resources": [
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "write"
+        ]
+      ],
+      "shapes": {
+        "pressure": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ],
+          [
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "size",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "reference_pressure",
+          "float32"
+        ],
+        [
+          "exponent",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "precise-metal-fp32-math",
+        "cuda-device-libm-identity-unverified"
+      ]
+    }
+  ]
+}

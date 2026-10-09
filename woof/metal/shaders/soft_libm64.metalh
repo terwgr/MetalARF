@@ -1,0 +1,249 @@
+#ifndef WOOF_SOFT_LIBM64_METALH
+#define WOOF_SOFT_LIBM64_METALH
+
+// Integer-only bit-pattern transcription of pinned portable_libm64.cuh
+// plm_exp, plm_log and plm_pow (Rust libm 0.2.16). Inputs and outputs are
+// ulong IEEE-754 binary64 encodings; no native fp64 arithmetic is used.
+// This shared primitive depends on soft_binary64.metalh and remains unverified.
+/*
+ * Copyright (C) 2004 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ */
+/*
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunSoft, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ */
+/*
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunPro, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ */
+#include "soft_binary64.metalh"
+
+static inline ulong soft64_plm_bits(ulong bits) { return bits; }
+static inline ulong soft64_plm_word(ulong bits) { return bits; }
+static inline uint soft64_plm_hi(ulong bits) { return uint(bits >> 32); }
+static inline ulong soft64_plm_sethi(ulong x, uint h) { return (ulong(h) << 32) | (x & 0xfffffffful); }
+static inline ulong soft64_plm_setlo(ulong x, uint l) { return (x & 0xffffffff00000000ul) | ulong(l); }
+static inline ulong soft64_plm_scalbn(ulong x, int n);
+static inline int soft64_plm_i32(ulong x) {
+    if (soft64_is_nan(x)) return 0;
+    if (soft64_greater_equal(x, 0x41dfffffffc00000ul)) return 2147483647;
+    if (soft64_less_equal(x, 0xc1e0000000000000ul)) return as_type<int>(0x80000000u);
+    const Soft64I32Result cv = soft64_to_i32_rz(x);
+    return cv.valid ? cv.value : (soft64_sign(x) ? as_type<int>(0x80000000u) : 2147483647);
+}
+static inline ulong soft64_plm_scalbn(ulong x, int n) {
+    if (n > 1023) {
+        x = soft64_mul(x, 0x7fe0000000000000ul); n -= 1023;
+        if (n > 1023) { x = soft64_mul(x, 0x7fe0000000000000ul); n -= 1023; if (n > 1023) n = 1023; }
+    } else if (n < -1022) {
+        x = soft64_mul(x, 0x0360000000000000ul); n += 969;
+        if (n < -1022) { x = soft64_mul(x, 0x0360000000000000ul); n += 969; if (n < -1022) n = -1022; }
+    }
+    const ulong scale = ulong(1023 + n) << 52;
+    return soft64_mul(x, scale);
+}
+
+static inline ulong soft64_plm_exp(ulong x) {
+    const ulong plm_LN2HI = soft64_plm_bits(0x3fe62e42fee00000ul);
+    const ulong plm_LN2LO = soft64_plm_bits(0x3dea39ef35793c76ul);
+    const ulong plm_INVLN2 = soft64_plm_bits(0x3ff71547652b82feul);
+    const ulong plm_P1 = soft64_plm_bits(0x3fc555555555553eul);
+    const ulong plm_P2 = soft64_plm_bits(0xbf66c16c16bebd93ul);
+    const ulong plm_P3 = soft64_plm_bits(0x3f11566aaf25de2cul);
+    const ulong plm_P4 = soft64_plm_bits(0xbebbbd41c5d26bf1ul);
+    const ulong plm_P5 = soft64_plm_bits(0x3e66376972bea4d0ul);
+    uint hx = soft64_plm_hi(x);
+    const int sign = int(hx >> 31);
+    hx &= 0x7fffffffu;
+
+    if (hx >= 0x4086232bu) {
+        if ((soft64_plm_word(x) & 0x7ffffffffffffffful)
+                > 0x7ff0000000000000ul)
+            return x;
+        if (soft64_greater(x, 0x40862e42fefa39eful))
+            return soft64_mul(x, 0x7fe0000000000000ul);
+        if (soft64_less(x, 0xc0874910d52d3051ul))
+            return 0ul;
+    }
+
+    int k;
+    ulong hi, lo;
+    if (hx > 0x3fd62e42u) {
+        if (hx >= 0x3ff0a2b2u) {
+            const ulong half_word = sign != 0 ? 0xbfe0000000000000ul
+                                              : 0x3fe0000000000000ul;
+            k = soft64_plm_i32(
+                soft64_add(soft64_mul(plm_INVLN2, x), half_word));
+        } else {
+            k = 1 - sign - sign;
+        }
+        const ulong kd = soft64_from_i32(k);
+        hi = soft64_sub(x, soft64_mul(kd, plm_LN2HI));
+        lo = soft64_mul(kd, plm_LN2LO);
+        x = soft64_sub(hi, lo);
+    } else if (hx > 0x3e300000u) {
+        k = 0;
+        hi = x;
+        lo = 0ul;
+    } else {
+        return soft64_add(0x3ff0000000000000ul, x);
+    }
+
+    const ulong xx = soft64_mul(x, x);
+    const ulong c = soft64_sub(x, soft64_mul(xx, soft64_add(plm_P1,
+        soft64_mul(xx, soft64_add(plm_P2, soft64_mul(xx,
+            soft64_add(plm_P3, soft64_mul(xx,
+                soft64_add(plm_P4, soft64_mul(xx, plm_P5))))))))));
+    const ulong rational = soft64_sub(
+        soft64_div(soft64_mul(x, c), soft64_sub(0x4000000000000000ul, c)),
+        lo);
+    const ulong y = soft64_add(0x3ff0000000000000ul,
+                               soft64_add(rational, hi));
+    return k == 0 ? y : soft64_plm_scalbn(y, k);
+}
+
+static inline ulong soft64_plm_log(ulong x) {
+    const ulong plm_LN2_HI = soft64_plm_bits(0x3fe62e42fee00000), plm_LN2_LO = soft64_plm_bits(0x3dea39ef35793c76);
+    const ulong plm_LG1 = soft64_plm_bits(0x3fe5555555555593), plm_LG2 = soft64_plm_bits(0x3fd999999997fa04), plm_LG3 = soft64_plm_bits(0x3fd2492494229359);
+    const ulong plm_LG4 = soft64_plm_bits(0x3fcc71c51d8e78af), plm_LG5 = soft64_plm_bits(0x3fc7466496cb03de), plm_LG6 = soft64_plm_bits(0x3fc39a09d078c69f), plm_LG7 = soft64_plm_bits(0x3fc2f112df3e5244);
+    ulong ui = soft64_plm_word(x); uint hx = ui >> 32; int k = 0;
+    if (hx < 0x00100000 || (hx >> 31) != 0) {
+        if ((ui << 1) == 0) return soft64_plm_bits(0xfff0000000000000);
+        if (hx >> 31) return soft64_div(soft64_sub(x, x), 0x0000000000000000ul);
+        k -= 54; x = soft64_mul(x, soft64_plm_bits(0x4350000000000000)); ui = soft64_plm_word(x); hx = ui >> 32;
+    } else if (hx >= 0x7ff00000) return x;
+    else if (hx == 0x3ff00000 && (ui << 32) == 0) return 0x0000000000000000ul;
+    hx += 0x3ff00000 - 0x3fe6a09e; k += (int)(hx >> 20) - 0x3ff;
+    hx = (hx & 0x000fffff) + 0x3fe6a09e; x = soft64_plm_sethi(x, hx);
+    ulong f = soft64_sub(x, 0x3ff0000000000000ul), hfsq = soft64_mul(soft64_mul(0x3fe0000000000000ul, f), f), s = soft64_div(f, soft64_add(0x4000000000000000ul, f));
+    ulong z = soft64_mul(s, s), w = soft64_mul(z, z);
+    ulong t1 = soft64_mul(w, soft64_add(plm_LG2, soft64_mul(w, soft64_add(plm_LG4, soft64_mul(w, plm_LG6)))));
+    ulong t2 = soft64_mul(z, soft64_add(plm_LG1, soft64_mul(w, soft64_add(plm_LG3, soft64_mul(w, soft64_add(plm_LG5, soft64_mul(w, plm_LG7)))))));
+    ulong r = soft64_add(t2, t1), dk = soft64_from_i32(k);
+    return soft64_add(soft64_add(soft64_sub(soft64_add(soft64_mul(s, soft64_add(hfsq, r)), soft64_mul(dk, plm_LN2_LO)), hfsq), f), soft64_mul(dk, plm_LN2_HI));
+}
+
+// Keep the sizeable portable pow implementation in its own device function.
+// Apple MTLCompilerService on M2 crashes while legalizing it when inlined into
+// Thompson's active-ice kernel; this call boundary leaves its arithmetic intact.
+static __attribute__((noinline)) ulong soft64_plm_pow(ulong x, ulong y) {
+    const ulong plm_BP[2] = {0x3ff0000000000000ul, 0x3ff8000000000000ul}, plm_DP_H[2] = {0x0000000000000000ul, soft64_plm_bits(0x3fe2b80340000000)}, plm_DP_L[2] = {0x0000000000000000ul, soft64_plm_bits(0x3e4cfdeb43cfd006)};
+    const ulong plm_TWO53 = soft64_plm_bits(0x4340000000000000), plm_HUGE = 0x7e37e43c8800759cul, plm_TINY = 0x01a56e1fc2f8f359ul;
+    const ulong plm_L1 = soft64_plm_bits(0x3fe3333333333303), plm_L2 = soft64_plm_bits(0x3fdb6db6db6fabff), plm_L3 = soft64_plm_bits(0x3fd55555518f264d);
+    const ulong plm_L4 = soft64_plm_bits(0x3fd17460a91d4101), plm_L5 = soft64_plm_bits(0x3fcd864a93c9db65), plm_L6 = soft64_plm_bits(0x3fca7e284a454eef);
+    const ulong plm_P1 = soft64_plm_bits(0x3fc555555555553e), plm_P2 = soft64_plm_bits(0xbf66c16c16bebd93), plm_P3 = soft64_plm_bits(0x3f11566aaf25de2c);
+    const ulong plm_P4 = soft64_plm_bits(0xbebbbd41c5d26bf1), plm_P5 = soft64_plm_bits(0x3e66376972bea4d0);
+    const ulong plm_LG2 = soft64_plm_bits(0x3fe62e42fefa39ef), plm_LG2_H = soft64_plm_bits(0x3fe62e4300000000), plm_LG2_L = soft64_plm_bits(0xbe205c610ca86c39);
+    const ulong plm_OVT = 0x3c971547652b82feul, plm_CP = soft64_plm_bits(0x3feec709dc3a03fd), plm_CP_H = soft64_plm_bits(0x3feec709e0000000), plm_CP_L = soft64_plm_bits(0xbe3e2fe0145b01f5);
+    const ulong plm_IVLN2 = soft64_plm_bits(0x3ff71547652b82fe), plm_IVLN2_H = soft64_plm_bits(0x3ff7154760000000), plm_IVLN2_L = soft64_plm_bits(0x3e54ae0bf85ddf44);
+    int hx = (int)soft64_plm_hi(x), hy = (int)soft64_plm_hi(y);
+    uint lx = (uint)soft64_plm_word(x), ly = (uint)soft64_plm_word(y);
+    int ix = hx & 0x7fffffff, iy = hy & 0x7fffffff;
+    if (((uint)iy | ly) == 0) return 0x3ff0000000000000ul;
+    if (hx == 0x3ff00000 && lx == 0) return 0x3ff0000000000000ul;
+    // Match the pinned source NaN precedence explicitly, including when both
+    // operands are NaNs; no soft arithmetic is needed on this path.
+    if (ix > 0x7ff00000 || (ix == 0x7ff00000 && lx != 0)) return (soft64_plm_word(x) | 0x0008000000000000ul);
+    if (iy > 0x7ff00000 || (iy == 0x7ff00000 && ly != 0)) return (soft64_plm_word(y) | 0x0008000000000000ul);
+    int yisint = 0, k, j;
+    if (hx < 0) {
+        if (iy >= 0x43400000) yisint = 2;
+        else if (iy >= 0x3ff00000) {
+            k = (iy >> 20) - 0x3ff;
+            if (k > 20) { j = (int)(ly >> (52 - k)); if (((uint)j << (52 - k)) == ly) yisint = 2 - (j & 1); }
+            else if (ly == 0) { j = iy >> (20 - k); if ((j << (20 - k)) == iy) yisint = 2 - (j & 1); }
+        }
+    }
+    if (ly == 0) {
+        if (iy == 0x7ff00000) {
+            if (((ix - 0x3ff00000) | (int)lx) == 0) return 0x3ff0000000000000ul;
+            if (ix >= 0x3ff00000) return hy >= 0 ? y : 0x0000000000000000ul;
+            return hy >= 0 ? 0x0000000000000000ul : soft64_negate_bits(y);
+        }
+        if (iy == 0x3ff00000) return hy >= 0 ? x : soft64_div(0x3ff0000000000000ul, x);
+        if (hy == 0x40000000) return soft64_mul(x, x);
+        if (hy == 0x3fe00000 && hx >= 0) return soft64_sqrt(x);
+    }
+    ulong ax = soft64_abs_bits(x);
+    if (lx == 0 && (ix == 0x7ff00000 || ix == 0 || ix == 0x3ff00000)) {
+        ulong z = ax;
+        if (hy < 0) z = soft64_div(0x3ff0000000000000ul, z);
+        if (hx < 0) {
+            if (((ix - 0x3ff00000) | yisint) == 0) z = soft64_div(soft64_sub(z, z), soft64_sub(z, z));
+            else if (yisint == 1) z = soft64_negate_bits(z);
+        }
+        return z;
+    }
+    ulong s = 0x3ff0000000000000ul;
+    if (hx < 0) { if (yisint == 0) return soft64_div(soft64_sub(x, x), soft64_sub(x, x)); if (yisint == 1) s = 0xbff0000000000000ul; }
+    ulong t1, t2;
+    if (iy > 0x41e00000) {
+        if (iy > 0x43f00000) {
+            if (ix <= 0x3fefffff) return hy < 0 ? soft64_mul(plm_HUGE, plm_HUGE) : soft64_mul(plm_TINY, plm_TINY);
+            if (ix >= 0x3ff00000) return hy > 0 ? soft64_mul(plm_HUGE, plm_HUGE) : soft64_mul(plm_TINY, plm_TINY);
+        }
+        if (ix < 0x3fefffff) return hy < 0 ? soft64_mul(soft64_mul(s, plm_HUGE), plm_HUGE) : soft64_mul(soft64_mul(s, plm_TINY), plm_TINY);
+        if (ix > 0x3ff00000) return hy > 0 ? soft64_mul(soft64_mul(s, plm_HUGE), plm_HUGE) : soft64_mul(soft64_mul(s, plm_TINY), plm_TINY);
+        ulong t = soft64_sub(ax, 0x3ff0000000000000ul), w = soft64_mul(soft64_mul(t, t), soft64_sub(0x3fe0000000000000ul, soft64_mul(t, soft64_sub(0x3fd5555555555555ul, soft64_mul(t, 0x3fd0000000000000ul)))));
+        ulong u = soft64_mul(plm_IVLN2_H, t), v = soft64_sub(soft64_mul(t, plm_IVLN2_L), soft64_mul(w, plm_IVLN2));
+        t1 = soft64_plm_setlo(soft64_add(u, v), 0); t2 = soft64_sub(v, soft64_sub(t1, u));
+    } else {
+        int n = 0;
+        if (ix < 0x00100000) { ax = soft64_mul(ax, plm_TWO53); n -= 53; ix = (int)soft64_plm_hi(ax); }
+        n += (ix >> 20) - 0x3ff; j = ix & 0x000fffff;
+        int k; ix = j | 0x3ff00000;
+        if (j <= 0x3988e) k = 0;
+        else if (j < 0xbb67a) k = 1;
+        else { k = 0; n += 1; ix -= 0x00100000; }
+        ax = soft64_plm_sethi(ax, (uint)ix);
+        ulong u = soft64_sub(ax, plm_BP[k]), v = soft64_div(0x3ff0000000000000ul, soft64_add(ax, plm_BP[k])), ss = soft64_mul(u, v), s_h = soft64_plm_setlo(ss, 0);
+        ulong t_h = soft64_plm_sethi(0x0000000000000000ul, (((uint)ix >> 1) | 0x20000000) + 0x00080000 + ((uint)k << 18));
+        ulong t_l = soft64_sub(ax, soft64_sub(t_h, plm_BP[k])), s_l = soft64_mul(v, soft64_sub(soft64_sub(u, soft64_mul(s_h, t_h)), soft64_mul(s_h, t_l)));
+        ulong s2 = soft64_mul(ss, ss), r = soft64_mul(soft64_mul(s2, s2), soft64_add(plm_L1, soft64_mul(s2, soft64_add(plm_L2, soft64_mul(s2, soft64_add(plm_L3, soft64_mul(s2, soft64_add(plm_L4, soft64_mul(s2, soft64_add(plm_L5, soft64_mul(s2, plm_L6)))))))))));
+        r = soft64_add(r, soft64_mul(s_l, soft64_add(s_h, ss))); s2 = soft64_mul(s_h, s_h);
+        t_h = soft64_plm_setlo(soft64_add(soft64_add(0x4008000000000000ul, s2), r), 0); t_l = soft64_sub(r, soft64_sub(soft64_sub(t_h, 0x4008000000000000ul), s2));
+        u = soft64_mul(s_h, t_h); v = soft64_add(soft64_mul(s_l, t_h), soft64_mul(t_l, ss));
+        ulong p_h = soft64_plm_setlo(soft64_add(u, v), 0), p_l = soft64_sub(v, soft64_sub(p_h, u));
+        ulong z_h = soft64_mul(plm_CP_H, p_h), z_l = soft64_add(soft64_add(soft64_mul(plm_CP_L, p_h), soft64_mul(p_l, plm_CP)), plm_DP_L[k]);
+        ulong t = soft64_from_i32(n);
+        t1 = soft64_plm_setlo(soft64_add(soft64_add(soft64_add(z_h, z_l), plm_DP_H[k]), t), 0);
+        t2 = soft64_sub(z_l, soft64_sub(soft64_sub(soft64_sub(t1, t), plm_DP_H[k]), z_h));
+    }
+    ulong y1 = soft64_plm_setlo(y, 0), p_l = soft64_add(soft64_mul(soft64_sub(y, y1), t1), soft64_mul(y, t2)), p_h = soft64_mul(y1, t1), z = soft64_add(p_l, p_h);
+    j = (int)soft64_plm_hi(z); int i = (int)soft64_plm_word(z);
+    if (j >= 0x40900000) {
+        if (((j - 0x40900000) | i) != 0) return soft64_mul(soft64_mul(s, plm_HUGE), plm_HUGE);
+        if (soft64_greater(soft64_add(p_l, plm_OVT), soft64_sub(z, p_h))) return soft64_mul(soft64_mul(s, plm_HUGE), plm_HUGE);
+    } else if ((j & 0x7fffffff) >= 0x4090cc00) {
+        if ((((uint)j - 0xc090cc00U) | (uint)i) != 0) return soft64_mul(soft64_mul(s, plm_TINY), plm_TINY);
+        if (soft64_less_equal(p_l, soft64_sub(z, p_h))) return soft64_mul(soft64_mul(s, plm_TINY), plm_TINY);
+    }
+    i = j & 0x7fffffff; k = (i >> 20) - 0x3ff; int n = 0;
+    if (i > 0x3fe00000) {
+        n = j + (0x00100000 >> (k + 1)); k = ((n & 0x7fffffff) >> 20) - 0x3ff;
+        ulong t = soft64_plm_sethi(0x0000000000000000ul, (uint)(n & ~(0x000fffff >> k)));
+        n = ((n & 0x000fffff) | 0x00100000) >> (20 - k); if (j < 0) n = -n;
+        p_h = soft64_sub(p_h, t);
+    }
+    ulong t = soft64_plm_setlo(soft64_add(p_l, p_h), 0), u = soft64_mul(t, plm_LG2_H), v = soft64_add(soft64_mul(soft64_sub(p_l, soft64_sub(t, p_h)), plm_LG2), soft64_mul(t, plm_LG2_L));
+    z = soft64_add(u, v); ulong w = soft64_sub(v, soft64_sub(z, u)); t = soft64_mul(z, z);
+    t1 = soft64_sub(z, soft64_mul(t, soft64_add(plm_P1, soft64_mul(t, soft64_add(plm_P2, soft64_mul(t, soft64_add(plm_P3, soft64_mul(t, soft64_add(plm_P4, soft64_mul(t, plm_P5))))))))));
+    ulong r = soft64_sub(soft64_div(soft64_mul(z, t1), soft64_sub(t1, 0x4000000000000000ul)), soft64_add(w, soft64_mul(z, w))); z = soft64_sub(0x3ff0000000000000ul, soft64_sub(r, z));
+    j = (int)((uint)soft64_plm_hi(z) + ((uint)n << 20));
+    z = (j >> 20) <= 0 ? soft64_plm_scalbn(z, n) : soft64_plm_sethi(z, (uint)j);
+    return soft64_mul(s, z);
+}
+
+#endif // WOOF_SOFT_LIBM64_METALH

@@ -1,0 +1,5 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "noah_forcing_bindings.metalh"
+#include "noah_rain_add_bindings.metalh"
+#include "noah_rain_clear_bindings.metalh"
+#include "noah_sr_from_temperature_bindings.metalh"

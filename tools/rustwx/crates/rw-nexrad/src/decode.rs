@@ -1,0 +1,1614 @@
+//! Volume -> sweep pack.
+//!
+//! Everything geometric stays in floating-point degrees and metres exactly
+//! as the RDA reported it; the pack is a transcription, not an
+//! interpretation.  The only reductions are the three the caller asked for
+//! (moment selection, an elevation ceiling, and a range ceiling) and all
+//! three are counted into the metadata so a thin pack is never mistaken for
+//! a thin volume.
+
+use std::error::Error;
+use std::path::Path;
+
+use chrono::{DateTime, Duration, NaiveDate, TimeZone, Utc};
+use wx_radar::level2::{Level2File, Level2Sweep, VolSite};
+use wx_radar::products::RadarProduct;
+
+use crate::pack::{
+    self, ArrayEntry, DecodeParams, Framing, MomentEntry, PackMeta, PayloadBuilder, SiteEntry,
+    SweepEntry, VolumeEntry, SWEEPS_SCHEMA, SWEEPS_SCHEMA_CENSOR,
+};
+use crate::s3::{boxed_error, hex_sha256, iso8601, iso8601_ms, parse_volume_key};
+
+/// Volume start time from the Archive-II header: `volume_date` counts days
+/// since 1970-01-01 with the epoch day numbered 1, `volume_time` is
+/// milliseconds past midnight UTC.
+pub fn volume_time(volume_date: u16, volume_time_ms: u32) -> Option<DateTime<Utc>> {
+    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)?;
+    let date = epoch.checked_add_signed(Duration::days(volume_date as i64 - 1))?;
+    let seconds = (volume_time_ms / 1000) as i64;
+    let naive = date.and_hms_opt(0, 0, 0)? + Duration::seconds(seconds);
+    Some(Utc.from_utc_datetime(&naive))
+}
+
+/// One radial's collection instant from its Message-31 header words, kept
+/// to the millisecond the RDA recorded.
+///
+/// The same day numbering as [`volume_time`].  `None` for a word pair that
+/// is not a time: day 0 (the ICD numbers the epoch day 1, so 0 is an unset
+/// word) or a millisecond count at or past midnight.  A caller that dates a
+/// volume from these must refuse such a radial by name rather than date the
+/// volume from a value that is not a time.
+pub fn radial_instant(collection_date: u16, collection_time_ms: u32) -> Option<DateTime<Utc>> {
+    if collection_date == 0 || collection_time_ms >= 86_400_000 {
+        return None;
+    }
+    let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)?;
+    let date = epoch.checked_add_signed(Duration::days(collection_date as i64 - 1))?;
+    let naive = date.and_hms_opt(0, 0, 0)? + Duration::milliseconds(collection_time_ms as i64);
+    Some(Utc.from_utc_datetime(&naive))
+}
+
+/// The earliest and latest collection instant among one cut's radials.
+///
+/// Min and max rather than first and last: a cut's radials arrive in scan
+/// order on every volume seen, but the span is a statement about when the
+/// cut was scanned and must not depend on the order the bytes happen to be
+/// in.
+pub fn cut_instants(sweep: &Level2Sweep) -> Result<(DateTime<Utc>, DateTime<Utc>), String> {
+    let mut first: Option<DateTime<Utc>> = None;
+    let mut last: Option<DateTime<Utc>> = None;
+    for (row, radial) in sweep.radials.iter().enumerate() {
+        let when = radial_instant(radial.collection_date, radial.collection_time_ms).ok_or_else(
+            || {
+                format!(
+                    "corrupt Level-II volume: sweep {} radial {row} carries collection date {} / \
+                     time {} ms, which is not a calendar instant. The pack dates every cut and \
+                     the whole volume from these words, so a value that is not a time cannot be \
+                     let through as one. The file is corrupt at that radial: fetch the volume \
+                     again or decode another one",
+                    sweep.sweep_index, radial.collection_date, radial.collection_time_ms
+                )
+            },
+        )?;
+        first = Some(first.map_or(when, |f| f.min(when)));
+        last = Some(last.map_or(when, |l| l.max(when)));
+    }
+    match (first, last) {
+        (Some(first), Some(last)) => Ok((first, last)),
+        _ => Err(format!(
+            "corrupt Level-II volume: sweep {} has no radials to date",
+            sweep.sweep_index
+        )),
+    }
+}
+
+/// Whether a cut both started and ended on a radial-status marker.
+pub fn cut_complete(sweep: &Level2Sweep) -> bool {
+    matches!(sweep.start_status, 0 | 3 | 5) && matches!(sweep.end_status, 2 | 4)
+}
+
+/// Coordinates for a site, and the accurate record of where they came from.
+#[derive(Debug, Clone)]
+pub struct SiteFix {
+    pub id: String,
+    pub name: String,
+    pub lat_deg: f64,
+    pub lon_deg: f64,
+    pub alt_m: f64,
+    pub source: String,
+}
+
+/// The vendored site table's placeholder for "elevation not filled in".
+///
+/// 130 of its 141 entries carry exactly this value, including KUEX at
+/// Hastings (really 602 m) and KTWX at Topeka (really 417 m); the eleven
+/// that differ are the ones somebody typed in.  It is a sentinel, not a
+/// measurement, and no operational WSR-88D antenna sits at exactly 0.000 m
+/// MSL, even KBYX at Key West is a few metres up.
+pub const SITE_ELEVATION_UNSET_M: f64 = 0.0;
+
+/// Resolve a site's coordinates: the caller's explicit override wins, then
+/// the vendored NEXRAD table.  An unknown site with no override is a hard
+/// error: a superob placed at a guessed radar position is worse than no
+/// superob at all.
+///
+/// A site whose *elevation* is the table's unset sentinel is the same hard
+/// error, for the same reason and with more consequence.  The antenna
+/// height is the ray origin: every gate's height above sea level is
+/// computed from it, so a radar placed 600 m too low puts its entire volume
+/// 600 m too low in the model column, systematically, in the direction that
+/// pushes a mid-level echo into the boundary layer.  Latitude and longitude
+/// were the only fields the table's silence was ever noticed in; the
+/// altitude column fails identically and had nothing stopping it.
+pub fn resolve_site(
+    station_id: &str,
+    override_fix: Option<(f64, f64, f64)>,
+) -> Result<SiteFix, Box<dyn Error>> {
+    resolve_site_from(station_id, override_fix, None)
+}
+
+/// Resolve a site with the volume's own Message-31 VOL block in hand.
+///
+/// Precedence: an explicit `--site-latlon` override, then the volume's
+/// own VOL block, then the vendored table.  The VOL block outranks the
+/// table because it is the radar's own survey riding inside the volume:
+/// latitude, longitude, site ground elevation AND the feedhorn height the
+/// table never carries, so its `antenna_height_m()` is the beam origin
+/// with no downstream addition.  The table's role shrinks to volumes old
+/// or damaged enough to carry no VOL block, where its elevation rules
+/// (placeholder refused, populated value documented as ground-only)
+/// still apply unchanged.
+///
+/// When both are present and the table disagrees with the volume by more
+/// than ~0.05 degrees, the disagreement is recorded in the fix's
+/// `source` string: that is how the KPBZ longitude transcription error
+/// (17 km) surfaces on real volumes instead of silently misplacing
+/// superobs.
+pub fn resolve_site_from(
+    station_id: &str,
+    override_fix: Option<(f64, f64, f64)>,
+    vol_site: Option<&VolSite>,
+) -> Result<SiteFix, Box<dyn Error>> {
+    if let Some((lat, lon, alt)) = override_fix {
+        if !(-90.0..=90.0).contains(&lat) || !(-180.0..=360.0).contains(&lon) {
+            return Err(boxed_error(format!(
+                "--site-latlon out of range: lat {lat}, lon {lon}"
+            )));
+        }
+        return Ok(SiteFix {
+            id: station_id.to_string(),
+            name: station_id.to_string(),
+            lat_deg: lat,
+            lon_deg: lon,
+            alt_m: alt,
+            source: "cli-override".to_string(),
+        });
+    }
+    if let Some(vol) = vol_site {
+        let mut source = "message31-vol-block".to_string();
+        if let Some(site) = wx_radar::sites::find_site(station_id) {
+            let dlat = (site.lat - f64::from(vol.latitude_deg)).abs();
+            let dlon = (site.lon - f64::from(vol.longitude_deg)).abs();
+            if dlat.max(dlon) > 0.05 {
+                source = format!(
+                    "message31-vol-block (vendored table disagrees by                      {dlat:.4} deg lat / {dlon:.4} deg lon)"
+                );
+            }
+        }
+        return Ok(SiteFix {
+            id: station_id.to_string(),
+            name: station_id.to_string(),
+            lat_deg: f64::from(vol.latitude_deg),
+            lon_deg: f64::from(vol.longitude_deg),
+            alt_m: vol.antenna_height_m(),
+            source,
+        });
+    }
+    match wx_radar::sites::find_site(station_id) {
+        Some(site) if site.elevation == SITE_ELEVATION_UNSET_M => Err(boxed_error(format!(
+            "the vendored NEXRAD table has no antenna elevation for site {:?} ({}): it carries \
+             the unset placeholder {SITE_ELEVATION_UNSET_M} m, as 130 of its 141 entries do. \
+             The antenna height is the ray origin, so accepting it would place every gate in \
+             the volume too low by the site's real elevation. Volumes whose radials carry a \
+             Message-31 VOL block resolve themselves (site plus feedhorn, no table needed), \
+             so this refusal means the volume lacked one. Pass --site-latlon \
+             LAT,LON,ALT_M with the antenna height above mean sea level (site elevation plus \
+             feedhorn height AGL -- nothing downstream adds the feedhorn)",
+            site.id, site.name
+        ))),
+        Some(site) => Ok(SiteFix {
+            id: site.id,
+            name: site.name,
+            lat_deg: site.lat,
+            lon_deg: site.lon,
+            alt_m: site.elevation,
+            source: "wx-radar-site-table".to_string(),
+        }),
+        None => Err(boxed_error(format!(
+            "no coordinates for site {station_id:?} in the vendored NEXRAD table; pass \
+             --site-latlon LAT,LON,ALT_M to place it explicitly"
+        ))),
+    }
+}
+
+/// The gate geometry one moment uses across a whole sweep.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MomentLayout {
+    pub product: RadarProduct,
+    /// Gates retained after the range ceiling.
+    pub gates: usize,
+    /// Gates the radials themselves declared, before the ceiling.
+    pub declared_gates: usize,
+    pub first_gate_range_m: f64,
+    pub gate_size_m: f64,
+}
+
+/// Agree one sweep's per-moment gate geometry, or name the radial that broke it.
+///
+/// The pack stores a sweep as a rectangle, so the range axis is a property
+/// of the sweep rather than of its first radial.  Taking the geometry from
+/// the first radial that carries a moment and copying every later radial
+/// into that rectangle is how a gate the RDA placed at 2,375 m gets
+/// published at 2,125 m: the disagreement is consumed by the copy and the
+/// pack keeps only the canonical axis, so nothing downstream (not the
+/// superob, not the receipt, not the grid file) can discover that a value
+/// moved.  A silent 250 m displacement of a velocity gate is worse than no
+/// gate at all, so the geometry is *agreed* here instead: every radial
+/// carrying the moment must declare the same gate count, first-gate range
+/// and gate interval, and one that does not refuses the volume by name.
+///
+/// A radial that simply does not carry the moment is not a disagreement
+/// (split cuts legitimately omit one) and its row stays NaN.
+///
+/// Returns the layouts in first-seen order and the gate samples the range
+/// ceiling trimmed off the far end.
+pub fn agree_sweep_layouts(
+    sweep: &Level2Sweep,
+    wanted: &[RadarProduct],
+    max_range_km: f64,
+) -> Result<(Vec<MomentLayout>, usize), String> {
+    // (product, gate_count, first_gate_range, gate_size, radial that set it)
+    let mut agreed: Vec<(RadarProduct, u16, u16, u16, usize)> = Vec::new();
+    for (row, radial) in sweep.radials.iter().enumerate() {
+        for moment in &radial.moments {
+            if !wanted.contains(&moment.product) {
+                continue;
+            }
+            if moment.data.len() != moment.gate_count as usize {
+                return Err(format!(
+                    "corrupt Level-II volume: sweep {} radial {} moment {} declares {} gates \
+                     but decoded {} samples",
+                    sweep.sweep_index,
+                    row,
+                    moment.product.short_name(),
+                    moment.gate_count,
+                    moment.data.len()
+                ));
+            }
+            match agreed.iter().find(|(product, ..)| *product == moment.product) {
+                None => agreed.push((
+                    moment.product,
+                    moment.gate_count,
+                    moment.first_gate_range,
+                    moment.gate_size,
+                    row,
+                )),
+                Some(&(_, gates, first, size, first_row)) => {
+                    if (moment.gate_count, moment.first_gate_range, moment.gate_size)
+                        != (gates, first, size)
+                    {
+                        return Err(format!(
+                            "sweep {} moment {} changes gate geometry mid-sweep: radial \
+                             {first_row} declares {gates} gates from {first} m by {size} m, \
+                             radial {row} declares {} gates from {} m by {} m. The pack stores \
+                             a sweep as one rectangle, so the later radial's gates could only \
+                             be published at the earlier radial's ranges -- refusing the volume \
+                             rather than misplacing them",
+                            sweep.sweep_index,
+                            moment.product.short_name(),
+                            moment.gate_count,
+                            moment.first_gate_range,
+                            moment.gate_size
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    let radial_count = sweep.radials.len();
+    let mut layouts = Vec::new();
+    let mut trimmed_gates = 0usize;
+    for (product, declared, first, size, _) in agreed {
+        let gate_size = size as f64;
+        let first_m = first as f64;
+        let mut gates = declared as usize;
+        if gate_size > 0.0 && max_range_km.is_finite() {
+            let limit_m = max_range_km * 1000.0;
+            let allowed = if limit_m <= first_m {
+                0
+            } else {
+                (((limit_m - first_m) / gate_size).floor() as usize).saturating_add(1)
+            };
+            if allowed < gates {
+                trimmed_gates += (gates - allowed) * radial_count;
+                gates = allowed;
+            }
+        }
+        if gates == 0 {
+            continue;
+        }
+        layouts.push(MomentLayout {
+            product,
+            gates,
+            declared_gates: declared as usize,
+            first_gate_range_m: first_m,
+            gate_size_m: gate_size,
+        });
+    }
+    Ok((layouts, trimmed_gates))
+}
+
+pub struct DecodeRequest<'a> {
+    pub volume_path: &'a Path,
+    /// The message stream to decode: the file's bytes, or their expansion
+    /// when the archived key was gzipped.
+    pub raw: &'a [u8],
+    /// The file exactly as it arrived on disk.  Equal to `raw` unless the
+    /// volume was gzip-wrapped.  The pack's `volume.bytes` and
+    /// `volume.sha256` are taken over *these*, because they are what the S3
+    /// listing stated and what a re-download can be checked against; the
+    /// expansion is an interpretation and has no independent authority.
+    pub source: &'a [u8],
+    pub framing: Framing,
+    pub moments: Vec<RadarProduct>,
+    pub max_range_km: f64,
+    pub max_elevation_deg: f64,
+    pub site_override: Option<(f64, f64, f64)>,
+    /// Emit a `|u1` censor plane beside every moment plane, and declare the
+    /// pack [`crate::pack::SWEEPS_SCHEMA_CENSOR`].
+    ///
+    /// Off by default, and the default path is byte-identical to the one
+    /// that existed before the flag: no extra arrays, no extra metadata
+    /// keys, the same schema string.
+    pub censor_flags: bool,
+}
+
+/// Build the pack metadata and payload for one validated volume.
+pub fn build_pack(request: &DecodeRequest<'_>) -> Result<(PackMeta, Vec<u8>), Box<dyn Error>> {
+    // Strict: the observation front door refuses a volume that contradicts
+    // itself rather than publishing the part of it that happened to decode.
+    let file = Level2File::parse_strict(request.raw).map_err(boxed_error)?;
+    crate::pack::validate_decoded(&file)?;
+    let site = resolve_site_from(&file.station_id, request.site_override, file.vol_site.as_ref())?;
+    let valid_time = volume_time(file.volume_date, file.volume_time).ok_or_else(|| {
+        boxed_error(format!(
+            "corrupt Level-II volume: volume date {} / time {} is not a calendar instant",
+            file.volume_date, file.volume_time
+        ))
+    })?;
+
+    // When the volume was scanned, from the radials' own clocks and over
+    // EVERY cut the file carries: a cut the caller's elevation ceiling drops
+    // was still scanned, and the moment the volume was complete is the last
+    // radial of the last cut whether or not that cut is packed.  Computed
+    // before the filters for exactly that reason.
+    let mut instants = Vec::with_capacity(file.sweeps.len());
+    let mut volume_start: Option<DateTime<Utc>> = None;
+    let mut volume_end: Option<DateTime<Utc>> = None;
+    let mut sweeps_incomplete = 0usize;
+    for sweep in &file.sweeps {
+        let (first, last) = cut_instants(sweep).map_err(boxed_error)?;
+        volume_start = Some(volume_start.map_or(first, |v| v.min(first)));
+        volume_end = Some(volume_end.map_or(last, |v| v.max(last)));
+        if !cut_complete(sweep) {
+            sweeps_incomplete += 1;
+        }
+        instants.push((first, last));
+    }
+    let volume_complete = sweeps_incomplete == 0
+        && file.sweeps.first().is_some_and(|s| s.start_status == 3)
+        && file.sweeps.last().is_some_and(|s| s.end_status == 4);
+    let key_time = request
+        .volume_path
+        .file_name()
+        .and_then(|name| parse_volume_key(&name.to_string_lossy()))
+        .map(|key| iso8601(key.valid_time));
+
+    let mut builder = PayloadBuilder::new();
+    let mut sweeps = Vec::new();
+    let mut dropped_sweeps = 0usize;
+    let mut dropped_moments = 0usize;
+    let mut trimmed_gates = 0usize;
+
+    for (sweep, &(cut_start, cut_end)) in file.sweeps.iter().zip(&instants) {
+        if sweep.elevation_angle as f64 > request.max_elevation_deg {
+            dropped_sweeps += 1;
+            continue;
+        }
+        if sweep.radials.is_empty() {
+            dropped_sweeps += 1;
+            continue;
+        }
+        let radial_count = sweep.radials.len();
+        let azimuth: Vec<f32> = sweep.radials.iter().map(|r| r.azimuth).collect();
+        let elevation: Vec<f32> = sweep.radials.iter().map(|r| r.elevation).collect();
+
+        // The Nyquist velocity is a *per-radial* constant: Message 31 puts
+        // it in every radial's RAD block, and a VCP that changes PRF inside
+        // a cut changes it mid-sweep.  Reducing it to one number per sweep
+        // before Python ever sees it throws away the only thing a dealiaser
+        // can actually fold against: the lattice the gate was measured on.
+        // So the array is what is packed, and the scalar is derived from it
+        // here rather than carried in parallel: one source, one reduction,
+        // and `decode_pack` reads the bytes back and checks the reduction.
+        //
+        // `NaN` for a radial whose RAD block carried no usable value (raw 0
+        // in the Nyquist word, which the parser already reports as absent).
+        // A hole in the array is a statement, not a gap to be filled with a
+        // neighbour's number.
+        let nyquist_by_radial: Vec<f32> = sweep
+            .radials
+            .iter()
+            .map(|r| match r.nyquist_velocity {
+                Some(value) if value.is_finite() && value > 0.0 => value,
+                _ => f32::NAN,
+            })
+            .collect();
+        let nyquist_velocity_ms = nyquist_by_radial
+            .iter()
+            .copied()
+            .filter(|value| value.is_finite() && *value > 0.0)
+            .fold(None::<f32>, |acc, value| {
+                Some(acc.map_or(value, |a| a.min(value)))
+            });
+
+        // Which moments does this sweep actually carry, and with what
+        // geometry?  Every radial carrying a moment must agree on the gate
+        // layout; a disagreement refuses the volume rather than publishing
+        // the later radial's gates at the earlier radial's ranges.
+        let (layouts, trimmed) =
+            agree_sweep_layouts(sweep, &request.moments, request.max_range_km)
+                .map_err(boxed_error)?;
+        trimmed_gates += trimmed;
+        let selected: usize = sweep
+            .radials
+            .iter()
+            .flat_map(|r| r.moments.iter())
+            .filter(|m| request.moments.contains(&m.product))
+            .count();
+        let present: usize = sweep.radials.iter().map(|r| r.moments.len()).sum();
+        dropped_moments += present.saturating_sub(selected);
+
+        if layouts.is_empty() {
+            dropped_sweeps += 1;
+            continue;
+        }
+
+        let azimuth_key = builder.push_f32(&azimuth, vec![radial_count]);
+        let elevation_key = builder.push_f32(&elevation, vec![radial_count]);
+        // Packed only when at least one radial reported: an all-`NaN` array
+        // would assert that originals were kept when there were none, and a
+        // cut with no Nyquist at all must serialize exactly as it did before
+        // this field existed so those packs stay digest-reproducible.
+        let nyquist_by_radial_key = nyquist_velocity_ms
+            .is_some()
+            .then(|| builder.push_f32(&nyquist_by_radial, vec![radial_count]));
+
+        let mut moment_entries = Vec::new();
+        for layout in layouts {
+            let gates = layout.gates;
+            let mut flat = vec![f32::NAN; radial_count * gates];
+            // The rectangle starts as NOT_COLLECTED everywhere, which is the
+            // truth for a row a split cut never filled.  A radial that does
+            // carry the moment overwrites its whole row with the decoder's
+            // own codes, so the only cells left saying NOT_COLLECTED are the
+            // ones the NaN fill above created.
+            let mut censor = if request.censor_flags {
+                vec![pack::censor_plane::NOT_COLLECTED; radial_count * gates]
+            } else {
+                Vec::new()
+            };
+            for (row, radial) in sweep.radials.iter().enumerate() {
+                let Some(moment) = radial.moments.iter().find(|m| m.product == layout.product)
+                else {
+                    continue;
+                };
+                // `agree_sweep_layouts` proved every carrying radial declares
+                // `declared_gates >= gates` samples, so this is a copy at the
+                // agreed ranges, never a trim from an unknown origin.
+                flat[row * gates..row * gates + gates].copy_from_slice(&moment.data[..gates]);
+                if request.censor_flags {
+                    // The decoder keeps `censor` exactly as long as `data`,
+                    // so the same span is in bounds for both.
+                    censor[row * gates..row * gates + gates]
+                        .copy_from_slice(&moment.censor[..gates]);
+                }
+            }
+            let key = builder.push_f32(&flat, vec![radial_count, gates]);
+            let censor_key = request
+                .censor_flags
+                .then(|| builder.push_u8(&censor, vec![radial_count, gates]));
+            moment_entries.push(MomentEntry {
+                product: layout.product.short_name().to_string(),
+                unit: layout.product.unit().to_string(),
+                gate_count: gates,
+                first_gate_range_m: layout.first_gate_range_m,
+                gate_size_m: layout.gate_size_m,
+                array: key,
+                censor_array: censor_key,
+                // The RDA already speaks the pack's vocabulary; there is no
+                // second spelling to preserve.
+                source_quantity: None,
+            });
+        }
+
+        sweeps.push(SweepEntry {
+            sweep_index: sweep.sweep_index,
+            elevation_number: sweep.elevation_number,
+            elevation_angle_deg: sweep.elevation_angle as f64,
+            nyquist_velocity_ms: nyquist_velocity_ms.map(|v| v as f64),
+            nyquist_radials_disagree: sweep.nyquist_radials_disagree,
+            // Left unset so every NEXRAD pack stays byte-identical to the one
+            // this build's predecessor wrote; the per-radial array's presence
+            // is what says "radial" here.
+            nyquist_granularity: None,
+            start_status: sweep.start_status,
+            end_status: sweep.end_status,
+            cut_sector: sweep.cut_sector,
+            complete: cut_complete(sweep),
+            radial_count,
+            azimuth_array: azimuth_key,
+            elevation_array: elevation_key,
+            nyquist_by_radial_array: nyquist_by_radial_key,
+            start_time: Some(iso8601_ms(cut_start)),
+            end_time: Some(iso8601_ms(cut_end)),
+            moments: moment_entries,
+        });
+    }
+
+    if sweeps.is_empty() {
+        return Err(boxed_error(format!(
+            "volume decoded to {} sweeps but none survived the filter (moments {:?}, \
+             max elevation {} deg, max range {} km)",
+            file.sweeps.len(),
+            request
+                .moments
+                .iter()
+                .map(|p| p.short_name())
+                .collect::<Vec<_>>(),
+            request.max_elevation_deg,
+            request.max_range_km
+        )));
+    }
+
+    let (payload, arrays) = builder.finish();
+    let meta = PackMeta {
+        schema: if request.censor_flags {
+            SWEEPS_SCHEMA_CENSOR.to_string()
+        } else {
+            SWEEPS_SCHEMA.to_string()
+        },
+        status: "READY".to_string(),
+        site: SiteEntry {
+            id: site.id,
+            name: site.name,
+            lat_deg: site.lat_deg,
+            lon_deg: site.lon_deg,
+            alt_m: site.alt_m,
+            source: site.source,
+        },
+        volume: VolumeEntry {
+            file: request
+                .volume_path
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| request.volume_path.to_string_lossy().to_string()),
+            bytes: request.source.len(),
+            sha256: hex_sha256(request.source),
+            station_id: file.station_id.clone(),
+            valid_time: iso8601(valid_time),
+            volume_date: file.volume_date,
+            volume_time_ms: file.volume_time,
+            key_time,
+            start_time: volume_start.map(iso8601_ms),
+            end_time: volume_end.map(iso8601_ms),
+            complete: Some(volume_complete),
+            sweeps_in_volume: Some(file.sweeps.len()),
+            sweeps_incomplete: Some(sweeps_incomplete),
+            framing: Some(request.framing.clone()),
+            // An Archive-II volume is one file; there is nothing to assemble
+            // and nothing accurate to write here.
+            assembled: None,
+        },
+        params: DecodeParams {
+            moments: request
+                .moments
+                .iter()
+                .map(|p| p.short_name().to_string())
+                .collect(),
+            max_range_km: request.max_range_km,
+            max_elevation_deg: request.max_elevation_deg,
+            censor_flags: request.censor_flags,
+        },
+        sweeps,
+        arrays: arrays as std::collections::BTreeMap<String, ArrayEntry>,
+        payload_bytes: payload.len(),
+        content_sha256: hex_sha256(&payload),
+        dropped_sweeps,
+        dropped_moments,
+        trimmed_gates,
+    };
+    Ok((meta, payload))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wx_radar::level2::{MomentData, RadialData};
+
+    fn moment(product: RadarProduct, gate_count: u16, first: u16, size: u16) -> MomentData {
+        MomentData {
+            product,
+            gate_count,
+            first_gate_range: first,
+            gate_size: size,
+            data: (0..gate_count).map(|g| g as f32).collect(),
+            censor: vec![wx_radar::level2::censor::MEASURED; gate_count as usize],
+        }
+    }
+
+    fn sweep_of(rows: Vec<Vec<MomentData>>) -> Level2Sweep {
+        Level2Sweep {
+            elevation_number: 1,
+            elevation_angle: 0.5,
+            nyquist_velocity: Some(32.0),
+            nyquist_radials_disagree: false,
+            sweep_index: 4,
+            start_status: 3,
+            end_status: 2,
+            cut_sector: 0,
+            radials: rows
+                .into_iter()
+                .enumerate()
+                .map(|(row, moments)| RadialData {
+                    azimuth: row as f32,
+                    elevation: 0.5,
+                    azimuth_spacing: 1.0,
+                    nyquist_velocity: Some(32.0),
+                    radial_status: if row == 0 { 3 } else { 1 },
+                    // One second per radial from the header's own instant.
+                    collection_time_ms: 72_196_232 + 1000 * row as u32,
+                    collection_date: 20663,
+                    moments,
+                })
+                .collect(),
+        }
+    }
+
+    const REF: RadarProduct = RadarProduct::Reflectivity;
+    const VEL: RadarProduct = RadarProduct::Velocity;
+
+    /// VOL and ELV are the verbatim constant blocks of KTLX
+    /// 2019-05-20 00:00:34Z -- generic format version 2.0 in 44 bytes,
+    /// 35.33336 N / 97.27776 W / site 370 m / VCP 32.  A hand-built VOL
+    /// block used to stand here and it declared version 1.0, a layout
+    /// nothing has read; `Level2File::parse_vol_block` now refuses that,
+    /// and these fixtures exist to exercise the strict parser rather than
+    /// to find out what it will tolerate.  See `wx_radar::level2`
+    /// `REAL_VOL_V2`/`REAL_ELV` for the same bytes and the survey they
+    /// came from.
+    const REAL_VOL_V2: [u8; 44] = [
+        0x52, 0x56, 0x4f, 0x4c, 0x00, 0x2c, 0x02, 0x00, 0x42, 0x0d, 0x55, 0x5d, 0xc2, 0xc2, 0x8e,
+        0x37, 0x01, 0x72, 0x00, 0x13, 0xc2, 0x34, 0x4a, 0x62, 0x43, 0x81, 0x2e, 0x7c, 0x43, 0x6f,
+        0x43, 0x73, 0x3d, 0xe5, 0x4f, 0x09, 0x42, 0x70, 0x00, 0x00, 0x00, 0x20, 0x00, 0x01,
+    ];
+    const REAL_ELV: [u8; 12] = [
+        0x52, 0x45, 0x4c, 0x56, 0x00, 0x0c, 0xff, 0xf4, 0xc2, 0x2f, 0x40, 0x00,
+    ];
+
+    #[test]
+    fn a_radial_that_changes_gate_geometry_refuses_the_sweep() {
+        // The audit's own case: 2,125 m and 2,375 m at the same 250 m
+        // spacing.  Publishing radial 1's first gate at radial 0's first
+        // range displaces every one of its values by 250 m.
+        let sweep = sweep_of(vec![
+            vec![moment(REF, 3, 2125, 250)],
+            vec![moment(REF, 3, 2375, 250)],
+        ]);
+        let err = agree_sweep_layouts(&sweep, &[REF], f64::INFINITY).unwrap_err();
+        assert!(err.contains("changes gate geometry mid-sweep"), "{err}");
+        assert!(err.contains("2125") && err.contains("2375"), "{err}");
+        assert!(err.contains("radial 0") && err.contains("radial 1"), "{err}");
+        assert!(err.contains("sweep 4"), "{err}");
+
+        // A different gate interval and a different gate count are the same
+        // refusal, not a pad or a trim.
+        for later in [moment(REF, 3, 2125, 1000), moment(REF, 7, 2125, 250)] {
+            let sweep = sweep_of(vec![vec![moment(REF, 3, 2125, 250)], vec![later]]);
+            assert!(agree_sweep_layouts(&sweep, &[REF], f64::INFINITY)
+                .unwrap_err()
+                .contains("changes gate geometry mid-sweep"));
+        }
+    }
+
+    #[test]
+    fn agreeing_radials_yield_one_layout_and_a_uniform_range_ceiling() {
+        let sweep = sweep_of(vec![
+            vec![moment(REF, 10, 2125, 250), moment(VEL, 8, 2125, 250)],
+            vec![moment(REF, 10, 2125, 250), moment(VEL, 8, 2125, 250)],
+        ]);
+        let (layouts, trimmed) = agree_sweep_layouts(&sweep, &[REF, VEL], f64::INFINITY).unwrap();
+        assert_eq!(layouts.len(), 2);
+        assert_eq!(layouts[0].product, REF);
+        assert_eq!(layouts[0].gates, 10);
+        assert_eq!(layouts[0].first_gate_range_m, 2125.0);
+        assert_eq!(layouts[0].gate_size_m, 250.0);
+        assert_eq!(trimmed, 0);
+
+        // Ceiling at 3 km keeps gates centred at 2125, 2375, 2625, 2875 m.
+        let (layouts, trimmed) = agree_sweep_layouts(&sweep, &[REF], 3.0).unwrap();
+        assert_eq!(layouts[0].gates, 4);
+        assert_eq!(layouts[0].declared_gates, 10);
+        assert_eq!(trimmed, (10 - 4) * 2);
+    }
+
+    #[test]
+    fn a_radial_that_simply_omits_the_moment_is_not_a_disagreement() {
+        // Split cuts legitimately carry velocity on only part of a sweep.
+        let sweep = sweep_of(vec![
+            vec![moment(REF, 4, 2125, 250), moment(VEL, 4, 2125, 250)],
+            vec![moment(REF, 4, 2125, 250)],
+        ]);
+        let (layouts, _) = agree_sweep_layouts(&sweep, &[REF, VEL], f64::INFINITY).unwrap();
+        assert_eq!(layouts.len(), 2);
+        assert_eq!(layouts[1].product, VEL);
+    }
+
+    #[test]
+    fn a_moment_whose_sample_count_contradicts_its_header_is_refused() {
+        let mut short = moment(REF, 6, 2125, 250);
+        short.data.truncate(4);
+        let sweep = sweep_of(vec![vec![short]]);
+        let err = agree_sweep_layouts(&sweep, &[REF], f64::INFINITY).unwrap_err();
+        assert!(err.contains("declares 6 gates but decoded 4 samples"), "{err}");
+    }
+
+    #[test]
+    fn an_unwanted_moment_never_constrains_the_geometry() {
+        // VEL is not selected, so its disagreement is irrelevant.
+        let sweep = sweep_of(vec![
+            vec![moment(REF, 4, 2125, 250), moment(VEL, 4, 2125, 250)],
+            vec![moment(REF, 4, 2125, 250), moment(VEL, 9, 9999, 1000)],
+        ]);
+        let (layouts, _) = agree_sweep_layouts(&sweep, &[REF], f64::INFINITY).unwrap();
+        assert_eq!(layouts.len(), 1);
+        assert_eq!(layouts[0].product, REF);
+    }
+
+    /// A whole Archive-II volume carrying exactly one Message-31 radial.
+    ///
+    /// `bad_pointer` aims the moment block past the end of its own radial.
+    /// The byte is still inside the volume, so the outer LDM framing and
+    /// the old whole-volume pointer bound both accept it; only the
+    /// per-radial envelope can tell that following it would read the next
+    /// radial's bytes as this one's.
+    fn one_radial_volume(bad_pointer: bool) -> Vec<u8> {
+        one_radial_volume_words(bad_pointer, [100u8, 101, 102, 103])
+    }
+
+    /// The same fixture with the four gate words chosen by the caller, so a
+    /// test can place raw 0 (below threshold) and raw 1 (range folded)
+    /// exactly where it wants them.
+    fn one_radial_volume_words(bad_pointer: bool, words: [u8; 4]) -> Vec<u8> {
+        fn constant(name: &[u8; 4], lrtup: u16, body: &[u8]) -> Vec<u8> {
+            let mut block = Vec::from(&name[..]);
+            block.extend_from_slice(&lrtup.to_be_bytes());
+            block.extend_from_slice(body);
+            block.resize(lrtup as usize, 0);
+            block
+        }
+        let real_vol_v2 = REAL_VOL_V2;
+        let real_elv = REAL_ELV;
+        let mut rad_body = vec![0u8; 10];
+        rad_body.extend_from_slice(&2384u16.to_be_bytes()); // 23.84 m/s
+        let mut moment = Vec::from(&b"DREF"[..]);
+        moment.extend_from_slice(&0u32.to_be_bytes());
+        moment.extend_from_slice(&4u16.to_be_bytes()); // gates
+        moment.extend_from_slice(&2125u16.to_be_bytes());
+        moment.extend_from_slice(&250u16.to_be_bytes());
+        moment.extend_from_slice(&0u16.to_be_bytes());
+        moment.push(0);
+        moment.push(0);
+        moment.extend_from_slice(&8u16.to_be_bytes());
+        moment.extend_from_slice(&2.0f32.to_be_bytes());
+        moment.extend_from_slice(&66.0f32.to_be_bytes());
+        moment.extend(words);
+
+        let _ = &constant;
+        let blocks = vec![
+            real_vol_v2.to_vec(),
+            real_elv.to_vec(),
+            constant(b"RRAD", 28, &rad_body),
+            moment,
+        ];
+        let header_bytes = 32 + 4 * blocks.len();
+        let mut pointers = Vec::new();
+        let mut running = header_bytes as u32;
+        for block in &blocks {
+            pointers.push(running);
+            running += block.len() as u32;
+        }
+        if bad_pointer {
+            *pointers.last_mut().unwrap() += 512;
+        }
+
+        let mut msg31 = Vec::from(&b"KTLX"[..]);
+        msg31.extend_from_slice(&72_196_232u32.to_be_bytes()); // collection time: the header's own
+        msg31.extend_from_slice(&20663u16.to_be_bytes());
+        msg31.extend_from_slice(&1u16.to_be_bytes());
+        msg31.extend_from_slice(&90.0f32.to_be_bytes());
+        msg31.push(0); // compression
+        msg31.push(0); // spare
+        msg31.extend_from_slice(&(running as u16).to_be_bytes()); // radial length
+        msg31.push(1);
+        msg31.push(3); // radial status: start of volume
+        msg31.push(1); // elevation number
+        msg31.push(0); // cut sector
+        msg31.extend_from_slice(&0.5f32.to_be_bytes());
+        msg31.push(0);
+        msg31.push(0);
+        msg31.extend_from_slice(&(blocks.len() as u16).to_be_bytes());
+        for pointer in &pointers {
+            msg31.extend_from_slice(&pointer.to_be_bytes());
+        }
+        for block in &blocks {
+            msg31.extend_from_slice(block);
+        }
+
+        let mut message = vec![0u8; 12];
+        message.extend_from_slice(&(((16 + msg31.len()) / 2) as u16).to_be_bytes());
+        message.push(0);
+        message.push(31);
+        message.extend_from_slice(&[0u8; 12]);
+        message.extend_from_slice(&msg31);
+        // 512 bytes of slack so the bad pointer still lands in the volume.
+        message.resize(message.len() + 1024, 0);
+
+        let mut raw = Vec::from(&b"AR2V0006."[..]);
+        raw.resize(24, 0);
+        raw[14..16].copy_from_slice(&20663u16.to_be_bytes());
+        raw[16..20].copy_from_slice(&72_196_232u32.to_be_bytes());
+        raw[20..24].copy_from_slice(b"KTLX");
+        // The pre-2016 shape: messages straight after the volume header,
+        // no LDM block table.  This fixture used to prepend a length word
+        // and store the message uncompressed, which is neither shape any
+        // real volume has -- an LDM block is always a bzip2 stream.  Naming
+        // it as the unframed layout makes it a volume the archive actually
+        // contains, and exercises the `.gz`-era path end to end.
+        raw.extend_from_slice(&message);
+        raw
+    }
+
+    fn pack_request(raw: &[u8]) -> DecodeRequest<'_> {
+        DecodeRequest {
+            volume_path: Path::new("KTLX20260728_200316_V06"),
+            raw,
+            source: raw,
+            framing: Framing {
+                magic: "AR2V0006".to_string(),
+                layout: crate::pack::layout::UNCOMPRESSED_MESSAGES.to_string(),
+                gzip_wrapped: false,
+                block_count: 0,
+                bzip2_block_count: 0,
+                message_count: 1,
+                bytes: raw.len(),
+                source_bytes: raw.len(),
+            },
+            moments: vec![REF],
+            max_range_km: 250.0,
+            max_elevation_deg: 20.0,
+            site_override: Some((35.3331, -97.2778, 370.0)),
+            censor_flags: false,
+        }
+    }
+
+    #[test]
+    fn the_pack_builder_reads_a_volume_through_the_strict_parser() {
+        // Conforming: the one radial becomes one sweep with four gates.
+        let raw = one_radial_volume(false);
+        let (meta, _payload) = build_pack(&pack_request(&raw)).unwrap();
+        assert_eq!(meta.sweeps.len(), 1);
+        assert!((meta.sweeps[0].nyquist_velocity_ms.unwrap() - 23.84).abs() < 1e-4);
+        assert_eq!(meta.sweeps[0].moments[0].gate_count, 4);
+        assert_eq!(meta.sweeps[0].moments[0].first_gate_range_m, 2125.0);
+
+        // One pointer moved past the end of its radial, still inside the
+        // volume: a refusal, not a sweep with three moments instead of four.
+        let raw = one_radial_volume(true);
+        let err = build_pack(&pack_request(&raw)).unwrap_err().to_string();
+        assert!(err.contains("outside its own"), "{err}");
+        assert!(err.contains("neighbouring radial"), "{err}");
+    }
+
+    /// Raw 0 (below threshold), raw 1 (range folded), and two measurements.
+    fn censored_request(raw: &[u8]) -> DecodeRequest<'_> {
+        let mut request = pack_request(raw);
+        request.censor_flags = true;
+        request
+    }
+
+    #[test]
+    fn the_default_pack_says_nothing_at_all_about_censoring() {
+        // The do-no-harm contract, pinned in the metadata rather than
+        // asserted in a commit message: with the flag off, a pack has the
+        // v1 schema string, no censor array on any moment, and no censoring
+        // keys anywhere in its serialized JSON.  The last one is what keeps
+        // every already-committed pack digest reproducible.
+        let raw = one_radial_volume_words(false, [0, 1, 102, 103]);
+        let (meta, payload) = build_pack(&pack_request(&raw)).unwrap();
+        assert_eq!(meta.schema, crate::pack::SWEEPS_SCHEMA);
+        assert!(!meta.params.censor_flags);
+        assert!(meta.sweeps[0].moments[0].censor_array.is_none());
+        // azimuth, elevation, the per-radial Nyquist, one moment
+        assert_eq!(meta.arrays.len(), 4);
+        for entry in meta.arrays.values() {
+            assert_eq!(entry.dtype, "<f4");
+        }
+        let json = serde_json::to_string(&meta).unwrap();
+        assert!(!json.contains("censor"), "{json}");
+
+        // And the gates themselves are what they always were: raw 0 and
+        // raw 1 both NaN, in the same plane, indistinguishable.
+        let values: Vec<f32> = payload
+            .chunks_exact(4)
+            .map(|word| f32::from_le_bytes([word[0], word[1], word[2], word[3]]))
+            .collect();
+        let gates = &values[values.len() - 4..];
+        assert!(gates[0].is_nan() && gates[1].is_nan());
+        assert_eq!(gates[2], 18.0);
+        assert_eq!(gates[3], 18.5);
+    }
+
+    #[test]
+    fn the_censor_plane_names_each_gates_reason_and_rides_a_v2_schema() {
+        let raw = one_radial_volume_words(false, [0, 1, 102, 103]);
+        let (meta, payload) = build_pack(&censored_request(&raw)).unwrap();
+        assert_eq!(meta.schema, crate::pack::SWEEPS_SCHEMA_CENSOR);
+        assert!(meta.params.censor_flags);
+
+        let moment = &meta.sweeps[0].moments[0];
+        let key = moment.censor_array.clone().expect("censor plane");
+        let entry = &meta.arrays[&key];
+        assert_eq!(entry.dtype, "|u1");
+        assert_eq!(entry.shape, vec![1, 4]);
+        assert_eq!(entry.bytes, 4);
+
+        // The moment plane is untouched by the flag: same values, same
+        // dtype, same shape.  Only the explanation is new.
+        let values = &meta.arrays[&moment.array];
+        assert_eq!(values.dtype, "<f4");
+        assert_eq!(values.shape, vec![1, 4]);
+
+        let codes = &payload[entry.offset..entry.offset + entry.bytes];
+        use wx_radar::level2::censor;
+        assert_eq!(
+            codes,
+            [
+                censor::BELOW_THRESHOLD,
+                censor::RANGE_FOLDED,
+                censor::MEASURED,
+                censor::MEASURED,
+            ]
+        );
+
+        // A pack that says v2 and a pack that says v1 both round-trip, and
+        // each is refused if its arrays contradict its schema string.
+        let bytes = crate::pack::encode_pack(&meta, &payload).unwrap();
+        let (read_back, _) = crate::pack::decode_pack(&bytes).unwrap();
+        assert_eq!(read_back.schema, crate::pack::SWEEPS_SCHEMA_CENSOR);
+        assert_eq!(
+            read_back.sweeps[0].moments[0].censor_array.as_deref(),
+            Some(key.as_str())
+        );
+
+        let mut lying = meta.clone();
+        lying.schema = crate::pack::SWEEPS_SCHEMA.to_string();
+        lying.params.censor_flags = false;
+        let bytes = crate::pack::encode_pack(&lying, &payload).unwrap();
+        let err = crate::pack::decode_pack(&bytes).unwrap_err().to_string();
+        assert!(err.contains("carries a censor plane"), "{err}");
+
+        let mut stripped = meta.clone();
+        stripped.sweeps[0].moments[0].censor_array = None;
+        let bytes = crate::pack::encode_pack(&stripped, &payload).unwrap();
+        let err = crate::pack::decode_pack(&bytes).unwrap_err().to_string();
+        assert!(err.contains("is missing a censor plane"), "{err}");
+    }
+
+    #[test]
+    fn a_radial_that_never_carried_the_moment_is_not_collected_not_clear() {
+        // The third NaN source, and the one that is purely this layer's
+        // doing: the pack stores a sweep as a rectangle, so a split cut's
+        // empty rows are NaN-filled here.  They must read as "not
+        // collected", never as "measured and empty" -- a clear-air builder
+        // that mistook them would invent observations over every azimuth
+        // the moment was never scanned on.
+        let sweep = sweep_of(vec![
+            vec![moment(REF, 4, 2125, 250), moment(VEL, 4, 2125, 250)],
+            vec![moment(REF, 4, 2125, 250)],
+        ]);
+        let mut builder = PayloadBuilder::new();
+        let (layouts, _) = agree_sweep_layouts(&sweep, &[REF, VEL], f64::INFINITY).unwrap();
+        let vel = layouts.iter().find(|l| l.product == VEL).unwrap();
+        let mut censor = vec![pack::censor_plane::NOT_COLLECTED; 2 * vel.gates];
+        censor[..vel.gates]
+            .copy_from_slice(&sweep.radials[0].moments[1].censor[..vel.gates]);
+        let key = builder.push_u8(&censor, vec![2, vel.gates]);
+        let (payload, arrays) = builder.finish();
+        let entry = &arrays[&key];
+        let codes = &payload[entry.offset..entry.offset + entry.bytes];
+        use wx_radar::level2::censor as code;
+        assert!(codes[..vel.gates].iter().all(|c| *c == code::MEASURED));
+        assert!(codes[vel.gates..]
+            .iter()
+            .all(|c| *c == pack::censor_plane::NOT_COLLECTED));
+        assert_ne!(pack::censor_plane::NOT_COLLECTED, code::BELOW_THRESHOLD);
+    }
+
+    #[test]
+    fn volume_time_uses_the_one_based_epoch_day() {
+        // volume_date == 1 is 1970-01-01 itself, not 1970-01-02.
+        let when = volume_time(1, 0).unwrap();
+        assert_eq!(iso8601(when), "1970-01-01T00:00:00Z");
+        // 20:03:56 == 72_236_000 ms past midnight.
+        let when = volume_time(19498, 72_236_000).unwrap();
+        assert_eq!(iso8601(when), "2023-05-20T20:03:56Z");
+    }
+
+    #[test]
+    fn site_resolution_prefers_the_override_and_refuses_to_guess() {
+        let fix = resolve_site("KTLX", None).unwrap();
+        assert_eq!(fix.id, "KTLX");
+        assert_eq!(fix.source, "wx-radar-site-table");
+        assert!((fix.lat_deg - 35.33).abs() < 0.1);
+        assert!((fix.alt_m - 370.0).abs() < 1.0);
+
+        let fix = resolve_site("KTLX", Some((1.0, 2.0, 3.0))).unwrap();
+        assert_eq!(fix.source, "cli-override");
+        assert_eq!((fix.lat_deg, fix.lon_deg, fix.alt_m), (1.0, 2.0, 3.0));
+
+        // KOUN is deliberately absent from the operational table.
+        let err = resolve_site("KOUN", None).unwrap_err().to_string();
+        assert!(err.contains("--site-latlon"), "{err}");
+        assert!(resolve_site("KTLX", Some((999.0, 0.0, 0.0))).is_err());
+    }
+
+    #[test]
+    fn a_site_with_no_table_elevation_is_refused_rather_than_placed_at_sea_level() {
+        // KUEX at Hastings really sits at about 602 m; the table says 0.0,
+        // as it does for 130 of its 141 entries.  Accepting that number
+        // puts every gate in the volume 600 m too low in the model column.
+        let err = resolve_site("KUEX", None).unwrap_err().to_string();
+        assert!(err.contains("no antenna elevation"), "{err}");
+        assert!(err.contains("KUEX"), "{err}");
+        assert!(err.contains("ray origin"), "{err}");
+        assert!(err.contains("--site-latlon"), "{err}");
+        assert!(err.contains("feedhorn"), "{err}");
+
+        // An explicit override is exactly how the caller supplies it, and
+        // it is tagged as the caller's number rather than the table's.
+        let fix = resolve_site("KUEX", Some((40.3208, -98.4419, 602.0))).unwrap();
+        assert_eq!(fix.source, "cli-override");
+        assert_eq!(fix.alt_m, 602.0);
+    }
+
+    #[test]
+    fn the_volumes_own_vol_block_outranks_the_table_and_needs_no_override() {
+        // KUEX with a VOL block: the site that refused above now resolves
+        // from the volume itself, with the feedhorn already in the height.
+        let vol = VolSite {
+            latitude_deg: 40.3208,
+            longitude_deg: -98.4419,
+            site_height_m: 602,
+            feedhorn_height_m: 20,
+        };
+        let fix = resolve_site_from("KUEX", None, Some(&vol)).unwrap();
+        assert_eq!(fix.source, "message31-vol-block");
+        assert_eq!(fix.alt_m, 622.0);
+        assert!((fix.lat_deg - 40.3208).abs() < 1e-4);
+
+        // The explicit override still outranks the volume: it is the
+        // operator saying "I know better than the data", which is the one
+        // statement a front door must not overrule.
+        let fix = resolve_site_from("KUEX", Some((1.0, 2.0, 3.0)), Some(&vol)).unwrap();
+        assert_eq!(fix.source, "cli-override");
+
+        // A populated table entry loses to the volume too -- the table's
+        // 370 m KTLX value is ground elevation, the VOL block's sum is the
+        // beam origin, and the two differing is the defect, not the tie.
+        let vol_ktlx = VolSite {
+            latitude_deg: 35.33336,
+            longitude_deg: -97.27776,
+            site_height_m: 370,
+            feedhorn_height_m: 19,
+        };
+        let fix = resolve_site_from("KTLX", None, Some(&vol_ktlx)).unwrap();
+        assert_eq!(fix.source, "message31-vol-block");
+        assert_eq!(fix.alt_m, 389.0);
+    }
+
+    #[test]
+    fn a_table_that_disagrees_with_the_volume_is_named_in_the_source() {
+        // The KPBZ longitude was transcribed 0.2 degrees off and shipped
+        // that way; a volume's own VOL block is how a table error of that
+        // kind surfaces on real data.  The fix takes the volume's numbers
+        // and says the table disagreed.
+        let vol = VolSite {
+            latitude_deg: 40.5317,
+            longitude_deg: -80.5183, // deliberately 0.3 deg from the table
+            site_height_m: 361,
+            feedhorn_height_m: 20,
+        };
+        let fix = resolve_site_from("KPBZ", None, Some(&vol)).unwrap();
+        assert!(fix.source.starts_with("message31-vol-block ("), "{}", fix.source);
+        assert!(fix.source.contains("disagrees"), "{}", fix.source);
+        assert_eq!(fix.lon_deg, f64::from(vol.longitude_deg));
+        assert_eq!(fix.alt_m, 381.0);
+
+        // Within survey noise the source stays clean.
+        let close = VolSite {
+            latitude_deg: 40.5317,
+            longitude_deg: -80.2183,
+            site_height_m: 361,
+            feedhorn_height_m: 20,
+        };
+        let fix = resolve_site_from("KPBZ", None, Some(&close)).unwrap();
+        assert_eq!(fix.source, "message31-vol-block");
+    }
+
+    #[test]
+    fn the_table_is_swept_for_every_entry_the_decoder_would_accept() {
+        // The sweep the audit asked for, kept as a test rather than a
+        // one-off: whatever the vendored table holds, exactly the entries
+        // with a real elevation resolve, and every other entry refuses.
+        // A table update that fills elevations in makes more sites work
+        // without touching this file; one that blanks them fails loudly.
+        let mut resolved = 0usize;
+        let mut refused = 0usize;
+        for (id, _, _, _, alt) in wx_radar::sites::SITES {
+            match resolve_site(id, None) {
+                Ok(fix) => {
+                    resolved += 1;
+                    assert_ne!(fix.alt_m, SITE_ELEVATION_UNSET_M, "{id}");
+                    assert_eq!(fix.source, "wx-radar-site-table", "{id}");
+                }
+                Err(error) => {
+                    refused += 1;
+                    assert_eq!(*alt, SITE_ELEVATION_UNSET_M, "{id}: {error}");
+                }
+            }
+        }
+        assert_eq!(resolved + refused, wx_radar::sites::SITES.len());
+        assert!(resolved > 0, "no site in the table has an elevation");
+        assert!(
+            refused > 0,
+            "the table gained elevations everywhere -- delete this arm and \
+             the placeholder refusal with it"
+        );
+    }
+
+    /// One Archive-II cut whose radials carry the Nyquist velocities given,
+    /// in hundredths of a m/s and in radial order.
+    ///
+    /// `0` is the RDA's own spelling of "no usable value" -- the RAD block
+    /// is still there and still mandatory, its Nyquist word is just zero --
+    /// so a hole in a cut is reachable through the strict parser exactly as
+    /// a real volume would present it, without omitting a block the strict
+    /// parser is right to insist on.
+    ///
+    /// The unframed pre-2016 layout for the same reason `one_radial_volume`
+    /// uses it: messages straight after the volume header, each stepping by
+    /// what it declares, so the fixture is a shape the archive contains.
+    fn cut_with_radial_nyquists(nyquist_hundredths: &[u16]) -> Vec<u8> {
+        assert!(
+            nyquist_hundredths.len() >= 2,
+            "a cut fixture needs a start radial and an end radial"
+        );
+        let last = nyquist_hundredths.len() - 1;
+        let radials: Vec<TimedRadial> = nyquist_hundredths
+            .iter()
+            .enumerate()
+            .map(|(index, nyquist)| TimedRadial {
+                nyquist_hundredths: *nyquist,
+                status: match index {
+                    0 => 3u8,            // start of volume
+                    i if i == last => 2, // end of elevation
+                    _ => 1,
+                },
+                // One second per radial from the header's own instant.
+                collection_time_ms: 72_196_232 + 1000 * index as u32,
+                collection_date: 20663,
+                elevation_number: 1,
+                elevation_deg: 0.5,
+            })
+            .collect();
+        volume_of_radials(&radials)
+    }
+
+    /// One Message-31 radial of a fixture volume, with the words a test
+    /// wants to choose: its Nyquist, its status, its clock and its cut.
+    #[derive(Clone, Copy)]
+    struct TimedRadial {
+        nyquist_hundredths: u16,
+        status: u8,
+        collection_time_ms: u32,
+        collection_date: u16,
+        elevation_number: u8,
+        elevation_deg: f32,
+    }
+
+    /// The unframed pre-2016 layout again, one message per radial, each
+    /// radial carrying exactly the header words the caller chose.
+    fn volume_of_radials(radials: &[TimedRadial]) -> Vec<u8> {
+        let mut stream = Vec::new();
+        for (index, radial) in radials.iter().enumerate() {
+            let mut rad_body = vec![0u8; 10];
+            rad_body.extend_from_slice(&radial.nyquist_hundredths.to_be_bytes());
+            let mut rad = Vec::from(&b"RRAD"[..]);
+            rad.extend_from_slice(&28u16.to_be_bytes());
+            rad.extend_from_slice(&rad_body);
+            rad.resize(28, 0);
+
+            let mut moment = Vec::from(&b"DREF"[..]);
+            moment.extend_from_slice(&0u32.to_be_bytes());
+            moment.extend_from_slice(&4u16.to_be_bytes()); // gates
+            moment.extend_from_slice(&2125u16.to_be_bytes());
+            moment.extend_from_slice(&250u16.to_be_bytes());
+            moment.extend_from_slice(&0u16.to_be_bytes());
+            moment.push(0);
+            moment.push(0);
+            moment.extend_from_slice(&8u16.to_be_bytes());
+            moment.extend_from_slice(&2.0f32.to_be_bytes());
+            moment.extend_from_slice(&66.0f32.to_be_bytes());
+            moment.extend_from_slice(&[100u8, 101, 102, 103]);
+
+            let blocks = vec![REAL_VOL_V2.to_vec(), REAL_ELV.to_vec(), rad, moment];
+            let header_bytes = 32 + 4 * blocks.len();
+            let mut pointers = Vec::new();
+            let mut running = header_bytes as u32;
+            for block in &blocks {
+                pointers.push(running);
+                running += block.len() as u32;
+            }
+
+            let mut msg31 = Vec::from(&b"KTLX"[..]);
+            msg31.extend_from_slice(&radial.collection_time_ms.to_be_bytes());
+            msg31.extend_from_slice(&radial.collection_date.to_be_bytes());
+            msg31.extend_from_slice(&(index as u16 + 1).to_be_bytes()); // azimuth number
+            msg31.extend_from_slice(&(index as f32).to_be_bytes()); // azimuth angle
+            msg31.push(0); // compression
+            msg31.push(0); // spare
+            msg31.extend_from_slice(&(running as u16).to_be_bytes()); // radial length
+            msg31.push(1); // azimuth resolution: half a degree
+            msg31.push(radial.status);
+            msg31.push(radial.elevation_number);
+            msg31.push(0); // cut sector
+            msg31.extend_from_slice(&radial.elevation_deg.to_be_bytes());
+            msg31.push(0);
+            msg31.push(0);
+            msg31.extend_from_slice(&(blocks.len() as u16).to_be_bytes());
+            for pointer in &pointers {
+                msg31.extend_from_slice(&pointer.to_be_bytes());
+            }
+            for block in &blocks {
+                msg31.extend_from_slice(block);
+            }
+
+            // The strict walk steps by exactly what the header declares, so
+            // the messages tile with no slack and the cut ends where the
+            // last radial does.
+            stream.extend_from_slice(&[0u8; 12]); // CTM
+            stream.extend_from_slice(&(((16 + msg31.len()) / 2) as u16).to_be_bytes());
+            stream.push(0); // channel
+            stream.push(31); // message type
+            stream.extend_from_slice(&[0u8; 12]);
+            stream.extend_from_slice(&msg31);
+        }
+
+        let mut raw = Vec::from(&b"AR2V0006."[..]);
+        raw.resize(24, 0);
+        raw[14..16].copy_from_slice(&20663u16.to_be_bytes());
+        raw[16..20].copy_from_slice(&72_196_232u32.to_be_bytes());
+        raw[20..24].copy_from_slice(b"KTLX");
+        raw.extend_from_slice(&stream);
+        raw
+    }
+
+    /// A three-cut volume scanned over 6 min 40 s: the header's own instant
+    /// 20:03:16.232, then cut 1 at 0.5 deg over three radials, cut 2 at
+    /// 0.9 deg, cut 3 at 19.5 deg ending 400 s after the first radial.
+    /// `last_status` is the last radial's status: 4 (end of volume) makes
+    /// the volume whole, anything else cuts it short.
+    fn three_cut_volume(last_status: u8) -> Vec<u8> {
+        let t0 = 72_196_232u32;
+        let radial = |offset_s: u32, status: u8, cut: u8, elevation: f32| TimedRadial {
+            nyquist_hundredths: 2384,
+            status,
+            collection_time_ms: t0 + 1000 * offset_s,
+            collection_date: 20663,
+            elevation_number: cut,
+            elevation_deg: elevation,
+        };
+        volume_of_radials(&[
+            radial(0, 3, 1, 0.5),
+            radial(10, 1, 1, 0.5),
+            radial(20, 2, 1, 0.5),
+            radial(60, 0, 2, 0.9),
+            radial(70, 1, 2, 0.9),
+            radial(80, 2, 2, 0.9),
+            radial(380, 0, 3, 19.5),
+            radial(390, 1, 3, 19.5),
+            radial(400, last_status, 3, 19.5),
+        ])
+    }
+
+    #[test]
+    fn every_cut_and_the_whole_volume_are_dated_by_the_radials_own_clocks() {
+        // The header says 20:03:16 and the archive key says the same; the
+        // radials say the volume was not complete until 20:09:56.232.
+        let raw = three_cut_volume(4);
+        let (meta, payload) = build_pack(&pack_request(&raw)).unwrap();
+        let volume = &meta.volume;
+        assert_eq!(volume.valid_time, "2026-07-28T20:03:16Z");
+        assert_eq!(volume.key_time.as_deref(), Some("2026-07-28T20:03:16Z"));
+        assert_eq!(volume.start_time.as_deref(), Some("2026-07-28T20:03:16.232Z"));
+        assert_eq!(volume.end_time.as_deref(), Some("2026-07-28T20:09:56.232Z"));
+        assert_eq!(volume.complete, Some(true));
+        assert_eq!(volume.sweeps_in_volume, Some(3));
+        assert_eq!(volume.sweeps_incomplete, Some(0));
+
+        // 19.5 deg is under the request's 20 deg ceiling, so all three cuts
+        // are packed and each carries its own span.
+        assert_eq!(meta.sweeps.len(), 3);
+        assert_eq!(meta.sweeps[0].start_time.as_deref(), Some("2026-07-28T20:03:16.232Z"));
+        assert_eq!(meta.sweeps[0].end_time.as_deref(), Some("2026-07-28T20:03:36.232Z"));
+        assert_eq!(meta.sweeps[1].start_time.as_deref(), Some("2026-07-28T20:04:16.232Z"));
+        assert_eq!(meta.sweeps[1].end_time.as_deref(), Some("2026-07-28T20:04:36.232Z"));
+        assert_eq!(meta.sweeps[2].start_time.as_deref(), Some("2026-07-28T20:09:36.232Z"));
+        assert_eq!(meta.sweeps[2].end_time.as_deref(), Some("2026-07-28T20:09:56.232Z"));
+        assert!(meta.sweeps.iter().all(|s| s.complete));
+
+        // The pack's own reader accepts what the builder wrote.
+        let bytes = crate::pack::encode_pack(&meta, &payload).unwrap();
+        let (round, _) = crate::pack::decode_pack(&bytes).unwrap();
+        assert_eq!(round.volume.end_time, volume.end_time);
+        assert_eq!(round.sweeps[2].end_time, meta.sweeps[2].end_time);
+    }
+
+    #[test]
+    fn a_cut_the_elevation_ceiling_drops_still_dates_the_end_of_the_volume() {
+        // Asking for cuts under 10 deg packs two of the three; the volume
+        // was nevertheless complete only when the 19.5 deg cut finished.
+        let raw = three_cut_volume(4);
+        let mut request = pack_request(&raw);
+        request.max_elevation_deg = 10.0;
+        let (meta, _) = build_pack(&request).unwrap();
+        assert_eq!(meta.sweeps.len(), 2);
+        assert_eq!(meta.dropped_sweeps, 1);
+        assert_eq!(meta.volume.end_time.as_deref(), Some("2026-07-28T20:09:56.232Z"));
+        assert_eq!(meta.volume.sweeps_in_volume, Some(3));
+    }
+
+    #[test]
+    fn a_volume_the_feed_cut_short_says_so_by_count() {
+        // The last radial is intermediate (1), not end-of-volume (4): the
+        // top cut never ended on a marker and the volume is not whole.
+        let raw = three_cut_volume(1);
+        let (meta, _) = build_pack(&pack_request(&raw)).unwrap();
+        assert_eq!(meta.volume.complete, Some(false));
+        assert_eq!(meta.volume.sweeps_incomplete, Some(1));
+        assert!(!meta.sweeps[2].complete);
+        assert!(meta.sweeps[0].complete && meta.sweeps[1].complete);
+        // Its span is still what the radials say; incompleteness is a
+        // statement about markers, not about clocks.
+        assert_eq!(meta.volume.end_time.as_deref(), Some("2026-07-28T20:09:56.232Z"));
+    }
+
+    #[test]
+    fn a_radial_whose_clock_is_not_an_instant_refuses_the_volume_by_name() {
+        let t0 = 72_196_232u32;
+        let mut radials = vec![
+            TimedRadial {
+                nyquist_hundredths: 2384,
+                status: 3,
+                collection_time_ms: t0,
+                collection_date: 20663,
+                elevation_number: 1,
+                elevation_deg: 0.5,
+            };
+            3
+        ];
+        radials[1].status = 1;
+        radials[2].status = 4;
+        radials[1].collection_time_ms = 90_000_000; // past midnight
+        let raw = volume_of_radials(&radials);
+        let err = build_pack(&pack_request(&raw)).unwrap_err().to_string();
+        assert!(err.contains("sweep 0 radial 1"), "{err}");
+        assert!(err.contains("90000000 ms"), "{err}");
+        assert!(err.contains("not a calendar instant"), "{err}");
+
+        radials[1].collection_time_ms = t0;
+        radials[1].collection_date = 0; // an unset day word
+        let raw = volume_of_radials(&radials);
+        let err = build_pack(&pack_request(&raw)).unwrap_err().to_string();
+        assert!(err.contains("collection date 0"), "{err}");
+    }
+
+    #[test]
+    fn a_pack_whose_instants_contradict_each_other_is_refused_on_read_back() {
+        let raw = three_cut_volume(4);
+        let (meta, payload) = build_pack(&pack_request(&raw)).unwrap();
+
+        // A volume that ends before it starts.
+        let mut backwards = meta.clone();
+        backwards.volume.end_time = Some("2026-07-28T20:00:00.000Z".to_string());
+        let bytes = crate::pack::encode_pack(&backwards, &payload).unwrap();
+        let err = crate::pack::decode_pack(&bytes).unwrap_err().to_string();
+        assert!(err.contains("ends at 2026-07-28T20:00:00.000Z before it starts"), "{err}");
+
+        // A cut outside the volume's span.
+        let mut outside = meta.clone();
+        outside.sweeps[2].end_time = Some("2026-07-28T20:30:00.000Z".to_string());
+        let bytes = crate::pack::encode_pack(&outside, &payload).unwrap();
+        let err = crate::pack::decode_pack(&bytes).unwrap_err().to_string();
+        assert!(err.contains("sweep 2 spans"), "{err}");
+        assert!(err.contains("outside the volume's own"), "{err}");
+
+        // A complete flag that contradicts the statuses it is defined by.
+        let mut lying = meta.clone();
+        lying.sweeps[0].complete = false;
+        let bytes = crate::pack::encode_pack(&lying, &payload).unwrap();
+        let err = crate::pack::decode_pack(&bytes).unwrap_err().to_string();
+        assert!(err.contains("says complete=false"), "{err}");
+
+        // Half a statement: an end with no start.
+        let mut half = meta.clone();
+        half.volume.start_time = None;
+        let bytes = crate::pack::encode_pack(&half, &payload).unwrap();
+        let err = crate::pack::decode_pack(&bytes).unwrap_err().to_string();
+        assert!(err.contains("without the other"), "{err}");
+
+        // And a pack that says nothing about instants at all is the pack
+        // this build's predecessor wrote, and still reads.
+        let mut silent = meta.clone();
+        silent.volume.start_time = None;
+        silent.volume.end_time = None;
+        for sweep in &mut silent.sweeps {
+            sweep.start_time = None;
+            sweep.end_time = None;
+        }
+        let bytes = crate::pack::encode_pack(&silent, &payload).unwrap();
+        crate::pack::decode_pack(&bytes).unwrap();
+        let json = serde_json::to_string(&silent).unwrap();
+        assert!(!json.contains("end_time"), "{json}");
+    }
+
+    #[test]
+    fn a_radial_instant_keeps_its_milliseconds_and_refuses_non_times() {
+        let when = radial_instant(20663, 72_196_232).unwrap();
+        assert_eq!(iso8601_ms(when), "2026-07-28T20:03:16.232Z");
+        assert_eq!(iso8601(when), "2026-07-28T20:03:16Z");
+        assert!(radial_instant(0, 1000).is_none());
+        assert!(radial_instant(20663, 86_400_000).is_none());
+        assert!(radial_instant(20663, 86_399_999).is_some());
+        assert_eq!(
+            crate::s3::parse_iso8601_ms("2026-07-28T20:03:16.232Z").unwrap(),
+            when
+        );
+        assert!(crate::s3::parse_iso8601_ms("2026-07-28T20:03:16+02:00").is_err());
+    }
+
+    /// The per-radial Nyquist array of sweep 0, as the pack carries it.
+    fn packed_nyquists(meta: &PackMeta, payload: &[u8]) -> Vec<f32> {
+        let key = meta.sweeps[0]
+            .nyquist_by_radial_array
+            .clone()
+            .expect("sweep 0 carries a per-radial Nyquist array");
+        let entry = &meta.arrays[&key];
+        assert_eq!(entry.dtype, "<f4");
+        assert_eq!(entry.shape, vec![meta.sweeps[0].radial_count]);
+        assert_eq!(entry.bytes, meta.sweeps[0].radial_count * 4);
+        payload[entry.offset..entry.offset + entry.bytes]
+            .chunks_exact(4)
+            .map(|word| f32::from_le_bytes([word[0], word[1], word[2], word[3]]))
+            .collect()
+    }
+
+    #[test]
+    fn a_uniform_cut_packs_the_same_nyquist_for_every_radial() {
+        // The overwhelmingly common case, and the one that must not move:
+        // four radials all on 23.84 m/s.  The array says so four times, the
+        // scalar says so once, and nothing disagrees with itself.
+        let raw = cut_with_radial_nyquists(&[2384, 2384, 2384, 2384]);
+        let (meta, payload) = build_pack(&pack_request(&raw)).unwrap();
+        assert_eq!(meta.sweeps.len(), 1);
+        assert_eq!(meta.sweeps[0].radial_count, 4);
+        assert_eq!(packed_nyquists(&meta, &payload), vec![23.84; 4]);
+        assert!((meta.sweeps[0].nyquist_velocity_ms.unwrap() - 23.84).abs() < 1e-6);
+        assert!(!meta.sweeps[0].nyquist_radials_disagree);
+
+        // Everything an existing consumer reads is exactly what it was: the
+        // v1 schema string, the same container, the same scalar, and moment
+        // planes of the same dtype and shape.  The array is beside them, not
+        // instead of any of them.
+        assert_eq!(meta.schema, crate::pack::SWEEPS_SCHEMA);
+        assert_eq!(meta.sweeps[0].moments[0].gate_count, 4);
+        assert_eq!(meta.arrays[&meta.sweeps[0].moments[0].array].shape, vec![4, 4]);
+        let bytes = crate::pack::encode_pack(&meta, &payload).unwrap();
+        let (round, _) = crate::pack::decode_pack(&bytes).unwrap();
+        assert_eq!(
+            round.sweeps[0].nyquist_velocity_ms,
+            meta.sweeps[0].nyquist_velocity_ms
+        );
+    }
+
+    #[test]
+    fn a_mixed_prf_cut_carries_both_lattices_and_the_scalar_is_the_lower() {
+        // A VCP that changes PRF inside the cut: two radials at 32.00 m/s
+        // and two at 12.00.  One number cannot describe this cut, which is
+        // the entire reason the array exists -- and the scalar has to be the
+        // floor, because 32 would license a 20 m/s gate that the radial it
+        // came from folds at 12.
+        let raw = cut_with_radial_nyquists(&[3200, 3200, 1200, 1200]);
+        let (meta, payload) = build_pack(&pack_request(&raw)).unwrap();
+        assert_eq!(
+            packed_nyquists(&meta, &payload),
+            vec![32.0, 32.0, 12.0, 12.0]
+        );
+        assert!((meta.sweeps[0].nyquist_velocity_ms.unwrap() - 12.0).abs() < 1e-6);
+        assert!(meta.sweeps[0].nyquist_radials_disagree);
+
+        // The scalar is not a second opinion: it is this array's minimum
+        // over its usable entries, and the pack's own reader proves it.
+        let bytes = crate::pack::encode_pack(&meta, &payload).unwrap();
+        crate::pack::decode_pack(&bytes).unwrap();
+    }
+
+    #[test]
+    fn a_radial_with_no_nyquist_is_a_nan_and_never_a_neighbours_number() {
+        // Middle radial's RAD block carries a zero Nyquist word.  The hole
+        // stays a hole: it is not filled from either side, it does not drag
+        // the minimum to zero, and it does make the cut disagree with itself.
+        let raw = cut_with_radial_nyquists(&[2384, 0, 2384, 1200]);
+        let (meta, payload) = build_pack(&pack_request(&raw)).unwrap();
+        let packed = packed_nyquists(&meta, &payload);
+        assert!((packed[0] - 23.84).abs() < 1e-6);
+        assert!(packed[1].is_nan(), "{packed:?}");
+        assert!((packed[2] - 23.84).abs() < 1e-6);
+        assert!((packed[3] - 12.0).abs() < 1e-6);
+        assert!((meta.sweeps[0].nyquist_velocity_ms.unwrap() - 12.0).abs() < 1e-6);
+        assert!(meta.sweeps[0].nyquist_radials_disagree);
+    }
+
+    #[test]
+    fn a_cut_no_radial_reported_for_packs_exactly_as_it_did_before() {
+        // Every RAD block carries a zero Nyquist word, so there is nothing
+        // to carry.  An all-NaN array would assert the originals were kept;
+        // the key is absent instead and the scalar stays None as it always
+        // was, so a reader built before the array existed reads the cut it
+        // always read.  (The collection instants are a separate, always
+        // present statement about the same cut; see the tests above.)
+        let raw = cut_with_radial_nyquists(&[0, 0, 0]);
+        let (meta, _payload) = build_pack(&pack_request(&raw)).unwrap();
+        assert!(meta.sweeps[0].nyquist_velocity_ms.is_none());
+        assert!(meta.sweeps[0].nyquist_by_radial_array.is_none());
+        assert_eq!(meta.arrays.len(), 3); // azimuth, elevation, one moment
+        let json = serde_json::to_string(&meta).unwrap();
+        assert!(!json.contains("nyquist_by_radial_array"), "{json}");
+    }
+
+    #[test]
+    fn a_scalar_that_does_not_summarise_its_array_is_refused_on_read_back() {
+        // The instrument, tested in both directions.  The pack above passes;
+        // the same pack with the scalar nudged off its array's floor by more
+        // than the tolerance is refused by name, so a future writer that
+        // computes the two separately cannot ship them quietly disagreeing.
+        let raw = cut_with_radial_nyquists(&[3200, 3200, 1200, 1200]);
+        let (mut meta, payload) = build_pack(&pack_request(&raw)).unwrap();
+        crate::pack::decode_pack(&crate::pack::encode_pack(&meta, &payload).unwrap()).unwrap();
+
+        meta.sweeps[0].nyquist_velocity_ms = Some(32.0);
+        let bytes = crate::pack::encode_pack(&meta, &payload).unwrap();
+        let err = crate::pack::decode_pack(&bytes).unwrap_err().to_string();
+        assert!(err.contains("bottoms out at 12"), "{err}");
+        assert!(err.contains("defined as that array's minimum"), "{err}");
+
+        // Rounding is not disagreement: a millimetre per second of float
+        // formatting drift is inside the tolerance and passes.
+        meta.sweeps[0].nyquist_velocity_ms = Some(12.0 + 5e-4);
+        let bytes = crate::pack::encode_pack(&meta, &payload).unwrap();
+        crate::pack::decode_pack(&bytes).unwrap();
+    }
+}

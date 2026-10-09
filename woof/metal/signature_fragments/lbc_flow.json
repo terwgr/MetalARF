@@ -1,0 +1,52 @@
+{
+  "kernels": [
+    {
+      "name": "lbc_dependent_batch",
+      "module": "lbc_flow",
+      "source": "woof/metal/shaders/lbc_flow.metal",
+      "cuda_source": "woof/core/kernels/lbc_flow.cu",
+      "cuda_symbol": "flow_dependent_batch",
+      "resources": [
+        ["f0", "float", "read_write"], ["f1", "float", "read_write"],
+        ["f2", "float", "read_write"], ["f3", "float", "read_write"],
+        ["f4", "float", "read_write"], ["f5", "float", "read_write"],
+        ["f6", "float", "read_write"], ["f7", "float", "read_write"],
+        ["f8", "float", "read_write"], ["u_flux", "float", "read"],
+        ["v_flux", "float", "read"]
+      ],
+      "shapes": {
+        "f0": [["nz", "ny", "nx"]], "f1": [["nz", "ny", "nx"]],
+        "f2": [["nz", "ny", "nx"]], "f3": [["nz", "ny", "nx"]],
+        "f4": [["nz", "ny", "nx"]], "f5": [["nz", "ny", "nx"]],
+        "f6": [["nz", "ny", "nx"]], "f7": [["nz", "ny", "nx"]],
+        "f8": [["nz", "ny", "nx"]],
+        "u_flux": [["nz", "ny", "nx+1"]],
+        "v_flux": [["nz", "ny+1", "nx"]]
+      },
+      "parameters": [
+        ["nfield", "int32"], ["spec_zone", "int32"], ["nz", "int32"],
+        ["ny", "int32"], ["nx", "int32"], ["frame_count", "int32"],
+        ["inflow_value", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "lbc_zero_gradient_w",
+      "module": "lbc_flow",
+      "source": "woof/metal/shaders/lbc_flow.metal",
+      "cuda_source": "woof/core/kernels/lbc_flow.cu",
+      "cuda_symbol": "zero_gradient_w",
+      "resources": [["field", "float", "read_write"]],
+      "shapes": {"field": [["nz", "ny", "nx"]]},
+      "parameters": [
+        ["spec_zone", "int32"], ["nz", "int32"], ["ny", "int32"],
+        ["nx", "int32"], ["frame_count", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

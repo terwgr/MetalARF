@@ -1,0 +1,66 @@
+# T255 L40 adiabatic, GDAS analysis, semi-Lagrangian core: the rung of the
+# dt ladder.  Physics is OFF, so what this config measures is the
+# integrator and nothing else: the wall, the Lipschitz number, the
+# trajectory residual, the conservation gates and whether the run finishes
+# at all.  The ladder driver rewrites time.dt_s alone.
+#
+# 86400 and 21600 are whole multiples of every rung (100, 200, 300, 450,
+# 600 and 900 s), so no rung changes the output cadence.
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-gdas-t255-sl-si-dry"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 255
+dealias_factor = 1.5
+
+[time]
+dt_s = 300.0
+duration_s = 86400.0
+output_interval_s = 21600.0
+integrator = "sl_si"
+maximum_lipschitz = 0.75
+
+[semilag]
+quasi_monotone = true
+trajectory_iterations = 3
+extrapolation = "settls"
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+[initial]
+mode = "analysis"
+analysis_grib = "cases/gdas/gdas.t18z.pgrb2.0p25.f000"
+analysis_mapping = "gdas-global"
+surface_water_kg_m2 = 500.0
+
+[physics]
+mode = "none"
+
+[diffusion]
+enabled = true
+order = 16
+e_folding_time_s_at_truncation = 720.0
+preserve_degree = 1
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+off_centring_weight = 0.55
+
+[repair]
+mass_fixer = true
+water_fixer = true
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 1.0e-6
+transform_parseval_relative_error = 5.0e-7
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-3

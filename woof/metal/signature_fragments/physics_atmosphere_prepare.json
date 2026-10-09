@@ -1,0 +1,62 @@
+{
+  "kernels": [
+    {
+      "name": "physics_atmosphere_prepare",
+      "module": "physics_atmosphere",
+      "source": "woof/metal/shaders/physics_atmosphere_prepare.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "_prepare_atmosphere",
+      "resources": [
+        ["thb", "float", "read"], ["thp", "float", "read"],
+        ["p", "float", "read"], ["u", "float", "read"],
+        ["v", "float", "read"], ["phb", "float", "read"],
+        ["php", "float", "read"], ["qv", "float", "read"],
+        ["qc", "float", "read"], ["qr", "float", "read"],
+        ["qi", "float", "read"], ["qs", "float", "read"],
+        ["qg", "float", "read"], ["qh", "float", "read"],
+        ["c1h", "float", "read"], ["c2h", "float", "read"],
+        ["dnw", "float", "read"], ["total_mu", "float", "read"],
+        ["alt", "float", "read"],
+        ["theta", "float", "read_write"], ["temperature", "float", "read_write"],
+        ["pressure", "float", "read_write"], ["p_interface", "float", "read_write"],
+        ["exner", "float", "read_write"], ["u_mass", "float", "read_write"],
+        ["v_mass", "float", "read_write"], ["z_interface", "float", "read_write"],
+        ["dz", "float", "read_write"], ["rho", "float", "read_write"]
+      ],
+      "shapes": {
+        "thb": [["nz", "ny", "nx"], ["nz"]],
+        "thp": [["nz", "ny", "nx"]],
+        "p": [["nz", "ny", "nx"]],
+        "u": [["nz", "ny", "nx+1"]],
+        "v": [["nz", "ny+1", "nx"]],
+        "phb": [["nz+1", "ny", "nx"], ["nz+1"]],
+        "php": [["nz+1", "ny", "nx"]],
+        "qv": [["nz", "ny", "nx"]], "qc": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]], "qi": [["nz", "ny", "nx"]],
+        "qs": [["nz", "ny", "nx"]], "qg": [["nz", "ny", "nx"]],
+        "qh": [["nz", "ny", "nx"]],
+        "c1h": [["nz"]], "c2h": [["nz"]], "dnw": [["nz"]],
+        "total_mu": [["ny", "nx"]], "alt": [["nz", "ny", "nx"]],
+        "theta": [["nz", "ny", "nx"]],
+        "temperature": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]],
+        "p_interface": [["nz+1", "ny", "nx"]],
+        "exner": [["nz", "ny", "nx"]],
+        "u_mass": [["nz", "ny", "nx"]],
+        "v_mass": [["nz", "ny", "nx"]],
+        "z_interface": [["nz+1", "ny", "nx"]],
+        "dz": [["nz", "ny", "nx"]], "rho": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["thb_3d", "int32"], ["phb_3d", "int32"],
+        ["has_qv", "int32"], ["has_qc", "int32"], ["has_qr", "int32"],
+        ["has_qi", "int32"], ["has_qs", "int32"], ["has_qg", "int32"],
+        ["has_qh", "int32"], ["p_top", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

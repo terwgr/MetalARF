@@ -1,0 +1,11 @@
+// Generated from kernel_signatures.json; layout ed2735ae8c5e7a0e85674ade3b60b2742926e16c0ffc58c4140bb60e16fc4118.
+struct NtiedtkeLlo3ReduceFinishResources {
+    device const int *partials [[id(0)]];
+    device int *llo3_mask [[id(1)]];
+    device int *flags [[id(2)]];
+};
+struct NtiedtkeLlo3ReduceFinishParams {
+    int ncol;
+    int chunk_index;
+};
+static_assert(sizeof(NtiedtkeLlo3ReduceFinishParams) == 8, "ntiedtke_llo3_reduce_finish parameter ABI size changed");

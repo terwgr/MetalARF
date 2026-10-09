@@ -1,0 +1,84 @@
+#ifndef WOOF_SOFT_GFK_EXP_METALH
+#define WOOF_SOFT_GFK_EXP_METALH
+
+// Dependency-blocked source proposal for glibc 2.39 gfk_exp / exp2f core.
+// The binary64 inputs and results below are ulong IEEE bit patterns. All
+// double-path arithmetic delegates to soft_binary64.metalh; that base header
+// is not centrally cleared or verified, so this proposal is not production
+// consumable. No native double or substitute libm is used.
+//
+// The table/core are transcribed from Arm optimized-routines exp2f data/code
+// as imported by glibc 2.39 (MIT; attribution and permission notice remain
+// in the repository NOTICE and licenses). The source's exceptional FADD(x,x)
+// branch remains the exact source FP32 add; the transcendental path is bits.
+
+#include "soft_binary64.metalh"
+#include "soft_binary32.metalh"
+
+constant ulong SOFT_GFK_EXP2F_TAB[32] = {
+    0x3ff0000000000000ul, 0x3fefd9b0d3158574ul,
+    0x3fefb5586cf9890ful, 0x3fef9301d0125b51ul,
+    0x3fef72b83c7d517bul, 0x3fef54873168b9aaul,
+    0x3fef387a6e756238ul, 0x3fef1e9df51fdee1ul,
+    0x3fef06fe0a31b715ul, 0x3feef1a7373aa9cbul,
+    0x3feedea64c123422ul, 0x3feece086061892dul,
+    0x3feebfdad5362a27ul, 0x3feeb42b569d4f82ul,
+    0x3feeab07dd485429ul, 0x3feea47eb03a5585ul,
+    0x3feea09e667f3bcdul, 0x3fee9f75e8ec5f74ul,
+    0x3feea11473eb0187ul, 0x3feea589994cce13ul,
+    0x3feeace5422aa0dbul, 0x3feeb737b0cdc5e5ul,
+    0x3feec49182a3f090ul, 0x3feed503b23e255dul,
+    0x3feee89f995ad3adul, 0x3feeff76f2fb5e47ul,
+    0x3fef199bdd85529cul, 0x3fef3720dcef9069ul,
+    0x3fef5818dcfba487ul, 0x3fef7c97337b9b5ful,
+    0x3fefa4afa2a490daul, 0x3fefd0765b6e4540ul
+};
+
+// Shared exp2 core interface owned by exp. Pow may consume this interface
+// after central review; its private log2 reduction is deliberately absent.
+static inline ulong soft_gfk_exp2_core(ulong xd, ulong shift,
+                                       ulong p0, ulong p1, ulong p2,
+                                       ulong sign_bias) {
+    ulong kd = soft64_add(xd, shift);
+    const ulong ki = kd; // CUDA __double_as_longlong is a representation cast.
+    kd = soft64_sub(kd, shift);
+    const ulong r = soft64_sub(xd, kd);
+
+    ulong t = SOFT_GFK_EXP2F_TAB[uint(ki & 31ul)];
+    t += (ki + sign_bias) << 47u;
+    const ulong s = t; // CUDA __longlong_as_double is a representation cast.
+    const ulong z = soft64_fma(p0, r, p1);
+    const ulong r2 = soft64_mul(r, r);
+    ulong y = soft64_fma(p2, r, 0x3ff0000000000000ul);
+    y = soft64_fma(z, r2, y);
+    return soft64_mul(y, s);
+}
+
+// Integer-bit translation of glibc 2.39 e_expf.c::expf.
+static inline uint soft_gfk_exp(uint xbits) {
+    const uint abstop = (xbits >> 20u) & 0x7ffu;
+    if (abstop >= 0x42bu) { // ((__float_as_uint(88.0f)) >> 20)
+        if (xbits == 0xff800000u) return 0u;
+        if (abstop >= 0x7f8u) {
+            // Preserve the source add boundary using integer-bit RN arithmetic.
+            return soft32_add(xbits, xbits);
+        }
+        const bool negative = (xbits & 0x80000000u) != 0u;
+        const uint magnitude = xbits & 0x7fffffffu;
+        if (!negative && xbits > 0x42b17218u) return 0x7f800000u;
+        if (negative && magnitude > 0x42cff1b4u) return 0u;
+    }
+
+    const ulong xd = soft64_from_f32_bits(xbits);
+    // 0x1.71547652b82fep+0 * 32.0, folded exactly by a binary exponent shift.
+    const ulong z = soft64_mul(0x40471547652b82feul, xd);
+    return soft64_to_f32_bits(soft_gfk_exp2_core(
+        z,
+        0x4338000000000000ul, // GFK_EXP2F_SHIFT = 0x1.8p+52
+        0x3ebc6af84b912394ul, // P0 / 32 / 32 / 32
+        0x3f2ebfce50fac4f3ul, // P1 / 32 / 32
+        0x3f962e42ff0c52d6ul, // P2 / 32
+        0ul));
+}
+
+#endif

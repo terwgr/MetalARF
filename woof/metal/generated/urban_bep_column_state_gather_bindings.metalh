@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout bce58ae3dff978a62e4e00d004221969dae0f9f608e8ae9d15ea2d67c8df58b6.
+struct UrbanBepColumnStateGatherResources {
+    device const int *active_cols [[id(0)]];
+    device const int *column_param_ix [[id(1)]];
+    device const float *trb_urb [[id(2)]];
+    device const float *tw1_urb [[id(3)]];
+    device const float *tw2_urb [[id(4)]];
+    device const float *tgb_urb [[id(5)]];
+    device const float *sfw1_urb [[id(6)]];
+    device const float *sfw2_urb [[id(7)]];
+    device const float *sfr_urb [[id(8)]];
+    device const float *sfg_urb [[id(9)]];
+    device float *column_state [[id(10)]];
+    device int *column_state_ix [[id(11)]];
+};
+struct UrbanBepColumnStateGatherParams {
+    int ncol;
+};
+static_assert(sizeof(UrbanBepColumnStateGatherParams) == 4, "urban_bep_column_state_gather parameter ABI size changed");

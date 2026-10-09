@@ -1,0 +1,181 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/spectral/transform.py",
+      "cuda_symbol": "resident Global spectral zonal derivative",
+      "layout_version": 1,
+      "module": "global_semilag_zonal_derivative_fragment",
+      "name": "global_semilag_zonal_derivative_fragment",
+      "parameters": [["truncation", "int32"], ["coefficient_count", "int32"]],
+      "resources": [
+        ["coefficients", "float64_bits", "read"],
+        ["derivative", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "coefficients": [["any_1d"]],
+        "derivative": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/spectral/vector.py",
+      "cuda_symbol": "resident Global vorticity-divergence wind synthesis",
+      "layout_version": 1,
+      "module": "global_semilag_wind_synthesis_fragment",
+      "name": "global_semilag_wind_synthesis_fragment",
+      "parameters": [["nlevel", "int32"], ["nlat", "int32"], ["nlon", "int32"]],
+      "resources": [
+        ["east", "float64_bits", "read"],
+        ["north", "float64_bits", "read"],
+        ["coslat", "float64_bits", "read"],
+        ["radius", "float64_bits", "read"],
+        ["u", "float64_bits", "read_write"],
+        ["v", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "coslat": [["any_1d"]],
+        "east": [["any_1d"]],
+        "north": [["any_1d"]],
+        "radius": [[1]],
+        "u": [["any_1d"]],
+        "v": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "resident Global temperature and virtual-temperature synthesis",
+      "layout_version": 1,
+      "module": "global_semilag_thermodynamics_fragment",
+      "name": "global_semilag_thermodynamics_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["theta", "float64_bits", "read"],
+        ["pressure_full", "float64_bits", "read"],
+        ["qv", "float64_bits", "read"],
+        ["qc", "float64_bits", "read"],
+        ["qr", "float64_bits", "read"],
+        ["qi", "float64_bits", "read"],
+        ["qs", "float64_bits", "read"],
+        ["qg", "float64_bits", "read"],
+        ["temperature", "float64_bits", "read_write"],
+        ["virtual_temperature", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "pressure_full": [["any_1d"]],
+        "qg": [["any_1d"]],
+        "qi": [["any_1d"]],
+        "qc": [["any_1d"]],
+        "qr": [["any_1d"]],
+        "qs": [["any_1d"]],
+        "qv": [["any_1d"]],
+        "temperature": [["any_1d"]],
+        "theta": [["any_1d"]],
+        "virtual_temperature": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "resident Global hydrostatic geopotential reconstruction",
+      "layout_version": 1,
+      "module": "global_semilag_hydrostatic_fragment",
+      "name": "global_semilag_hydrostatic_fragment",
+      "parameters": [["nlevel", "int32"], ["nlat", "int32"], ["nlon", "int32"]],
+      "resources": [
+        ["virtual_temperature", "float64_bits", "read"],
+        ["ln_full", "float64_bits", "read"],
+        ["ln_ratio", "float64_bits", "read"],
+        ["surface_geopotential", "float64_bits", "read"],
+        ["gas_constant", "float64_bits", "read"],
+        ["geopotential", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "gas_constant": [[1]],
+        "geopotential": [["any_1d"]],
+        "ln_full": [["any_1d"]],
+        "ln_ratio": [["any_1d"]],
+        "surface_geopotential": [["any_1d"]],
+        "virtual_temperature": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "resident Global semi-Lagrangian mass flux products",
+      "layout_version": 1,
+      "module": "global_semilag_mass_flux_fragment",
+      "name": "global_semilag_mass_flux_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["dp", "float64_bits", "read"],
+        ["u", "float64_bits", "read"],
+        ["v", "float64_bits", "read"],
+        ["flux_u", "float64_bits", "read_write"],
+        ["flux_v", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "dp": [["any_1d"]],
+        "flux_u": [["any_1d"]],
+        "flux_v": [["any_1d"]],
+        "u": [["any_1d"]],
+        "v": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "resident Global semi-Lagrangian column mass-flux reduction",
+      "layout_version": 1,
+      "module": "global_semilag_mass_flux_reduction_fragment",
+      "name": "global_semilag_mass_flux_reduction_fragment",
+      "parameters": [["nlevel", "int32"], ["nlat", "int32"], ["nlon", "int32"]],
+      "resources": [
+        ["divergence_mass", "float64_bits", "read"],
+        ["ps_t", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "divergence_mass": [["any_1d"]],
+        "ps_t": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "resident Global semi-Lagrangian pressure-continuity recurrence",
+      "layout_version": 1,
+      "module": "global_semilag_continuity_fragment",
+      "name": "global_semilag_continuity_fragment",
+      "parameters": [["nlevel", "int32"], ["nlat", "int32"], ["nlon", "int32"]],
+      "resources": [
+        ["divergence_mass", "float64_bits", "read"],
+        ["ps_t", "float64_bits", "read"],
+        ["delta_b", "float64_bits", "read"],
+        ["omega", "float64_bits", "read_write"],
+        ["residual", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "delta_b": [["any_1d"]],
+        "divergence_mass": [["any_1d"]],
+        "omega": [["any_1d"]],
+        "ps_t": [["any_1d"]],
+        "residual": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

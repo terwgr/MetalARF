@@ -1,0 +1,29 @@
+// Generated from kernel_signatures.json; layout 2667ff0f204f6df79760997d7d44caee888fa29b51ee62c554bd61a313c40781.
+struct MorrisonPrepareFieldsResources {
+    device const float *thb [[id(0)]];
+    device const float *thp [[id(1)]];
+    device const float *phb [[id(2)]];
+    device const float *php [[id(3)]];
+    device const float *pressure [[id(4)]];
+    device float *theta [[id(5)]];
+    device float *pii [[id(6)]];
+    device float *dz [[id(7)]];
+    device float *h_diabatic [[id(8)]];
+};
+struct MorrisonPrepareFieldsParams {
+    int nz;
+    int ny;
+    int nx;
+    int nzi;
+    int thb_full;
+    int phb_full;
+    float p0;
+    float rcp;
+    float gravity;
+    int ncell;
+    int j_start;
+    int j_stop;
+    int i_start;
+    int i_stop;
+};
+static_assert(sizeof(MorrisonPrepareFieldsParams) == 56, "morrison_prepare_fields parameter ABI size changed");

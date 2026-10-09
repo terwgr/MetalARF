@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semilag/vectors.py",
+      "cuda_symbol": "transport_to_arrival",
+      "layout_version": 1,
+      "module": "global_semilag_transport_fragment",
+      "name": "global_semilag_transport_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["vx", "float64_bits", "read"], ["vy", "float64_bits", "read"],
+        ["vz", "float64_bits", "read"], ["px", "float64_bits", "read"],
+        ["py", "float64_bits", "read"], ["pz", "float64_bits", "read"],
+        ["qx", "float64_bits", "read"], ["qy", "float64_bits", "read"],
+        ["qz", "float64_bits", "read"], ["sin_lat", "float64_bits", "read"],
+        ["cos_lat", "float64_bits", "read"], ["sin_latlon", "float64_bits", "read"],
+        ["cos_latlon", "float64_bits", "read"], ["u_arrival", "float64_bits", "read_write"],
+        ["v_arrival", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "vx": [["any_1d"]], "vy": [["any_1d"]], "vz": [["any_1d"]],
+        "px": [["any_1d"]], "py": [["any_1d"]], "pz": [["any_1d"]],
+        "qx": [["any_1d"]], "qy": [["any_1d"]], "qz": [["any_1d"]],
+        "sin_lat": [["any_1d"]], "cos_lat": [["any_1d"]],
+        "sin_latlon": [["any_1d"]], "cos_latlon": [["any_1d"]],
+        "u_arrival": [["any_1d"]], "v_arrival": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_semilag_transport_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

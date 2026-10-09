@@ -1,0 +1,215 @@
+{
+  "kernels": [
+    {
+      "name": "ruc_sfclay_prepare",
+      "module": "ruc_sfclay_seaice",
+      "source": "woof/metal/shaders/ruc_sfclay_seaice.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "PhysicsDriver._run_sfclay.ruc_fractional_seaice_prepare",
+      "resources": [
+        ["xice", "float", "read"],
+        ["tsk", "float", "read"],
+        ["tsk_save", "float", "read"],
+        ["tsk_sea", "float", "read_write"],
+        ["local_tsk", "float", "write"]
+      ],
+      "shapes": {
+        "xice": [
+          ["any_2d"]
+        ],
+        "tsk": [
+          ["any_2d"]
+        ],
+        "tsk_save": [
+          ["any_2d"]
+        ],
+        "tsk_sea": [
+          ["any_2d"]
+        ],
+        "local_tsk": [
+          ["any_2d"]
+        ]
+      },
+      "parameters": [
+        ["n", "int32"],
+        ["itimestep", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "ruc_sfclay_scatter",
+      "module": "ruc_sfclay_seaice",
+      "source": "woof/metal/shaders/ruc_sfclay_seaice.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "PhysicsDriver._run_sfclay.ruc_fractional_seaice_scatter",
+      "resources": [
+        ["raw", "float", "read"],
+        ["xice", "float", "read"],
+        ["znt_sea", "float", "read_write"],
+        ["ust_sea", "float", "read_write"],
+        ["mol_sea", "float", "read_write"],
+        ["zol_sea", "float", "read_write"],
+        ["flhc_sea", "float", "read_write"],
+        ["flqc_sea", "float", "read_write"],
+        ["cpm_sea", "float", "read_write"],
+        ["cqs2_sea", "float", "read_write"],
+        ["chs2_sea", "float", "read_write"],
+        ["chs_sea", "float", "read_write"],
+        ["qsfc_sea", "float", "read_write"],
+        ["qgh_sea", "float", "read_write"],
+        ["hfx_sea", "float", "read_write"],
+        ["qfx_sea", "float", "read_write"],
+        ["lh_sea", "float", "read_write"]
+      ],
+      "shapes": {
+        "raw": [
+          ["any_1d"]
+        ],
+        "xice": [
+          ["any_2d"]
+        ],
+        "znt_sea": [
+          ["any_2d"]
+        ],
+        "ust_sea": [
+          ["any_2d"]
+        ],
+        "mol_sea": [
+          ["any_2d"]
+        ],
+        "zol_sea": [
+          ["any_2d"]
+        ],
+        "flhc_sea": [
+          ["any_2d"]
+        ],
+        "flqc_sea": [
+          ["any_2d"]
+        ],
+        "cpm_sea": [
+          ["any_2d"]
+        ],
+        "cqs2_sea": [
+          ["any_2d"]
+        ],
+        "chs2_sea": [
+          ["any_2d"]
+        ],
+        "chs_sea": [
+          ["any_2d"]
+        ],
+        "qsfc_sea": [
+          ["any_2d"]
+        ],
+        "qgh_sea": [
+          ["any_2d"]
+        ],
+        "hfx_sea": [
+          ["any_2d"]
+        ],
+        "qfx_sea": [
+          ["any_2d"]
+        ],
+        "lh_sea": [
+          ["any_2d"]
+        ]
+      },
+      "parameters": [
+        ["n", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "mynn_seaice_prepare",
+      "module": "ruc_sfclay_seaice",
+      "source": "woof/metal/shaders/ruc_sfclay_seaice.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "PhysicsDriver._run_sfclay.mynn_fractional_seaice_prepare",
+      "resources": [
+        ["xice", "float", "read"],
+        ["tsk", "float", "read"],
+        ["mavail", "float", "read"],
+        ["xland", "float", "read"],
+        ["tsk_sea", "float", "read_write"],
+        ["znt_sea", "float", "read_write"],
+        ["local_tsk", "float", "write"],
+        ["sea_tsk", "float", "write"],
+        ["sea_mavail", "float", "write"],
+        ["sea_xland", "float", "write"]
+      ],
+      "shapes": {
+        "xice": [
+          ["any_2d"]
+        ],
+        "tsk": [
+          ["any_2d"]
+        ],
+        "mavail": [
+          ["any_2d"]
+        ],
+        "xland": [
+          ["any_2d"]
+        ],
+        "tsk_sea": [
+          ["any_2d"]
+        ],
+        "znt_sea": [
+          ["any_2d"]
+        ],
+        "local_tsk": [
+          ["any_2d"]
+        ],
+        "sea_tsk": [
+          ["any_2d"]
+        ],
+        "sea_mavail": [
+          ["any_2d"]
+        ],
+        "sea_xland": [
+          ["any_2d"]
+        ]
+      },
+      "parameters": [
+        ["n", "int32"],
+        ["itimestep", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "mynn_seaice_blend",
+      "module": "ruc_sfclay_seaice",
+      "source": "woof/metal/shaders/ruc_sfclay_seaice.metal",
+      "cuda_source": "woof/core/physics.py",
+      "cuda_symbol": "PhysicsDriver._run_sfclay.mynn_fractional_seaice_blend",
+      "resources": [
+        ["xice", "float", "read"],
+        ["value", "float", "read_write"],
+        ["sea", "float", "read"]
+      ],
+      "shapes": {
+        "xice": [
+          ["any_2d"]
+        ],
+        "value": [
+          ["any_2d"]
+        ],
+        "sea": [
+          ["any_2d"]
+        ]
+      },
+      "parameters": [
+        ["n", "int32"],
+        ["select", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

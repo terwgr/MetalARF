@@ -1,0 +1,23 @@
+// Generated from kernel_signatures.json; layout a6b9db6edbd5dc14d03d78e19cd522915be1312015a330d906b2346f6bdfcb01.
+struct WrfColdStartWResources {
+    device const float *u [[id(0)]];
+    device const float *v [[id(1)]];
+    device const float *ht [[id(2)]];
+    device const float *msftx [[id(3)]];
+    device const float *msfty [[id(4)]];
+    device const float *znw [[id(5)]];
+    device float *w [[id(6)]];
+};
+struct WrfColdStartWParams {
+    float cf1;
+    float cf2;
+    float cf3;
+    float rdx;
+    float rdy;
+    int periodic_x;
+    int periodic_y;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(WrfColdStartWParams) == 40, "wrf_cold_start_w parameter ABI size changed");

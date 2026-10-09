@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "name": "noah_sfcdiags",
+      "module": "noah_sfcdiags",
+      "source": "woof/metal/shaders/noah_sfcdiags_family.metal",
+      "cuda_source": "woof/core/noah_sfcdiags.py",
+      "cuda_symbol": "noah_sfcdiags",
+      "resources": [
+        ["psfc_a", "float", "read"],
+        ["tsk_a", "float", "read"],
+        ["cqs2_a", "float", "read"],
+        ["chs2_a", "float", "read"],
+        ["qsfc_a", "float", "read"],
+        ["qfx_a", "float", "read"],
+        ["hfx_a", "float", "read"],
+        ["qv1_a", "float", "read"],
+        ["q2_a", "float", "read_write"],
+        ["t2_a", "float", "read_write"],
+        ["th2_a", "float", "read_write"]
+      ],
+      "shapes": {
+        "psfc_a": [["ny", "nx"]],
+        "tsk_a": [["ny", "nx"]],
+        "cqs2_a": [["ny", "nx"]],
+        "chs2_a": [["ny", "nx"]],
+        "qsfc_a": [["ny", "nx"]],
+        "qfx_a": [["ny", "nx"]],
+        "hfx_a": [["ny", "nx"]],
+        "qv1_a": [["ny", "nx"]],
+        "q2_a": [["ny", "nx"]],
+        "t2_a": [["ny", "nx"]],
+        "th2_a": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["rd", "float32"],
+        ["cp_air", "float32"],
+        ["p0", "float32"],
+        ["rcp", "float32"],
+        ["active_floor", "float32"],
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["ncol", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

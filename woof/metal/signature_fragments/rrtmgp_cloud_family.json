@@ -1,0 +1,224 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_cloud_optics",
+      "module": "rrtmgp_cloud_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_cloud_optics",
+      "resources": [
+        ["clwp", "float", "read"], ["ciwp", "float", "read"],
+        ["reliq", "float", "read"], ["dgice", "float", "read"],
+        ["extliq", "float", "read"], ["ssaliq", "float", "read"],
+        ["asyliq", "float", "read"], ["extice", "float", "read"],
+        ["ssaice", "float", "read"], ["asyice", "float", "read"],
+        ["tau", "float", "read_write"], ["ssa", "float", "read_write"],
+        ["asym", "float", "read_write"]
+      ],
+      "shapes": {
+        "clwp": [["ncell"]], "ciwp": [["ncell"]],
+        "reliq": [["ncell"]], "dgice": [["ncell"]],
+        "extliq": [["nliq", "nband"]], "ssaliq": [["nliq", "nband"]],
+        "asyliq": [["nliq", "nband"]],
+        "extice": [["nice", "nband", "nrgh"]],
+        "ssaice": [["nice", "nband", "nrgh"]],
+        "asyice": [["nice", "nband", "nrgh"]],
+        "tau": [["ncell", "nband"]], "ssa": [["ncell", "nband"]],
+        "asym": [["ncell", "nband"]]
+      },
+      "parameters": [
+        ["ncell", "int32"], ["nband", "int32"], ["nliq", "int32"],
+        ["nice", "int32"], ["nrgh", "int32"],
+        ["liq_offset", "float32"], ["liq_step", "float32"],
+        ["ice_offset", "float32"], ["ice_step", "float32"]
+      ],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_finalize_cloud_lw",
+      "module": "rrtmgp_cloud_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_finalize_cloud_lw",
+      "resources": [
+        ["tau_gas", "float", "read"], ["tau_cloud", "float", "read"],
+        ["ssa_cloud", "float", "read"], ["gpoint_bands", "float", "read"],
+        ["cloud_mask", "float", "read"], ["tau", "float", "read_write"]
+      ],
+      "shapes": {
+        "tau_gas": [["n"]],
+        "tau_cloud": [["ncell", "nband"]], "ssa_cloud": [["ncell", "nband"]],
+        "gpoint_bands": [["ngpt"]], "cloud_mask": [["n"]],
+        "tau": [["n"]]
+      },
+      "parameters": [["n", "int32"], ["ncell", "int32"],
+        ["ngpt", "int32"],
+        ["nband", "int32"], ["have_mask", "int32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_finalize_cloud_sw",
+      "module": "rrtmgp_cloud_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_finalize_cloud_sw",
+      "resources": [
+        ["tau_gas", "float", "read"], ["ssa_gas", "float", "read"],
+        ["tau_cloud", "float", "read"], ["ssa_cloud", "float", "read"],
+        ["g_cloud", "float", "read"], ["gpoint_bands", "float", "read"],
+        ["cloud_mask", "float", "read"], ["tau", "float", "read_write"],
+        ["ssa", "float", "read_write"], ["asym", "float", "read_write"]
+      ],
+      "shapes": {
+        "tau_gas": [["n"]], "ssa_gas": [["n"]],
+        "tau_cloud": [["ncell", "nband"]], "ssa_cloud": [["ncell", "nband"]],
+        "g_cloud": [["ncell", "nband"]], "gpoint_bands": [["ngpt"]],
+        "cloud_mask": [["n"]], "tau": [["n"]],
+        "ssa": [["n"]], "asym": [["n"]]
+      },
+      "parameters": [["n", "int32"], ["ncell", "int32"],
+        ["ngpt", "int32"],
+        ["nband", "int32"], ["have_mask", "int32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_clear_upper_layers",
+      "module": "rrtmgp_cloud_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_clear_upper_layers",
+      "resources": [
+        ["in_0", "float", "read"], ["in_1", "float", "read"],
+        ["in_2", "float", "read"], ["in_3", "float", "read"],
+        ["in_4", "float", "read"], ["out_0", "float", "read_write"],
+        ["out_1", "float", "read_write"], ["out_2", "float", "read_write"],
+        ["out_3", "float", "read_write"], ["out_4", "float", "read_write"]
+      ],
+      "shapes": {
+        "in_0": [["ncol", "model_nlay"]], "in_1": [["ncol", "model_nlay"]],
+        "in_2": [["ncol", "model_nlay"]], "in_3": [["ncol", "model_nlay"]],
+        "in_4": [["ncol", "model_nlay"]], "out_0": [["ncol", "nlay"]],
+        "out_1": [["ncol", "nlay"]], "out_2": [["ncol", "nlay"]],
+        "out_3": [["ncol", "nlay"]], "out_4": [["ncol", "nlay"]]
+      },
+      "parameters": [["ncol", "int32"], ["model_nlay", "int32"], ["nlay", "int32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_store_model_flux_pair",
+      "module": "rrtmgp_cloud_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_store_model_flux_pair",
+      "resources": [
+        ["up", "float", "read"], ["dn", "float", "read"],
+        ["daylight", "float", "read"], ["out_up", "float", "read_write"],
+        ["out_dn", "float", "read_write"]
+      ],
+      "shapes": {"up": [["ncol", "source_nlev"]], "dn": [["ncol", "source_nlev"]],
+        "daylight": [["ncol"]], "out_up": [["ncol", "model_nlev"]],
+        "out_dn": [["ncol", "model_nlev"]]},
+      "parameters": [["ncol", "int32"], ["source_nlev", "int32"],
+        ["model_nlev", "int32"], ["apply_daylight", "int32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_prepare_sw_inputs",
+      "module": "rrtmgp_cloud_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_prepare_sw_inputs",
+      "resources": [
+        ["albedo", "float", "read"], ["solar", "float", "read"],
+        ["mu", "float", "read"], ["albedo_gpt", "float", "read_write"],
+        ["inc_gpt", "float", "read_write"], ["mu0", "float", "read_write"]
+      ],
+      "shapes": {"albedo": [["ncol"]], "solar": [["ngpt"]], "mu": [["ncol"]],
+        "albedo_gpt": [["ncol", "ngpt"]], "inc_gpt": [["ncol", "ngpt"]],
+        "mu0": [["ncol", "nlay"]]},
+      "parameters": [["ncol", "int32"], ["ngpt", "int32"], ["nlay", "int32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_append_profile_fp32",
+      "module": "rrtmgp_cloud_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_append_profile_fp32",
+      "resources": [
+        ["model_play", "float", "read"], ["model_plev", "float", "read"],
+        ["model_tlay", "float", "read"], ["model_tlev", "float", "read"],
+        ["model_qv", "float", "read"], ["upper_play", "float", "read"],
+        ["upper_plev", "float", "read"], ["upper_tlay", "float", "read"],
+        ["upper_tlev", "float", "read"], ["upper_qv", "float", "read"],
+        ["out_play", "float", "read_write"], ["out_plev", "float", "read_write"],
+        ["out_tlay", "float", "read_write"], ["out_tlev", "float", "read_write"],
+        ["out_qv", "float", "read_write"]
+      ],
+      "shapes": {"model_play": [["ncol", "model_nlay"]],
+        "model_plev": [["ncol", "model_nlay+1"]],
+        "model_tlay": [["ncol", "model_nlay"]],
+        "model_tlev": [["ncol", "model_nlay+1"]],
+        "model_qv": [["ncol", "model_nlay"]],
+        "upper_play": [["ncol", "upper_nlay"]],
+        "upper_plev": [["ncol", "upper_nlay+1"]],
+        "upper_tlay": [["ncol", "upper_nlay"]],
+        "upper_tlev": [["ncol", "upper_nlay+1"]],
+        "upper_qv": [["ncol", "upper_nlay"]],
+        "out_play": [["ncol", "nlay"]], "out_plev": [["ncol", "nlay+1"]],
+        "out_tlay": [["ncol", "nlay"]], "out_tlev": [["ncol", "nlay+1"]],
+        "out_qv": [["ncol", "nlay"]]},
+      "parameters": [["ncol", "int32"], ["model_nlay", "int32"],
+        ["upper_nlay", "int32"], ["spc", "int32"], ["spl", "int32"],
+        ["sec", "int32"], ["sel", "int32"], ["stc", "int32"],
+        ["stl", "int32"], ["sic", "int32"], ["sil", "int32"],
+        ["sqc", "int32"], ["sql", "int32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_mask_words_to_float",
+      "module": "rrtmgp_cloud_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_finalize_cloud_lw",
+      "resources": [
+        ["words", "float", "read"], ["mask", "float", "read_write"]
+      ],
+      "shapes": {"words": [["nwords"]], "mask": [["n"]]},
+      "parameters": [["n", "int32"], ["nwords", "int32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["index-only", "dependency-marked-unverified"]
+    },
+    {
+      "name": "rrtmgp_expand_band_to_gpoint",
+      "module": "rrtmgp_cloud_family",
+      "source": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_cloud.cu",
+      "cuda_symbol": "rrtmgp_prepare_sw_inputs",
+      "resources": [
+        ["values", "float", "read"],
+        ["gpoint_bands", "float", "read"],
+        ["output", "float", "read_write"]
+      ],
+      "shapes": {"values": [["ncol", "nband"]],
+        "gpoint_bands": [["ngpt"]], "output": [["ncol", "ngpt"]]},
+      "parameters": [["ncol", "int32"], ["nband", "int32"],
+        ["ngpt", "int32"]],
+      "threads_per_group": 256, "layout_version": 1,
+      "arithmetic_policies": ["index-only", "dependency-marked-unverified"]
+    }
+  ],
+  "blocked_exports": {
+    "rrtmgp_prepare_sw_inputs_fp64": "requires a faithful CUDA binary64-to-FP32 round-to-nearest conversion for mu",
+    "rrtmgp_append_profile_fp64": "requires typed FP64 MetalArray resource submission; do not downcast the retained temperatures",
+    "rrtmgp_append_lw_profile": "requires faithful binary64 RN subtract/add/multiply for derived LW temperature profiles and typed FP64 resources",
+    "rrtmgp_solver_temperatures": "requires faithful CUDA binary64-to-FP32 round-to-nearest conversion and typed FP64 resource submission"
+  }
+}

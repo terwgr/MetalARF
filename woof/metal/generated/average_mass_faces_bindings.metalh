@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout 3b08a071cd7412630f81b8cf9033e320c633df83cab7358961420046ee383d51.
+struct AverageMassFacesResources {
+    device const float *mu [[id(0)]];
+    device float *out [[id(1)]];
+};
+struct AverageMassFacesParams {
+    int yface;
+    int boundary_x;
+    int boundary_y;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(AverageMassFacesParams) == 20, "average_mass_faces parameter ABI size changed");

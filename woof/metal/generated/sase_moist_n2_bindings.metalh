@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout eba1019101b5f329836ffd592592bc55ef20b03cba21c9905ef710490904bb63.
+struct SaseMoistN2Resources {
+    device const float *theta [[id(0)]];
+    device const float *qv [[id(1)]];
+    device const float *qc [[id(2)]];
+    device const float *pressure [[id(3)]];
+    device const float *n2dry [[id(4)]];
+    device float *out [[id(5)]];
+    device const float *t [[id(6)]];
+    device const ulong *constants [[id(7)]];
+};
+struct SaseMoistN2Params {
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseMoistN2Params) == 12, "sase_moist_n2 parameter ABI size changed");

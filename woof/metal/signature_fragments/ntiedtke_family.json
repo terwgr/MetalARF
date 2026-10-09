@@ -1,0 +1,6076 @@
+{
+  "kernels": [
+    {
+      "name": "ntiedtke_prep",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_prep",
+      "resources": [
+        [
+          "t3d",
+          "float",
+          "read"
+        ],
+        [
+          "qv3d",
+          "float",
+          "read"
+        ],
+        [
+          "qc3d",
+          "float",
+          "read"
+        ],
+        [
+          "qi3d",
+          "float",
+          "read"
+        ],
+        [
+          "u3d",
+          "float",
+          "read"
+        ],
+        [
+          "v3d",
+          "float",
+          "read"
+        ],
+        [
+          "pcps",
+          "float",
+          "read"
+        ],
+        [
+          "dz8w",
+          "float",
+          "read"
+        ],
+        [
+          "rho3d",
+          "float",
+          "read"
+        ],
+        [
+          "p8w",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "qvften",
+          "float",
+          "read"
+        ],
+        [
+          "thften",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "hfx",
+          "float",
+          "read"
+        ],
+        [
+          "qfx",
+          "float",
+          "read"
+        ],
+        [
+          "dx",
+          "float",
+          "read"
+        ],
+        [
+          "prsl",
+          "float",
+          "read_write"
+        ],
+        [
+          "ghtl",
+          "float",
+          "read_write"
+        ],
+        [
+          "omg",
+          "float",
+          "read_write"
+        ],
+        [
+          "tf",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvf",
+          "float",
+          "read_write"
+        ],
+        [
+          "qcf",
+          "float",
+          "read_write"
+        ],
+        [
+          "qif",
+          "float",
+          "read_write"
+        ],
+        [
+          "uf",
+          "float",
+          "read_write"
+        ],
+        [
+          "vf",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvftenz",
+          "float",
+          "read_write"
+        ],
+        [
+          "thftenz",
+          "float",
+          "read_write"
+        ],
+        [
+          "prsi",
+          "float",
+          "read_write"
+        ],
+        [
+          "ghti",
+          "float",
+          "read_write"
+        ],
+        [
+          "slimsk",
+          "int32",
+          "read_write"
+        ],
+        [
+          "scale_fac",
+          "float",
+          "read_write"
+        ],
+        [
+          "scale_fac2",
+          "float",
+          "read_write"
+        ],
+        [
+          "delt_out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "t3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pcps": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvften": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thften": [
+          [
+            "any_1d"
+          ]
+        ],
+        "xland": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prsl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ghtl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "omg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qcf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qif": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvftenz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thftenz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prsi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ghti": [
+          [
+            "any_1d"
+          ]
+        ],
+        "slimsk": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale_fac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale_fac2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delt_out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "stepcu",
+          "int32"
+        ],
+        [
+          "itimestep",
+          "int32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_convert",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_convert",
+      "resources": [
+        [
+          "tf",
+          "float",
+          "read"
+        ],
+        [
+          "qvf",
+          "float",
+          "read"
+        ],
+        [
+          "uf",
+          "float",
+          "read"
+        ],
+        [
+          "vf",
+          "float",
+          "read"
+        ],
+        [
+          "omg",
+          "float",
+          "read"
+        ],
+        [
+          "ghtl",
+          "float",
+          "read"
+        ],
+        [
+          "ghti",
+          "float",
+          "read"
+        ],
+        [
+          "prsl",
+          "float",
+          "read"
+        ],
+        [
+          "qvftenz",
+          "float",
+          "read"
+        ],
+        [
+          "thftenz",
+          "float",
+          "read"
+        ],
+        [
+          "ztp1",
+          "float",
+          "read_write"
+        ],
+        [
+          "zqp1",
+          "float",
+          "read_write"
+        ],
+        [
+          "zqsat",
+          "float",
+          "read_write"
+        ],
+        [
+          "pgeo",
+          "float",
+          "read_write"
+        ],
+        [
+          "pgeoh",
+          "float",
+          "read_write"
+        ],
+        [
+          "pum1",
+          "float",
+          "read_write"
+        ],
+        [
+          "pvm1",
+          "float",
+          "read_write"
+        ],
+        [
+          "pverv",
+          "float",
+          "read_write"
+        ],
+        [
+          "ptte",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqte",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "omg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ghtl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ghti": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prsl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvftenz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thftenz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztp1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zqp1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zqsat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeoh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pum1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvm1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pverv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptte": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqte": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_cuinin",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cuinin",
+      "resources": [
+        [
+          "pten",
+          "float",
+          "read"
+        ],
+        [
+          "pqen",
+          "float",
+          "read"
+        ],
+        [
+          "pqsen",
+          "float",
+          "read"
+        ],
+        [
+          "puen",
+          "float",
+          "read"
+        ],
+        [
+          "pven",
+          "float",
+          "read"
+        ],
+        [
+          "pverv",
+          "float",
+          "read"
+        ],
+        [
+          "pgeo",
+          "float",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pgeoh",
+          "float",
+          "read"
+        ],
+        [
+          "ptenh",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqenh",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqsenh",
+          "float",
+          "read_write"
+        ],
+        [
+          "ptu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqu",
+          "float",
+          "read_write"
+        ],
+        [
+          "ptd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqd",
+          "float",
+          "read_write"
+        ],
+        [
+          "puu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pvu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pud",
+          "float",
+          "read_write"
+        ],
+        [
+          "pvd",
+          "float",
+          "read_write"
+        ],
+        [
+          "plu",
+          "float",
+          "read_write"
+        ],
+        [
+          "klab",
+          "int32",
+          "read_write"
+        ],
+        [
+          "klwmin",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqsen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "puen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pven": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pverv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeoh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqsenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "puu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pud": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "klab": [
+          [
+            "any_1d"
+          ]
+        ],
+        "klwmin": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_cutypen",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cutypen",
+      "resources": [
+        [
+          "pqen",
+          "float",
+          "read"
+        ],
+        [
+          "ptenh",
+          "float",
+          "read"
+        ],
+        [
+          "pqenh",
+          "float",
+          "read"
+        ],
+        [
+          "pgeoh",
+          "float",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pgeo",
+          "float",
+          "read"
+        ],
+        [
+          "pqsen",
+          "float",
+          "read"
+        ],
+        [
+          "pap",
+          "float",
+          "read"
+        ],
+        [
+          "pten",
+          "float",
+          "read"
+        ],
+        [
+          "hfx",
+          "float",
+          "read"
+        ],
+        [
+          "qfx",
+          "float",
+          "read"
+        ],
+        [
+          "cutu",
+          "float",
+          "read_write"
+        ],
+        [
+          "cuqu",
+          "float",
+          "read_write"
+        ],
+        [
+          "culu",
+          "float",
+          "read_write"
+        ],
+        [
+          "culab",
+          "int32",
+          "read_write"
+        ],
+        [
+          "scr",
+          "float",
+          "read_write"
+        ],
+        [
+          "scr_i",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ldcum_o",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ktype_o",
+          "int32",
+          "read_write"
+        ],
+        [
+          "cubot_o",
+          "int32",
+          "read_write"
+        ],
+        [
+          "cutop_o",
+          "int32",
+          "read_write"
+        ],
+        [
+          "kdpl_o",
+          "int32",
+          "read_write"
+        ],
+        [
+          "wbase_o",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pqen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeoh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqsen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "hfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qfx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cutu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cuqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "culu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "culab": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scr_i": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ldcum_o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype_o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cubot_o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cutop_o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdpl_o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wbase_o": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_midlevel",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_midlevel",
+      "resources": [
+        [
+          "pten",
+          "float",
+          "read"
+        ],
+        [
+          "pqen",
+          "float",
+          "read"
+        ],
+        [
+          "pqsen",
+          "float",
+          "read"
+        ],
+        [
+          "pverv",
+          "float",
+          "read"
+        ],
+        [
+          "pgeo",
+          "float",
+          "read"
+        ],
+        [
+          "pgeoh",
+          "float",
+          "read"
+        ],
+        [
+          "ldcum",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ktype",
+          "int32",
+          "read_write"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read_write"
+        ],
+        [
+          "klab",
+          "int32",
+          "read_write"
+        ],
+        [
+          "plrain",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfub",
+          "float",
+          "read_write"
+        ],
+        [
+          "ptu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqu",
+          "float",
+          "read_write"
+        ],
+        [
+          "plu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfus",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfuq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmful",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfup",
+          "float",
+          "read_write"
+        ],
+        [
+          "dmfen",
+          "float",
+          "read_write"
+        ],
+        [
+          "dmfde",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqsen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pverv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeoh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "klab": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plrain": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfub": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfus": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfuq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmful": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dmfen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dmfde": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_mfub",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_mfub",
+      "resources": [
+        [
+          "ptte",
+          "float",
+          "read"
+        ],
+        [
+          "pqte",
+          "float",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "puen",
+          "float",
+          "read"
+        ],
+        [
+          "pven",
+          "float",
+          "read"
+        ],
+        [
+          "ptu",
+          "float",
+          "read"
+        ],
+        [
+          "pqu",
+          "float",
+          "read"
+        ],
+        [
+          "plu",
+          "float",
+          "read"
+        ],
+        [
+          "ztenh",
+          "float",
+          "read"
+        ],
+        [
+          "zqenh",
+          "float",
+          "read"
+        ],
+        [
+          "ktype",
+          "int32",
+          "read"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read"
+        ],
+        [
+          "lndj",
+          "int32",
+          "read"
+        ],
+        [
+          "ldcum",
+          "int32",
+          "read_write"
+        ],
+        [
+          "zdhpbl",
+          "float",
+          "read_write"
+        ],
+        [
+          "upbl",
+          "float",
+          "read_write"
+        ],
+        [
+          "zmfub",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ptte": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqte": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "puen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pven": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zqenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lndj": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zdhpbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "upbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfub": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "tiedtke_closure",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_closure",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_closure",
+      "resources": [
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "ktype",
+          "int32",
+          "read"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read"
+        ],
+        [
+          "kdpl",
+          "int32",
+          "read"
+        ],
+        [
+          "loddraf",
+          "int32",
+          "read"
+        ],
+        [
+          "lndj",
+          "int32",
+          "read"
+        ],
+        [
+          "wup",
+          "float",
+          "read"
+        ],
+        [
+          "zmfub",
+          "float",
+          "read"
+        ],
+        [
+          "zdhpbl",
+          "float",
+          "read"
+        ],
+        [
+          "scale_fac",
+          "float",
+          "read"
+        ],
+        [
+          "scale_fac2",
+          "float",
+          "read"
+        ],
+        [
+          "pgeoh",
+          "float",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pap",
+          "float",
+          "read"
+        ],
+        [
+          "pgeo",
+          "float",
+          "read"
+        ],
+        [
+          "pten",
+          "float",
+          "read"
+        ],
+        [
+          "pqen",
+          "float",
+          "read"
+        ],
+        [
+          "ptenh",
+          "float",
+          "read"
+        ],
+        [
+          "pqenh",
+          "float",
+          "read"
+        ],
+        [
+          "ptu",
+          "float",
+          "read"
+        ],
+        [
+          "pqu",
+          "float",
+          "read"
+        ],
+        [
+          "plu",
+          "float",
+          "read"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read"
+        ],
+        [
+          "ptd",
+          "float",
+          "read"
+        ],
+        [
+          "pqd",
+          "float",
+          "read"
+        ],
+        [
+          "ptte",
+          "float",
+          "read"
+        ],
+        [
+          "pqte",
+          "float",
+          "read"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfds",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfdp",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdde_rate",
+          "float",
+          "read_write"
+        ],
+        [
+          "zheat",
+          "float",
+          "read_write"
+        ],
+        [
+          "zcape",
+          "float",
+          "read_write"
+        ],
+        [
+          "zcape1",
+          "float",
+          "read_write"
+        ],
+        [
+          "zcape2",
+          "float",
+          "read_write"
+        ],
+        [
+          "ztauc",
+          "float",
+          "read_write"
+        ],
+        [
+          "ztaubl",
+          "float",
+          "read_write"
+        ],
+        [
+          "ztau_o",
+          "float",
+          "read_write"
+        ],
+        [
+          "upbl",
+          "float",
+          "read_write"
+        ],
+        [
+          "zmfub1",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdpl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "loddraf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lndj": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfub": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zdhpbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale_fac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale_fac2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeoh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptte": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqte": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfds": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfdp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdde_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zheat": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zcape": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zcape1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zcape2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztauc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztaubl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztau_o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "upbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfub1": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "tiedtke_closure",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_cuascn",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cuascn",
+      "resources": [
+        [
+          "pten",
+          "float",
+          "read"
+        ],
+        [
+          "pqen",
+          "float",
+          "read"
+        ],
+        [
+          "pqsen",
+          "float",
+          "read"
+        ],
+        [
+          "pgeo",
+          "float",
+          "read"
+        ],
+        [
+          "pgeoh",
+          "float",
+          "read"
+        ],
+        [
+          "pap",
+          "float",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pverv",
+          "float",
+          "read"
+        ],
+        [
+          "lndj",
+          "int32",
+          "read"
+        ],
+        [
+          "kdpl",
+          "int32",
+          "read"
+        ],
+        [
+          "wbase",
+          "float",
+          "read"
+        ],
+        [
+          "ptenh",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqenh",
+          "float",
+          "read_write"
+        ],
+        [
+          "ptu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqu",
+          "float",
+          "read_write"
+        ],
+        [
+          "plu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfus",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfuq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmful",
+          "float",
+          "read_write"
+        ],
+        [
+          "plude",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfup",
+          "float",
+          "read_write"
+        ],
+        [
+          "plglac",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfude_rate",
+          "float",
+          "read_write"
+        ],
+        [
+          "klab",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ldcum",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ktype",
+          "int32",
+          "read_write"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read_write"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read_write"
+        ],
+        [
+          "kctop0",
+          "int32",
+          "read_write"
+        ],
+        [
+          "pmfub",
+          "float",
+          "read_write"
+        ],
+        [
+          "wup",
+          "float",
+          "read_write"
+        ],
+        [
+          "llo3_mask",
+          "int32",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "pten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqsen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeoh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pverv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lndj": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdpl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wbase": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfus": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfuq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmful": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plglac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfude_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "klab": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop0": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfub": [
+          [
+            "any_1d"
+          ]
+        ],
+        "wup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "llo3_mask": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ztmst",
+          "float32"
+        ],
+        [
+          "llo3",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_cudtdqn",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cudtdqn",
+      "resources": [
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pten",
+          "float",
+          "read"
+        ],
+        [
+          "plglac",
+          "float",
+          "read"
+        ],
+        [
+          "plude",
+          "float",
+          "read"
+        ],
+        [
+          "pmfus",
+          "float",
+          "read"
+        ],
+        [
+          "pmfds",
+          "float",
+          "read"
+        ],
+        [
+          "pmfuq",
+          "float",
+          "read"
+        ],
+        [
+          "pmfdq",
+          "float",
+          "read"
+        ],
+        [
+          "pmful",
+          "float",
+          "read"
+        ],
+        [
+          "pdmfup",
+          "float",
+          "read"
+        ],
+        [
+          "pdmfdp",
+          "float",
+          "read"
+        ],
+        [
+          "pdpmel",
+          "float",
+          "read"
+        ],
+        [
+          "ptent",
+          "float",
+          "read_write"
+        ],
+        [
+          "ptenq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pcte",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plglac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfus": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfds": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfuq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmful": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfdp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdpmel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptent": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pcte": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ktopm2",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_cududvn",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cududvn",
+      "resources": [
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "ktype",
+          "int32",
+          "read"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "puen",
+          "float",
+          "read"
+        ],
+        [
+          "pven",
+          "float",
+          "read"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read"
+        ],
+        [
+          "puu",
+          "float",
+          "read"
+        ],
+        [
+          "pud",
+          "float",
+          "read"
+        ],
+        [
+          "pvu",
+          "float",
+          "read"
+        ],
+        [
+          "pvd",
+          "float",
+          "read"
+        ],
+        [
+          "ptenu",
+          "float",
+          "read_write"
+        ],
+        [
+          "ptenv",
+          "float",
+          "read_write"
+        ],
+        [
+          "zmfuu",
+          "float",
+          "read_write"
+        ],
+        [
+          "zmfuv",
+          "float",
+          "read_write"
+        ],
+        [
+          "zmfdu",
+          "float",
+          "read_write"
+        ],
+        [
+          "zmfdv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "puen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pven": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "puu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pud": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfuu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfuv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfdu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfdv": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ktopm2",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_cudlfsn",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cudlfsn",
+      "resources": [
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read"
+        ],
+        [
+          "ptenh",
+          "float",
+          "read"
+        ],
+        [
+          "pqenh",
+          "float",
+          "read"
+        ],
+        [
+          "pten",
+          "float",
+          "read"
+        ],
+        [
+          "pqsen",
+          "float",
+          "read"
+        ],
+        [
+          "pgeo",
+          "float",
+          "read"
+        ],
+        [
+          "pgeoh",
+          "float",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "ptu",
+          "float",
+          "read"
+        ],
+        [
+          "pqu",
+          "float",
+          "read"
+        ],
+        [
+          "pmfub",
+          "float",
+          "read"
+        ],
+        [
+          "ptd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfds",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfdp",
+          "float",
+          "read_write"
+        ],
+        [
+          "prfl",
+          "float",
+          "read_write"
+        ],
+        [
+          "kdtop",
+          "int32",
+          "read_write"
+        ],
+        [
+          "lddraf",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqsen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeoh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfub": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfds": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfdp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prfl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdtop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lddraf": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_cuddrafn",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cuddrafn",
+      "resources": [
+        [
+          "lddraf",
+          "int32",
+          "read"
+        ],
+        [
+          "ptenh",
+          "float",
+          "read"
+        ],
+        [
+          "pqenh",
+          "float",
+          "read"
+        ],
+        [
+          "pgeo",
+          "float",
+          "read"
+        ],
+        [
+          "pgeoh",
+          "float",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read"
+        ],
+        [
+          "ptd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfds",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfdp",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdde_rate",
+          "float",
+          "read_write"
+        ],
+        [
+          "prfl",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "lddraf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeo": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeoh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfds": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfdp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdde_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prfl": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_cuflxn",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cuflxn",
+      "resources": [
+        [
+          "kcbot",
+          "int32",
+          "read"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read"
+        ],
+        [
+          "kdtop",
+          "int32",
+          "read"
+        ],
+        [
+          "lndj",
+          "int32",
+          "read"
+        ],
+        [
+          "pten",
+          "float",
+          "read"
+        ],
+        [
+          "ptenh",
+          "float",
+          "read"
+        ],
+        [
+          "pqenh",
+          "float",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pap",
+          "float",
+          "read"
+        ],
+        [
+          "pqen",
+          "float",
+          "read"
+        ],
+        [
+          "pgeoh",
+          "float",
+          "read"
+        ],
+        [
+          "ldcum",
+          "int32",
+          "read_write"
+        ],
+        [
+          "lddraf",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ktype",
+          "int32",
+          "read_write"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfus",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfds",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfuq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmful",
+          "float",
+          "read_write"
+        ],
+        [
+          "plude",
+          "float",
+          "read_write"
+        ],
+        [
+          "plglac",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfup",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfdp",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdde_rate",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqsen",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdpmel",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmflxr",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmflxs",
+          "float",
+          "read_write"
+        ],
+        [
+          "prain",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdtop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lndj": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqenh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pgeoh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lddraf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfus": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfds": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfuq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmful": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plglac": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfdp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdde_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqsen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdpmel": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmflxr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmflxs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prain": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ztmst",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_cloud_depth",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_cloud_depth",
+      "resources": [
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pdmfup",
+          "float",
+          "read"
+        ],
+        [
+          "ktype",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ictop0",
+          "int32",
+          "read_write"
+        ],
+        [
+          "prfl",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfds",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfdp",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdpmel",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ictop0": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prfl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfds": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfdp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdpmel": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_adjust",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_adjust",
+      "resources": [
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "loddraf",
+          "int32",
+          "read"
+        ],
+        [
+          "idtop",
+          "int32",
+          "read"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pqen",
+          "float",
+          "read"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read"
+        ],
+        [
+          "pmfuq",
+          "float",
+          "read"
+        ],
+        [
+          "pmful",
+          "float",
+          "read"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfds",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdq",
+          "float",
+          "read_write"
+        ],
+        [
+          "plude",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfup",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfdp",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdde_rate",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfude_rate",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmflxr",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmflxs",
+          "float",
+          "read_write"
+        ],
+        [
+          "prsfc",
+          "float",
+          "read_write"
+        ],
+        [
+          "pssfc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "loddraf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "idtop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfuq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmful": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfds": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfdp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdde_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfude_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmflxr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmflxs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prsfc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pssfc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ztmst",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_momentum_rescale",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_momentum_rescale",
+      "resources": [
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read"
+        ],
+        [
+          "zmfuus",
+          "float",
+          "read_write"
+        ],
+        [
+          "zmfdus",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfuus": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfdus": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ztmst",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_updraft_scale",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_updraft_scale",
+      "resources": [
+        [
+          "loddraf",
+          "int32",
+          "read"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read"
+        ],
+        [
+          "zmfub1",
+          "float",
+          "read"
+        ],
+        [
+          "zmfub",
+          "float",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "ldcum",
+          "int32",
+          "read_write"
+        ],
+        [
+          "ktype",
+          "int32",
+          "read_write"
+        ],
+        [
+          "idtop",
+          "int32",
+          "read_write"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfus",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfuq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmful",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfup",
+          "float",
+          "read_write"
+        ],
+        [
+          "plude",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfude_rate",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfds",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdq",
+          "float",
+          "read_write"
+        ],
+        [
+          "pdmfdp",
+          "float",
+          "read_write"
+        ],
+        [
+          "pmfdde_rate",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "loddraf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfub1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmfub": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype": [
+          [
+            "any_1d"
+          ]
+        ],
+        "idtop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfus": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfuq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmful": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plude": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfude_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfds": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pdmfdp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdde_rate": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "ztmst",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_momentum_profile",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_momentum_profile",
+      "resources": [
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "ktype",
+          "int32",
+          "read"
+        ],
+        [
+          "kcbot",
+          "int32",
+          "read"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read"
+        ],
+        [
+          "kdpl",
+          "int32",
+          "read"
+        ],
+        [
+          "idtop",
+          "int32",
+          "read"
+        ],
+        [
+          "puen",
+          "float",
+          "read"
+        ],
+        [
+          "pven",
+          "float",
+          "read"
+        ],
+        [
+          "pmfu",
+          "float",
+          "read"
+        ],
+        [
+          "pmfd",
+          "float",
+          "read"
+        ],
+        [
+          "pmfude_rate",
+          "float",
+          "read"
+        ],
+        [
+          "pmfdde_rate",
+          "float",
+          "read"
+        ],
+        [
+          "puu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pvu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pud",
+          "float",
+          "read_write"
+        ],
+        [
+          "pvd",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ktype": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kcbot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdpl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "idtop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "puen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pven": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfude_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pmfdde_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "puu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pud": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvd": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_ke_dissipation",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_ke_dissipation",
+      "resources": [
+        [
+          "ldcum",
+          "int32",
+          "read"
+        ],
+        [
+          "kctop",
+          "int32",
+          "read"
+        ],
+        [
+          "paph",
+          "float",
+          "read"
+        ],
+        [
+          "puen",
+          "float",
+          "read"
+        ],
+        [
+          "pven",
+          "float",
+          "read"
+        ],
+        [
+          "ztenu",
+          "float",
+          "read"
+        ],
+        [
+          "ztenv",
+          "float",
+          "read"
+        ],
+        [
+          "pvom",
+          "float",
+          "read"
+        ],
+        [
+          "pvol",
+          "float",
+          "read"
+        ],
+        [
+          "ptte",
+          "float",
+          "read_write"
+        ],
+        [
+          "zuv2",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ldcum": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kctop": [
+          [
+            "any_1d"
+          ]
+        ],
+        "paph": [
+          [
+            "any_1d"
+          ]
+        ],
+        "puen": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pven": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztenu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztenv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvom": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvol": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptte": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zuv2": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "rv",
+          "float32"
+        ],
+        [
+          "xlv",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ],
+        [
+          "grav",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_post_run",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_post_run",
+      "resources": [
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "tf",
+          "float",
+          "read"
+        ],
+        [
+          "qvf",
+          "float",
+          "read"
+        ],
+        [
+          "qcf",
+          "float",
+          "read"
+        ],
+        [
+          "qif",
+          "float",
+          "read"
+        ],
+        [
+          "uf",
+          "float",
+          "read"
+        ],
+        [
+          "vf",
+          "float",
+          "read"
+        ],
+        [
+          "rn",
+          "float",
+          "read"
+        ],
+        [
+          "rthcuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqvcuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqccuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqicuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rucuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rvcuten",
+          "float",
+          "read_write"
+        ],
+        [
+          "raincv",
+          "float",
+          "read_write"
+        ],
+        [
+          "pratec",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qcf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qif": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthcuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvcuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqccuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqicuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rucuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rvcuten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "raincv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pratec": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "stepcu",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_post_conversion",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/kernels/ntiedtke.cu",
+      "cuda_symbol": "ntiedtke_post_conversion",
+      "resources": [
+        [
+          "pcte",
+          "float",
+          "read"
+        ],
+        [
+          "ztp1",
+          "float",
+          "read"
+        ],
+        [
+          "ptte",
+          "float",
+          "read"
+        ],
+        [
+          "ztt",
+          "float",
+          "read"
+        ],
+        [
+          "pqte",
+          "float",
+          "read"
+        ],
+        [
+          "zqq",
+          "float",
+          "read"
+        ],
+        [
+          "zqp1",
+          "float",
+          "read_write"
+        ],
+        [
+          "qcf",
+          "float",
+          "read"
+        ],
+        [
+          "qif",
+          "float",
+          "read"
+        ],
+        [
+          "uf",
+          "float",
+          "read"
+        ],
+        [
+          "vf",
+          "float",
+          "read"
+        ],
+        [
+          "pvom",
+          "float",
+          "read"
+        ],
+        [
+          "pvol",
+          "float",
+          "read"
+        ],
+        [
+          "prsfc",
+          "float",
+          "read"
+        ],
+        [
+          "pssfc",
+          "float",
+          "read"
+        ],
+        [
+          "pqc",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqi",
+          "float",
+          "read_write"
+        ],
+        [
+          "pt",
+          "float",
+          "read_write"
+        ],
+        [
+          "pqv",
+          "float",
+          "read_write"
+        ],
+        [
+          "pu",
+          "float",
+          "read_write"
+        ],
+        [
+          "pv",
+          "float",
+          "read_write"
+        ],
+        [
+          "zprecc",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pcte": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztp1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ptte": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ztt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqte": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zqq": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zqp1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qcf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qif": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vf": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvom": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pvol": [
+          [
+            "any_1d"
+          ]
+        ],
+        "prsfc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pssfc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pqv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zprecc": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "klev",
+          "int32"
+        ],
+        [
+          "delt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_force_fold",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/ntiedtke.py",
+      "cuda_symbol": "ntiedtke_force_fold",
+      "resources": [
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "rthratenlw",
+          "float",
+          "read"
+        ],
+        [
+          "rthratensw",
+          "float",
+          "read"
+        ],
+        [
+          "gf_rthdynten",
+          "float",
+          "read"
+        ],
+        [
+          "gf_rthblten",
+          "float",
+          "read"
+        ],
+        [
+          "gf_rqvdynten",
+          "float",
+          "read"
+        ],
+        [
+          "gf_rqvblten",
+          "float",
+          "read"
+        ],
+        [
+          "qvften",
+          "float",
+          "read_write"
+        ],
+        [
+          "thften",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthratenlw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthratensw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gf_rthdynten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gf_rthblten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gf_rqvdynten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gf_rqvblten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qvften": [
+          [
+            "any_1d"
+          ]
+        ],
+        "thften": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_gather_level",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/ntiedtke.py",
+      "cuda_symbol": "ntiedtke_gather_level",
+      "resources": [
+        [
+          "source",
+          "float",
+          "read"
+        ],
+        [
+          "target",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "full_ncol",
+          "int32"
+        ],
+        [
+          "start",
+          "int32"
+        ],
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_gather_interface",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/ntiedtke.py",
+      "cuda_symbol": "ntiedtke_gather_interface",
+      "resources": [
+        [
+          "source",
+          "float",
+          "read"
+        ],
+        [
+          "target",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "full_ncol",
+          "int32"
+        ],
+        [
+          "start",
+          "int32"
+        ],
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "nzi",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_gather_surface",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/ntiedtke.py",
+      "cuda_symbol": "ntiedtke_gather_surface",
+      "resources": [
+        [
+          "source",
+          "float",
+          "read"
+        ],
+        [
+          "target",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "full_ncol",
+          "int32"
+        ],
+        [
+          "start",
+          "int32"
+        ],
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_scatter_level",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/ntiedtke.py",
+      "cuda_symbol": "ntiedtke_scatter_level",
+      "resources": [
+        [
+          "source",
+          "float",
+          "read"
+        ],
+        [
+          "target",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "full_ncol",
+          "int32"
+        ],
+        [
+          "start",
+          "int32"
+        ],
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_scatter_surface",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/ntiedtke.py",
+      "cuda_symbol": "ntiedtke_scatter_surface",
+      "resources": [
+        [
+          "source",
+          "float",
+          "read"
+        ],
+        [
+          "target",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "full_ncol",
+          "int32"
+        ],
+        [
+          "start",
+          "int32"
+        ],
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_llo3_reduce_columns",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/ntiedtke.py",
+      "cuda_symbol": "ntiedtke_llo3_reduce_columns",
+      "resources": [
+        [
+          "klab",
+          "int32",
+          "read"
+        ],
+        [
+          "partials",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "klab": [
+          [
+            "any_1d"
+          ]
+        ],
+        "partials": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_llo3_reduce_finish",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/ntiedtke.py",
+      "cuda_symbol": "ntiedtke_llo3_reduce_finish",
+      "resources": [
+        [
+          "partials",
+          "int32",
+          "read"
+        ],
+        [
+          "llo3_mask",
+          "int32",
+          "read_write"
+        ],
+        [
+          "flags",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "partials": [
+          [
+            "any_1d"
+          ]
+        ],
+        "llo3_mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flags": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "chunk_index",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "ntiedtke_driver_rain_merge",
+      "module": "ntiedtke_family",
+      "source": "woof/metal/shaders/ntiedtke_family.metal",
+      "cuda_source": "woof/core/ntiedtke.py",
+      "cuda_symbol": "ntiedtke_driver_rain_merge",
+      "resources": [
+        [
+          "increment",
+          "float",
+          "read"
+        ],
+        [
+          "rainc",
+          "float",
+          "read_write"
+        ],
+        [
+          "pending_rainbl",
+          "float",
+          "read_write"
+        ],
+        [
+          "surface_raincv",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "increment": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rainc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pending_rainbl": [
+          [
+            "any_1d"
+          ]
+        ],
+        "surface_raincv": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "has_surface_raincv",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

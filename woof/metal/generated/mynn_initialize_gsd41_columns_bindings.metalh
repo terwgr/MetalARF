@@ -1,0 +1,33 @@
+// Generated from kernel_signatures.json; layout 172180c1750264b91647d9e148294a3f7a4bf9a5696d1c7b9a477f6c0594518e.
+struct MynnInitializeGsd41ColumnsResources {
+    device const float *dz [[id(0)]];
+    device const float *u [[id(1)]];
+    device const float *v [[id(2)]];
+    device const float *thl [[id(3)]];
+    device const float *qw [[id(4)]];
+    device const float *theta [[id(5)]];
+    device const float *edmf_w [[id(6)]];
+    device const float *edmf_a [[id(7)]];
+    device const float *sm_in [[id(8)]];
+    device const float *sh_in [[id(9)]];
+    device const float *qke_in [[id(10)]];
+    device const float *zw [[id(11)]];
+    device const float *rmo [[id(12)]];
+    device const float *ust [[id(13)]];
+    device const float *zi [[id(14)]];
+    device const float *psig_bl [[id(15)]];
+    device float *el [[id(16)]];
+    device float *qke [[id(17)]];
+    device float *tsq [[id(18)]];
+    device float *qsq [[id(19)]];
+    device float *cov [[id(20)]];
+    device float *sm [[id(21)]];
+    device float *sh [[id(22)]];
+    device float *scratch [[id(23)]];
+};
+struct MynnInitializeGsd41ColumnsParams {
+    int nz;
+    int ncol;
+    int initialize_qke;
+};
+static_assert(sizeof(MynnInitializeGsd41ColumnsParams) == 12, "mynn_initialize_gsd41_columns parameter ABI size changed");

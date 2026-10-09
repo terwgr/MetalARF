@@ -1,0 +1,143 @@
+Recast WOOF companion data distribution (distribution "recast-woof-data",
+Python package "woof_data")
+Copyright 2026 Recast WOOF contributors
+
+WOOF derives from ArWen, Apache-2.0 code Copyright 2026 ArWen contributors.
+
+Licensed under the Apache License, Version 2.0. The third-party datasets
+and tables packaged here retain their own licenses and notices. Per-asset
+provenance -- sources, generation recipes, SHA-256 pins -- is recorded in
+the PROVENANCE.md file beside each asset directory.
+
+This distribution is DATA. It contains no Python except one eleven-line
+__init__.py and a VERSION file, no compiled code, and no vendored
+dependency tree. Its NOTICE is therefore shorter than the recast-woof NOTICE and
+covers a different set of things; where a paragraph here has a fuller
+counterpart there, it says so.
+
+Where a licence requires its text to be reproduced rather than merely
+named, it is reproduced. The texts are in the licenses/ directory, which
+ships in both the wheel and the source distribution through the
+license-files declaration in pyproject.toml and lands in an installed
+wheel at recast_woof_data-<version>.dist-info/licenses/licenses/. Some also sit
+beside the data they belong to, which is where a reader looking at one
+directory rather than at the whole distribution will find them first.
+
+--------------------------------------------------------------------------
+
+WRF / NCAR / UCAR
+
+WOOF is an independent implementation. It is not affiliated with or
+endorsed by the National Center for Atmospheric Research (NCAR) or the
+University Corporation for Atmospheric Research (UCAR). The Weather
+Research and Forecasting (WRF) model, developed at NCAR, is the
+transcription and verification authority for WOOF's WRF-derived
+mechanisms (WRF v4.6.1, https://github.com/wrf-model/WRF).
+
+WRF is not released under an open-source licence: UCAR places it in the
+public domain and requests a notice. That request is honoured here by
+reproduction rather than paraphrase. WRF v4.6.1 LICENSE.txt is at
+licenses/LICENSE-WRF-public-domain.txt and beside the packaged tables at
+woof_data/data/thompson/LICENSE-WRF.txt, byte-identical to WRF's own
+(md5 ea0d72123846bafa972b29ca41f89b1a) and carrying the "WRF(R) is a
+registered trademark" line as UCAR writes it.
+
+An earlier version of this file said WRF was "released by UCAR as open
+source per its own notice". That was wrong in both halves -- WRF is not
+open source and UCAR's notice does not say it is -- and it is withdrawn.
+
+What this distribution packages from WRF: the Thompson microphysics
+lookup tables under woof_data/data/thompson/tables/, generated with WRF's
+own table generator and SHA-256-pinned by
+woof/core/thompson_contract.py in the recast-woof package.
+
+UCAR's declaration disclaims UCAR's own claims. It cannot dispose of
+anyone else's, and one other claim reaches these tables; see "Numerical
+Recipes Software" below.
+
+--------------------------------------------------------------------------
+
+Numerical Recipes Software
+
+The Thompson tables here are the OUTPUT of WRF's table generator, and that
+generator computes gamma functions with WRF's REAL FUNCTION GAMMLN, which
+phys/module_mp_thompson.F brackets with "(C) Copr. 1986-92 Numerical
+Recipes Software 2.02" immediately above and below.
+
+No Numerical Recipes code is in this distribution -- these are binary
+tables of numbers, not source -- so what is reproduced here is the notice
+and WOOF's position on it, not a licence over the bytes. Both are at
+licenses/NOTICE-Numerical-Recipes.txt, unchanged from the copy in the
+recast-woof distribution, where the transcription those tables came from lives.
+It is reproduced here because a table's provenance does not stop at the
+program that wrote it, and because a reader who finds the notice in one
+distribution should not have to guess whether it was meant to apply to the
+other.
+
+--------------------------------------------------------------------------
+
+RTE+RRTMGP
+
+The k-distribution and cloud-optics files under woof_data/data/rrtmgp/
+come from the earth-system-radiation rrtmgp-data repository and are BSD
+3-Clause, "Copyright (c) 2015-2018, Atmospheric and Environmental Research
+and Regents of the University of Colorado". That text ships beside the
+data at woof_data/data/rrtmgp/LICENSE and again at
+licenses/LICENSE-RTE-RRTMGP-BSD-3-Clause.txt. Per-file upstream URLs, tag,
+commit and SHA-256 are in woof_data/data/rrtmgp/PROVENANCE.md.
+
+The software that reads them -- about 5,700 lines under woof/core/ -- is
+a different work, covered by the recast-woof distribution's NOTICE, not
+by this one.
+
+--------------------------------------------------------------------------
+
+RFMIP data: one derived table ships, the RFMIP files do not
+
+woof_data/data/rrtmgp/rrtmgp-trace-gas-climatology.json holds 136
+numbers derived from the RFMIP clear-sky input file produced by the
+University of Colorado for RFMIP (CMIP6 input4MIPs, UColorado-RFMIP-1-2):
+the experiment-zero global-mean mole fractions of sixteen well-mixed gases
+and the median layer pressure and ozone profile over its 100 sites. That
+file's embedded licence attribute names CC-BY-SA-4.0 and links the
+CC-BY-4.0 deed; the derived table is offered under CC-BY-SA-4.0, the
+stricter reading, whose text ships beside it at
+woof_data/data/rrtmgp/LICENSE-CC-BY-SA-4.0. The Apache-2.0 grant in the
+LICENSE file does not extend to that table.
+
+The RFMIP files themselves are in neither this distribution nor its
+source repository: the input file, and the four clear-sky reference
+results, which are CC-BY-NC-SA-4.0 (non-commercial). The tests that read
+them fetch them at test time from rrtmgp-data v1.9, SHA-256 verified
+(woof/core/rfmip_upstream.py in recast-woof).
+
+--------------------------------------------------------------------------
+
+Map assets: Natural Earth and US Census cartographic boundaries
+
+woof_data/data/basemap/ holds the geography the renderer draws on every
+picture. natural_earth_10m/ and natural_earth_110m/ are Natural Earth
+layers (https://www.naturalearthdata.com/), which Natural Earth places in
+the public domain. us_counties_5m/ is the US Census Bureau's
+cb_2023_us_county_5m cartographic boundary file, a work of the United
+States Government and not subject to copyright in the United States
+(17 U.S.C. 105). No redistribution condition attaches to either. The
+upstream archives are named in each directory's README and in
+woof_data/data/basemap/PROVENANCE.md.
+
+--------------------------------------------------------------------------
+
+Two entries this file used to carry, and why they are gone
+
+  * RRTMG (AER). This distribution said "RRTMG was developed by
+    Atmospheric and Environmental Research, Inc. (AER); its code and data
+    carry AER's copyright and license notices, which are retained with the
+    assets." Two things were wrong. RRTMG_LW_DATA and RRTMG_SW_DATA are
+    unformatted Fortran binaries that carry no notice, so nothing was
+    being retained; and they are not in this distribution at all -- they
+    ship in the recast-woof wheel under woof/data/wrf_radiation/, where AER's
+    notice and BSD-3-Clause grant are now reproduced beside them.
+  * Vendored Rust crates, wrf-rust, and the data-services paragraph. This
+    distribution vendors no crates, links no Rust, downloads nothing and
+    renders nothing. Those paragraphs were copied from the recast-woof NOTICE
+    and described that distribution, not this one.

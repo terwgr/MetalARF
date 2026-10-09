@@ -1,0 +1,40 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_flat_flux_fragment",
+      "module": "urban_bem_flat_flux_fragment",
+      "source": "woof/metal/shaders/urban_bem_flat_flux_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_flux_flat",
+      "resources": [
+        ["active_cols", "int32", "read"], ["interp", "float", "read"],
+        ["z0", "float", "read"], ["ss", "float", "read"],
+        ["ptg", "float", "read"], ["tr", "float", "read"],
+        ["dg", "float", "read"], ["dgr", "float", "read"],
+        ["uhb", "float", "read_write"], ["vhb", "float", "read_write"],
+        ["sf", "float", "read_write"], ["lf", "float", "read_write"],
+        ["ehb", "float", "read_write"], ["thb", "float", "read_write"],
+        ["qhb", "float", "read_write"], ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]], "interp": [["ncol", 7, 18]],
+        "z0": [["ncol", 2, 18]], "ss": [["ncol", 19]],
+        "ptg": [["ncol", 2]], "tr": [["ncol", 10, 18, 2]],
+        "dg": [["ncol", 2]], "dgr": [["ncol", 18, 2]],
+        "uhb": [["ncol", 2, 18]], "vhb": [["ncol", 2, 18]],
+        "sf": [["ncol", 2, 18]], "lf": [["ncol", 2, 18]],
+        "ehb": [["ncol", 2, 18]], "thb": [["ncol", 2, 18]],
+        "qhb": [["ncol", 2, 18]], "error": [["ncol", 2, 18]]
+      },
+      "parameters": [
+        ["ncol", "int32"], ["nitem", "int32"], ["g_u", "float32"],
+        ["vk", "float32"], ["p0", "float32"], ["rcp_u", "float32"],
+        ["cp_u", "float32"], ["latent", "float32"], ["dz_u", "float32"],
+        ["dgmax", "float32"], ["drmax", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

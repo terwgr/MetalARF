@@ -1,0 +1,26 @@
+// Generated from kernel_signatures.json; layout 5c491cf870243c8dc40e2048dcce1a032bd7122626dc3d1142cfe50b3b4ab8e0.
+struct Nssl2Radardd02Resources {
+    device const float *air_density [[id(0)]];
+    device const float *temperature_k [[id(1)]];
+    device const float *qr [[id(2)]];
+    device const float *qi [[id(3)]];
+    device const float *qs [[id(4)]];
+    device const float *qg [[id(5)]];
+    device const float *qh [[id(6)]];
+    device const float *qnr [[id(7)]];
+    device const float *qni [[id(8)]];
+    device const float *qns [[id(9)]];
+    device const float *qng [[id(10)]];
+    device const float *qnh [[id(11)]];
+    device const float *qvolg [[id(12)]];
+    device const float *qvolh [[id(13)]];
+    device float *refl_10cm [[id(14)]];
+};
+struct Nssl2Radardd02Params {
+    int concentration_space;
+    int n;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Nssl2Radardd02Params) == 20, "nssl2_radardd02 parameter ABI size changed");

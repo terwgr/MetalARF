@@ -1,0 +1,83 @@
+{
+  "schema": "woof-metal-source-math-proposal-v1",
+  "id": "pinned-noahmp-bareflux-glibc-atanf",
+  "status": "dependency-blocked-source-proposal",
+  "source": {
+    "file": "woof/core/kernels/noahmp_bareflux.cu",
+    "symbol": "glibc_atanf",
+    "source_lines": "352-416",
+    "upstream": "glibc 2.39 sysdeps/ieee754/flt-32/s_atanf.c fdlibm kernel",
+    "constants_source_lines": "155-161",
+    "call_sites": [
+      "noahmp_bareflux.cu:499",
+      "noahmp_bareflux.cu:506",
+      "noahmp_bareflux.cu:717"
+    ]
+  },
+  "metal_header": "woof/metal/shaders/soft_gfk_atan.metalh",
+  "production_registration": false,
+  "representation": "FP32 arguments, constants, intermediates, and result are uint binary32 encodings; arithmetic uses integer-bit primitives",
+  "provided_interfaces": [
+    "soft_gfk_atanf(uint xbits) -> uint result_bits"
+  ],
+  "primitive_dependencies": {
+    "header": "woof/metal/shaders/soft_binary32.metalh",
+    "declared_interfaces_used": [
+      "soft32_add(uint, uint) -> uint",
+      "soft32_sub(uint, uint) -> uint",
+      "soft32_mul(uint, uint) -> uint",
+      "soft32_div(uint, uint) -> uint"
+    ],
+    "soft64": "Not required: the pinned glibc_atanf CUDA operation graph is entirely FP32.",
+    "missing_interfaces": [],
+    "state": "soft_binary32.metalh and its arithmetic/NaN semantics are unverified and not centrally cleared. The declared interfaces exist, but this leaf must remain dependency-blocked until central review and verification."
+  },
+  "source_contract": {
+    "C_ATAN_bits": [
+      "0x3eed6338",
+      "0x3f490fda",
+      "0x3f7b985e",
+      "0x3fc90fda",
+      "0x31ac3769",
+      "0x33222168",
+      "0x33140fb4",
+      "0x33a22168",
+      "0x3eaaaaab",
+      "0xbe4ccccd",
+      "0x3e124925",
+      "0xbde38e38",
+      "0x3dba2e6e",
+      "0xbd9d8795",
+      "0x3d886b35",
+      "0xbd6ef16b",
+      "0x3d4bda59",
+      "0xbd15a221",
+      "0x3c8569d7"
+    ],
+    "bit_branches": [
+      "Use ix=abs_bits(x); for |x| >= 2^25, return soft32_add(x,x) for NaNs, otherwise the pinned signed atanhi[3]+/-atanlo[3] expression.",
+      "For |x| < 2^-29, return original x bits unchanged.",
+      "For |x| < 0.4375, use id=-1 and retain input sign in x.",
+      "For the remaining finite domain, clear sign and use the exact source cut points 0x3f300000, 0x3f980000, and 0x401c0000 to select the four reductions.",
+      "Evaluate the ATAN polynomial with the exact source Horner ordering, then apply the source id reconstruction and original sign bit."
+    ],
+    "rounding": "Each source FADD, FSUB, FMUL, and FDIV maps to its corresponding soft32 operation boundary; no contraction or native floating arithmetic is introduced.",
+    "nan_signed_zero_subnormal": "Raw input/result bits are preserved in the tiny identity arm. Large NaNs use the source x+x path via soft32_add; signed infinities take the source signed pi/2 branch. Other special-value equivalence depends on review of the soft32 primitive contract."
+  },
+  "family_prerequisites": {
+    "noahmp_bare_flux": [
+      "This leaf's soft32 primitive base must be centrally reviewed and verified.",
+      "The same CUDA translation unit calls glibc_logf and glibc_powf; their separate soft_gfk_log and soft_gfk_pow proposals remain unreviewed, and pow depends on the exp-owned soft_gfk_exp2_core_bits interface.",
+      "The full Noah-MP BARE_FLUX translation and its typed caller/layout still require separate implementation and central integration."
+    ],
+    "noahmp_bareflux_libm_probe": [
+      "Requires glibc_logf, this glibc_atanf, and glibc_powf together; diagnostic probe only, no Metal entry is supplied."
+    ]
+  },
+  "constraints": [
+    "No native float/double arithmetic, generic atan approximation, built-in atan, external math source, or duplicate family-local soft primitive is used.",
+    "No caller, registry, generated file, build file, state, inventory, or ledger is modified.",
+    "No kernel entrypoint or production consumer is added."
+  ],
+  "verification": "MetalToolchain 27.1 compiled all four helpers together with the shared binary32/binary64 headers and executed the temporary kernel on Apple M2. Each of logf, expf, powf, and atanf matched the in-tree glibc 2.39 CPU transcription in woof/core/noahmp_libm.py exactly on 4,826 rows (zero bit mismatches each). Inputs covered special values, subnormals, thresholds and adjacent encodings, plus seeded random bit patterns/pairs. This is bounded evidence, not exhaustive certification; production consumption remains blocked by the shared primitive and consumer-level contracts."
+}

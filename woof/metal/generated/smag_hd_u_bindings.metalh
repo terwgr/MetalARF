@@ -1,0 +1,18 @@
+// Generated from kernel_signatures.json; layout bd60c3d24087cdc1aef93a6a0e0e238f85c7bebe880762be0b8c0b24baaa19a1.
+struct SmagHdUResources {
+    device const float *u [[id(0)]];
+    device const float *xk [[id(1)]];
+    device const float *mut [[id(2)]];
+    device const float *c1 [[id(3)]];
+    device const float *c2 [[id(4)]];
+    device float *tend [[id(5)]];
+};
+struct SmagHdUParams {
+    float rdx;
+    float rdy;
+    int open_x;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SmagHdUParams) == 24, "smag_hd_u parameter ABI size changed");

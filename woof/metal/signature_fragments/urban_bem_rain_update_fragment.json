@@ -1,0 +1,32 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_rain_update_fragment",
+      "module": "urban_bem_rain_update_fragment",
+      "source": "woof/metal/shaders/urban_bem_rain_update_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_column dg/dgr post-radiation update",
+      "resources": [
+        ["active_cols", "int32", "read"], ["utype", "int32", "read"],
+        ["class_int", "int32", "read"], ["rainbl", "float", "read"],
+        ["lfg", "float", "read"], ["lfr", "float", "read"],
+        ["dg", "float", "read_write"], ["dgr", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]], "utype": [["ncol"]],
+        "class_int": [[37]], "rainbl": [["ncol"]],
+        "lfg": [["ncol", 2]], "lfr": [["ncol", 18, 2]],
+        "dg": [["ncol", 2]], "dgr": [["ncol", 18, 2]],
+        "error": [["ncol"]]
+      },
+      "parameters": [
+        ["ncol", "int32"], ["nurbm", "int32"],
+        ["dt", "float32"], ["latent", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["soft32"]
+    }
+  ]
+}

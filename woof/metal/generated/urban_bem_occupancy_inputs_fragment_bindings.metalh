@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout 84e0de58414705e2dfa978a1cd2c063b74bcd08f03c911fddd886d704f0dcb7b.
+struct UrbanBemOccupancyInputsFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const int *utype [[id(1)]];
+    device const float *class_float [[id(2)]];
+    device const float *bs [[id(3)]];
+    device float *hsequip [[id(4)]];
+    device float *building_width [[id(5)]];
+    device float *building_length [[id(6)]];
+    device float *floor_fraction [[id(7)]];
+    device float *equipment_scale [[id(8)]];
+    device int *error [[id(9)]];
+};
+struct UrbanBemOccupancyInputsFragmentParams {
+    int ncol;
+    int nitem;
+    int class_float_len;
+};
+static_assert(sizeof(UrbanBemOccupancyInputsFragmentParams) == 12, "urban_bem_occupancy_inputs_fragment parameter ABI size changed");

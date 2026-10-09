@@ -1,0 +1,14 @@
+// Generated from kernel_signatures.json; layout eac447643fdefb6034ac2ee7df13ecf1928bf547aec03fb418251e583915815a.
+struct ThompsonExnerPowerResources {
+    device const float *pressure [[id(0)]];
+    device float *exner [[id(1)]];
+};
+struct ThompsonExnerPowerParams {
+    int size;
+    int nz;
+    int ny;
+    int nx;
+    float reference_pressure;
+    float exponent;
+};
+static_assert(sizeof(ThompsonExnerPowerParams) == 24, "thompson_exner_power parameter ABI size changed");

@@ -1,0 +1,29 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._top_sponge",
+      "layout_version": 1,
+      "module": "global_top_sponge_fragment",
+      "name": "global_top_sponge_fragment",
+      "parameters": [["nlevel", "int32"], ["nlat", "int32"], ["nlon", "int32"]],
+      "resources": [
+        ["u", "float64_bits", "read"],
+        ["v", "float64_bits", "read"],
+        ["p_full", "float64_bits", "read"],
+        ["p_half", "float64_bits", "read"],
+        ["constants", "float64_bits", "read"],
+        ["u_out", "float64_bits", "read_write"],
+        ["v_out", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "u": [["any_1d"]], "v": [["any_1d"]],
+        "p_full": [["any_1d"]], "p_half": [["any_1d"]],
+        "constants": [[3]], "u_out": [["any_1d"]], "v_out": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_top_sponge_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

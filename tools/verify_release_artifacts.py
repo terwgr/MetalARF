@@ -1,0 +1,717 @@
+#!/usr/bin/env python3
+"""Prove the exact Python distributions and bridge assets before publishing.
+
+Run this script with the newly built wheel installed into an isolated virtual
+environment and Python ``-I`` from outside the checkout.  It intentionally
+uses the installed package's production parsers, staging path, executable
+probes, and CPU-library ABI check.  The checkout supplies only this verifier
+and the expected artifacts.
+
+``--dry-run`` runs the same assertions over locally staged or fixture-built
+artifacts, outside a live cut.  It skips exactly the four that are properties
+of a wheel installed outside the checkout and of executable target-native
+binaries -- the installed module's location, its version, its packaged pins
+bytes, and the host probes -- and runs every document, wheel, sdist, and
+bundle assertion unchanged.  It exists because this verifier could previously
+only ever run mid-cut: a defect in it (the bundle membership test that
+compared against the binary pins alone, and so refused every bundle the
+current packer produces) burned a live 1.4.1 round before anything could
+catch it.  ``tests/test_verify_release_artifacts.py`` drives this mode
+against bundles the real packer produced, so the next such defect fails in
+CI instead.
+"""
+
+from __future__ import annotations
+
+import argparse
+from base64 import urlsafe_b64encode
+import csv
+import ctypes
+import hashlib
+import io
+import json
+from pathlib import Path
+import re
+import sys
+import tarfile
+from types import SimpleNamespace
+import zipfile
+
+
+_PINS_MEMBER = "woof/data/bridges/bridge-pins.json"
+
+#: The checkout this verifier sits in; the history a reused native binary
+#: is proved against when --repo-root is not given.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from woof import bridge_assets  # noqa: E402
+
+#: PyPI's per-file cap, taken at its STRICTER reading.  "100 MB" is
+#: spelled 100,000,000 B in some of warehouse's own copy and
+#: 104,857,600 B (100 MiB) in others, and a cut must not depend on
+#: which one the index means that day, so the decimal number is the
+#: one enforced here and both headrooms are recorded.
+PYPI_FILE_CAP_BYTES = 100_000_000
+PYPI_FILE_CAP_BYTES_BINARY = 104_857_600
+
+#: How a platform-tagged wheel is told from the universal one.  The
+#: universal wheel is the only artifact PyPI receives today.
+_UNIVERSAL_WHEEL_TAG = "-py3-none-any.whl"
+
+#: A NetCDF member's attribute text, as strings(1) would print it.
+_PRINTABLE_RUN = re.compile(rb"[\x20-\x7e]{6,}")
+
+#: Where the staged Rust artifacts live inside a distribution.
+_STAGED_MEMBER_PREFIX = "woof/libexec/bridges/"
+
+
+def _size_record(path: Path, *, published: bool) -> dict:
+    """Bytes, hash and cap verdict for one distribution file."""
+
+    size = path.stat().st_size
+    return {
+        "filename": path.name,
+        "bytes": size,
+        "sha256": _sha256(path),
+        "published": published,
+        "cap_verdict": "PASS" if size <= PYPI_FILE_CAP_BYTES else "OVER",
+        "headroom_bytes_vs_100e6": PYPI_FILE_CAP_BYTES - size,
+        "headroom_bytes_vs_100MiB": PYPI_FILE_CAP_BYTES_BINARY - size,
+    }
+
+
+def _refuse_over_cap(records: list[dict]) -> None:
+    """A file PyPI will reject must fail here, not after the tag is public.
+
+    The upload is the last step of a cut: the tag is pushed, the GitHub
+    release assets are written, and only then does twine hand PyPI the
+    wheel and the sdist.  A file over the cap fails there, with the tag
+    already public and non-reproducible Rust builds behind it -- the
+    burned-tag shape this project has paid for before.  The published
+    pair today has 8.07 MB of headroom on the wheel and 4.76 MB on the
+    sdist, so this is not theoretical margin.
+    """
+
+    over = [record for record in records
+            if record["published"] and record["cap_verdict"] == "OVER"]
+    if not over:
+        return
+    lines = [
+        f"  {record['filename']}: {record['bytes']:,} B, over by "
+        f"{-record['headroom_bytes_vs_100e6']:,} B"
+        for record in over
+    ]
+    raise SystemExit(
+        f"{len(over)} distribution file(s) exceed PyPI's "
+        f"{PYPI_FILE_CAP_BYTES:,} B per-file cap and would be rejected at "
+        "upload, after the tag is public:\n" + "\n".join(lines)
+        + "\nMove the next bulk data directory into "
+          "woof.data_assets.COMPANION_TREES and rebuild both "
+          "distributions -- the route that split recast-woof-data out in 2.5.0 "
+          "when the single wheel reached 103.62 MiB -- or externalise a "
+          "table through `woof fetch-tables` (the route freezeH2O.dat "
+          "and qr_acr_qg_V4.dat already take).  Do not drop a decoder.")
+
+
+def _sibling_distributions(directory: Path, published: set[str]) -> list[Path]:
+    """Distribution files in ``directory`` that are not the published pair.
+
+    A platform wheel is built beside the pure one often enough that the
+    cut should say what it measured rather than ignore it: at this tip
+    the platform pair does not fit under the cap, and a receipt that
+    only ever mentions the universal wheel makes that invisible.
+    """
+
+    if not directory.is_dir():
+        return []
+    return sorted(
+        path for path in directory.iterdir()
+        if path.is_file()
+        and path.name not in published
+        and (path.name.endswith(".whl") or path.name.endswith(".tar.gz"))
+    )
+
+
+def private_host_members(wheel: Path,
+                         repo_root: Path | None = None) -> list[dict]:
+    """Data members of ``wheel`` that name a private machine.
+
+    The breakage this refuses: a private machine's name published in a
+    wheel.  2.8.1's fetch route table carried the lab host that watched
+    the posting times in 20 measured rows (A154), and nothing between the
+    tree and PyPI read a wheel's data files for one.  The rule, its scope,
+    its patterns and its one allowance are ``tools/release_exclusions.py``'s,
+    the same the public-tree scan applies; a member is read as text when its
+    first block holds no NUL, and a NetCDF container by its printable runs.
+    A row whose member is the exact bytes a committed WRF reference pins
+    (read from ``repo_root``) carries ``pinned_record: True`` and is not
+    refused.
+    """
+
+    from tools.release_exclusions import (PRIVATE_HOST_MARKERS,
+                                          is_wheel_data_member,
+                                          pinned_record_digests)
+
+    pinned = (frozenset() if repo_root is None
+              else pinned_record_digests(repo_root))
+    rows = []
+    with zipfile.ZipFile(wheel) as archive:
+        for info in archive.infolist():
+            if info.is_dir() or not is_wheel_data_member(info.filename):
+                continue
+            payload = archive.read(info)
+            if info.filename.lower().endswith((".nc", ".nc4")):
+                texts = [run.decode("ascii") for run in
+                         _PRINTABLE_RUN.findall(payload)]
+            elif b"\x00" in payload[:8192]:
+                continue
+            else:
+                texts = payload.decode("utf-8", "replace").splitlines()
+            record = hashlib.sha256(payload).hexdigest() in pinned
+            for text in texts:
+                for pattern, kind in PRIVATE_HOST_MARKERS:
+                    found = pattern.search(text)
+                    if found is not None:
+                        rows.append({"member": info.filename, "kind": kind,
+                                     "token": found.group(0),
+                                     "pinned_record": record})
+                        break
+    return rows
+
+
+def _refuse_private_hosts(wheel: Path, repo_root: Path) -> list[str]:
+    """Refuse the wheel, or return the pinned records the rule allowed."""
+
+    found = private_host_members(wheel, repo_root)
+    rows = [row for row in found if not row["pinned_record"]]
+    if rows:
+        raise SystemExit(
+            f"{wheel.name} publishes a private machine's name in "
+            f"{len(rows)} data member line(s): {rows[:10]}.  Reword the "
+            "record to name the measurement rather than the machine it "
+            "ran on (tools/release_exclusions.py holds the rule).")
+    return sorted({row["member"] for row in found})
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def probe_library_abi(path, artifact, *, loader=ctypes.CDLL) -> dict:
+    """Load one library artifact and resolve *its own* ABI symbol.
+
+    The handshake is dispatched per artifact through
+    :func:`woof.bridge_assets.library_abi_for`, the one table the
+    workflow's per-runner probe reads too.  This function used to be
+    three inline lines that named ``gpuwm_preprocess_cpu_abi_version``
+    for every ``kind == "library"`` member, which was true while there
+    was one library; the vendored dealiasing cdylib exports
+    ``bw_abi_version``, so the 2.1.0 prepare job refused a correct
+    bundle after the tag was public.
+
+    Fail closed on an undeclared library: a library nobody declared a
+    handshake for is refused here rather than probed with whatever
+    symbol happened to be hardcoded.  ``loader`` is a seam so a unit
+    test can prove the dispatch without a target-native binary.
+    """
+
+    from woof import bridge_assets
+
+    try:
+        symbol, expected = bridge_assets.library_abi_for(artifact.name)
+    except bridge_assets.BridgeAssetError as error:
+        raise SystemExit(f"{path}: {error}") from None
+    library = loader(str(path))
+    abi = getattr(library, symbol)
+    abi.argtypes = []
+    abi.restype = ctypes.c_uint32
+    answered = int(abi())
+    if answered != expected:
+        raise SystemExit(
+            f"{path}: {artifact.name} answers {symbol}() with "
+            f"{answered}, not the {expected} this release speaks")
+    return {
+        "artifact": artifact.name,
+        "filename": Path(path).name,
+        "kind": artifact.kind,
+        "symbol": symbol,
+        "abi": answered,
+        "status": "PASS",
+    }
+
+
+#: What ``--dry-run`` cannot prove outside a live cut, named in its receipt so
+#: a dry-run receipt can never be mistaken for the real one.
+DRY_RUN_SKIPS = (
+    "installed module resolves outside the checkout",
+    "installed distribution version equals the release tag",
+    "installed package data carries the exact pins bytes",
+    "host staging, executable probes, and CPU-library ABI",
+)
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--wheel", type=Path, required=True)
+    parser.add_argument("--sdist", type=Path, required=True)
+    parser.add_argument("--pins", type=Path, required=True)
+    parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--bundles", type=Path, required=True)
+    parser.add_argument("--release", required=True)
+    parser.add_argument(
+        "--platform", action="append", required=True,
+        choices=bridge_assets.SUPPORTED_PLATFORMS,
+        help="platform selected for this release; repeat for each pinned "
+             "platform")
+    parser.add_argument(
+        "--source-rev", required=True,
+        help="full 40-hex git commit being released; every binary in "
+             "every bundle must embed a GPUWM_BRIDGE_SOURCE_REV stamp "
+             "naming exactly this commit")
+    parser.add_argument("--repo-root", type=Path)
+    parser.add_argument("--stage", type=Path)
+    parser.add_argument(
+        "--dist-dir", type=Path, default=None,
+        help="directory the distributions were built into (default: the "
+             "wheel's own directory).  Every distribution file in it is "
+             "measured against PyPI's per-file cap, so a platform pair "
+             "built beside the published pair is reported rather than "
+             "silently ignored")
+    parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="run every document, wheel, sdist, and bundle assertion "
+             "against locally staged or fixture-built artifacts, without "
+             "a wheel installed outside the checkout and without "
+             "executing any bundled binary; see DRY_RUN_SKIPS")
+    args = parser.parse_args(argv)
+    if not args.dry_run:
+        missing = [name for name in ("repo_root", "stage")
+                   if getattr(args, name) is None]
+        if missing:
+            parser.error(
+                "a live cut requires "
+                + ", ".join(f"--{name.replace('_', '-')}"
+                            for name in missing))
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    selected_platforms = set(args.platform)
+    if len(selected_platforms) != len(args.platform):
+        raise SystemExit("verify_release_artifacts: --platform was repeated")
+    wheel = args.wheel.resolve(strict=True)
+    sdist = args.sdist.resolve(strict=True)
+    pins_path = args.pins.resolve(strict=True)
+    manifest_path = args.manifest.resolve(strict=True)
+    bundles = args.bundles.resolve(strict=True)
+    repo = None if args.repo_root is None else args.repo_root.resolve(strict=True)
+    stage = None if args.stage is None else args.stage.resolve()
+    receipt_path = args.receipt.resolve()
+
+    dist_dir = (args.dist_dir.resolve() if args.dist_dir is not None
+                else wheel.parent)
+
+    # Size before content: a file PyPI will reject is a cut that dies
+    # after the tag is public, and it costs nothing to know first.
+    distributions = [_size_record(wheel, published=True),
+                     _size_record(sdist, published=True)]
+    for sibling in _sibling_distributions(dist_dir,
+                                          {wheel.name, sdist.name}):
+        distributions.append(_size_record(sibling, published=False))
+    _refuse_over_cap(distributions)
+    pinned_records_with_machine_names = _refuse_private_hosts(
+        wheel, REPO_ROOT if repo is None else repo)
+
+    expected_pins = pins_path.read_bytes()
+    pins_document = json.loads(expected_pins)
+    manifest_document = json.loads(manifest_path.read_bytes())
+    assert pins_document["schema"] == "gpuwm-bridge-pins-v1"
+    assert manifest_document["schema"] == "gpuwm-bridge-bundle-manifest-v1"
+    assert pins_document["release"] == args.release
+    assert manifest_document["release"] == args.release
+    assert manifest_document["platforms"] == pins_document["platforms"]
+
+    # The per-file cap is enforced ONCE, by `_refuse_over_cap` above, and
+    # this is where a second copy of that check used to sit.  Two checks
+    # against two spellings of "100 MB" is how a cut learns the looser one
+    # never fires: the decimal cap refuses first, so a 100 MiB loop here
+    # could only ever be dead code carrying a different remedy sentence.
+    # The remedy it carried is now the one `_refuse_over_cap` prints.
+
+    # The wheel carries the exact generated bytes, and RECORD binds their hash
+    # and size rather than merely naming the member.
+    with zipfile.ZipFile(wheel) as archive:
+        assert archive.namelist().count(_PINS_MEMBER) == 1
+        assert archive.read(_PINS_MEMBER) == expected_pins
+        records = [
+            name for name in archive.namelist() if name.endswith(".dist-info/RECORD")
+        ]
+        assert len(records) == 1, records
+        rows = [
+            row
+            for row in csv.reader(
+                io.StringIO(archive.read(records[0]).decode("utf-8"))
+            )
+            if row and row[0] == _PINS_MEMBER
+        ]
+        assert len(rows) == 1, rows
+        digest = urlsafe_b64encode(hashlib.sha256(expected_pins).digest()).rstrip(
+            b"="
+        ).decode("ascii")
+        assert rows[0][1] == f"sha256={digest}", rows[0]
+        assert rows[0][2] == str(len(expected_pins)), rows[0]
+
+    # PyPI publishes the sdist too, so it must carry the identical pins.
+    with tarfile.open(sdist, "r:gz") as archive:
+        members = [
+            member
+            for member in archive.getmembers()
+            if member.name.endswith("/" + _PINS_MEMBER)
+        ]
+        assert len(members) == 1, [member.name for member in members]
+        source = archive.extractfile(members[0])
+        assert source is not None
+        assert source.read() == expected_pins
+
+    # Under ``python -I`` these resolve from the clean wheel installation, not
+    # the checkout beside the verifier.  Under ``--dry-run`` there is no such
+    # installation, so the three assertions that are about it are the first
+    # thing the mode gives up -- and the only reason it reads the pins from
+    # the named file rather than from the installed package data.
+    import woof
+    from woof import bridge_assets, bridges, doctor
+
+    installed = Path(woof.__file__).resolve()
+    if not args.dry_run:
+        assert not installed.is_relative_to(repo), installed
+        assert args.release == f"v{woof.__version__}", (
+            args.release,
+            woof.__version__,
+        )
+        assert bridge_assets.packaged_pins_path().read_bytes() == expected_pins
+
+    pins = bridge_assets.load_pins(pins_path if args.dry_run else None)
+    assert pins.release == args.release, pins.release
+    assert set(pins.platforms) == selected_platforms, (
+        set(pins.platforms), selected_platforms)
+
+    by_name = {
+        artifact.name: artifact for artifact in bridge_assets.BUNDLED_ARTIFACTS
+    }
+    bundle_receipts: dict[str, object] = {}
+    # What was actually proved, per binary, so the receipt can say it
+    # rather than assert a blanket claim that stopped being true the day
+    # a vendored artifact joined the bundle.
+    stamped: list[str] = []
+    #: label -> the earlier commit a reused binary was built at.
+    reused: dict[str, str] = {}
+    vendored_by_marker: list[str] = []
+    for platform, bundle in sorted(pins.platforms.items()):
+        assert len(bundle.binaries) == len(by_name)
+        assert {pin.artifact for pin in bundle.binaries} == set(by_name)
+        archive_path = bundles / bundle.filename
+        bridge_assets.verify_pinned_file(
+            archive_path,
+            expected_bytes=bundle.bytes,
+            expected_sha256=bundle.sha256,
+            label=bundle.filename,
+        )
+        # A bundle carries the nine binaries AND the renderer's map assets --
+        # that is the whole point of the asset half, since a bridge binary
+        # without its basemaps draws weather over a blank rectangle.  This
+        # membership test predates the assets and compared against the binary
+        # pins alone, so it refused every bundle the current packer produces.
+        # It is not enough to widen it to "at least the binaries": a bundle
+        # must contain exactly what the release pinned and nothing else, so
+        # both halves are named and the equality is kept.
+        assert bundle.assets, (platform, "bundle pins no map assets")
+        expected_members = (
+            {pin.filename for pin in bundle.binaries}
+            | {pin.path for pin in bundle.assets}
+        )
+        with zipfile.ZipFile(archive_path) as archive:
+            members = set(archive.namelist())
+            assert members == expected_members, (
+                platform,
+                f"unexpected: {sorted(members - expected_members)}",
+                f"missing: {sorted(expected_members - members)}",
+            )
+            for pin in bundle.binaries:
+                payload = archive.read(pin.filename)
+                assert len(payload) == pin.bytes, (platform, pin.filename)
+                assert hashlib.sha256(payload).hexdigest() == pin.sha256, (
+                    platform, pin.filename)
+                if platform == bridge_assets.DARWIN_PLATFORM:
+                    minimum_os = bridge_assets.macho_arm64_minimum_os(
+                        payload, label=f"{platform}: {pin.filename}")
+                    expected_minimum_os = (
+                        *bridge_assets.DARWIN_MINIMUM_OS, 0)
+                    assert minimum_os == expected_minimum_os, (
+                        platform, pin.filename, minimum_os,
+                        expected_minimum_os)
+                    if by_name[pin.artifact].kind == "library":
+                        install_ids = bridge_assets.macho_dylib_ids(
+                            payload, label=f"{platform}: {pin.filename}")
+                        assert install_ids == (f"@rpath/{pin.filename}",), (
+                            platform, pin.filename, install_ids)
+                # The hash proves these are the pinned bytes; the stamp
+                # proves the bytes were built from the commit being
+                # released.  Both platforms' binaries are provable from
+                # this one machine because the stamp is read, never run.
+                #
+                # A VENDORED artifact is a verbatim upstream crate frozen
+                # at a recorded commit.  It does not move with this
+                # checkout, so the release commit says nothing about it
+                # and the build deliberately leaves it unstamped -- the
+                # tree's whole claim is that no file in it differs from
+                # upstream by a byte.  The packer asks such an artifact
+                # for its declared contract marker instead, and so does
+                # this verifier: the same staleness question, asked the
+                # only way these bytes can answer it.
+                artifact = by_name[pin.artifact]
+                label = f"{platform}: {pin.filename}"
+                if artifact.vendored:
+                    marker = bridges.BRIDGE_ABI_MARKERS.get(artifact.name)
+                    if marker is None:
+                        raise SystemExit(
+                            f"{label}: vendored artifact with no declared "
+                            "contract marker, so nothing proves which "
+                            "build of it this is")
+                    if marker not in payload:
+                        raise SystemExit(
+                            f"{label}: does not carry the "
+                            f"{artifact.name} contract marker "
+                            f"{marker.decode('ascii', 'replace')!r}, so "
+                            "it was built from a vendored crate older "
+                            "than the one this release speaks to")
+                    vendored_by_marker.append(label)
+                else:
+                    bridge_assets.verify_source_revision(
+                        payload, expected=args.source_rev, label=label,
+                        equivalent=lambda built, crate=artifact.crate: (
+                            bridge_assets.native_input_difference(
+                                repo or REPO_ROOT, crate, built,
+                                args.source_rev)))
+                    built = bridge_assets.embedded_source_revisions(payload)
+                    if built and built[0] != args.source_rev:
+                        reused[label] = built[0]
+                    stamped.append(label)
+            for pin in bundle.assets:
+                payload = archive.read(pin.path)
+                assert len(payload) == pin.bytes, (platform, pin.path)
+                assert hashlib.sha256(payload).hexdigest() == pin.sha256, (
+                    platform, pin.path)
+        bundle_receipts[platform] = {
+            "filename": bundle.filename,
+            "bytes": bundle.bytes,
+            "sha256": bundle.sha256,
+            "members": len(bundle.binaries) + len(bundle.assets),
+            "binaries": len(bundle.binaries),
+            "assets": len(bundle.assets),
+        }
+        if bundle.metal is not None:
+            bundle_receipts[platform]["metal"] = dict(bundle.metal)
+
+    # A Darwin wheel couples the Rust bundle to the Metal runtime and both
+    # metallibs. Pinning only the bridge zip allowed a wheel to mix native
+    # halves built from unrelated checkouts, so verify the wheel's exact
+    # manifest bytes, implementation provenance, ABI floor, and every file.
+    if bridge_assets.DARWIN_PLATFORM in selected_platforms:
+        darwin = pins.platforms[bridge_assets.DARWIN_PLATFORM]
+        assert darwin.metal is not None
+        metal_member = ("woof/libexec/metal/" +
+                        bridge_assets.METAL_MANIFEST_FILENAME)
+        with zipfile.ZipFile(wheel) as archive:
+            metal_payload = archive.read(metal_member)
+            metal = json.loads(metal_payload)
+            assert hashlib.sha256(metal_payload).hexdigest() == \
+                darwin.metal["manifest_sha256"]
+            assert metal.get("schema") == "woof-metal-bundle-v1"
+            assert metal.get("platform") == bridge_assets.DARWIN_PLATFORM
+            assert metal.get("minimum_os") == "14.0"
+            assert metal.get("abi_version") == darwin.metal["abi_version"]
+            assert metal.get("source_commit") == args.source_rev
+            assert metal.get("source_commit") == darwin.metal["source_commit"]
+            assert metal.get("implementation_sha256") == \
+                darwin.metal["implementation_sha256"]
+            assert metal.get("implementation_file_count") == \
+                darwin.metal["implementation_file_count"]
+            implementation_digest, implementation_count = \
+                bridge_assets.metal_implementation_provenance(repo or REPO_ROOT)
+            assert metal.get("implementation_sha256") == implementation_digest
+            assert metal.get("implementation_file_count") == implementation_count
+            records = metal.get("files")
+            assert isinstance(records, dict)
+            assert set(records) == set(bridge_assets.METAL_FILES)
+            expected_metal_members = {
+                "woof/libexec/metal/" + name
+                for name in bridge_assets.METAL_FILES
+            } | {metal_member}
+            actual_metal_members = {
+                name for name in archive.namelist()
+                if name.startswith("woof/libexec/metal/")
+                and not name.endswith("/")
+            }
+            assert actual_metal_members == expected_metal_members, (
+                sorted(actual_metal_members - expected_metal_members),
+                sorted(expected_metal_members - actual_metal_members),
+            )
+            for name in bridge_assets.METAL_FILES:
+                payload = archive.read("woof/libexec/metal/" + name)
+                record = records[name]
+                assert len(payload) == record["size"], name
+                assert hashlib.sha256(payload).hexdigest() == record["sha256"], name
+                if name.endswith(".dylib"):
+                    minimum_os = bridge_assets.macho_arm64_minimum_os(
+                        payload, label=f"Metal: {name}")
+                    expected_minimum_os = (
+                        *bridge_assets.DARWIN_MINIMUM_OS, 0)
+                    assert minimum_os == expected_minimum_os, (
+                        name, minimum_os, expected_minimum_os)
+                    assert bridge_assets.macho_dylib_ids(
+                        payload, label=f"Metal: {name}") == (f"@rpath/{name}",)
+
+    # Everything past here needs the offer the *installed* wheel makes and
+    # binaries this host can execute.  A dry run has neither, and inventing
+    # either would make its receipt a lie.
+    live: list[str] = []
+    host: str | None = None
+    probes: list[dict[str, object]] = []
+    if not args.dry_run:
+        offer = bridges.prebuilt_bundle_offer()
+        assert offer is not None
+        live = [
+            line.strip()
+            for line in offer
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        assert live == ["woof fetch-bridges"], live
+
+        if stage.exists():
+            assert not any(stage.iterdir()), stage
+        fetch_args = SimpleNamespace(
+            dest=str(stage), from_dir=str(bundles), list=False,
+            keep_bundle=False
+        )
+        assert bridge_assets.fetch_bridges_main(fetch_args) == 0
+        host = bridge_assets.host_platform()
+        host_bundle = pins.bundle_for(host)
+        assert host_bundle is not None
+        for pin in host_bundle.binaries:
+            path = stage / pin.filename
+            assert bridge_assets.matches_pin(path, pin), path
+            artifact = by_name[pin.artifact]
+            if artifact.kind == "executable":
+                ok, evidence = doctor._exec_probe(path)
+                assert ok, (path, evidence)
+                probes.append(
+                    {
+                        "artifact": artifact.name,
+                        "filename": pin.filename,
+                        "kind": artifact.kind,
+                        "evidence": evidence,
+                        "status": "PASS",
+                    }
+                )
+            else:
+                probes.append(probe_library_abi(path, artifact))
+
+    receipt = {
+        # v2, not a v1 with extra keys.  v1 asserted one blanket claim --
+        # every binary carries this release's revision stamp -- and that
+        # invariant stopped being true the day a vendored artifact joined
+        # the bundle.  The invariant v2 states is the real one: every
+        # binary is proved stale-free either by a source-revision stamp
+        # or by a declared contract marker, and the receipt names which
+        # binaries got which proof rather than asking a reader to trust a
+        # single boolean.  A consumer written against v1's key should
+        # fail loudly on a v2 receipt, so the key is retired, not aliased.
+        "schema": "gpuwm-release-artifact-proof-v2",
+        "mode": "dry-run" if args.dry_run else "cut",
+        "not_proven": list(DRY_RUN_SKIPS) if args.dry_run else [],
+        "status": "PASS",
+        "release": args.release,
+        "source_rev": args.source_rev,
+        "source_rev_stamp_verified_in_every_built_binary": True,
+        # The two proof lists partition the bundle's binaries, per
+        # platform-qualified filename:
+        #   binaries_proved_by_source_rev_stamp -- gpuwm-authored bytes
+        #     carrying GPUWM_BRIDGE_SOURCE_REV equal to the released
+        #     commit, so the build cannot predate the source it ships.
+        #   binaries_proved_by_contract_marker -- vendored bytes, which
+        #     do not move with this checkout and so carry no stamp;
+        #     BRIDGE_ABI_MARKERS names an ABI literal that is a property
+        #     of those exact bytes, so a build predating the contract
+        #     this release speaks is caught statically.
+        # Together they cover every binary in every platform bundle;
+        # a name missing from both would be bytes nobody proved.
+        "binaries_proved_by_source_rev_stamp": sorted(stamped),
+        "binaries_proved_by_contract_marker": sorted(vendored_by_marker),
+        # Stamped binaries whose stamp names an earlier ancestor commit at
+        # which every declared build input of their crate is the same git
+        # object (woof.bridge_assets.native_input_difference): the cut
+        # reused them instead of recompiling identical sources.  A subset
+        # of the stamp list above, named so the reuse is never silent.
+        "binaries_reused_from_identical_inputs": dict(sorted(reused.items())),
+        "installed_module": str(installed),
+        "installed_version": woof.__version__ if not args.dry_run else None,
+        # Bytes and hash come from the size pass above rather than being
+        # recomputed: these are 90+ MB files and hashing each twice buys
+        # nothing.
+        "wheel": {
+            "filename": wheel.name,
+            "bytes": distributions[0]["bytes"],
+            "sha256": distributions[0]["sha256"],
+            "pins_bytes_exact": True,
+            "record_digest_and_size_exact": True,
+            "private_machine_names_in_data_members": 0,
+            "pinned_records_allowed_their_machine_names":
+                pinned_records_with_machine_names,
+        },
+        "sdist": {
+            "filename": sdist.name,
+            "bytes": distributions[1]["bytes"],
+            "sha256": distributions[1]["sha256"],
+            "pins_bytes_exact": True,
+        },
+        # Every distribution file in the dist directory, published or
+        # not, against PyPI's per-file cap.  Additive to v2: the two
+        # keys above still describe the published pair, and this says
+        # what else was sitting beside it -- a platform wheel built in
+        # the same tree is 108-112 MB at this tip and would be rejected
+        # at upload, which a receipt naming only the universal wheel
+        # could not show.
+        "pypi_file_cap_bytes": PYPI_FILE_CAP_BYTES,
+        "distributions": distributions,
+        "pins": {
+            "filename": pins_path.name,
+            "bytes": pins_path.stat().st_size,
+            "sha256": _sha256(pins_path),
+        },
+        "manifest": {
+            "filename": manifest_path.name,
+            "bytes": manifest_path.stat().st_size,
+            "sha256": _sha256(manifest_path),
+            "platforms_exactly_match_pins": True,
+        },
+        "bundles": bundle_receipts,
+        "prebuilt_offer_live_lines": live,
+        "host_platform": host,
+        "host_probes": probes,
+    }
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(receipt, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

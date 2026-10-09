@@ -1,0 +1,250 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_fused_gs.cu",
+      "cuda_symbol": "nssl2_prepare_fused_gs",
+      "layout_version": 1,
+      "module": "nssl2_fused_gs_family",
+      "name": "nssl2_prepare_fused_gs",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "temperature_k",
+          "float",
+          "read_write"
+        ],
+        [
+          "target_m3",
+          "float",
+          "read_write"
+        ],
+        [
+          "state",
+          "float",
+          "read"
+        ],
+        [
+          "full_theta",
+          "float",
+          "read"
+        ],
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_pa",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "exner": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "full_theta": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "pressure_pa": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "state": [
+          [
+            16,
+            "nz",
+            "ncol"
+          ]
+        ],
+        "target_m3": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "temperature_k": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_fused_gs_family.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2_fused_gs.cu",
+      "cuda_symbol": "nssl2_fused_gs",
+      "layout_version": 1,
+      "module": "nssl2_fused_gs_family",
+      "name": "nssl2_fused_gs",
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "hail_on",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "state",
+          "float",
+          "read_write"
+        ],
+        [
+          "full_theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_pa",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "temperature_k",
+          "float",
+          "read_write"
+        ],
+        [
+          "vertical_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "primary_ice_target_m3",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "exner": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "full_theta": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "pressure_pa": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "primary_ice_target_m3": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "state": [
+          [
+            16,
+            "nz",
+            "ncol"
+          ]
+        ],
+        "temperature_k": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vertical_velocity": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_fused_gs_family.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

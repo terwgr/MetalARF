@@ -1,0 +1,28 @@
+// Generated from kernel_signatures.json; layout c66b054978dbbe0e548c6b122916957d07c2faad31d5bb6cbfcc0fbb19130b6e.
+struct KesslerColumnResources {
+    device float *t [[id(0)]];
+    device float *qv [[id(1)]];
+    device float *qc [[id(2)]];
+    device float *qr [[id(3)]];
+    device const float *rho [[id(4)]];
+    device const float *pii [[id(5)]];
+    device const float *z [[id(6)]];
+    device const float *dz8w [[id(7)]];
+    device float *rainnc [[id(8)]];
+    device float *rainncv [[id(9)]];
+};
+struct KesslerColumnParams {
+    float dt;
+    int nz;
+    int ny;
+    int nx;
+    float svp1;
+    float svp2;
+    float svp3;
+    float svpt0;
+    float xlv;
+    float cp;
+    float rhowater;
+    float ep2;
+};
+static_assert(sizeof(KesslerColumnParams) == 48, "kessler_column parameter ABI size changed");

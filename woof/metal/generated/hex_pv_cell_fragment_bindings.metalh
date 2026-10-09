@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout d577a6850cef8c0ab1d3e4454d70115e799b914e332806315f0a214b351f705c.
+struct HexPvCellFragmentResources {
+    device const float *pv_vertex [[id(0)]];
+    device const int *vertices_on_cell [[id(1)]];
+    device const int *n_edges_on_cell [[id(2)]];
+    device const int *kite_index [[id(3)]];
+    device const float *kite_areas [[id(4)]];
+    device const float *area_cell [[id(5)]];
+    device const float *inv_area_cell [[id(6)]];
+    device float *pv_cell [[id(7)]];
+};
+struct HexPvCellFragmentParams {
+    int nlev;
+    int ncells;
+    int nvertices;
+    int max_cell_edges;
+    int max_vertex_edges;
+    int use_inverse_area;
+    float apvm_upwinding;
+};
+static_assert(sizeof(HexPvCellFragmentParams) == 28, "hex_pv_cell_fragment parameter ABI size changed");

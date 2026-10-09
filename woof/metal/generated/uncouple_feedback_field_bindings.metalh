@@ -1,0 +1,30 @@
+// Generated from kernel_signatures.json; layout 9491fc1cedca36e5a706ab2f9ba261bcf4e3e83bcc8740399d8e7bb97097692a.
+struct UncoupleFeedbackFieldResources {
+    device float *target [[id(0)]];
+    device const float *coupled [[id(1)]];
+    device const float *mub2d [[id(2)]];
+    device const float *mup [[id(3)]];
+    device const float *thb [[id(4)]];
+    device const float *c1h [[id(5)]];
+    device const float *c2h [[id(6)]];
+    device const float *c1f [[id(7)]];
+    device const float *c2f [[id(8)]];
+    device const float *msft [[id(9)]];
+    device const float *msfu [[id(10)]];
+    device const float *msfv [[id(11)]];
+};
+struct UncoupleFeedbackFieldParams {
+    int has_msf;
+    int thb_3d;
+    int kind;
+    int i_lo;
+    int i_hi;
+    int j_lo;
+    int j_hi;
+    int nz;
+    int ny;
+    int nx;
+    int mny;
+    int mnx;
+};
+static_assert(sizeof(UncoupleFeedbackFieldParams) == 48, "uncouple_feedback_field parameter ABI size changed");

@@ -1,0 +1,35 @@
+{
+  "kernels": [
+    {
+      "name": "shinhong_validate_outputs",
+      "module": "shinhong_family",
+      "source": "woof/metal/shaders/shinhong_column.metal",
+      "cuda_source": "woof/core/kernels/shinhong_validation.cu",
+      "cuda_symbol": "shinhong_validate_outputs",
+      "resources": [
+        ["du", "float", "read"], ["dv", "float", "read"],
+        ["dtheta", "float", "read"], ["dqv", "float", "read"],
+        ["dqc", "float", "read"], ["dqi", "float", "read"],
+        ["exch_h", "float", "read"], ["tke", "float", "read"],
+        ["el", "float", "read"], ["hpbl", "float", "read"],
+        ["wstar", "float", "read"], ["delta", "float", "read"],
+        ["status", "uint32", "read_write"]
+      ],
+      "shapes": {
+        "du": [["count3"]], "dv": [["count3"]],
+        "dtheta": [["count3"]], "dqv": [["count3"]],
+        "dqc": [["count3"]], "dqi": [["count3"]],
+        "exch_h": [["count3"]], "tke": [["count3"]],
+        "el": [["count3"]], "hpbl": [["count2"]],
+        "wstar": [["count2"]], "delta": [["count2"]],
+        "status": [[1]]
+      },
+      "parameters": [
+        ["count3", "int32"], ["count2", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

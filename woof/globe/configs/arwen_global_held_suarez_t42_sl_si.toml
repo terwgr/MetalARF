@@ -1,0 +1,79 @@
+# Held and Suarez 1994, T42 L40, semi-Lagrangian arm of gate HS-1.
+#
+# The case asks what a dynamical core's CLIMATE looks like after hundreds
+# of days, which is the timescale an over-dissipative interpolation shows
+# up on and a twenty-four hour forecast does not.  Its forcing is
+# Newtonian relaxation plus boundary-layer Rayleigh friction and nothing
+# else, so [physics] mode is "none" and the forcing is applied by
+# tools/arwen_global_semilag_cases.py held-suarez, which owns the case's
+# own time split.
+#
+# duration_s is the length of ONE segment the driver steps; the driver
+# reads dt_s and runs its own spin-up and statistics counts, so this
+# number is a formality the config door requires.
+#
+# T42 is the resolution Held and Suarez ran, on this model's own 40-level
+# stack rather than their 20 sigma levels.
+[arwen_global]
+schema = "gpuwm.arwen-global-run/v1"
+name = "arwen-global-held-suarez-t42-sl-si"
+acknowledgement = "research-only-arwen-global-v1"
+backend = "cupy"
+precision = "float32"
+
+[grid]
+truncation = 42
+dealias_factor = 1.5
+
+[time]
+dt_s = 300.0
+duration_s = 86400.0
+output_interval_s = 86400.0
+integrator = "sl_si"
+maximum_lipschitz = 0.75
+
+[semilag]
+quasi_monotone = true
+trajectory_iterations = 3
+
+[vertical]
+coordinate = "surface_stretched"
+nlev = 40
+p_top_pa = 100.0
+
+[initial]
+mode = "analytic"
+surface_pressure_pa = 100000.0
+surface_temperature_k = 288.0
+top_temperature_k = 215.0
+qv_surface = 0.0
+zonal_wind_m_s = 10.0
+perturbation_amplitude = 0.001
+zonal_wavenumber = 5
+terrain_amplitude_m = 0.0
+surface_water_kg_m2 = 0.0
+
+[physics]
+mode = "none"
+
+[diffusion]
+enabled = true
+order = 16
+e_folding_time_s_at_truncation = 720.0
+preserve_degree = 1
+
+[semi_implicit]
+enabled = true
+weight = 1.0
+off_centring_weight = 0.55
+
+[repair]
+mass_fixer = true
+water_fixer = false
+positivity_repair = true
+
+[gates]
+transform_roundtrip_relative_linf = 1.0e-6
+transform_parseval_relative_error = 5.0e-7
+mass_relative_drift = 1.0e-4
+total_water_relative_drift = 1.0e-3

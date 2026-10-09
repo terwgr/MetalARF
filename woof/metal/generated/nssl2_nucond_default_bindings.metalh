@@ -1,0 +1,30 @@
+// Generated from kernel_signatures.json; layout f7d8ef4d3fc73b2a6c16d97c5af21417b095f7fc531dcca4b606ee1f3a0b49ff.
+struct Nssl2NucondDefaultResources {
+    device float *full_theta [[id(0)]];
+    device const float *air_density [[id(1)]];
+    device const float *pressure_pa [[id(2)]];
+    device const float *exner [[id(3)]];
+    device const float *w_interface [[id(4)]];
+    device const float *initial_supersaturation_percent [[id(5)]];
+    device float *qv [[id(6)]];
+    device float *qc [[id(7)]];
+    device float *qr [[id(8)]];
+    device const float *qi [[id(9)]];
+    device const float *qs [[id(10)]];
+    device float *qndrop [[id(11)]];
+    device float *qnr [[id(12)]];
+    device const float *qni [[id(13)]];
+    device const float *qns [[id(14)]];
+    device float *qnn [[id(15)]];
+};
+struct Nssl2NucondDefaultParams {
+    float dt;
+    int concentration_space;
+    int n;
+    int nz;
+    int horizontal_size;
+    int predicted_ccn;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(Nssl2NucondDefaultParams) == 32, "nssl2_nucond_default parameter ABI size changed");

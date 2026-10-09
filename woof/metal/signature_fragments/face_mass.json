@@ -1,0 +1,29 @@
+{
+  "kernels": [
+    {
+      "name": "average_mass_faces",
+      "module": "face_mass",
+      "source": "woof/metal/shaders/face_mass.metal",
+      "cuda_source": "woof/core/kernels/face_mass.cu",
+      "cuda_symbol": "average_mass_faces",
+      "resources": [
+        ["mu", "float", "read"],
+        ["out", "float", "read_write"]
+      ],
+      "shapes": {
+        "mu": [["ny", "nx"]],
+        "out": [["ny", "nx+1"], ["ny+1", "nx"]]
+      },
+      "parameters": [
+        ["yface", "int32"],
+        ["boundary_x", "int32"],
+        ["boundary_y", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

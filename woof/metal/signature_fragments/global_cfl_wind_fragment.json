@@ -1,0 +1,25 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel.cfl",
+      "layout_version": 1,
+      "module": "global_cfl_wind_fragment",
+      "name": "global_cfl_wind_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["u", "float64_bits", "read"],
+        ["v", "float64_bits", "read"],
+        ["wind_speed", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "u": [["any_1d"]],
+        "v": [["any_1d"]],
+        "wind_speed": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_cfl_wind_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "_doc": "Stored 2-D planes that hold observations, not model output. Read by rustwx-products/src/viewer.rs. A var: map of a plane named here is titled by its row, never by its stored name, so an observation drawn beside model panels says what observed it. `plane` is matched against the stored plane's name with or without the wrf_ prefix, case-insensitively; `{n}` in it stands for one run of digits (the satellite number), and the title repeats those digits where it says `{n}`. `wears` names the model product whose colour table the plane is drawn with, so the observation shares the model panels' scale; it applies only while the plane is stored in `units`, which is the unit that colour table is calibrated for, and otherwise the plane keeps the auto-ranged ramp under its row's title. A plane with no `wears` keeps the auto-ranged ramp. Adding an observation plane is a row.",
+  "planes": [
+    { "plane": "goes{n}_low_cloud", "title": "GOES-{n} low cloud", "units": "%", "wears": "low_cloud_cover" },
+    { "plane": "goes{n}_fog_btd", "title": "GOES-{n} night fog difference, 10.3 minus 3.9 um" },
+    { "plane": "goes{n}_bt13", "title": "GOES-{n} 10.3 um brightness temperature" },
+    { "plane": "goes{n}_vis", "title": "GOES-{n} 0.64 um reflectance" }
+  ]
+}

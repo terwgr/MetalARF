@@ -1,0 +1,53 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/physics/reference.py",
+      "cuda_symbol": "ReferencePhysics._screen_level_diagnostics",
+      "layout_version": 1,
+      "module": "global_screen_diagnostics_resident_fragment",
+      "name": "global_screen_diagnostics_resident_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["u", "float64_bits", "read"],
+        ["v", "float64_bits", "read"],
+        ["theta", "float64_bits", "read"],
+        ["exner", "float64_bits", "read"],
+        ["qv", "float64_bits", "read"],
+        ["p_full", "float64_bits", "read"],
+        ["p_surface", "float64_bits", "read"],
+        ["skin_temperature", "float64_bits", "read"],
+        ["land_fraction", "float64_bits", "read"],
+        ["soil_wetness", "float64_bits", "read"],
+        ["roughness", "float64_bits", "read"],
+        ["thermodynamic_constants", "float64_bits", "read"],
+        ["t2", "float64_bits", "read_write"],
+        ["th2", "float64_bits", "read_write"],
+        ["q2", "float64_bits", "read_write"],
+        ["u10", "float64_bits", "read_write"],
+        ["v10", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "u": [["any_1d"]],
+        "v": [["any_1d"]],
+        "theta": [["any_1d"]],
+        "exner": [["any_1d"]],
+        "qv": [["any_1d"]],
+        "p_full": [["any_1d"]],
+        "p_surface": [["any_1d"]],
+        "skin_temperature": [["any_1d"]],
+        "land_fraction": [["any_1d"]],
+        "soil_wetness": [["any_1d"]],
+        "roughness": [["any_1d"]],
+        "thermodynamic_constants": [["any_1d"]],
+        "t2": [["any_1d"]],
+        "th2": [["any_1d"]],
+        "q2": [["any_1d"]],
+        "u10": [["any_1d"]],
+        "v10": [["any_1d"]]
+      },
+      "source": "woof/metal/shaders/global_screen_diagnostics_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

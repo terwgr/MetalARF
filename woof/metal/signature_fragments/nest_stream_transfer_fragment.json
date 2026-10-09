@@ -1,0 +1,48 @@
+{
+  "kernels": [
+    {
+      "name": "nest_rect_gather_f32",
+      "module": "nest_family",
+      "source": "woof/metal/shaders/nest_stream_transfer_fragment.metal",
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_rect_gather_f32",
+      "resources": [
+        ["source_a", "float", "read"], ["packed_a", "float", "read_write"]
+      ],
+      "shapes": {
+        "source_a": [["nz", "source_ny", "source_nx"]],
+        "packed_a": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["j0", "int32"], ["i0", "int32"], ["ny", "int32"],
+        ["nx", "int32"], ["nz", "int32"], ["source_ny", "int32"],
+        ["source_nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    },
+    {
+      "name": "nest_rect_scatter_f32",
+      "module": "nest_family",
+      "source": "woof/metal/shaders/nest_stream_transfer_fragment.metal",
+      "cuda_source": "woof/core/kernels/nest.cu",
+      "cuda_symbol": "nest_rect_scatter_f32",
+      "resources": [
+        ["packed_a", "float", "read"], ["target_a", "float", "read_write"]
+      ],
+      "shapes": {
+        "packed_a": [["nz", "ny", "nx"]],
+        "target_a": [["nz", "target_ny", "target_nx"]]
+      },
+      "parameters": [
+        ["j0", "int32"], ["i0", "int32"], ["ny", "int32"],
+        ["nx", "int32"], ["nz", "int32"], ["target_ny", "int32"],
+        ["target_nx", "int32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["wrf-exact"]
+    }
+  ]
+}

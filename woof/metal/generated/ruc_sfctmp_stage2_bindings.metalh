@@ -1,0 +1,28 @@
+// Generated from kernel_signatures.json; layout c0e22e7be702da826b61755f0522c43f14496c14c0666fcd6adb4f6eddcf85c1.
+struct RucSfctmpStage2Resources {
+    device uint *raw [[id(0)]];
+    device ulong *flags [[id(1)]];
+};
+struct RucSfctmpStage2Params {
+    int n;
+    int run_base;
+    int alive_base;
+    int int_base;
+    int table_base;
+    int table_offset_rstbl;
+    int table_offset_rgltbl;
+    int table_offset_z0tbl;
+    int table_offset_lemitbl;
+    int table_offset_tbq;
+    int table_offset_zshalf;
+    float delt;
+    float c1sn;
+    float c2sn;
+    float rsmax;
+    int isice;
+    int urban;
+    int ncategory;
+    int limit;
+    int forms;
+};
+static_assert(sizeof(RucSfctmpStage2Params) == 80, "ruc_sfctmp_stage2 parameter ABI size changed");

@@ -1,0 +1,35 @@
+{
+  "kernels": [
+    {
+      "name": "hex_pressure_perturbation",
+      "module": "hex_diagnostics",
+      "source": "woof/metal/shaders/hex_pressure_perturbation_fragment.metal",
+      "cuda_source": "woof/hex/driver.py",
+      "cuda_symbol": "_pressure_perturbation",
+      "resources": [
+        ["pressure_perturbation", "float", "write"],
+        ["exner", "float", "read"],
+        ["rho_theta_perturbation", "float", "read"],
+        ["rho_theta_base", "float", "read"],
+        ["exner_base", "float", "read"],
+        ["zz", "float", "read"]
+      ],
+      "shapes": {
+        "pressure_perturbation": [["nlev", "ncells"]],
+        "exner": [["nlev", "ncells"]],
+        "rho_theta_perturbation": [["nlev", "ncells"]],
+        "rho_theta_base": [["nlev", "ncells"]],
+        "exner_base": [["nlev", "ncells"]],
+        "zz": [["nlev"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["rgas", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout bc1a2a4101b262daaff31c4b0f0ce4e2eea2bd24707899f1eccb57736e131b60.
+struct GlobalSemilagThermodynamicsFragmentResources {
+    device const ulong *theta [[id(0)]];
+    device const ulong *pressure_full [[id(1)]];
+    device const ulong *qv [[id(2)]];
+    device const ulong *qc [[id(3)]];
+    device const ulong *qr [[id(4)]];
+    device const ulong *qi [[id(5)]];
+    device const ulong *qs [[id(6)]];
+    device const ulong *qg [[id(7)]];
+    device ulong *temperature [[id(8)]];
+    device ulong *virtual_temperature [[id(9)]];
+};
+struct GlobalSemilagThermodynamicsFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalSemilagThermodynamicsFragmentParams) == 4, "global_semilag_thermodynamics_fragment parameter ABI size changed");

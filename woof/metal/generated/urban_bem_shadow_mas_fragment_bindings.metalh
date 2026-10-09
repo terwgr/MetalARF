@@ -1,0 +1,25 @@
+// Generated from kernel_signatures.json; layout 8efefb555b84ee12548f4fbff65465302c5988fcc8f536ac4cf75f917523263a.
+struct UrbanBemShadowMasFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const int *utype [[id(1)]];
+    device const int *class_int [[id(2)]];
+    device const int *nzu_class [[id(3)]];
+    device const float *z_u [[id(4)]];
+    device const float *ws [[id(5)]];
+    device const float *drst [[id(6)]];
+    device const float *ss [[id(7)]];
+    device const float *pb [[id(8)]];
+    device const float *swddir [[id(9)]];
+    device const float *cosz [[id(10)]];
+    device const float *hour_angle [[id(11)]];
+    device const float *latitude [[id(12)]];
+    device float *rsw [[id(13)]];
+    device float *rsg [[id(14)]];
+    device int *error [[id(15)]];
+};
+struct UrbanBemShadowMasFragmentParams {
+    int ncol;
+    int nurbm;
+    float declin;
+};
+static_assert(sizeof(UrbanBemShadowMasFragmentParams) == 12, "urban_bem_shadow_mas_fragment parameter ABI size changed");

@@ -1,0 +1,41 @@
+{
+  "kernels": [{
+    "name": "urban_bep_bem_pv_solve_fragment",
+    "module": "urban_bep_bem_pv_solve_fragment",
+    "source": "woof/metal/shaders/urban_bep_bem_pv_solve_fragment.metal",
+    "cuda_source": "woof/core/kernels/urban_bem.cuh",
+    "cuda_symbol": "bem_hsfluxpv (1010-1084) and PV contribution in bb_buildings (2832-2888)",
+    "resources": [
+      ["active_cols", "int32", "read"],
+      ["utype", "int32", "read"],
+      ["building_nlev", "int32", "read"],
+      ["class_float", "float", "read"],
+      ["interp", "float", "read"],
+      ["tr_av", "float", "read"],
+      ["tpv", "float", "read_write"],
+      ["swdown", "float", "read"],
+      ["glw", "float", "read"],
+      ["flat_thb", "float", "read_write"],
+      ["pv_energy", "float", "read_write"],
+      ["pv_hspv", "float", "read_write"]
+    ],
+    "shapes": {
+      "active_cols": [["ncol"]],
+      "utype": [["ncol"]],
+      "building_nlev": [["ncol", 15]],
+      "class_float": [["any_1d"]],
+      "interp": [["ncol", 7, 18]],
+      "tr_av": [["ncol", 18, 2]],
+      "tpv": [["ncol", 18, 2]],
+      "swdown": [["ncol"]],
+      "glw": [["ncol"]],
+      "flat_thb": [["ncol", 2, 18]],
+      "pv_energy": [["ncol", 15]],
+      "pv_hspv": [["ncol", 15]]
+    },
+    "parameters": [["ncol", "int32"], ["dt", "float32"], ["cp_u", "float32"]],
+    "threads_per_group": 64,
+    "layout_version": 1,
+    "arithmetic_policies": ["soft32"]
+  }]
+}

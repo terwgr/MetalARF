@@ -1,0 +1,7 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "global_insitu_energy_columns_fragment_bindings.metalh"
+#include "global_insitu_energy_band_columns_fragment_bindings.metalh"
+#include "global_insitu_energy_reduce_fragment_bindings.metalh"
+#include "global_insitu_energy_finalize_fragment_bindings.metalh"
+#include "global_insitu_energy_mask_modes_fragment_bindings.metalh"
+#include "global_insitu_energy_parseval_fragment_bindings.metalh"

@@ -1,0 +1,23 @@
+// Generated from kernel_signatures.json; layout 00921d4ee99a88a6f060b14916277379f8b3f3d1e34223454e9639917a0e0e4a.
+struct UrbanBemInteriorRadiationFragmentResources {
+    device const float *rswal [[id(0)]];
+    device const float *surwal [[id(1)]];
+    device const float *twal_int [[id(2)]];
+    device const float *twin [[id(3)]];
+    device float *rsint [[id(4)]];
+    device float *rlint [[id(5)]];
+    device int *error [[id(6)]];
+};
+struct UrbanBemInteriorRadiationFragmentParams {
+    int nitem;
+    float albwal;
+    float albwin;
+    float emwal;
+    float emwin;
+    float sigma;
+    float pwin;
+    float bw;
+    float bl;
+    float zw;
+};
+static_assert(sizeof(UrbanBemInteriorRadiationFragmentParams) == 40, "urban_bem_interior_radiation_fragment parameter ABI size changed");

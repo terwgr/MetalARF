@@ -1,0 +1,13 @@
+// Generated from kernel_signatures.json; layout fb076b4418adb2267ea15891f7e917a1a9548534391bb2d62b64c61a486a954f.
+struct ThompsonAaNctenBalanceResources {
+    device const float *qc_entry [[id(0)]];
+    device const float *qc_after [[id(1)]];
+    device const float *nc_entry [[id(2)]];
+    device const float *density [[id(3)]];
+    device float *ncten [[id(4)]];
+};
+struct ThompsonAaNctenBalanceParams {
+    float dt;
+    int n;
+};
+static_assert(sizeof(ThompsonAaNctenBalanceParams) == 8, "thompson_aa_ncten_balance parameter ABI size changed");

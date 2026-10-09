@@ -1,0 +1,51 @@
+{
+  "kernels": [
+    {
+      "name": "hex_acoustic_edge_update",
+      "module": "hex_acoustic",
+      "source": "woof/metal/shaders/hex_acoustic_edge_update_fragment.metal",
+      "cuda_source": "woof/hex/acoustic.py",
+      "cuda_symbol": "advance_acoustic_step.edge_update",
+      "resources": [
+        ["ru_p", "float", "read_write"],
+        ["ru_avg", "float", "read_write"],
+        ["tend_ru", "float", "read"],
+        ["rtheta_pp", "float", "read"],
+        ["rho_pp", "float", "read"],
+        ["zz", "float", "read"],
+        ["exner", "float", "read"],
+        ["zxu", "float", "read"],
+        ["cqu", "float", "read"],
+        ["cells_on_edge", "int32", "read"],
+        ["dc_edge", "float", "read"],
+        ["specified_zone_edge", "float", "read"]
+      ],
+      "shapes": {
+        "ru_p": [["nlev", "nedges"]],
+        "ru_avg": [["nlev", "nedges"]],
+        "tend_ru": [["nlev", "nedges"]],
+        "rtheta_pp": [["nlev", "ncells"]],
+        "rho_pp": [["nlev", "ncells"]],
+        "zz": [["nlev", "ncells"]],
+        "exner": [["nlev", "ncells"]],
+        "zxu": [["nlev", "nedges"]],
+        "cqu": [["nlev", "nedges"]],
+        "cells_on_edge": [["nedges", 2]],
+        "dc_edge": [["nedges"]],
+        "specified_zone_edge": [["nedges"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["nedges", "int32"],
+        ["small_step", "int32"],
+        ["dts", "float32"],
+        ["c2", "float32"],
+        ["gravity", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

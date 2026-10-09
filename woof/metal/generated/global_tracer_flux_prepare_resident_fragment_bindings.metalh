@@ -1,0 +1,17 @@
+// Generated from kernel_signatures.json; layout 1c4680184cb943d2ec6b0a9f469721eccea48b6c9baf730dda57e8b90542b6f2.
+struct GlobalTracerFluxPrepareResidentFragmentResources {
+    device const ulong *flux_u [[id(0)]];
+    device const ulong *flux_v [[id(1)]];
+    device const ulong *omega [[id(2)]];
+    device const ulong *x_scale [[id(3)]];
+    device const ulong *y_face [[id(4)]];
+    device ulong *psi_x [[id(5)]];
+    device ulong *psi_y [[id(6)]];
+    device ulong *psi_z [[id(7)]];
+};
+struct GlobalTracerFluxPrepareResidentFragmentParams {
+    int nlevel;
+    int nlatitude;
+    int nlongitude;
+};
+static_assert(sizeof(GlobalTracerFluxPrepareResidentFragmentParams) == 12, "global_tracer_flux_prepare_resident_fragment parameter ABI size changed");

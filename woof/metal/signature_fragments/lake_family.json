@@ -1,0 +1,542 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/lake.cu",
+      "cuda_symbol": "lake_init_columns",
+      "layout_version": 1,
+      "module": "lake_family",
+      "name": "lake_init_columns",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "use_depth",
+          "int32"
+        ],
+        [
+          "depth_flag",
+          "int32"
+        ],
+        [
+          "default_depth",
+          "float32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
+        ],
+        [
+          "iswater",
+          "int32"
+        ],
+        [
+          "lake_min_elev",
+          "float32"
+        ],
+        [
+          "latitude_present",
+          "int32"
+        ],
+        [
+          "state_words",
+          "int32"
+        ],
+        [
+          "static_words",
+          "int32"
+        ],
+        [
+          "two",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "lakemask",
+          "float",
+          "read"
+        ],
+        [
+          "isltyp",
+          "int32",
+          "read"
+        ],
+        [
+          "lake_depth",
+          "float",
+          "read"
+        ],
+        [
+          "tsk",
+          "float",
+          "read"
+        ],
+        [
+          "snow",
+          "float",
+          "read"
+        ],
+        [
+          "xice",
+          "float",
+          "read_write"
+        ],
+        [
+          "lake_columns",
+          "float",
+          "read_write"
+        ],
+        [
+          "lake_static",
+          "float",
+          "read_write"
+        ],
+        [
+          "lake_latitude",
+          "float",
+          "read"
+        ],
+        [
+          "ivgtyp",
+          "int32",
+          "read_write"
+        ],
+        [
+          "xland",
+          "float",
+          "read_write"
+        ],
+        [
+          "errors",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "lakemask": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "isltyp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lake_depth": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tsk": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xice": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lake_latitude": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ivgtyp": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xland": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lake_columns": [
+          [
+            "state_words",
+            "ny",
+            "nx"
+          ]
+        ],
+        "lake_static": [
+          [
+            "static_words",
+            "ny",
+            "nx"
+          ]
+        ],
+        "errors": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/lake_family.metal",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/lake.cu",
+      "cuda_symbol": "lake_step_columns",
+      "layout_version": 1,
+      "module": "lake_family",
+      "name": "lake_step_columns",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
+        ],
+        [
+          "iswater",
+          "int32"
+        ],
+        [
+          "lake_min_elev",
+          "float32"
+        ],
+        [
+          "state_words",
+          "int32"
+        ],
+        [
+          "static_words",
+          "int32"
+        ],
+        [
+          "two",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "lakemask",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "p_interface",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "glw",
+          "float",
+          "read"
+        ],
+        [
+          "emiss",
+          "float",
+          "read"
+        ],
+        [
+          "precipitation",
+          "float",
+          "read"
+        ],
+        [
+          "pending_rainbl",
+          "float",
+          "read"
+        ],
+        [
+          "swdown",
+          "float",
+          "read"
+        ],
+        [
+          "albedo",
+          "float",
+          "read_write"
+        ],
+        [
+          "latitude",
+          "float",
+          "read"
+        ],
+        [
+          "lake_columns",
+          "float",
+          "read_write"
+        ],
+        [
+          "lake_static",
+          "float",
+          "read"
+        ],
+        [
+          "errors",
+          "int32",
+          "read_write"
+        ],
+        [
+          "hfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "lh",
+          "float",
+          "read_write"
+        ],
+        [
+          "grdflx",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsk",
+          "float",
+          "read_write"
+        ],
+        [
+          "qfx",
+          "float",
+          "read_write"
+        ],
+        [
+          "t2",
+          "float",
+          "read_write"
+        ],
+        [
+          "th2",
+          "float",
+          "read_write"
+        ],
+        [
+          "q2",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "lakemask": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "u": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "glw": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "emiss": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "precipitation": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "pending_rainbl": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "swdown": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "albedo": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "latitude": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "lh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "grdflx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tsk": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "t2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "th2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "q2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_interface": [
+          [
+            "two",
+            "ny",
+            "nx"
+          ]
+        ],
+        "lake_columns": [
+          [
+            "state_words",
+            "ny",
+            "nx"
+          ]
+        ],
+        "lake_static": [
+          [
+            "static_words",
+            "ny",
+            "nx"
+          ]
+        ],
+        "errors": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/lake_family.metal",
+      "threads_per_group": 32
+    }
+  ]
+}

@@ -1,0 +1,890 @@
+"""Nest spawn-at-trigger: a dormant nest's WHEN and WHERE.
+
+:mod:`woof.core.storm_tracking` decides when and where an EXISTING nest
+moves.  This module is the same decision for a nest that does not exist
+yet: a ``[[domain]]`` declared with a ``spawn`` table is DORMANT -- fully
+declared (size, resolution, physics, a placeholder placement), reserved
+in the memory plan at startup exactly as if it existed, and integrating
+nothing -- until its trigger fires on the RUNNING PARENT'S OWN FIELDS,
+at which point it materializes at the trigger-chosen placement and is a
+static nest from then on ([relocation.follow] takes over if configured).
+
+RESERVATION, STATED PLAINLY.  A declared-but-never-triggered nest costs
+its full reserved VRAM for the whole run and zero compute.  That is the
+design, not an accident: the reservation is what makes VRAM
+deterministic, lets preflight refuse accurately at planning time, and
+makes spawning an ACTIVATION rather than a mid-run allocation that can
+OOM after hours of integration.  ``woof check`` says this per dormant
+domain (:func:`woof.core.preflight.check_advisories`).
+
+THE SEAM (the spawn-provider contract).  The runner side -- the same
+cadence loop that consumes :class:`~woof.core.storm_tracking
+.StormTracker` -- consumes a :class:`SpawnController` through one call,
+evaluated once per relocation cadence (a cycle boundary, never
+mid-step)::
+
+    controller.evaluate(grid_id, parent_state, t,
+                        active_footprints=...) -> SpawnEvent | None
+
+``parent_state`` is the dormant domain's PARENT's live state; ``t`` is
+model seconds since the experiment start (model time, so the window
+arithmetic is deterministic); ``active_footprints`` is where the
+parent's LIVE children currently sit, as
+:class:`~woof.core.storm_tracking.NestFootprint`-coercible objects --
+position state lives with the runner, exactly as it does for the
+tracker, so this module never disagrees with the runner about the tree.
+A returned :class:`SpawnEvent` names the domain and the chosen
+whole-parent-cell placement; the runner materializes it through
+:func:`woof.ingest.nest_spawn_init.spawn_child_from_parent` and the
+leg/schedule surgery of :func:`woof.experiment.active_experiment`.  A
+controller proposes; it never builds anything.
+
+MULTIPLE DORMANT NESTS are first-class: each ``[[domain]]`` carries its
+own trigger and its own reservation, and two nests must be able to fire
+on two different storms.  Two rules provide that:
+
+- per-nest search boxes (``search_box``, or the declared footprint plus
+  the ``[relocation.follow]`` margin, or the whole parent); and
+- exclusion: a trigger IGNORES signal inside another ACTIVE nest's
+  footprint on the SAME parent grid -- the simplest accurate rule for
+  "that storm is taken".  A footprint is cell numbers on one grid, so it
+  is only ever applied to watches on that grid
+  (:attr:`~woof.core.storm_tracking.NestFootprint.parent_id`).
+  :meth:`SpawnController.evaluate_all` additionally feeds each event
+  fired at a boundary into the exclusion set of the nests on the same
+  parent evaluated after it (grid_id order), so two triggers at one
+  boundary cannot claim the same centroid.
+
+CONFIG.  ``spawn = { ... }`` inline table on the dormant ``[[domain]]``:
+``trigger`` (``"uh"`` | ``"reflectivity"`` | ``"pressure"`` |
+``"time"``).  Field triggers require ``threshold`` (m2 s-2 for uh, dBZ
+for reflectivity; see below for pressure), ``earliest_s`` and
+``latest_s`` (the model-time window; after ``latest_s`` the watch closes
+and the nest never spawns), and admit an optional ``search_box = [i_lo,
+j_lo, i_hi, j_hi]`` (1-based inclusive parent cells).  ``trigger =
+"time"`` is the manual, deterministic form for testability: it requires
+``at_s`` alone and spawns at the DECLARED placement at the first cadence
+at or after ``at_s``.  Every key is honored or refused, never ignored,
+and the constructed config echoes its values
+(:meth:`SpawnConfig.to_json`).
+
+THE INVERTED TRIGGER.  ``trigger = "pressure"`` is the birth side a
+tropical cyclone was missing: ``[relocation.follow]`` could ride a
+vortex all day, and nothing could decide to OPEN the nest, because both
+of the other signals are maxima and a cyclone is a minimum.  It carries
+the follow block's own two optional knobs, validated by the same
+function (:func:`woof.core.storm_tracking.normalise_pressure_surface`)
+so the two tables cannot draw the units differently:
+
+``level_hpa``
+    which surface the vortex is looked for ON.  Absent is
+    :data:`~woof.core.storm_tracking.DEFAULT_LEVEL_HPA` (850 hPa),
+    where ``threshold`` is METRES of geopotential height above the
+    search box's own minimum; ``level_hpa = 0`` is the sea-level
+    reduction, the one form whose ``threshold`` is an absolute hPa
+    ceiling.  The two bands are disjoint, so a config that means one and
+    would be read as the other refuses at load rather than spawning on
+    the wrong field.  ONE surface: the extremum cell is what claims a
+    storm under the exclusion rule above, and a deep-layer mean of
+    per-level centres has none.
+``radius_km``
+    how far from the extremum the centroid may draw (default 50 km).
+    Refused under ``uh``/``reflectivity``, whose centroid is already
+    bounded by the footprint-sized window around the loudest cell.
+
+Under ``level_hpa`` the threshold is RELATIVE, so some cell always
+qualifies; the watch therefore fires only when the search box's own
+signal SPAN reaches ``threshold``.  A flat box is a no-signal, not a
+spawn at the box's own centre.
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+from dataclasses import dataclass
+
+import numpy as np
+
+from woof.core.uh_diag import UH_SPAWN_WINDOW_SLOT
+from woof.core.storm_tracking import (DEFAULT_CENTROID_RADIUS_KM,
+                                       RADIUS_KM_MAX, RADIUS_KM_MIN,
+                                       NestFootprint, is_minimum_signal,
+                                       locate_signal,
+                                       normalise_pressure_surface,
+                                       pressure_surface_json,
+                                       radius_in_cells, signal_extremum,
+                                       signal_plane, signal_span)
+
+#: Versioned label carried by every receipt this module emits.
+SPAWN_CONTRACT = "gpuwm-nest-spawn.v1"
+
+#: The trigger vocabulary: the tracker's three field signals, plus the
+#: manual deterministic time trigger.
+#:
+#: ``"pressure"`` is the one INVERTED trigger -- a cyclone is a minimum,
+#: not a maximum -- and it is what gives a tropical cyclone a birth side
+#: to match the follow side it already had.  Before it, a dormant nest
+#: could ride a vortex all day and nothing could decide to open it.
+SPAWN_TRIGGERS = ("uh", "reflectivity", "pressure", "time")
+
+#: Keys of the ``spawn`` inline table.  Unknown keys refuse.
+SPAWN_KEYS = frozenset({
+    "trigger", "threshold", "search_box", "earliest_s", "latest_s", "at_s",
+    # PRESSURE ONLY, and the same two knobs [relocation.follow] carries:
+    # which surface the vortex is looked for on, and how far from its
+    # extremum the centroid may draw.
+    "level_hpa", "radius_km",
+})
+
+_LOG = logging.getLogger("gpuwm.nest_spawn")
+
+
+class SpawnRefusal(ValueError):
+    """A spawn request this module will not serve quietly."""
+
+
+# ---------------------------------------------------------------------------
+# Config: the [[domain]] spawn table
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SpawnConfig:
+    """The validated ``spawn`` table of one dormant ``[[domain]]``.
+
+    ``threshold`` is in the trigger field's own units.  ``search_box``
+    is 1-based inclusive parent-cell bounds ``(i_lo, j_lo, i_hi,
+    j_hi)``; ``None`` defers to the declared footprint plus the
+    ``[relocation.follow]`` margin when a follow block exists, else to
+    the whole parent.  ``at_s`` exists only for ``trigger = "time"``.
+    """
+
+    trigger: str
+    threshold: float | None = None
+    search_box: tuple[int, int, int, int] | None = None
+    earliest_s: float | None = None
+    latest_s: float | None = None
+    at_s: float | None = None
+    #: The surface the vortex is looked for ON, under ``trigger =
+    #: "pressure"``.  ``None`` on the way IN means "not configured" and
+    #: becomes ``(DEFAULT_LEVEL_HPA,)``; ``None`` on the way OUT means
+    #: SEA LEVEL, asked for as ``level_hpa = 0``.  The two never overlap:
+    #: after ``__post_init__`` there is no such thing as "not
+    #: configured".  Exactly :class:`~woof.core.storm_tracking
+    #: .FollowConfig`'s convention, through the same validator.
+    level_hpa: "float | tuple[float, ...] | None" = None
+    #: How far from the extremum the centroid may draw, in kilometres.
+    #: ``None`` on the way IN under a pressure trigger becomes
+    #: :data:`~woof.core.storm_tracking.DEFAULT_CENTROID_RADIUS_KM`;
+    #: it stays ``None`` for the maximum triggers, which take their
+    #: centroid from a footprint-sized window and are bounded that way.
+    radius_km: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.trigger not in SPAWN_TRIGGERS:
+            raise ValueError(
+                f"spawn trigger must be one of {SPAWN_TRIGGERS}, got "
+                f"{self.trigger!r}")
+        if self.trigger == "time":
+            if self.at_s is None or not math.isfinite(float(self.at_s)) \
+                    or float(self.at_s) < 0.0:
+                raise ValueError(
+                    "spawn trigger = 'time' requires at_s, a finite "
+                    "non-negative model time in seconds, got "
+                    f"{self.at_s!r}")
+            stray = [name for name in
+                     ("threshold", "search_box", "earliest_s", "latest_s",
+                      "level_hpa", "radius_km")
+                     if getattr(self, name) is not None]
+            if stray:
+                raise ValueError(
+                    f"spawn trigger = 'time' refuses {stray}: the manual "
+                    "trigger spawns at the DECLARED placement at at_s and "
+                    "reads no field, so a threshold or window on it would "
+                    "be a value nobody consumes")
+            return
+        if self.at_s is not None:
+            raise ValueError(
+                f"spawn trigger = {self.trigger!r} refuses at_s; the "
+                "field trigger decides its own instant. Use trigger = "
+                "'time' for a manual spawn")
+        if self.threshold is None or not math.isfinite(float(self.threshold)):
+            raise ValueError(
+                f"spawn trigger = {self.trigger!r} requires a finite "
+                f"threshold in the field's own units, got "
+                f"{self.threshold!r}")
+        for name in ("earliest_s", "latest_s"):
+            value = getattr(self, name)
+            if value is None or not math.isfinite(float(value)) \
+                    or float(value) < 0.0:
+                raise ValueError(
+                    f"spawn {name} must be a finite non-negative model "
+                    f"time in seconds, got {value!r}; the window is chosen "
+                    "deliberately -- there are no defaults to inherit")
+        if float(self.latest_s) <= float(self.earliest_s):
+            raise ValueError(
+                f"spawn latest_s = {self.latest_s!r} must exceed "
+                f"earliest_s = {self.earliest_s!r}; an empty window is a "
+                "disabled feature wearing an enabled name")
+        if self.search_box is not None:
+            box = tuple(int(v) for v in self.search_box)
+            if len(box) != 4:
+                raise ValueError(
+                    "spawn search_box must be [i_lo, j_lo, i_hi, j_hi] "
+                    f"(1-based inclusive parent cells), got "
+                    f"{self.search_box!r}")
+            i_lo, j_lo, i_hi, j_hi = box
+            if i_lo < 1 or j_lo < 1 or i_hi < i_lo or j_hi < j_lo:
+                raise ValueError(
+                    f"spawn search_box {box} is not an ordered 1-based "
+                    "box: require 1 <= i_lo <= i_hi and 1 <= j_lo <= j_hi")
+            object.__setattr__(self, "search_box", box)
+        # -- which surface, and how wide the core is -----------------------
+        # ONE surface, not a deep-layer mean: the extremum cell is what
+        # claims a storm here (see the exclusion rule in the module
+        # docstring), and a mean of per-level centres has no extremum
+        # cell to claim one with.
+        levels, defaulted = normalise_pressure_surface(
+            self.level_hpa, field=self.trigger, threshold=self.threshold,
+            label="spawn", selector="trigger", allow_multiple=False)
+        object.__setattr__(self, "_level_defaulted", defaulted)
+        object.__setattr__(self, "level_hpa", levels)
+        if self.trigger != "pressure":
+            if self.radius_km is not None:
+                raise ValueError(
+                    f"spawn trigger = {self.trigger!r} refuses radius_km: "
+                    "a rotation or echo trigger takes its centroid from a "
+                    "footprint-sized window around the loudest cell, which "
+                    "is already the bound radius_km exists to impose. "
+                    "Setting one here would move the chosen placement of "
+                    "every config that has ever run this trigger, and buy "
+                    "nothing -- the unbounded region radius_km was added "
+                    "to close cannot arise inside a window that size.")
+        else:
+            radius = (DEFAULT_CENTROID_RADIUS_KM if self.radius_km is None
+                      else float(self.radius_km))
+            if not (RADIUS_KM_MIN <= radius <= RADIUS_KM_MAX):
+                raise ValueError(
+                    f"spawn radius_km = {self.radius_km!r} is outside "
+                    f"{RADIUS_KM_MIN}-{RADIUS_KM_MAX} km. It is how far "
+                    "from the signal's extremum the centroid may draw -- "
+                    "the size of the vortex, not of the parent. A tropical "
+                    "cyclone's core is 20-100 km; the default is "
+                    f"{DEFAULT_CENTROID_RADIUS_KM:g}.")
+            object.__setattr__(self, "radius_km", radius)
+
+    def to_json(self) -> dict[str, object]:
+        """Echo every configured value (the receipts' config record)."""
+        out: dict[str, object] = {
+            "contract": SPAWN_CONTRACT,
+            "trigger": self.trigger,
+        }
+        if self.trigger == "time":
+            out["at_s"] = float(self.at_s)
+            return out
+        out["threshold"] = float(self.threshold)
+        out["earliest_s"] = float(self.earliest_s)
+        out["latest_s"] = float(self.latest_s)
+        if self.search_box is not None:
+            out["search_box"] = [int(v) for v in self.search_box]
+        if self.trigger == "pressure":
+            out.update(pressure_surface_json(
+                self.level_hpa,
+                defaulted=bool(getattr(self, "_level_defaulted", False))))
+            out["radius_km"] = float(self.radius_km)
+        return out
+
+
+def _require_number(table: dict, key: str, source: str, label: str):
+    value = table[key]
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(
+            f"{key} in {label} of {source} must be a number, got {value!r}")
+    return value
+
+
+def build_spawn_config(table: dict, source: str, *,
+                       grid_id: int) -> SpawnConfig:
+    """Validate one parsed ``spawn`` inline table.
+
+    Honored or refused, never ignored: unknown keys are refused by name,
+    the keys each trigger requires are required by name, and a key a
+    trigger cannot consume is refused rather than dropped.
+    """
+    from woof.experiment import did_you_mean
+
+    label = f"[[domain]] grid_id={grid_id} spawn"
+    unknown = sorted(set(table) - SPAWN_KEYS)
+    if unknown:
+        named = ", ".join(
+            f"{key!r}{did_you_mean(key, SPAWN_KEYS)}" for key in unknown)
+        raise ValueError(
+            f"{label} of {source} does not have key(s) {named}; no key is "
+            "ignored, because a dropped key spawns a nest on a value "
+            "nobody chose.")
+    if "trigger" not in table:
+        raise ValueError(
+            f"{label} of {source} is missing the required key 'trigger' "
+            f"(one of {SPAWN_TRIGGERS}); present: {sorted(table)}.")
+    trigger = table["trigger"]
+    if not isinstance(trigger, str):
+        raise ValueError(
+            f"trigger in {label} of {source} must be a string, got "
+            f"{trigger!r}")
+    kwargs: dict[str, object] = {"trigger": trigger}
+    for key in ("threshold", "earliest_s", "latest_s", "at_s", "radius_km"):
+        if key in table:
+            kwargs[key] = float(_require_number(table, key, source, label))
+    if "level_hpa" in table:
+        raw = table["level_hpa"]
+        seq = raw if isinstance(raw, (list, tuple)) else [raw]
+        for index, item in enumerate(seq):
+            if isinstance(item, bool) or not isinstance(item, (int, float)):
+                where = (f"level_hpa[{index}]"
+                         if isinstance(raw, (list, tuple)) else "level_hpa")
+                raise ValueError(
+                    f"{where} in {label} of {source} must be a number in "
+                    f"hPa, got {item!r}")
+        kwargs["level_hpa"] = (tuple(float(v) for v in raw)
+                               if isinstance(raw, (list, tuple))
+                               else float(raw))
+    if "search_box" in table:
+        box = table["search_box"]
+        if (not isinstance(box, (list, tuple)) or len(box) != 4
+                or any(isinstance(v, bool) or not isinstance(v, int)
+                       for v in box)):
+            raise ValueError(
+                f"search_box in {label} of {source} must be a 4-integer "
+                f"array [i_lo, j_lo, i_hi, j_hi], got {box!r}")
+        kwargs["search_box"] = tuple(int(v) for v in box)
+    try:
+        return SpawnConfig(**kwargs)
+    except ValueError as err:
+        raise ValueError(f"{label} of {source}: {err}") from None
+
+
+# ---------------------------------------------------------------------------
+# The event a fired trigger produces
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SpawnEvent:
+    """One fired trigger: which domain, and where it materializes."""
+
+    grid_id: int
+    i_parent_start: int
+    j_parent_start: int
+    t: float
+    receipt: dict
+
+    @property
+    def position(self) -> tuple[int, int]:
+        return (int(self.i_parent_start), int(self.j_parent_start))
+
+
+# ---------------------------------------------------------------------------
+# One dormant nest's watch
+# ---------------------------------------------------------------------------
+
+class SpawnWatch:
+    """Trigger evaluation for ONE dormant domain.
+
+    Stateful in exactly two ways: whether it has fired (a spawn is a
+    one-shot) and whether its window has closed.  Everything else --
+    the parent state, the model time, where the live siblings sit --
+    arrives as arguments every call, so a watch can never disagree with
+    the runner about the world.
+    """
+
+    def __init__(self, config: SpawnConfig, declared: NestFootprint, *,
+                 keepout_cells: int, follow=None) -> None:
+        if not isinstance(config, SpawnConfig):
+            raise TypeError("config must be a SpawnConfig")
+        self.config = config
+        self.declared = NestFootprint.coerce(declared)
+        if int(keepout_cells) < 1:
+            raise SpawnRefusal(
+                f"keepout_cells must be >= 1 parent cell, got "
+                f"{keepout_cells!r}")
+        #: Parent rows the chosen placement keeps clear of the parent
+        #: edge on every side: the loader's clearance rule
+        #: (spec_bdy_width + blend_width), so a fired placement re-passes
+        #: the exact admission check a declared one did.
+        self.keepout_cells = int(keepout_cells)
+        self.follow = follow
+        self.fired = False
+        self.closed = False
+        self.receipts: list[dict] = []
+        self._receipt({"decision": "configured",
+                       "grid_id": int(self.declared.grid_id),
+                       "declared_placement": [
+                           int(self.declared.i_parent_start),
+                           int(self.declared.j_parent_start)],
+                       "keepout_cells": self.keepout_cells,
+                       "config": config.to_json()})
+
+    # -- receipts ----------------------------------------------------------
+
+    def _receipt(self, entry: dict) -> dict:
+        entry = {"contract": SPAWN_CONTRACT, **entry}
+        self.receipts.append(entry)
+        _LOG.info("nest-spawn %s", entry)
+        return entry
+
+    def drain_receipts(self) -> list[dict]:
+        out, self.receipts = self.receipts, []
+        return out
+
+    def rearm(self, *, t: float, episode: int) -> None:
+        """Return a one-shot watch to its declared dormant state."""
+        self.fired = False
+        self.closed = False
+        self._receipt({"decision": "rearmed", "grid_id": int(self.declared.grid_id),
+                       "t": float(t), "episode": int(episode)})
+
+    # -- geometry ----------------------------------------------------------
+
+    def _search_box(self, plane_shape) -> tuple[tuple[slice, slice], str]:
+        ny, nx = int(plane_shape[-2]), int(plane_shape[-1])
+        cfg = self.config
+        if cfg.search_box is not None:
+            i_lo, j_lo, i_hi, j_hi = cfg.search_box
+            j_slice = slice(max(0, j_lo - 1), min(ny, j_hi))
+            i_slice = slice(max(0, i_lo - 1), min(nx, i_hi))
+            if j_slice.start >= j_slice.stop or i_slice.start >= i_slice.stop:
+                raise SpawnRefusal(
+                    f"spawn search_box {cfg.search_box} lies outside the "
+                    f"parent plane {(ny, nx)}; the box and the parent "
+                    "state disagree about the tree geometry")
+            return (j_slice, i_slice), "explicit"
+        if self.follow is not None:
+            margin = int(getattr(self.follow, "search_margin_cells"))
+            return (self.declared.search_box(plane_shape, margin),
+                    "declared-footprint+follow-margin")
+        return ((slice(0, ny), slice(0, nx)), "whole-parent")
+
+    def _placement_bounds(self, plane_shape) -> tuple[int, int, int, int]:
+        """(i_min, i_max, j_min, j_max) admissible 1-based starts."""
+        ny, nx = int(plane_shape[-2]), int(plane_shape[-1])
+        fp = self.declared
+        span_i = int(fp.child_nx) // int(fp.parent_grid_ratio)
+        span_j = int(fp.child_ny) // int(fp.parent_grid_ratio)
+        need = self.keepout_cells
+        i_min, i_max = need + 1, nx - span_i + 1 - need
+        j_min, j_max = need + 1, ny - span_j + 1 - need
+        if i_min > i_max or j_min > j_max:
+            raise SpawnRefusal(
+                f"the declared d{fp.grid_id:02d} footprint "
+                f"({fp.child_nx}x{fp.child_ny} at ratio "
+                f"{fp.parent_grid_ratio}) cannot be placed anywhere in a "
+                f"{ny}x{nx} parent with {need} rows of edge clearance; "
+                "the nest is too large to spawn at all, which is a "
+                "configuration error, not a quiet storm")
+        return i_min, i_max, j_min, j_max
+
+    def _placement_from_centroid(self, ci: float, cj: float,
+                                 plane_shape) -> tuple[int, int, bool]:
+        """Center the footprint on the centroid, whole-parent-cell
+        aligned per leg-1's relocation convention, clamped to keepout."""
+        fp = self.declared
+        i_min, i_max, j_min, j_max = self._placement_bounds(plane_shape)
+        # leg-1 center convention: center = (start - 1) + span/2 with the
+        # donor span (nx - 1)/ratio, so start = centroid - span/2 + 1.
+        raw_i = ci - fp.span_parent_i / 2.0 + 1.0
+        raw_j = cj - fp.span_parent_j / 2.0 + 1.0
+        i_start = int(math.floor(raw_i + 0.5))
+        j_start = int(math.floor(raw_j + 0.5))
+        clamped_i = min(max(i_start, i_min), i_max)
+        clamped_j = min(max(j_start, j_min), j_max)
+        return (clamped_i, clamped_j,
+                clamped_i != i_start or clamped_j != j_start)
+
+    @staticmethod
+    def _mask_active_footprints(plane: np.ndarray, footprints,
+                                *, minimum: bool = False
+                                ) -> tuple[np.ndarray, list]:
+        """Erase signal a live nest already owns (the exclusion rule).
+
+        The fill is an INFINITY of the losing sign -- ``-inf`` where the
+        feature is a maximum, ``+inf`` where it is a minimum -- so the
+        masked cells lose every extremum search on either convention,
+        and :func:`~woof.core.storm_tracking.weighted_centroid`'s
+        finiteness mask drops them from the centroid on both.  A zero
+        fill would be the deepest low on the grid.
+        """
+        masked: list[dict] = []
+        if not footprints:
+            return plane, masked
+        out = np.array(plane, copy=True)
+        fill = np.inf if minimum else -np.inf
+        ny, nx = out.shape[-2], out.shape[-1]
+        for value in footprints:
+            fp = NestFootprint.coerce(value)
+            i0 = max(0, int(fp.i_parent_start) - 1)
+            j0 = max(0, int(fp.j_parent_start) - 1)
+            i1 = min(nx, int(math.ceil(i0 + fp.span_parent_i)) + 1)
+            j1 = min(ny, int(math.ceil(j0 + fp.span_parent_j)) + 1)
+            if i0 < i1 and j0 < j1:
+                out[..., j0:j1, i0:i1] = fill
+                masked.append({"grid_id": int(fp.grid_id),
+                               "cells": [[j0, j1], [i0, i1]]})
+        return out, masked
+
+    # -- the contract ------------------------------------------------------
+
+    def evaluate(self, parent_state, t: float, *,
+                 exclude_footprints=()) -> SpawnEvent | None:
+        """One cadence evaluation: a SpawnEvent, or None with a receipt."""
+        cfg = self.config
+        gid = int(self.declared.grid_id)
+        if self.fired:
+            return None
+        if cfg.trigger == "time":
+            if float(t) < float(cfg.at_s):
+                self._receipt({"decision": "waiting:before-at_s",
+                               "grid_id": gid, "t": float(t),
+                               "at_s": float(cfg.at_s)})
+                return None
+            self.fired = True
+            receipt = self._receipt({
+                "decision": "fired",
+                "grid_id": gid, "t": float(t),
+                "trigger": "time", "at_s": float(cfg.at_s),
+                "placement": [int(self.declared.i_parent_start),
+                              int(self.declared.j_parent_start)],
+                "placement_source": "declared",
+            })
+            return SpawnEvent(
+                grid_id=gid,
+                i_parent_start=int(self.declared.i_parent_start),
+                j_parent_start=int(self.declared.j_parent_start),
+                t=float(t), receipt=receipt)
+        if self.closed:
+            return None
+        if float(t) > float(cfg.latest_s):
+            self.closed = True
+            self._receipt({"decision": "window-closed", "grid_id": gid,
+                           "t": float(t), "latest_s": float(cfg.latest_s),
+                           "note": "the nest will never spawn; its "
+                                   "reservation remains held (activation "
+                                   "is the only thing that was declined)"})
+            return None
+        if float(t) < float(cfg.earliest_s):
+            self._receipt({"decision": "waiting:before-window",
+                           "grid_id": gid, "t": float(t),
+                           "earliest_s": float(cfg.earliest_s)})
+            return None
+        # THIS consumer's window, not the relocation runner's and not
+        # the history-reset diagnostic: a spawn watch evaluates on LEG
+        # boundaries, a different rhythm from the relocation cadence,
+        # so it owns and resets its own max-since-I-last-looked.
+        minimum = is_minimum_signal(cfg.trigger)
+        # THE SURFACE IS PART OF THE SIGNAL under a pressure trigger:
+        # levels_of() is empty for the sea-level form, which is the one
+        # the plane builder spells as level_hpa = None.
+        level = (cfg.level_hpa or (None,))[0] if minimum else None
+        plane = signal_plane(parent_state, cfg.trigger,
+                             uh_slot=UH_SPAWN_WINDOW_SLOT,
+                             level_hpa=level)
+        box, box_source = self._search_box(plane.shape)
+        plane_masked, masked = self._mask_active_footprints(
+            plane, exclude_footprints, minimum=minimum)
+        evidence: dict[str, object] = {
+            "grid_id": gid, "t": float(t),
+            "field": cfg.trigger, "threshold": float(cfg.threshold),
+            "search_box": [[int(box[0].start), int(box[0].stop)],
+                           [int(box[1].start), int(box[1].stop)]],
+            "search_box_source": box_source,
+            "excluded_active_footprints": masked,
+        }
+        if minimum:
+            evidence["level_hpa"] = None if level is None else float(level)
+        # RELATIVE OR ABSOLUTE, decided by the surface.  On an isobaric
+        # surface the threshold is metres of geopotential height above
+        # the search box's OWN minimum -- self-calibrating, because a
+        # 850 hPa height is ~1500 m in the deep tropics and ~1350 m in a
+        # cold airmass, and an absolute number would have to be re-tuned
+        # per case.  That self-calibration has one cost, and it is the
+        # same one woof.core.storm_tracking.centre_over_levels names:
+        # when the box is FLAT every cell clears `box minimum +
+        # threshold`, and the centroid of every cell in a box is the
+        # box's own centre -- which here would spawn a nest at its own
+        # declared placement on no storm at all.  The span test is the
+        # exact criterion for that ("span < threshold" IS "every cell
+        # qualifies"), so it decides whether there is a vortex before
+        # the centroid is asked where it is.
+        relative = minimum and level is not None
+        window = plane_masked[box[0], box[1]]
+        if relative:
+            span = signal_span(plane_masked, box)
+            evidence["signal_span"] = (None if span is None
+                                       else round(float(span), 4))
+            if span is None or span < float(cfg.threshold):
+                self._receipt({
+                    "decision": "no-signal", **evidence,
+                    "note": (
+                        "the search box spans "
+                        f"{0.0 if span is None else span:.3f} m against a "
+                        f"threshold of {float(cfg.threshold):g} m, so every "
+                        "cell in it would qualify and the centroid would be "
+                        "the box's own centre; there is no vortex in the "
+                        "box to be born on")})
+                return None
+        # TWO STORMS, ONE BOX: a box-wide weighted centroid of two
+        # exceedance regions lands BETWEEN them -- a birth position on
+        # neither storm.  So the strongest cell claims the nest first
+        # (the extremum within the box), and the centroid is then
+        # computed over a footprint-sized window around it: the position
+        # is the weighted center of THAT storm alone, which is also what
+        # makes the exclusion rule compose -- once a fired sibling masks
+        # storm one, the next watch's extremum is storm two.
+        with np.errstate(invalid="ignore"):
+            if not minimum:
+                qualifying = np.isfinite(window) & (
+                    window >= float(cfg.threshold))
+            else:
+                # ceiling: metres above the box minimum, or the absolute
+                # hPa ceiling of the sea-level form.  Cells at or BELOW
+                # it are the vortex.
+                finite = window[np.isfinite(window)]
+                if finite.size == 0:
+                    self._receipt({"decision": "no-signal", **evidence})
+                    return None
+                ceiling = (float(finite.min()) + float(cfg.threshold)
+                           if relative else float(cfg.threshold))
+                evidence["ceiling"] = round(ceiling, 4)
+                qualifying = np.isfinite(window) & (window <= ceiling)
+        if not bool(qualifying.any()):
+            self._receipt({"decision": "no-signal", **evidence})
+            return None
+        losing = np.inf if minimum else -np.inf
+        chosen = np.where(qualifying, window, losing)
+        peak_flat = int(np.argmin(chosen) if minimum else np.argmax(chosen))
+        peak_j, peak_i = np.unravel_index(peak_flat, window.shape)
+        peak_j = int(peak_j) + int(box[0].start)
+        peak_i = int(peak_i) + int(box[1].start)
+        half_j = max(1, int(math.ceil(self.declared.span_parent_j / 2.0)))
+        half_i = max(1, int(math.ceil(self.declared.span_parent_i / 2.0)))
+        local = (slice(max(box[0].start, peak_j - half_j),
+                       min(box[0].stop, peak_j + half_j + 1)),
+                 slice(max(box[1].start, peak_i - half_i),
+                       min(box[1].stop, peak_i + half_i + 1)))
+        evidence["peak_parent_ij"] = [peak_i, peak_j]
+        evidence["local_window"] = [
+            [int(local[0].start), int(local[0].stop)],
+            [int(local[1].start), int(local[1].stop)]]
+        # ONE centre-finder for the whole tree.  locate_signal owns the
+        # minimum inversion (negate the plane AND the threshold, so the
+        # weight becomes the pressure DEFICIT below the ceiling) and the
+        # relative-to-minimum ceiling; the maximum triggers fall straight
+        # through to the same weighted_centroid call they always made,
+        # with radius_cells None, so their answers do not move.
+        #
+        # The local window CONTAINS the box's extremum by construction,
+        # so its own minimum is the box's minimum and the relative
+        # ceiling computed inside is the one computed above.
+        radius_cells = (radius_in_cells(cfg.radius_km,
+                                        self.declared.parent_dx_m)
+                        if minimum else None)
+        found = locate_signal(plane_masked, cfg.trigger,
+                              float(cfg.threshold), local,
+                              relative_to_minimum=relative,
+                              radius_cells=radius_cells)
+        if found is None:
+            # Cannot happen while the peak qualifies; kept as a loud
+            # guard rather than an assumption.
+            self._receipt({"decision": "no-signal", **evidence})
+            return None
+        i_start, j_start, clamped = self._placement_from_centroid(
+            found["ci"], found["cj"], plane.shape)
+        self.fired = True
+        receipt = self._receipt({
+            "decision": "fired",
+            "trigger": cfg.trigger,
+            # "cells_above_threshold" reads literally for every maximum
+            # trigger and means "cells past the threshold" for pressure,
+            # where past is BELOW.  The key is kept rather than split so
+            # one receipt shape covers every trigger; "extremum_kind"
+            # says which side of the threshold qualified.
+            "cells_above_threshold": int(found["cells"]),
+            "max_value": round(signal_extremum(found, cfg.trigger), 3),
+            "extremum_kind": "minimum" if minimum else "maximum",
+            "extremum_units": ("m" if relative
+                               else ("hPa" if minimum else "field")),
+            "centroid_parent_ij": [round(float(found["ci"]), 3),
+                                   round(float(found["cj"]), 3)],
+            "placement": [int(i_start), int(j_start)],
+            "placement_source": "centroid",
+            "clamped_to_keepout": bool(clamped),
+            "keepout_cells": self.keepout_cells,
+            **evidence,
+        })
+        return SpawnEvent(grid_id=gid, i_parent_start=int(i_start),
+                          j_parent_start=int(j_start), t=float(t),
+                          receipt=receipt)
+
+
+# ---------------------------------------------------------------------------
+# The controller (the spawn provider)
+# ---------------------------------------------------------------------------
+
+class SpawnController:
+    """Every dormant nest of one experiment, behind the runner seam."""
+
+    def __init__(self, watches: dict[int, SpawnWatch],
+                 parent_of: dict[int, int]) -> None:
+        self.watches = dict(watches)
+        self.parent_of = dict(parent_of)
+
+    @classmethod
+    def from_experiment(cls, experiment) -> "SpawnController | None":
+        """The runner's one-line hookup, mirroring ``make_plan_provider``.
+
+        Returns ``None`` when the experiment declares no dormant nest.
+        The clearance keepout is the experiment's own admission rule
+        (``spec_bdy_width + blend_width``), so a fired placement
+        re-passes exactly the check a declared one did.
+        """
+        watches: dict[int, SpawnWatch] = {}
+        parent_of: dict[int, int] = {}
+        relocation = getattr(experiment, "relocation", None)
+        follow = getattr(relocation, "follow", None)
+        keepout = (int(getattr(experiment, "spec_bdy_width", 5))
+                   + int(getattr(experiment, "blend_width", 5)))
+        for dc in experiment.domains:
+            spawn = getattr(dc, "spawn", None)
+            if spawn is None:
+                continue
+            domain_follow = getattr(dc, "follow", None)
+            watches[int(dc.grid_id)] = SpawnWatch(
+                spawn, NestFootprint.coerce(dc), keepout_cells=keepout,
+                follow=(domain_follow.tracker if domain_follow is not None
+                        else (follow if getattr(relocation, "grid_id", None)
+                              in (None, dc.grid_id) else None)))
+            parent_of[int(dc.grid_id)] = int(dc.parent_id)
+        if not watches:
+            return None
+        return cls(watches, parent_of)
+
+    @property
+    def pending(self) -> tuple[int, ...]:
+        """Dormant domains still able to fire, in grid_id order."""
+        return tuple(sorted(
+            gid for gid, watch in self.watches.items()
+            if not watch.fired and not watch.closed))
+
+    @staticmethod
+    def _footprints_on(parent_id: int, footprints, *,
+                       grids) -> tuple[NestFootprint, ...]:
+        """The footprints counted on ``parent_id``'s grid, and only those.
+
+        A footprint's cells are indices on ONE grid.  A live d02 placed at
+        cells 30..50 of d01 says nothing about cells 30..50 of d02, so a
+        watch on d02 that masked them would hide a storm that no nest
+        owns and stay dormant with a ``no-signal`` receipt.  Each
+        footprint therefore goes only to the watches on the grid it is
+        counted on (:attr:`NestFootprint.parent_id`).
+
+        A hand-built footprint that names no grid belongs to the single
+        grid its caller is looking at.  When the watches of one call sit
+        on more than one grid (``grids``) it cannot be placed, and this
+        refuses rather than masking the same cell numbers on every grid.
+        """
+        out: list[NestFootprint] = []
+        for value in footprints:
+            fp = NestFootprint.coerce(value)
+            if fp.parent_id is None:
+                if len(grids) > 1:
+                    raise SpawnRefusal(
+                        f"the live nest d{int(fp.grid_id):02d}'s footprint "
+                        "does not say which grid its cells are counted on, "
+                        "and the dormant nests here watch grids "
+                        f"{sorted(int(g) for g in grids)}; applied to every "
+                        "grid it would hide a storm at the same cell numbers "
+                        "on a grid it does not cover.  Build it with "
+                        "NestFootprint.coerce(domain) or give it parent_id")
+                out.append(fp)
+            elif int(fp.parent_id) == int(parent_id):
+                out.append(fp)
+        return tuple(out)
+
+    def evaluate(self, grid_id: int, parent_state, t: float, *,
+                 active_footprints=()) -> SpawnEvent | None:
+        """Evaluate ONE dormant nest's trigger (the seam call).
+
+        Only the footprints counted on this nest's own parent grid are
+        excluded; a footprint of another grid covers other ground.
+        """
+        watch = self.watches.get(int(grid_id))
+        if watch is None:
+            raise SpawnRefusal(
+                f"grid_id {grid_id} is not a declared dormant nest; "
+                f"declared: {sorted(self.watches)}")
+        parent_id = self.parent_of[int(grid_id)]
+        return watch.evaluate(
+            parent_state, t,
+            exclude_footprints=self._footprints_on(
+                parent_id, active_footprints, grids={parent_id}))
+
+    def evaluate_all(self, parent_states, t: float, *,
+                     active_footprints=()) -> tuple[SpawnEvent, ...]:
+        """Evaluate every pending watch at one cadence boundary.
+
+        ``parent_states`` maps parent grid_id -> live parent state.
+        ``active_footprints`` are the live nests' footprints, each
+        carrying the grid it is counted on; a watch is given only the
+        ones on its own parent grid.  Watches are processed in grid_id
+        order and every event fired at this boundary immediately joins
+        the exclusion set of the later watches on the SAME parent grid,
+        so two nests cannot claim one storm even when both triggers
+        cross threshold on the same boundary, and a nest born on d01
+        never masks the cells of a watch on d02.
+        """
+        events: list[SpawnEvent] = []
+        grids = {self.parent_of[gid] for gid in self.pending}
+        exclusions = list(active_footprints)
+        for gid in self.pending:
+            parent_id = self.parent_of[gid]
+            if parent_id not in parent_states:
+                # Escalation ladders legitimately declare a dormant child of
+                # another dormant/retired SLOT.  Preserve the historical
+                # refusal for every other missing parent: only a declared
+                # watch proves that absence is intentional lifecycle state.
+                if parent_id not in self.watches:
+                    raise SpawnRefusal(
+                        f"no parent state supplied for d{gid:02d}'s parent "
+                        f"d{parent_id:02d}; supplied: {sorted(parent_states)}")
+                self.watches[gid]._receipt({
+                    "decision": "held:parent-not-live", "t": float(t),
+                    "grid_id": int(gid), "parent_id": int(parent_id)})
+                continue
+            event = self.watches[gid].evaluate(
+                parent_states[parent_id], t,
+                exclude_footprints=self._footprints_on(
+                    parent_id, exclusions, grids=grids))
+            if event is None:
+                continue
+            events.append(event)
+            declared = self.watches[gid].declared
+            exclusions.append(NestFootprint(
+                grid_id=gid,
+                i_parent_start=event.i_parent_start,
+                j_parent_start=event.j_parent_start,
+                child_nx=declared.child_nx, child_ny=declared.child_ny,
+                parent_grid_ratio=declared.parent_grid_ratio,
+                parent_dx_m=declared.parent_dx_m,
+                parent_id=int(parent_id)))
+        return tuple(events)
+
+    def drain_receipts(self) -> list[dict]:
+        out: list[dict] = []
+        for gid in sorted(self.watches):
+            out.extend(self.watches[gid].drain_receipts())
+        return out
+
+
+__all__ = [
+    "SPAWN_CONTRACT", "SPAWN_KEYS", "SPAWN_TRIGGERS", "SpawnConfig",
+    "SpawnController", "SpawnEvent", "SpawnRefusal", "SpawnWatch",
+    "build_spawn_config",
+]

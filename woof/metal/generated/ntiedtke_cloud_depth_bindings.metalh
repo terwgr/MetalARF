@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout 6ff71ce9735f2c80984efff655933493057f376b87797ef1309bbd7e97789d12.
+struct NtiedtkeCloudDepthResources {
+    device const int *ldcum [[id(0)]];
+    device const int *kcbot [[id(1)]];
+    device const int *kctop [[id(2)]];
+    device const float *paph [[id(3)]];
+    device const float *pdmfup [[id(4)]];
+    device int *ktype [[id(5)]];
+    device int *ictop0 [[id(6)]];
+    device float *prfl [[id(7)]];
+    device float *pmfd [[id(8)]];
+    device float *pmfds [[id(9)]];
+    device float *pmfdq [[id(10)]];
+    device float *pdmfdp [[id(11)]];
+    device float *pdpmel [[id(12)]];
+};
+struct NtiedtkeCloudDepthParams {
+    int ncol;
+    int klev;
+};
+static_assert(sizeof(NtiedtkeCloudDepthParams) == 8, "ntiedtke_cloud_depth parameter ABI size changed");

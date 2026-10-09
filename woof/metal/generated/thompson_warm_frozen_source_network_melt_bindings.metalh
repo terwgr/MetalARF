@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout 40d1f238b4d916c2ad52b42c8fa4079306ea3e41e12eeaee9d4f9b8b4f137c08.
+struct ThompsonWarmFrozenSourceNetworkMeltResources {
+    device float *qc [[id(0)]];
+    device float *qr [[id(1)]];
+    device float *nr [[id(2)]];
+    device float *qs [[id(3)]];
+    device float *qg [[id(4)]];
+    device float *graupel_number_per_kg [[id(5)]];
+    device float *graupel_melt_marker [[id(6)]];
+    device float *snow_melt_marker [[id(7)]];
+    device float *temperature [[id(8)]];
+    device const float *pressure [[id(9)]];
+    device float *qv [[id(10)]];
+    device const ulong *collision_rates [[id(11)]];
+    device ulong *cloud_state [[id(12)]];
+};
+struct ThompsonWarmFrozenSourceNetworkMeltParams {
+    float dt;
+    int n;
+};
+static_assert(sizeof(ThompsonWarmFrozenSourceNetworkMeltParams) == 8, "thompson_warm_frozen_source_network_melt parameter ABI size changed");

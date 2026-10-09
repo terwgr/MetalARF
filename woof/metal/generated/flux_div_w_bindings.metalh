@@ -1,0 +1,24 @@
+// Generated from kernel_signatures.json; layout 223a3061114d9ccbae61441b94f56784f7bfad1da72138dbbf0c0c59d4de1f1f.
+struct FluxDivWResources {
+    device const float *w [[id(0)]];
+    device const float *ru [[id(1)]];
+    device const float *rv [[id(2)]];
+    device const float *rw [[id(3)]];
+    device float *tend [[id(4)]];
+    device const float *rdn [[id(5)]];
+    device const float *fnm [[id(6)]];
+    device const float *fnp [[id(7)]];
+    device const float *msf [[id(8)]];
+};
+struct FluxDivWParams {
+    float dx_inv;
+    float dy_inv;
+    int nz;
+    int ny;
+    int nx;
+    int open_x;
+    int open_y;
+    int has_msf;
+    int spec;
+};
+static_assert(sizeof(FluxDivWParams) == 36, "flux_div_w parameter ABI size changed");

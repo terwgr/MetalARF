@@ -1,0 +1,32 @@
+// Generated from kernel_signatures.json; layout b0c5ee16b0b60d9d1aecb2f08bc2adca1a3a1e8b8ae93b5adf3e266493d4c6d5.
+struct RrtmLwRtrnDownResources {
+    device const float *pfrac [[id(0)]];
+    device const float *pz [[id(1)]];
+    device const float *tz [[id(2)]];
+    device const float *tavel [[id(3)]];
+    device const float *cldfrac [[id(4)]];
+    device const float *taucloud [[id(5)]];
+    device const int *itr [[id(6)]];
+    device const float *tbound [[id(7)]];
+    device const float *semiss [[id(8)]];
+    device const float *totplnk [[id(9)]];
+    device const float *delwave [[id(10)]];
+    device const float *tau_table [[id(11)]];
+    device const float *tf_table [[id(12)]];
+    device const float *trans_table [[id(13)]];
+    device const int *ngb0 [[id(14)]];
+    device float *bbu [[id(15)]];
+    device float *bbutot [[id(16)]];
+    device float *atot [[id(17)]];
+    device float *abss [[id(18)]];
+    device float *down [[id(19)]];
+    device float *clear_down [[id(20)]];
+};
+struct RrtmLwRtrnDownParams {
+    int ncol;
+    int nlay;
+    int ngpt;
+    int ncell;
+    float bpade;
+};
+static_assert(sizeof(RrtmLwRtrnDownParams) == 20, "rrtm_lw_rtrn_down parameter ABI size changed");

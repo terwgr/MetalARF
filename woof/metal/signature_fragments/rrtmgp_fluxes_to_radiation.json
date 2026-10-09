@@ -1,0 +1,51 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_fluxes_to_radiation",
+      "module": "rrtmgp_rte_family",
+      "source": "woof/metal/shaders/rrtmgp_rte_family.metal",
+      "cuda_source": "woof/core/rrtmgp.py",
+      "cuda_symbol": "_fluxes_to_radiation",
+      "resources": [
+        ["lw_up", "float", "read"],
+        ["lw_dn", "float", "read"],
+        ["sw_up", "float", "read"],
+        ["sw_dn", "float", "read"],
+        ["plev", "float", "read"],
+        ["exner", "float", "read"],
+        ["rthratenlw", "float", "read_write"],
+        ["rthratensw", "float", "read_write"],
+        ["swdown", "float", "read_write"],
+        ["glw", "float", "read_write"],
+        ["olr", "float", "read_write"],
+        ["gsw", "float", "read_write"]
+      ],
+      "shapes": {
+        "lw_up": [["ncol", "nlev"]],
+        "lw_dn": [["ncol", "nlev"]],
+        "sw_up": [["ncol", "nlev"]],
+        "sw_dn": [["ncol", "nlev"]],
+        "plev": [["ncol", "nlev"]],
+        "exner": [["ncol", "nlay"]],
+        "rthratenlw": [["nlay", "ny", "nx"]],
+        "rthratensw": [["nlay", "ny", "nx"]],
+        "swdown": [["ny", "nx"]],
+        "glw": [["ny", "nx"]],
+        "olr": [["ny", "nx"]],
+        "gsw": [["ny", "nx"]]
+      },
+      "parameters": [
+        ["ncol", "int32"],
+        ["nlay", "int32"],
+        ["nlev", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"],
+        ["ncell", "int32"],
+        ["heating_factor", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["float32_ordered", "contraction_off"]
+    }
+  ]
+}

@@ -1,0 +1,523 @@
+{
+  "kernels": [
+    {
+      "name": "mynn_mixlength_gsd41_columns",
+      "module": "mynn_pbl_family",
+      "source": "woof/metal/shaders/mynn_pbl_family.metal",
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "zw",
+          "float",
+          "read"
+        ],
+        [
+          "qke",
+          "float",
+          "read"
+        ],
+        [
+          "dtv",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_w",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_a",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra",
+          "float",
+          "read"
+        ],
+        [
+          "vt",
+          "float",
+          "read"
+        ],
+        [
+          "vq",
+          "float",
+          "read"
+        ],
+        [
+          "flt",
+          "float",
+          "read"
+        ],
+        [
+          "flq",
+          "float",
+          "read"
+        ],
+        [
+          "rmo",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read"
+        ],
+        [
+          "psig_bl",
+          "float",
+          "read"
+        ],
+        [
+          "el",
+          "float",
+          "read_write"
+        ],
+        [
+          "qkw",
+          "float",
+          "read_write"
+        ],
+        [
+          "qtke",
+          "float",
+          "read_write"
+        ],
+        [
+          "thetaw",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "dz": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "zw": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "qke": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dtv": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "edmf_w": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "edmf_a": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "cldfra": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vt": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vq": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "flt": [
+          [
+            "ncol"
+          ]
+        ],
+        "flq": [
+          [
+            "ncol"
+          ]
+        ],
+        "rmo": [
+          [
+            "ncol"
+          ]
+        ],
+        "zi": [
+          [
+            "ncol"
+          ]
+        ],
+        "psig_bl": [
+          [
+            "ncol"
+          ]
+        ],
+        "el": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qkw": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qtke": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "thetaw": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "mynn_initialize_gsd41_columns",
+      "module": "mynn_pbl_family",
+      "source": "woof/metal/shaders/mynn_pbl_family.metal",
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "thl",
+          "float",
+          "read"
+        ],
+        [
+          "qw",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_w",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_a",
+          "float",
+          "read"
+        ],
+        [
+          "sm_in",
+          "float",
+          "read"
+        ],
+        [
+          "sh_in",
+          "float",
+          "read"
+        ],
+        [
+          "qke_in",
+          "float",
+          "read"
+        ],
+        [
+          "zw",
+          "float",
+          "read"
+        ],
+        [
+          "rmo",
+          "float",
+          "read"
+        ],
+        [
+          "ust",
+          "float",
+          "read"
+        ],
+        [
+          "zi",
+          "float",
+          "read"
+        ],
+        [
+          "psig_bl",
+          "float",
+          "read"
+        ],
+        [
+          "el",
+          "float",
+          "read_write"
+        ],
+        [
+          "qke",
+          "float",
+          "read_write"
+        ],
+        [
+          "tsq",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsq",
+          "float",
+          "read_write"
+        ],
+        [
+          "cov",
+          "float",
+          "read_write"
+        ],
+        [
+          "sm",
+          "float",
+          "read_write"
+        ],
+        [
+          "sh",
+          "float",
+          "read_write"
+        ],
+        [
+          "scratch",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "edmf_w": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qw": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "scratch": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sh": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "psig_bl": [
+          [
+            "ncol"
+          ]
+        ],
+        "sm_in": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "rmo": [
+          [
+            "ncol"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "zw": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "qke_in": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "ust": [
+          [
+            "ncol"
+          ]
+        ],
+        "zi": [
+          [
+            "ncol"
+          ]
+        ],
+        "el": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qke": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "edmf_a": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qsq": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "thl": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "sh_in": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "sm": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "cov": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "tsq": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "initialize_qke",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

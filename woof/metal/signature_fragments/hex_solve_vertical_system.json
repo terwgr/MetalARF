@@ -1,0 +1,31 @@
+{
+  "kernels": [
+    {
+      "name": "hex_solve_vertical_system",
+      "module": "hex_acoustic",
+      "source": "woof/metal/shaders/hex_solve_vertical_system_fragment.metal",
+      "cuda_source": "woof/hex/acoustic.py",
+      "cuda_symbol": "solve_vertical_system",
+      "resources": [
+        ["rhs", "float", "read_write"],
+        ["a_tri", "float", "read"],
+        ["alpha_tri", "float", "read"],
+        ["gamma_tri", "float", "read"]
+      ],
+      "shapes": {
+        "rhs": [["nlev+1", "ncells"]],
+        "a_tri": [["nlev", "ncells"]],
+        "alpha_tri": [["nlev", "ncells"]],
+        "gamma_tri": [["nlev", "ncells"]]
+      },
+      "parameters": [
+        ["nlev", "int32"],
+        ["ncells", "int32"],
+        ["a_scale", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

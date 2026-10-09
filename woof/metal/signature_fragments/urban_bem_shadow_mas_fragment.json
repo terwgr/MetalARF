@@ -1,0 +1,55 @@
+{
+  "kernels": [
+    {
+      "name": "urban_bem_shadow_mas_fragment",
+      "module": "urban_bem_shadow_mas_fragment",
+      "source": "woof/metal/shaders/urban_bem_shadow_mas_fragment.metal",
+      "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_symbol": "bb_shadow_mas",
+      "resources": [
+        ["active_cols", "int32", "read"],
+        ["utype", "int32", "read"],
+        ["class_int", "int32", "read"],
+        ["nzu_class", "int32", "read"],
+        ["z_u", "float", "read"],
+        ["ws", "float", "read"],
+        ["drst", "float", "read"],
+        ["ss", "float", "read"],
+        ["pb", "float", "read"],
+        ["swddir", "float", "read"],
+        ["cosz", "float", "read"],
+        ["hour_angle", "float", "read"],
+        ["latitude", "float", "read"],
+        ["rsw", "float", "read_write"],
+        ["rsg", "float", "read_write"],
+        ["error", "int32", "read_write"]
+      ],
+      "shapes": {
+        "active_cols": [["ncol"]],
+        "utype": [["ncol"]],
+        "class_int": [[37]],
+        "nzu_class": [["nurbm"]],
+        "z_u": [[19]],
+        "ws": [["ncol", 2]],
+        "drst": [["ncol", 2]],
+        "ss": [["ncol", 19]],
+        "pb": [["ncol", 19]],
+        "swddir": [["ncol"]],
+        "cosz": [["ncol"]],
+        "hour_angle": [["ncol"]],
+        "latitude": [["ncol"]],
+        "rsw": [["ncol", 4, 18]],
+        "rsg": [["ncol", 2]],
+        "error": [["ncol"]]
+      },
+      "parameters": [
+        ["ncol", "int32"],
+        ["nurbm", "int32"],
+        ["declin", "float32"]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

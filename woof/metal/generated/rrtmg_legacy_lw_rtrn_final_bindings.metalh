@@ -1,0 +1,19 @@
+// Generated from kernel_signatures.json; layout 8dd93bb6388e52b3df63129be72a40f51aa1cf976fb360adc94b8a310476d7b6.
+struct RrtmgLegacyLwRtrnFinalResources {
+    device const float *pz [[id(0)]];
+    device float *totuflux [[id(1)]];
+    device float *totdflux [[id(2)]];
+    device float *totuclfl [[id(3)]];
+    device float *totdclfl [[id(4)]];
+    device float *fnet [[id(5)]];
+    device float *fnetc [[id(6)]];
+    device float *htr [[id(7)]];
+    device float *htrc [[id(8)]];
+};
+struct RrtmgLegacyLwRtrnFinalParams {
+    int ncol;
+    int nl;
+    float fluxfac;
+    float heatfac;
+};
+static_assert(sizeof(RrtmgLegacyLwRtrnFinalParams) == 16, "rrtmg_legacy_lw_rtrn_final parameter ABI size changed");

@@ -1,0 +1,37 @@
+// Generated from kernel_signatures.json; layout b425933092995e14c6d193c789798922b001e60b3cf43600755a36043d0f6ff4.
+struct NtiedtkeCuininResources {
+    device const float *pten [[id(0)]];
+    device const float *pqen [[id(1)]];
+    device const float *pqsen [[id(2)]];
+    device const float *puen [[id(3)]];
+    device const float *pven [[id(4)]];
+    device const float *pverv [[id(5)]];
+    device const float *pgeo [[id(6)]];
+    device const float *paph [[id(7)]];
+    device const float *pgeoh [[id(8)]];
+    device float *ptenh [[id(9)]];
+    device float *pqenh [[id(10)]];
+    device float *pqsenh [[id(11)]];
+    device float *ptu [[id(12)]];
+    device float *pqu [[id(13)]];
+    device float *ptd [[id(14)]];
+    device float *pqd [[id(15)]];
+    device float *puu [[id(16)]];
+    device float *pvu [[id(17)]];
+    device float *pud [[id(18)]];
+    device float *pvd [[id(19)]];
+    device float *plu [[id(20)]];
+    device int *klab [[id(21)]];
+    device int *klwmin [[id(22)]];
+};
+struct NtiedtkeCuininParams {
+    int ncol;
+    int nz;
+    float cp;
+    float rd;
+    float rv;
+    float xlv;
+    float xlf;
+    float grav;
+};
+static_assert(sizeof(NtiedtkeCuininParams) == 32, "ntiedtke_cuinin parameter ABI size changed");

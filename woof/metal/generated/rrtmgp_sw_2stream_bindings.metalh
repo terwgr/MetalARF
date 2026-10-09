@@ -1,0 +1,32 @@
+// Generated from kernel_signatures.json; layout 5d2618f20383020c0b2efeed228fb0ebb4afcb4ad890f64d0b88d978d7169ee7.
+struct RrtmgpSw2StreamResources {
+    device const float *tau [[id(0)]];
+    device const float *ssa [[id(1)]];
+    device const float *asym [[id(2)]];
+    device const float *mu0 [[id(3)]];
+    device const float *sfc_alb_dir [[id(4)]];
+    device const float *sfc_alb_dif [[id(5)]];
+    device const float *inc_flux [[id(6)]];
+    device float *part_up [[id(7)]];
+    device float *part_dn [[id(8)]];
+    device float *part_dir [[id(9)]];
+    device const float *fz_cld_tau [[id(10)]];
+    device const float *fz_cld_ssa [[id(11)]];
+    device const float *fz_cld_asy [[id(12)]];
+    device const float *fz_gpt_bands [[id(13)]];
+    device const float *fz_mask [[id(14)]];
+};
+struct RrtmgpSw2StreamParams {
+    int ncol;
+    int nlay;
+    int ngpt;
+    int gpt0;
+    int gpt_tile;
+    int top_at_1;
+    int zero_g;
+    int warp_fold;
+    int fz_nband;
+    int fz_have_mask;
+    int fz_on;
+};
+static_assert(sizeof(RrtmgpSw2StreamParams) == 44, "rrtmgp_sw_2stream parameter ABI size changed");

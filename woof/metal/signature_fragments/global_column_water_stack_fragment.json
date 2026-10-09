@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "name": "global_column_water_stack_fragment",
+      "module": "global_column_water_stack_fragment",
+      "source": "woof/metal/shaders/global_column_water_stack_fragment.metal",
+      "cuda_source": "woof/globe/dynamics.py",
+      "cuda_symbol": "MoistHybridModel._physics_exchange_band",
+      "resources": [
+        ["qv", "float64_bits", "read"],
+        ["qc", "float64_bits", "read"],
+        ["qr", "float64_bits", "read"],
+        ["qi", "float64_bits", "read"],
+        ["qs", "float64_bits", "read"],
+        ["qg", "float64_bits", "read"],
+        ["stacked", "float64_bits", "read_write"]
+      ],
+      "shapes": {
+        "qv": [["any_1d"]],
+        "qc": [["any_1d"]],
+        "qr": [["any_1d"]],
+        "qi": [["any_1d"]],
+        "qs": [["any_1d"]],
+        "qg": [["any_1d"]],
+        "stacked": [["any_1d"]]
+      },
+      "parameters": [["count", "int32"]],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

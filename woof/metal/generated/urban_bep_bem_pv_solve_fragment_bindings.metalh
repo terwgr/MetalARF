@@ -1,0 +1,21 @@
+// Generated from kernel_signatures.json; layout 420648a6cc228723aacecbf9d2e12312274b85c351900fd8e086cf889efa8a4e.
+struct UrbanBepBemPvSolveFragmentResources {
+    device const int *active_cols [[id(0)]];
+    device const int *utype [[id(1)]];
+    device const int *building_nlev [[id(2)]];
+    device const float *class_float [[id(3)]];
+    device const float *interp [[id(4)]];
+    device const float *tr_av [[id(5)]];
+    device float *tpv [[id(6)]];
+    device const float *swdown [[id(7)]];
+    device const float *glw [[id(8)]];
+    device float *flat_thb [[id(9)]];
+    device float *pv_energy [[id(10)]];
+    device float *pv_hspv [[id(11)]];
+};
+struct UrbanBepBemPvSolveFragmentParams {
+    int ncol;
+    float dt;
+    float cp_u;
+};
+static_assert(sizeof(UrbanBepBemPvSolveFragmentParams) == 12, "urban_bep_bem_pv_solve_fragment parameter ABI size changed");

@@ -1,0 +1,20 @@
+// Generated from kernel_signatures.json; layout 4ebfa0cf28918e2fc1d5cad241e2ba6ea9d550223cd20cdd00b55adb591c2a07.
+struct GlobalSaturationAdjustFragmentResources {
+    device const ulong *theta [[id(0)]];
+    device const ulong *exner [[id(1)]];
+    device const ulong *pressure [[id(2)]];
+    device const ulong *qv [[id(3)]];
+    device const ulong *qc [[id(4)]];
+    device const ulong *epsilon [[id(5)]];
+    device const ulong *dry_air_cp [[id(6)]];
+    device const ulong *latent_heat [[id(7)]];
+    device ulong *theta_out [[id(8)]];
+    device ulong *qv_out [[id(9)]];
+    device ulong *qc_out [[id(10)]];
+    device ulong *condensed [[id(11)]];
+};
+struct GlobalSaturationAdjustFragmentParams {
+    int nlevel;
+    int ncolumn;
+};
+static_assert(sizeof(GlobalSaturationAdjustFragmentParams) == 8, "global_saturation_adjust_fragment parameter ABI size changed");

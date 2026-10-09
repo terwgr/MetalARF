@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 47eae70f4088d25e556c1367e3e5161b568ac6db513ac95c68d3f5dfbba5839d.
+struct SpectralPairStatsResources {
+    device const float *original [[id(0)]];
+    device const float *filtered [[id(1)]];
+    device float *stats [[id(2)]];
+};
+struct SpectralPairStatsParams {
+    int plane_count;
+    int batches;
+    int partial_count;
+    int ny;
+    int nx;
+    int ey;
+    int ex;
+};
+static_assert(sizeof(SpectralPairStatsParams) == 28, "spectral_pair_stats parameter ABI size changed");

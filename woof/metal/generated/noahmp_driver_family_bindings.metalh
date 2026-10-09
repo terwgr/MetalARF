@@ -1,0 +1,3 @@
+// Generated from kernel_signatures.json; do not edit.
+#include "noahmp_driver_noahmp_init_bindings.metalh"
+#include "noahmp_driver_snow_init_bindings.metalh"

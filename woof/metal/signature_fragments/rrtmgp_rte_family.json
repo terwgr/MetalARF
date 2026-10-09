@@ -1,0 +1,62 @@
+{
+  "kernels": [
+    {
+      "name": "rrtmgp_delta_scale", "module": "rrtmgp_rte_family",
+      "source": "woof/metal/shaders/rrtmgp_rte_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_rte.cu",
+      "cuda_symbol": "rrtmgp_delta_scale",
+      "resources": [["tau_in","float","read"],["ssa_in","float","read"],["g_in","float","read"],["tau","float","read_write"],["ssa","float","read_write"],["asym","float","read_write"]],
+      "shapes": {"tau_in":[["n"]],"ssa_in":[["n"]],"g_in":[["n"]],"tau":[["n"]],"ssa":[["n"]],"asym":[["n"]]},
+      "parameters": [["n","int32"]], "threads_per_group": 128,
+      "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_lw_noscat", "module": "rrtmgp_rte_family",
+      "source": "woof/metal/shaders/rrtmgp_rte_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_rte.cu",
+      "cuda_symbol": "rrtmgp_lw_noscat",
+      "resources": [
+        ["tau","float","read"],["lay_source","float","read"],["lev_source","float","read"],["sfc_source","float","read"],["sfc_emis","float","read"],["incident_flux","float","read"],["part_up","float","read_write"],["part_dn","float","read_write"],
+        ["fz_cld_tau","float","read"],["fz_cld_ssa","float","read"],["fz_cld_asy","float","read"],["fz_gpt_bands","float","read"],["fz_mask","float","read"],
+        ["pk_play","float","read"],["pk_tlay","float","read"],["pk_tlev","float","read"],["pk_tsfc","float","read"],["pk_vmr","float","read"],["pk_iatm","float","read"],["pk_jt","float","read"],["pk_jp","float","read"],["pk_ftemp","float","read"],["pk_fpress","float","read"],["pk_temp_ref","float","read"],["pk_vmr_ref","float","read"],["pk_flavor","float","read"],["pk_gpoint_flavor","float","read"],["pk_gpoint_bands","float","read"],["pk_planck_fraction","float","read"],["pk_totplnk","float","read"]
+      ],
+      "shapes": {
+        "tau":[["ncol","nlay","ngpt"]],"lay_source":[["ncol","nlay","ngpt"]],"lev_source":[["ncol","nlay+1","ngpt"]],"sfc_source":[["ncol","ngpt"]],"sfc_emis":[["ncol","ngpt"]],"incident_flux":[["ncol","ngpt"]],"part_up":[["gpt_tile","nlay+1","ncol"]],"part_dn":[["gpt_tile","nlay+1","ncol"]],
+        "fz_cld_tau":[["ncol","nlay","fz_nband"],["ncol","nlay","ngpt"]],"fz_cld_ssa":[["ncol","nlay","fz_nband"],["ncol","nlay","ngpt"]],"fz_cld_asy":[["ncol","nlay","fz_nband"],["ncol","nlay","ngpt"]],"fz_gpt_bands":[["ngpt"],["ncol","nlay","ngpt"]],"fz_mask":[["ncol","nlay","ngpt"]],
+        "pk_play":[["ncol","nlay"],["ncol","nlay","ngpt"]],"pk_tlay":[["ncol","nlay"],["ncol","nlay","ngpt"]],"pk_tlev":[["ncol","nlay+1"],["ncol","nlay","ngpt"]],"pk_tsfc":[["ncol"],["ncol","nlay","ngpt"]],"pk_vmr":[["ncol","nlay","pk_ngas+1"],["ncol","nlay","ngpt"]],"pk_iatm":[["ncol","nlay"],["ncol","nlay","ngpt"]],"pk_jt":[["ncol","nlay"],["ncol","nlay","ngpt"]],"pk_jp":[["ncol","nlay"],["ncol","nlay","ngpt"]],"pk_ftemp":[["ncol","nlay"],["ncol","nlay","ngpt"]],"pk_fpress":[["ncol","nlay"],["ncol","nlay","ngpt"]],"pk_temp_ref":[["pk_ntemp"],["ncol","nlay","ngpt"]],"pk_vmr_ref":[["pk_natm","pk_ngas+1","pk_ntemp"],["ncol","nlay","ngpt"]],"pk_flavor":[["pk_nflavor","pk_nflavor_width"],["ncol","nlay","ngpt"]],"pk_gpoint_flavor":[["pk_natm","ngpt"],["ncol","nlay","ngpt"]],"pk_gpoint_bands":[["ngpt"],["ncol","nlay","ngpt"]],"pk_planck_fraction":[["pk_ntemp","pk_neta","pk_npres+1","ngpt"],["ncol","nlay","ngpt"]],"pk_totplnk":[["pk_nplanck","pk_nband"],["ncol","nlay","ngpt"]]
+      },
+      "parameters": [["ncol","int32"],["nlay","int32"],["ngpt","int32"],["gpt0","int32"],["gpt_tile","int32"],["top_at_1","int32"],["warp_fold","int32"],["fz_nband","int32"],["fz_have_mask","int32"],["fz_on","int32"],["pk_ngas","int32"],["pk_ntemp","int32"],["pk_npres","int32"],["pk_neta","int32"],["pk_nband","int32"],["pk_nplanck","int32"],["pk_natm","int32"],["pk_nflavor","int32"],["pk_nflavor_width","int32"],["pk_on","int32"]],
+      "threads_per_group": 128, "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_lw_flux_reduce", "module": "rrtmgp_rte_family",
+      "source": "woof/metal/shaders/rrtmgp_rte_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_rte.cu",
+      "cuda_symbol": "rrtmgp_lw_flux_reduce",
+      "resources": [["part_up","float","read"],["part_dn","float","read"],["flux_up","float","read_write"],["flux_dn","float","read_write"]],
+      "shapes": {"part_up":[["ntile","nlev","ncol"]],"part_dn":[["ntile","nlev","ncol"]],"flux_up":[["ncol","nlev"]],"flux_dn":[["ncol","nlev"]]},
+      "parameters": [["ncol","int32"],["nlev","int32"],["gpt0","int32"],["ntile","int32"]], "threads_per_group": 128,
+      "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_sw_2stream", "module": "rrtmgp_rte_family",
+      "source": "woof/metal/shaders/rrtmgp_rte_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_rte.cu",
+      "cuda_symbol": "rrtmgp_sw_2stream",
+      "resources": [["tau","float","read"],["ssa","float","read"],["asym","float","read"],["mu0","float","read"],["sfc_alb_dir","float","read"],["sfc_alb_dif","float","read"],["inc_flux","float","read"],["part_up","float","read_write"],["part_dn","float","read_write"],["part_dir","float","read_write"],["fz_cld_tau","float","read"],["fz_cld_ssa","float","read"],["fz_cld_asy","float","read"],["fz_gpt_bands","float","read"],["fz_mask","float","read"]],
+      "shapes": {"tau":[["ncol","nlay","ngpt"]],"ssa":[["ncol","nlay","ngpt"]],"asym":[["ncol","nlay","ngpt"]],"mu0":[["ncol","nlay"]],"sfc_alb_dir":[["ncol","ngpt"]],"sfc_alb_dif":[["ncol","ngpt"]],"inc_flux":[["ncol","ngpt"]],"part_up":[["gpt_tile","nlay+1","ncol"]],"part_dn":[["gpt_tile","nlay+1","ncol"]],"part_dir":[["gpt_tile","nlay+1","ncol"]],"fz_cld_tau":[["ncol","nlay","fz_nband"],["ncol","nlay","ngpt"]],"fz_cld_ssa":[["ncol","nlay","fz_nband"],["ncol","nlay","ngpt"]],"fz_cld_asy":[["ncol","nlay","fz_nband"],["ncol","nlay","ngpt"]],"fz_gpt_bands":[["ngpt"],["ncol","nlay","ngpt"]],"fz_mask":[["ncol","nlay","ngpt"]]},
+      "parameters": [["ncol","int32"],["nlay","int32"],["ngpt","int32"],["gpt0","int32"],["gpt_tile","int32"],["top_at_1","int32"],["zero_g","int32"],["warp_fold","int32"],["fz_nband","int32"],["fz_have_mask","int32"],["fz_on","int32"]], "threads_per_group": 128,
+      "layout_version": 1, "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "rrtmgp_sw_flux_reduce", "module": "rrtmgp_rte_family",
+      "source": "woof/metal/shaders/rrtmgp_rte_family.metal",
+      "cuda_source": "woof/core/kernels/rrtmgp_rte.cu",
+      "cuda_symbol": "rrtmgp_sw_flux_reduce",
+      "resources": [["part_up","float","read"],["part_dn","float","read"],["part_dir","float","read"],["flux_up","float","read_write"],["flux_dn","float","read_write"],["flux_dir","float","read_write"]],
+      "shapes": {"part_up":[["ntile","nlev","ncol"]],"part_dn":[["ntile","nlev","ncol"]],"part_dir":[["ntile","nlev","ncol"]],"flux_up":[["ncol","nlev"]],"flux_dn":[["ncol","nlev"]],"flux_dir":[["ncol","nlev"]]},
+      "parameters": [["ncol","int32"],["nlev","int32"],["gpt0","int32"],["ntile","int32"]], "threads_per_group": 128,
+      "layout_version": 1, "arithmetic_policies": ["default"]
+    }
+  ]
+}

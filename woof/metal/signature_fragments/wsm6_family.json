@@ -1,0 +1,126 @@
+{
+  "kernels": [
+    {
+      "name": "wsm6_prepare",
+      "module": "wsm6_family",
+      "source": "woof/metal/shaders/wsm6_family.metal",
+      "cuda_source": "woof/core/wsm6.py",
+      "cuda_symbol": "apply",
+      "resources": [
+        ["thb", "float", "read"], ["thp", "float", "read"],
+        ["p", "float", "read"], ["alt", "float", "read"],
+        ["phb", "float", "read"], ["php", "float", "read"],
+        ["theta", "float", "read_write"], ["den", "float", "read_write"],
+        ["pii", "float", "read_write"], ["dz", "float", "read_write"],
+        ["z8w", "float", "read_write"],
+        ["h_diabatic", "float", "read_write"]
+      ],
+      "shapes": {
+        "thb": [["nz"], ["nz", 1, 1], ["nz", "ny", "nx"]],
+        "thp": [["nz", "ny", "nx"]], "p": [["nz", "ny", "nx"]],
+        "alt": [["nz", "ny", "nx"]],
+        "phb": [["nzi"], ["nzi", 1, 1], ["nzi", "ny", "nx"]],
+        "php": [["nzi", "ny", "nx"]],
+        "theta": [["nz", "ny", "nx"]], "den": [["nz", "ny", "nx"]],
+        "pii": [["nz", "ny", "nx"]], "dz": [["nz", "ny", "nx"]],
+        "z8w": [["nzi", "ny", "nx"]],
+        "h_diabatic": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["nzi", "int32"], ["thb_3d", "int32"], ["phb_3d", "int32"],
+        ["p0", "float32"], ["rcp", "float32"], ["gravity", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "wsm6_finish",
+      "module": "wsm6_family",
+      "source": "woof/metal/shaders/wsm6_family.metal",
+      "cuda_source": "woof/core/microphysics.py",
+      "cuda_symbol": "moist_physics_finish",
+      "resources": [
+        ["theta", "float", "read"], ["thp", "float", "read_write"],
+        ["h_diabatic", "float", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["nz", "ny", "nx"]],
+        "thp": [["nz", "ny", "nx"]],
+        "h_diabatic": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["no_mp_heating", "int32"],
+        ["dt", "float32"], ["limit", "float32"]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    },
+    {
+      "name": "wsm6_column",
+      "module": "wsm6_family",
+      "source": "woof/metal/shaders/wsm6_family.metal",
+      "cuda_source": "woof/core/kernels/wsm6.cu",
+      "cuda_symbol": "wsm6_column",
+      "resources": [
+        ["theta", "float", "read_write"],
+        ["qv", "float", "read_write"],
+        ["qc", "float", "read_write"],
+        ["qi", "float", "read_write"],
+        ["qr", "float", "read_write"],
+        ["qs", "float", "read_write"],
+        ["qg", "float", "read_write"],
+        ["den", "float", "read"],
+        ["pressure", "float", "read"],
+        ["pii", "float", "read"],
+        ["dz", "float", "read"],
+        ["rainnc", "float", "read_write"],
+        ["rainncv", "float", "read_write"],
+        ["snownc", "float", "read_write"],
+        ["snowncv", "float", "read_write"],
+        ["graupelnc", "float", "read_write"],
+        ["graupelncv", "float", "read_write"],
+        ["sr", "float", "read_write"],
+        ["effc", "float", "read_write"],
+        ["effi", "float", "read_write"],
+        ["effs", "float", "read_write"]
+      ],
+      "shapes": {
+        "theta": [["nz", "ny", "nx"]],
+        "qv": [["nz", "ny", "nx"]],
+        "qc": [["nz", "ny", "nx"]],
+        "qi": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]],
+        "qs": [["nz", "ny", "nx"]],
+        "qg": [["nz", "ny", "nx"]],
+        "den": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]],
+        "pii": [["nz", "ny", "nx"]],
+        "dz": [["nz", "ny", "nx"]],
+        "rainnc": [["ny", "nx"]],
+        "rainncv": [["ny", "nx"]],
+        "snownc": [["ny", "nx"]],
+        "snowncv": [["ny", "nx"]],
+        "graupelnc": [["ny", "nx"]],
+        "graupelncv": [["ny", "nx"]],
+        "sr": [["ny", "nx"]],
+        "effc": [["nz", "ny", "nx"]],
+        "effi": [["nz", "ny", "nx"]],
+        "effs": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["dt", "float32"],
+        ["hail_opt", "int32"],
+        ["nz", "int32"],
+        ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": ["default"]
+    }
+  ]
+}

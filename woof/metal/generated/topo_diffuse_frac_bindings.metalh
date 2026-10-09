@@ -1,0 +1,16 @@
+// Generated from kernel_signatures.json; layout 54126d72848a801ba117889eac7d17cda476b1c325709ac640f9cc5b28ab811f.
+struct TopoDiffuseFracResources {
+    device const float *coszen [[id(0)]];
+    device const float *swdown [[id(1)]];
+    device const float *ht [[id(2)]];
+    device float *swddif [[id(3)]];
+    device float *diffuse_frac [[id(4)]];
+};
+struct TopoDiffuseFracParams {
+    float solcon;
+    int ruiz;
+    int n;
+    int nx;
+    int ny;
+};
+static_assert(sizeof(TopoDiffuseFracParams) == 20, "topo_diffuse_frac parameter ABI size changed");

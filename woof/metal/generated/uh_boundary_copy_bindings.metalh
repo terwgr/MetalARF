@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout dd099233b8cfc5718486eb4163c255e769d68c36c9abe66c79f731434197a86d.
+struct UhBoundaryCopyResources {
+    device float *field [[id(0)]];
+};
+struct UhBoundaryCopyParams {
+    int ny;
+    int nx;
+    int ncol;
+};
+static_assert(sizeof(UhBoundaryCopyParams) == 12, "uh_boundary_copy parameter ABI size changed");

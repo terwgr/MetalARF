@@ -1,0 +1,10 @@
+// Generated from kernel_signatures.json; layout 79bdd0e4987ed8de11d8d8a2702694391eaed85d10b4a9d9bf9dbf3f8cf9a92d.
+struct GlobalCflWindFragmentResources {
+    device const ulong *u [[id(0)]];
+    device const ulong *v [[id(1)]];
+    device ulong *wind_speed [[id(2)]];
+};
+struct GlobalCflWindFragmentParams {
+    int count;
+};
+static_assert(sizeof(GlobalCflWindFragmentParams) == 4, "global_cfl_wind_fragment parameter ABI size changed");

@@ -1,0 +1,45 @@
+{
+  "schema": "woof-metal-soft-binary64-contract-v1",
+  "status": "implemented-unverified",
+  "representation": "IEEE-754 binary64 bit pattern stored in MSL ulong; all arithmetic in integer operations",
+  "rounding": "round-to-nearest, ties-to-even",
+  "implemented": [
+    "classification: sign, zero, finite, infinity, NaN, signaling NaN",
+    "quiet NaN propagation for arithmetic",
+    "binary64 add and subtract",
+    "binary64 multiply using exact 106-bit integer product",
+    "binary64 fused multiply-add using exact product, 128-bit alignment/cancellation, and one RN-even packing",
+    "binary64 divide using restoring quotient generation and sticky remainder",
+    "ordered equality and relational comparisons; unordered NaN results",
+    "binary32-bit to binary64-bit conversion",
+    "binary64-bit to binary32-bit conversion",
+    "exact signed int32 and unsigned uint32 numeric widening to binary64",
+    "round-to-nearest-even unsigned uint64 numeric widening to binary64",
+    "binary64 round-to-integral (rint) with ties-to-even",
+    "finite in-range binary64 to int32 conversions with RN-even and toward-zero modes",
+    "finite in-range nonnegative binary64 to uint32 conversion toward zero",
+    "integer-word bit-preserving binary64/signed-int64 reinterprets",
+    "signed zero and gradual underflow/overflow handling",
+    "correctly rounded binary64 square root using integer radicand and RN-even packing"
+  ],
+  "unimplemented": [
+    "remainder, modulo, nextafter, scalbn, frexp, signed-int64 numeric widening, and binary64-to-uint64 conversion",
+    "transcendental functions including log, log2, exp, exp2, and pow",
+    "directed rounding modes and IEEE exception flags",
+    "NaN totalOrder and signaling exception behavior"
+  ],
+  "nan_policy": "Arithmetic quiets and returns the first NaN operand, preserving sign and payload bits; invalid non-NaN operations return canonical positive quiet NaN. No exception flags are tracked.",
+  "integer_conversion_policy": "int32/uint32 widening is exact; uint64 widening rounds RN-even. soft64_rint_bits returns a binary64 integral value with ties-to-even. soft64_to_i32_rn/rz and soft64_to_u32_rz return {valid:false,value:0} for NaN, infinity, or values outside their defined destination ranges; callers must not rely on CUDA out-of-range conversion sentinels.",
+  "source_interfaces": {
+    "cuda_fma_rn_binary64": "soft64_fma(ulong,ulong,ulong) -> ulong; integer-only binary64 fused multiply-add with one RN-even result, signed zeros, and gradual underflow",
+    "cuda_int2double_rn": "soft64_from_i32(int) -> ulong; exact for every int32 input",
+    "cuda_uint2double_rn": "soft64_from_u32(uint) -> ulong; exact for every uint32 input",
+    "uint64_to_double_rn": "soft64_from_u64(ulong) -> ulong",
+    "cuda_double2int_rz": "soft64_to_i32_rz(ulong) -> Soft64I32Result; valid only when finite and the truncated value is in int32 range",
+    "rint_binary64": "soft64_rint_bits(ulong) -> ulong; RN-even, integral binary64 encoding",
+    "rint_result_to_int32": "soft64_to_i32_rn(ulong) -> Soft64I32Result; finite in-range domain",
+    "subnormal_float_mantissa_cast": "soft64_to_u32_rz(ulong) -> Soft64U32Result; finite nonnegative uint32-range domain",
+    "binary64_longlong_bitcasts": "soft64_from_i64_bits(long), soft64_to_i64_bits(ulong), and identity word representation; bit reinterpretation only"
+  },
+  "verification": "MetalToolchain 27.1 compiled and executed temporary probes on the installed Apple GPU. A deterministic 256-lane boundary/pseudo-random finite probe emitted 5,888 words; bounded comparisons returned zero mismatches. A separate 59-lane edge probe made 1,121 oracle comparisons with zero mismatches, including signed zero, qNaN/sNaN payload quieting, invalid-operation NaNs, int32/uint32 conversion boundaries, and binary64-to-binary32 rounding ties. This remains bounded evidence; it does not exhaust all IEEE input space or consumer-specific CUDA behavior, so the contract status remains implemented-unverified. The later soft64_fma addition has not been compiled or executed and is not covered by those comparisons."
+}

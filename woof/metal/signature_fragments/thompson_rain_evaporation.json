@@ -1,0 +1,30 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_rain_evaporation_with_density_history_and_presence",
+      "module": "thompson_rain_evaporation",
+      "source": "woof/metal/shaders/thompson_rain_evaporation.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_rain_evaporation_with_density_history_and_presence",
+      "resources": [
+        ["qr", "float", "read_write"], ["nr", "float", "read_write"],
+        ["temperature", "float", "read_write"], ["pressure", "float", "read"],
+        ["qv", "float", "read_write"], ["reference_density", "float", "read_write"],
+        ["graupel_melt_marker", "float", "read"], ["source_density", "float", "read"],
+        ["condensation_marker", "float", "read"]
+      ],
+      "shapes": {
+        "qr": [["nz", "ny", "nx"]], "nr": [["nz", "ny", "nx"]],
+        "temperature": [["nz", "ny", "nx"]], "pressure": [["nz", "ny", "nx"]],
+        "qv": [["nz", "ny", "nx"]], "reference_density": [["nz", "ny", "nx"]],
+        "graupel_melt_marker": [["nz", "ny", "nx"]],
+        "source_density": [["nz", "ny", "nx"]],
+        "condensation_marker": [["nz", "ny", "nx"]]
+      },
+      "parameters": [["dt", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-precise-libm", "fp32-output", "cuda-libm-identity-unverified"]
+    }
+  ]
+}

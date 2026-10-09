@@ -1,0 +1,44 @@
+// Generated from kernel_signatures.json; layout 4f14a35de01ad7af7479940f143a1c1fdd6aabdd9db87c3657b33b9c836ae875.
+struct AdvanceUvResources {
+    device float *u_pp [[id(0)]];
+    device float *v_pp [[id(1)]];
+    device const float *ru_t [[id(2)]];
+    device const float *rv_t [[id(3)]];
+    device const float *p_pp [[id(4)]];
+    device const float *p_pp_old [[id(5)]];
+    device const float *ph_pp [[id(6)]];
+    device const float *php [[id(7)]];
+    device const float *phb [[id(8)]];
+    device const float *alt [[id(9)]];
+    device const float *al_pp [[id(10)]];
+    device const float *pb [[id(11)]];
+    device const float *mup [[id(12)]];
+    device const float *mu_pp [[id(13)]];
+    device const float *mub2d [[id(14)]];
+    device const float *c1h [[id(15)]];
+    device const float *c2h [[id(16)]];
+    device const float *fnm [[id(17)]];
+    device const float *fnp [[id(18)]];
+    device const float *rdnw [[id(19)]];
+    device const float *cqu [[id(20)]];
+    device const float *cqv [[id(21)]];
+};
+struct AdvanceUvParams {
+    int moist_cq;
+    float cf1;
+    float cf2;
+    float cf3;
+    int top_lid;
+    float rdx;
+    float rdy;
+    float dtau;
+    float smdiv;
+    int spec_zone;
+    int base3d;
+    int radiative_x;
+    int radiative_y;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(AdvanceUvParams) == 64, "advance_uv parameter ABI size changed");

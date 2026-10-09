@@ -1,0 +1,56 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semilag/trajectory.py",
+      "cuda_symbol": "cartesian_wind",
+      "layout_version": 1,
+      "module": "global_semilag_cartesian_wind_fragment",
+      "name": "global_semilag_cartesian_wind_fragment",
+      "parameters": [["nlevel", "int32"], ["nlat", "int32"], ["nlon", "int32"]],
+      "resources": [
+        ["u", "float64_bits", "read"], ["v", "float64_bits", "read"],
+        ["sinlat", "float64_bits", "read"], ["coslat", "float64_bits", "read"],
+        ["sinlon", "float64_bits", "read"], ["coslon", "float64_bits", "read"],
+        ["vx", "float64_bits", "read_write"], ["vy", "float64_bits", "read_write"],
+        ["vz", "float64_bits", "read_write"]
+      ],
+      "shapes": {"u": [["any_1d"]], "v": [["any_1d"]], "sinlat": [["any_1d"]], "coslat": [["any_1d"]], "sinlon": [["any_1d"]], "coslon": [["any_1d"]], "vx": [["any_1d"]], "vy": [["any_1d"]], "vz": [["any_1d"]]},
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semilag/trajectory.py",
+      "cuda_symbol": "level_rate_from_mass_flux",
+      "layout_version": 1,
+      "module": "global_semilag_level_rate_fragment",
+      "name": "global_semilag_level_rate_fragment",
+      "parameters": [["nlevel", "int32"], ["nlat", "int32"], ["nlon", "int32"]],
+      "resources": [
+        ["omega_half", "float64_bits", "read"], ["dp", "float64_bits", "read"],
+        ["level_rate", "float64_bits", "read_write"]
+      ],
+      "shapes": {"omega_half": [["any_1d"]], "dp": [["any_1d"]], "level_rate": [["any_1d"]]},
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": ["default"],
+      "cuda_source": "woof/globe/semilag/trajectory.py",
+      "cuda_symbol": "semi_lagrangian_trajectory_extrapolation",
+      "layout_version": 1,
+      "module": "global_semilag_level_rate_extrapolate_fragment",
+      "name": "global_semilag_level_rate_extrapolate_fragment",
+      "parameters": [["count", "int32"]],
+      "resources": [
+        ["current", "float64_bits", "read"],
+        ["previous", "float64_bits", "read"],
+        ["extrapolated", "float64_bits", "read_write"]
+      ],
+      "shapes": {"current": [["any_1d"]], "previous": [["any_1d"]], "extrapolated": [["any_1d"]]},
+      "source": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

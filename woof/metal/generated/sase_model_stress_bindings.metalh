@@ -1,0 +1,28 @@
+// Generated from kernel_signatures.json; layout e6a47f8e514b72f8e6a0333abe809f231a5c0ec7a53bbb3e557653a6e7096923.
+struct SaseModelStressResources {
+    device const float *e [[id(0)]];
+    device const float *s0 [[id(1)]];
+    device const float *s1 [[id(2)]];
+    device const float *s2 [[id(3)]];
+    device const float *s3 [[id(4)]];
+    device const float *s4 [[id(5)]];
+    device const float *s5 [[id(6)]];
+    device float *t0 [[id(7)]];
+    device float *t1 [[id(8)]];
+    device float *t2 [[id(9)]];
+    device float *t3 [[id(10)]];
+    device float *t4 [[id(11)]];
+    device float *t5 [[id(12)]];
+};
+struct SaseModelStressParams {
+    float c_nu;
+    float f_blend;
+    float delta_eddy;
+    float delta_mom;
+    float ck_over_prt;
+    float e_min;
+    int nz;
+    int ny;
+    int nx;
+};
+static_assert(sizeof(SaseModelStressParams) == 36, "sase_model_stress parameter ABI size changed");

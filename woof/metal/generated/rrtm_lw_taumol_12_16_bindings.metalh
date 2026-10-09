@@ -1,0 +1,44 @@
+// Generated from kernel_signatures.json; layout ba43c6c4c15e070cd548f467bccb695b808ab32aa67912ee3dec81c7f768e308.
+struct RrtmLwTaumol1216Resources {
+    device const float *colh2o [[id(0)]];
+    device const float *colco2 [[id(1)]];
+    device const float *coln2o [[id(2)]];
+    device const float *colch4 [[id(3)]];
+    device const float *fac00 [[id(4)]];
+    device const float *fac01 [[id(5)]];
+    device const float *fac10 [[id(6)]];
+    device const float *fac11 [[id(7)]];
+    device const float *selffac [[id(8)]];
+    device const float *selffrac [[id(9)]];
+    device const int *jp [[id(10)]];
+    device const int *jt [[id(11)]];
+    device const int *jt1 [[id(12)]];
+    device const int *indself [[id(13)]];
+    device const int *laytrop [[id(14)]];
+    device const float *tables [[id(15)]];
+    device const int *table_index [[id(16)]];
+    device float *taug [[id(17)]];
+    device float *pfrac [[id(18)]];
+};
+struct RrtmLwTaumol1216Params {
+    int ncol;
+    int nlay;
+    int ncell;
+    int offset;
+    int ng;
+    int nspa;
+    int nspb;
+    int nrowa;
+    int nrowb;
+    int gas_a;
+    int gas_b;
+    float strrat;
+    int mode;
+    int have_self;
+    int id_absa;
+    int id_absb;
+    int id_self;
+    int id_fraca;
+    int id_fracb;
+};
+static_assert(sizeof(RrtmLwTaumol1216Params) == 76, "rrtm_lw_taumol_12_16 parameter ABI size changed");

@@ -1,0 +1,33 @@
+{
+  "kernels": [
+    {
+      "name": "thompson_graupel_sediment_with_density_column_mask_shadow",
+      "module": "thompson_graupel_sedimentation",
+      "source": "woof/metal/shaders/thompson_graupel_sedimentation.metal",
+      "cuda_source": "woof/core/kernels/thompson.cu",
+      "cuda_symbol": "thompson_graupel_sediment_64_with_density_and_column_mask_and_shadow",
+      "source_symbol_variants": ["thompson_graupel_sediment_256_with_density_and_column_mask_and_shadow"],
+      "resources": [
+        ["qg", "float", "read_write"], ["temperature", "float", "read"],
+        ["pressure", "float", "read"], ["qv", "float", "read"],
+        ["reference_density", "float", "read"], ["dz", "float", "read"],
+        ["rainnc", "float", "read_write"], ["rainncv", "float", "read_write"],
+        ["graupelnc", "float", "read_write"], ["graupelncv", "float", "read_write"],
+        ["active_columns", "float", "read"], ["graupel_number_shadow", "float", "read_write"]
+      ],
+      "shapes": {
+        "qg": [["nz", "ny", "nx"]], "temperature": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]], "qv": [["nz", "ny", "nx"]],
+        "reference_density": [["nz", "ny", "nx"]], "dz": [["nz", "ny", "nx"]],
+        "rainnc": [["ny", "nx"]], "rainncv": [["ny", "nx"]],
+        "graupelnc": [["ny", "nx"]], "graupelncv": [["ny", "nx"]],
+        "active_columns": [["ny", "nx"]],
+        "graupel_number_shadow": [["nz", "ny", "nx"]]
+      },
+      "parameters": [["accumulate_surface", "int32"], ["dt", "float32"], ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-precise-libm", "soft64-rn-bit-ops", "cuda-libm-identity-unverified"]
+    }
+  ]
+}
