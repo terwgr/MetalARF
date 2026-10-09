@@ -2,31 +2,34 @@
 
 ## MetalARF 1.0.1
 
-A speed release. Forecast output is bitwise identical to 1.0.0.
+A speed release. Forecast output is bitwise identical to 1.0.0 on every
+model. Speedups below are steady-state wall time per forecast hour against
+1.0.0 on the same case; they vary with hardware and configuration.
 
 Faster:
 
-- Hex: the Metal dynamical core keeps scalar transport and the acoustic
-  solve resident on the GPU and batches their dispatches. Hex forecasts are
-  substantially faster.
-- Regional: acoustic and repeated dycore kernels are batched into fewer
-  command buffers, and cold kernels are prepared before the first step.
-  Legacy RRTMG shortwave uses hardware single precision where it is
-  bit-exact, and the software double-precision library uses faster exact
-  routines for multiply, normalize and square root. Regional forecasts,
-  including the HRRR configuration, are modestly faster, with a faster
-  first step.
-- MYNN checks its tendencies with one GPU scan and no longer copies them to
+- Hex, about 2.4x: the Metal dynamical core keeps scalar transport and the
+  acoustic solve resident on the GPU across Runge-Kutta stages and batches
+  their dispatches into fewer command buffers.
+- Regional, about 1.1x: acoustic and repeated dycore kernels are batched
+  into fewer command buffers, and cold kernels are pipelined before the
+  first step. For the HRRR configuration the steady step is about 1.04x
+  faster and the first step, which carries startup and the first radiation
+  call, about 1.35x, giving about 1.1x end to end.
+- Legacy RRTMG shortwave runs on hardware single precision where it is
+  bit-exact, which cuts the cost of each radiation call.
+- The software double-precision library uses faster exact routines for
+  multiply, normalization and square root, which benefits MYNN, Thompson
+  and other schemes that compute in double.
+- MYNN checks its tendencies with one GPU scan instead of copying them to
   the host each step.
+- Global is unchanged in speed.
 
 Fixed:
 
 - Global: rounded-up tracer Courant and floor dispatches lacked tail guards
   and could write past their buffers under concurrent GPU load, failing the
   water-fixer check intermittently.
-- Packaging: the prebuilt Metal shader library (`woof/libexec/metal`) and
-  some vendored Rust lock and source files were missing from the 1.0.0
-  source snapshot. They are included again.
 
 ## MetalARF 1.0.0 (WOOF 1.0.3 on Apple Silicon)
 
