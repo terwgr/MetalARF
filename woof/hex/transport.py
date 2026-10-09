@@ -69,6 +69,7 @@ class ScalarTransportResult:
 
     scalars: FloatArray
     density: FloatArray
+    metal_scalars: Any | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +114,70 @@ __all__ = [
     "vertical_flux_3",
     "vertical_flux_4",
 ]
+
+
+def build_metal_scalar_transport_workspace(
+    context, mesh, scalar_old, coefficients, *, fzm, fzp, rdzw,
+    inv_area_cell, config_scalar_adv_order,
+):
+    """Upload one timestep's shared scalar and mesh inputs for Metal RK stages."""
+    old, _ = _as_tracers(scalar_old, "scalar_old")
+    if old.dtype != np.dtype(np.float32):
+        raise ConfigurationRefusal(
+            "hex_metal_scalar_precision", old.dtype.str,
+            "the fused Hex scalar RK kernel currently accepts FP32 resources",
+            "an FP32 Hex scalar state",
+        )
+    n_cells, n_edges, counts, edges_on_cell, _, cells_on_edge = _topology(mesh)
+    adv, adv3, n_adv, adv_cells = _resolve_coefficients(
+        coefficients, None, None, None, None, n_edges, old.dtype,
+        int(config_scalar_adv_order),
+    )
+    for edge, count in enumerate(n_adv):
+        active = adv_cells[edge, :int(count)]
+        if np.any(active < 0) or np.any(active >= n_cells):
+            raise ValueError("active adv_cells_for_edge entry is out of range")
+    area_cell = _float_array(_mesh_array(mesh, "areaCell"), "areaCell", old.dtype)
+    inverse = (np.zeros(n_cells, dtype=old.dtype) if inv_area_cell is None
+               else _source_inverse_array(inv_area_cell, "inv_area_cell", old.dtype))
+    if area_cell.shape != (n_cells,) or inverse.shape != (n_cells,):
+        raise ValueError("Metal scalar RK cell-area inputs do not match the mesh")
+    def int32(value):
+        array = np.asarray(value)
+        if (np.any(array < np.iinfo(np.int32).min)
+                or np.any(array > np.iinfo(np.int32).max)):
+            raise ValueError("Hex scalar transport index exceeds int32 ABI")
+        return np.ascontiguousarray(array, dtype=np.int32)
+
+    float32 = lambda value: np.ascontiguousarray(value, dtype=np.float32)
+    static = {
+        "scalar_old": float32(old).reshape(-1),
+        "edges_on_cell": int32(edges_on_cell).reshape(-1),
+        "edge_counts": int32(counts),
+        "edge_signs": float32(_operator_edge_signs(
+            counts, edges_on_cell, cells_on_edge
+        )).reshape(-1),
+        "cells_on_edge": int32(cells_on_edge).reshape(-1),
+        "dv_edge": float32(_mesh_array(mesh, "dvEdge")),
+        "adv_coefs": float32(adv).reshape(-1),
+        "adv_coefs_3rd": float32(adv3).reshape(-1),
+        "n_adv_cells_for_edge": int32(n_adv),
+        "adv_cells_for_edge": int32(adv_cells).reshape(-1),
+        "area_cell": float32(area_cell),
+        "inv_area_cell": float32(inverse),
+        "fzm": float32(fzm),
+        "fzp": float32(fzp),
+        "rdzw": float32(rdzw),
+    }
+    dimensions = {
+        "ntracers": int(old.shape[0]), "nlev": int(old.shape[1]),
+        "ncells": int(n_cells), "nedges": int(n_edges),
+        "max_edges": int(edges_on_cell.shape[1]),
+        "max_adv": int(adv.shape[1]),
+        "use_inverse_area": int(inv_area_cell is not None),
+    }
+    from .metal_preview import MetalScalarTransportWorkspace
+    return MetalScalarTransportWorkspace(context, static, dimensions)
 
 
 def _mesh_value(mesh: Any, name: str, default: Any = None) -> Any:
@@ -1602,6 +1667,11 @@ def _atmosphere_horizontal_edge_values(
     result = np.zeros((n_tracers, n_levels, n_edges), dtype=dtype)
     half = dtype.type(0.5)
     coef = dtype.type(coefficient if order == 3 else 0.0)
+    # The frozen Fortran SIGN(1, uhAvg) is reused across every active stencil
+    # cell. Form its exact dtype-preserving elementwise equivalent once;
+    # calling the scalar helper inside the edge/level/stencil loops creates
+    # tens of millions of Python calls on representative meshes.
+    velocity_sign = np.copysign(dtype.type(1.0), velocity)
     for edge in range(n_edges):
         if bdy_mask_edge is not None and order != 2 and not monotonic_source_flux:
             # The monotonic path computes the complete high-order stencil at
@@ -1657,7 +1727,7 @@ def _atmosphere_horizontal_edge_values(
                 # v8.4.1 retains a literal ten-term sum for hexagonal edges,
                 # then multiplies the completed edge value by uhAvg.
                 for level in range(n_levels):
-                    sign = _fortran_sign_one(velocity[level, edge], dtype)
+                    sign = velocity_sign[level, edge]
                     for scalar in range(n_tracers):
                         cell = int(adv_cells[edge, 0])
                         value = (
@@ -1685,7 +1755,7 @@ def _atmosphere_horizontal_edge_values(
                         scalar_weight = velocity[level, edge] * (
                             adv[edge, slot]
                             + coef
-                            * _fortran_sign_one(velocity[level, edge], dtype)
+                            * velocity_sign[level, edge]
                             * adv3[edge, slot]
                         )
                         for scalar in range(n_tracers):
@@ -1701,9 +1771,7 @@ def _atmosphere_horizontal_edge_values(
             if cell < 0 or cell >= tracers.shape[2]:
                 raise ValueError("active adv_cells_for_edge entry is out of range")
             for level in range(n_levels):
-                weight = adv[edge, slot] + coef * _fortran_sign_one(
-                    velocity[level, edge], dtype
-                ) * adv3[edge, slot]
+                weight = adv[edge, slot] + coef * velocity_sign[level, edge] * adv3[edge, slot]
                 for scalar in range(n_tracers):
                     result[scalar, level, edge] = (
                         result[scalar, level, edge]
@@ -2040,6 +2108,7 @@ def advance_scalars_monotonic(
     inv_area_cell: ArrayLike | None = None,
     in_place: bool = False,
     metal_context=None,
+    resident_stage_device=None,
 ) -> ScalarTransportResult:
     """Zalesak FCT atmosphere update from lines 3487-4211.
 
@@ -2180,11 +2249,20 @@ def advance_scalars_monotonic(
             from woof.metal.array import MetalArrayModule
 
             edge_flux_module = MetalArrayModule(metal_context)
+            stage_device = resident_stage_device
+            if stage_device is not None and (
+                getattr(stage_device, "dtype", None) != np.dtype(np.float32)
+                or getattr(stage_device, "size", -1) != stage.size
+            ):
+                raise ValueError("resident Hex scalar stage has an invalid shape or dtype")
             edge_flux_runner = {
                 "module": edge_flux_module,
                 "inputs": {
-                    "scalar_stage": edge_flux_module.asarray(np.ascontiguousarray(
-                        stage, dtype=np.float32).reshape(-1)),
+                    "scalar_stage": (
+                        stage_device if stage_device is not None
+                        else edge_flux_module.asarray(np.ascontiguousarray(
+                            stage, dtype=np.float32).reshape(-1))
+                    ),
                     "horizontal_velocity": edge_flux_module.asarray(
                         np.ascontiguousarray(horizontal_velocity,
                                              dtype=np.float32).reshape(-1)),
@@ -2562,6 +2640,8 @@ def advance_scalar_transport(
     config_positive_definite: bool = False,
     config_split_dynamics_transport: bool = False,
     config_time_integration_order: int = 3,
+    metal_workspace=None,
+    resident_scalar_stage=None,
     **kwargs: Any,
 ) -> ScalarTransportResult:
     """Dispatch exactly as ``advance_scalars`` lines 1499 and 1544-1577."""
@@ -2590,7 +2670,94 @@ def advance_scalar_transport(
             dt,
             advance_density=config_split_dynamics_transport,
             metal_context=metal_context,
+            resident_stage_device=resident_scalar_stage,
             **kwargs,
+        )
+    if (metal_workspace is not None and metal_context is not None
+            and stage.dtype == np.dtype(np.float32)
+            and not bool(kwargs.get("config_apply_lbcs", False))
+            and kwargs.get("bdy_mask_cell") is None
+            and kwargs.get("bdy_mask_edge") is None):
+        horizontal_order = _validate_order(
+            kwargs.get("config_scalar_adv_order", 3), "config_scalar_adv_order"
+        )
+        vertical_order = _validate_order(
+            kwargs.get("config_scalar_vadv_order", 3), "config_scalar_vadv_order"
+        )
+        coefficient = float(kwargs.get("config_coef_3rd_order", 0.25))
+        _validate_third_order_coefficient(coefficient)
+        step = stage.dtype.type(dt)
+        if not np.isfinite(step) or step < 0:
+            raise ValueError("dt must be finite and non-negative")
+        old, old_squeezed = _as_tracers(scalar_old, "scalar_old")
+        if old.shape != stage.shape or old_squeezed != squeezed:
+            raise ValueError("scalar_old and scalar_stage shapes must agree")
+        dimensions = metal_workspace.dimensions
+        if (old.shape != (dimensions["ntracers"], dimensions["nlev"],
+                          dimensions["ncells"])):
+            raise ValueError("scalar arrays disagree with the resident Metal workspace")
+        rho_old = _float_array(rho_zz_old, "rho_zz_old", stage.dtype)
+        if rho_old.shape != rho_new.shape:
+            raise ValueError("rho_zz_old/new shapes must agree")
+        expected_density = (dimensions["nlev"], dimensions["ncells"])
+        if rho_old.shape != expected_density:
+            raise ValueError("rho_zz_old/new must have shape (nLevels,nCells)")
+        if not config_split_dynamics_transport:
+            weight_new = stage.dtype.type(1.0)
+        elif rk_step == 1:
+            weight_new = stage.dtype.type(
+                1.0 / (3.0 if config_time_integration_order == 3 else 2.0)
+            )
+        elif rk_step == 2:
+            weight_new = stage.dtype.type(0.5)
+        else:
+            weight_new = stage.dtype.type(1.0)
+        target_density = (
+            (stage.dtype.type(1.0) - weight_new) * rho_old
+            + weight_new * rho_new
+        )
+        if np.any(target_density <= 0):
+            raise ValueError("time-interpolated rho_zz must stay positive")
+        scalar_tendency = kwargs.get("scalar_tendency")
+        if scalar_tendency is None:
+            source = np.zeros_like(old)
+        else:
+            source, source_squeezed = _as_tracers(
+                scalar_tendency, "scalar_tendency"
+            )
+            if source.shape != old.shape or source_squeezed != squeezed:
+                raise ValueError("scalar_tendency shape must equal scalar_old shape")
+        params = {
+            **metal_workspace.dimensions,
+            "horizontal_order": horizontal_order,
+            "vertical_order": vertical_order,
+            "dt": float(dt),
+            "horizontal_coefficient": coefficient if horizontal_order == 3 else 0.0,
+            "vertical_coefficient": coefficient if vertical_order == 3 else 0.0,
+        }
+        dynamic_arrays = {
+            "rho_old": rho_old,
+            "target_density": target_density,
+            "horizontal_velocity": _float_array(uh_avg, "uh_avg", stage.dtype),
+            "vertical_velocity": _float_array(ww_avg, "ww_avg", stage.dtype),
+            "source": source,
+        }
+        if dynamic_arrays["horizontal_velocity"].shape != (
+                dimensions["nlev"], dimensions["nedges"]):
+            raise ValueError("uh_avg must have shape (nLevels,nEdges)")
+        if dynamic_arrays["vertical_velocity"].shape != (
+                dimensions["nlev"] + 1, dimensions["ncells"]):
+            raise ValueError("ww_avg must have shape (nLevels+1,nCells)")
+        stage_size = int(old.size)
+        output_device = metal_workspace.update(
+            scalar_stage=stage, resident_stage=resident_scalar_stage,
+            dynamic_arrays=dynamic_arrays, params=params,
+            stage_size=stage_size,
+        )
+        output_host = output_device.to_numpy().reshape(old.shape)
+        return ScalarTransportResult(
+            _restore_tracers(output_host, squeezed), target_density.copy(),
+            metal_scalars=output_device,
         )
     return advance_scalars(
         mesh,

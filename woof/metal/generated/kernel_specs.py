@@ -5479,7 +5479,7 @@ RRTMG_LEGACY_SW_INATM_SHAPES = (('ch4vmr', (('ncol', 'nl'),)), ('co2vmr', (('nco
 RRTMG_LEGACY_SW_INATM_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('grav', 'ctypes.c_float'), ('avogad', 'ctypes.c_float')]
 RRTMG_LEGACY_SW_INATM_THREADS_PER_GROUP = 128
 RRTMG_LEGACY_SW_INATM_LAYOUT_HASH = '10b20d446a45e4bda35902ae7a69a48a707d8f232bc5319a148279486493da33'
-RRTMG_LEGACY_SW_INATM_SHADER_HASH = '5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24'
+RRTMG_LEGACY_SW_INATM_SHADER_HASH = 'a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033'
 
 RRTMG_LEGACY_SW_CLDPRMC_RESOURCES = (('tab', 'float', 'read'), ('ngb', 'int32', 'read'), ('cldfmc', 'float', 'read'), ('ciwpmc', 'float', 'read'), ('clwpmc', 'float', 'read'), ('cswpmc', 'float', 'read'), ('reicmc', 'float', 'read'), ('relqmc', 'float', 'read'), ('resnmc', 'float', 'read'), ('taormc', 'float', 'read_write'), ('taucmc', 'float', 'read_write'), ('ssacmc', 'float', 'read_write'), ('asmcmc', 'float', 'read_write'), ('fsfcmc', 'float', 'read'), ('err', 'int32', 'read_write'))
 RRTMG_LEGACY_SW_CLDPRMC_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write')
@@ -5487,7 +5487,7 @@ RRTMG_LEGACY_SW_CLDPRMC_SHAPES = (('asmcmc', (('ncol', 'nl', '112'),)), ('ciwpmc
 RRTMG_LEGACY_SW_CLDPRMC_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('ntab', 'ctypes.c_int32'), ('inflag', 'ctypes.c_int32'), ('iceflag', 'ctypes.c_int32'), ('liqflag', 'ctypes.c_int32')]
 RRTMG_LEGACY_SW_CLDPRMC_THREADS_PER_GROUP = 128
 RRTMG_LEGACY_SW_CLDPRMC_LAYOUT_HASH = 'e7aaecc28d5f77a4a928e4881bb30035b142fc5cb1de983d32708a809ba2a937'
-RRTMG_LEGACY_SW_CLDPRMC_SHADER_HASH = '5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24'
+RRTMG_LEGACY_SW_CLDPRMC_SHADER_HASH = 'a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033'
 
 RRTMG_LEGACY_SW_SETCOEF_RESOURCES = (('tab', 'float', 'read'), ('pavel', 'float', 'read'), ('tavel', 'float', 'read'), ('coldry', 'float', 'read'), ('wkl', 'float', 'read'), ('jp', 'int32', 'read_write'), ('jt', 'int32', 'read_write'), ('jt1', 'int32', 'read_write'), ('indself', 'int32', 'read_write'), ('indfor', 'int32', 'read_write'), ('tflag', 'int32', 'read_write'), ('lflag', 'int32', 'read_write'), ('colh2o', 'float', 'read_write'), ('colco2', 'float', 'read_write'), ('colo3', 'float', 'read_write'), ('coln2o', 'float', 'read_write'), ('colch4', 'float', 'read_write'), ('colo2', 'float', 'read_write'), ('colmol', 'float', 'read_write'), ('co2mult', 'float', 'read_write'), ('selffac', 'float', 'read_write'), ('selffrac', 'float', 'read_write'), ('forfac', 'float', 'read_write'), ('forfrac', 'float', 'read_write'), ('fac00', 'float', 'read_write'), ('fac01', 'float', 'read_write'), ('fac10', 'float', 'read_write'), ('fac11', 'float', 'read_write'))
 RRTMG_LEGACY_SW_SETCOEF_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -5495,7 +5495,7 @@ RRTMG_LEGACY_SW_SETCOEF_SHAPES = (('co2mult', (('ncol', 'nl'),)), ('colch4', (('
 RRTMG_LEGACY_SW_SETCOEF_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('ntab', 'ctypes.c_int32')]
 RRTMG_LEGACY_SW_SETCOEF_THREADS_PER_GROUP = 128
 RRTMG_LEGACY_SW_SETCOEF_LAYOUT_HASH = '93bff9db9750a441056bb97464b9f21c7d080a885f8a15d7417c877779069237'
-RRTMG_LEGACY_SW_SETCOEF_SHADER_HASH = '5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24'
+RRTMG_LEGACY_SW_SETCOEF_SHADER_HASH = 'a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033'
 
 RRTMG_LEGACY_SW_LAYSOLFR_RESOURCES = (('jp', 'int32', 'read'), ('tflag', 'int32', 'read'), ('spec', 'int32', 'read'), ('laytrop', 'int32', 'read_write'), ('laysolfr', 'int32', 'read_write'))
 RRTMG_LEGACY_SW_LAYSOLFR_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
@@ -5503,7 +5503,7 @@ RRTMG_LEGACY_SW_LAYSOLFR_SHAPES = (('jp', (('ncol', 'nl'),)), ('laysolfr', (('nc
 RRTMG_LEGACY_SW_LAYSOLFR_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32')]
 RRTMG_LEGACY_SW_LAYSOLFR_THREADS_PER_GROUP = 128
 RRTMG_LEGACY_SW_LAYSOLFR_LAYOUT_HASH = '0c9dceb9912d3c1783ccb75105d5b8f806ff6842030bac4905ebd8aad3e8cde9'
-RRTMG_LEGACY_SW_LAYSOLFR_SHADER_HASH = '5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24'
+RRTMG_LEGACY_SW_LAYSOLFR_SHADER_HASH = 'a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033'
 
 RRTMG_LEGACY_SW_TAUMOL_RESOURCES = (('laytrop', 'int32', 'read'), ('tab', 'float', 'read'), ('ngb', 'int32', 'read'), ('jp', 'int32', 'read'), ('jt', 'int32', 'read'), ('jt1', 'int32', 'read'), ('colh2o', 'float', 'read'), ('colco2', 'float', 'read'), ('colch4', 'float', 'read'), ('colo2', 'float', 'read'), ('colo3', 'float', 'read'), ('colmol', 'float', 'read'), ('fac00', 'float', 'read'), ('fac01', 'float', 'read'), ('fac10', 'float', 'read'), ('fac11', 'float', 'read'), ('selffac', 'float', 'read'), ('selffrac', 'float', 'read'), ('indself', 'int32', 'read'), ('forfac', 'float', 'read'), ('forfrac', 'float', 'read'), ('indfor', 'int32', 'read'), ('taug', 'float', 'read_write'), ('taur', 'float', 'read_write'))
 RRTMG_LEGACY_SW_TAUMOL_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -5511,7 +5511,7 @@ RRTMG_LEGACY_SW_TAUMOL_SHAPES = (('colch4', (('ncol', 'nl'),)), ('colco2', (('nc
 RRTMG_LEGACY_SW_TAUMOL_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('ntab', 'ctypes.c_int32')]
 RRTMG_LEGACY_SW_TAUMOL_THREADS_PER_GROUP = 128
 RRTMG_LEGACY_SW_TAUMOL_LAYOUT_HASH = '14caf7c0933f89ad5d13ba4d6d1b10260be184aec577785bd1b19caa89e37aa8'
-RRTMG_LEGACY_SW_TAUMOL_SHADER_HASH = '5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24'
+RRTMG_LEGACY_SW_TAUMOL_SHADER_HASH = 'a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033'
 
 RRTMG_LEGACY_SW_SFLUXZEN_RESOURCES = (('laytrop', 'int32', 'read'), ('tab', 'float', 'read'), ('ngb', 'int32', 'read'), ('laysolfr', 'int32', 'read'), ('jp', 'int32', 'read'), ('jt', 'int32', 'read'), ('jt1', 'int32', 'read'), ('colh2o', 'float', 'read'), ('colco2', 'float', 'read'), ('colch4', 'float', 'read'), ('colo2', 'float', 'read'), ('colo3', 'float', 'read'), ('fac00', 'float', 'read'), ('fac01', 'float', 'read'), ('fac10', 'float', 'read'), ('fac11', 'float', 'read'), ('sfluxzen', 'float', 'read_write'))
 RRTMG_LEGACY_SW_SFLUXZEN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -5519,7 +5519,7 @@ RRTMG_LEGACY_SW_SFLUXZEN_SHAPES = (('colch4', (('ncol', 'nl'),)), ('colco2', (('
 RRTMG_LEGACY_SW_SFLUXZEN_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('ntab', 'ctypes.c_int32')]
 RRTMG_LEGACY_SW_SFLUXZEN_THREADS_PER_GROUP = 128
 RRTMG_LEGACY_SW_SFLUXZEN_LAYOUT_HASH = '29dd80f8e433791dc6fa5d020e737efe94c767f56b31a446122b2e36573c3106'
-RRTMG_LEGACY_SW_SFLUXZEN_SHADER_HASH = '5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24'
+RRTMG_LEGACY_SW_SFLUXZEN_SHADER_HASH = 'a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033'
 
 RRTMG_LEGACY_SW_SPCVMC_RESOURCES = (('tab', 'float', 'read'), ('ngb', 'int32', 'read'), ('palbd', 'float', 'read'), ('palbp', 'float', 'read'), ('pcldfmc', 'float', 'read'), ('ptaucmc', 'float', 'read'), ('pasycmc', 'float', 'read'), ('pomgcmc', 'float', 'read'), ('ptaormc', 'float', 'read'), ('ptaua', 'float', 'read'), ('pasya', 'float', 'read'), ('pomga', 'float', 'read'), ('prmu0', 'float', 'read'), ('adjflux', 'float', 'read'), ('sfluxzen', 'float', 'read'), ('taug', 'float', 'read'), ('taur', 'float', 'read'), ('zincflx', 'float', 'read_write'), ('zcd', 'float', 'read_write'), ('zcu', 'float', 'read_write'), ('zfd', 'float', 'read_write'), ('zfu', 'float', 'read_write'), ('ztdbt_nodel', 'float', 'read_write'), ('ztdbtc_nodel', 'float', 'read_write'), ('wk', 'float', 'read_write'))
 RRTMG_LEGACY_SW_SPCVMC_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -5527,7 +5527,7 @@ RRTMG_LEGACY_SW_SPCVMC_SHAPES = (('adjflux', (('ncol', '14'),)), ('ngb', (('112'
 RRTMG_LEGACY_SW_SPCVMC_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('ntab', 'ctypes.c_int32'), ('nwk', 'ctypes.c_int32')]
 RRTMG_LEGACY_SW_SPCVMC_THREADS_PER_GROUP = 128
 RRTMG_LEGACY_SW_SPCVMC_LAYOUT_HASH = '42ccfb3d2a5dc5b37ec8c8b007a26e8dabbb4ec9f36ad06fd60b62d2dc4f8938'
-RRTMG_LEGACY_SW_SPCVMC_SHADER_HASH = '5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24'
+RRTMG_LEGACY_SW_SPCVMC_SHADER_HASH = 'a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033'
 
 RRTMG_LEGACY_SW_ACCUM_RESOURCES = (('ngb', 'int32', 'read'), ('zincflx', 'float', 'read'), ('zcd', 'float', 'read'), ('zcu', 'float', 'read'), ('zfd', 'float', 'read'), ('zfu', 'float', 'read'), ('ztdbt_nodel', 'float', 'read'), ('ztdbtc_nodel', 'float', 'read'), ('pbbfd', 'float', 'read_write'), ('pbbfu', 'float', 'read_write'), ('pbbcd', 'float', 'read_write'), ('pbbcu', 'float', 'read_write'), ('pbbfddir', 'float', 'read_write'), ('pbbcddir', 'float', 'read_write'), ('puvfd', 'float', 'read_write'), ('puvcd', 'float', 'read_write'), ('puvfddir', 'float', 'read_write'), ('puvcddir', 'float', 'read_write'), ('pnifd', 'float', 'read_write'), ('pnicd', 'float', 'read_write'), ('pnifddir', 'float', 'read_write'), ('pnicddir', 'float', 'read_write'))
 RRTMG_LEGACY_SW_ACCUM_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -5535,7 +5535,7 @@ RRTMG_LEGACY_SW_ACCUM_SHAPES = (('ngb', (('112',),)), ('pbbcd', (('ncol', 'nl+1'
 RRTMG_LEGACY_SW_ACCUM_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32')]
 RRTMG_LEGACY_SW_ACCUM_THREADS_PER_GROUP = 128
 RRTMG_LEGACY_SW_ACCUM_LAYOUT_HASH = '3bb1de6d5060ea0b1bc9dd10abcae725fd6b3f3da628a063470bc049bad7967e'
-RRTMG_LEGACY_SW_ACCUM_SHADER_HASH = '5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24'
+RRTMG_LEGACY_SW_ACCUM_SHADER_HASH = 'a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033'
 
 RRTMG_LEGACY_SW_POST_RESOURCES = (('pdp', 'float', 'read'), ('pbbfu', 'float', 'read'), ('pbbfd', 'float', 'read'), ('pbbcu', 'float', 'read'), ('pbbcd', 'float', 'read'), ('swhr', 'float', 'read_write'), ('swhrc', 'float', 'read_write'))
 RRTMG_LEGACY_SW_POST_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -5543,7 +5543,7 @@ RRTMG_LEGACY_SW_POST_SHAPES = (('pbbcd', (('ncol', 'nl+1'),)), ('pbbcu', (('ncol
 RRTMG_LEGACY_SW_POST_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nl', 'ctypes.c_int32'), ('heatfac', 'ctypes.c_float')]
 RRTMG_LEGACY_SW_POST_THREADS_PER_GROUP = 128
 RRTMG_LEGACY_SW_POST_LAYOUT_HASH = 'b7b64941beac5ed05f9e30ba1b04d9910709217651aafb2caf098fce2d412232'
-RRTMG_LEGACY_SW_POST_SHADER_HASH = '5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24'
+RRTMG_LEGACY_SW_POST_SHADER_HASH = 'a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033'
 
 GLOBAL_SEMILAG_HALF_APPLY_FRAGMENT_RESOURCES = (('divergence', 'float64_bits', 'read'), ('theta', 'float64_bits', 'read'), ('logps', 'float64_bits', 'read'), ('b_matrix', 'float64_bits', 'read'), ('c_matrix', 'float64_bits', 'read'), ('p_d', 'float64_bits', 'read'), ('q_d', 'float64_bits', 'read'), ('p_x', 'float64_bits', 'read'), ('q_x', 'float64_bits', 'read'), ('k2', 'float64_bits', 'read'), ('divergence_new', 'float64_bits', 'read_write'), ('x_new', 'float64_bits', 'read_write'), ('partial_max', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_HALF_APPLY_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
@@ -5919,7 +5919,7 @@ GLOBAL_TRACER_PACK_FRAGMENT_SHAPES = (('tracer', (('count',),)), ('density', (('
 GLOBAL_TRACER_PACK_FRAGMENT_PARAM_FIELDS = [('count', 'ctypes.c_int32')]
 GLOBAL_TRACER_PACK_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_TRACER_PACK_FRAGMENT_LAYOUT_HASH = '901212ba2dcc367fde516a575f0b3c6d20d5cd86316aea0e619824ec3ad0e889'
-GLOBAL_TRACER_PACK_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_PACK_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_FLUX_PREPARE_FRAGMENT_RESOURCES = (('flux_u', 'float64_bits', 'read'), ('flux_v', 'float64_bits', 'read'), ('omega', 'float64_bits', 'read'), ('x_scale', 'float64_bits', 'read'), ('y_face', 'float64_bits', 'read'), ('psi_x', 'float64_bits', 'read_write'), ('psi_y', 'float64_bits', 'read_write'), ('psi_z', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_FLUX_PREPARE_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
@@ -5927,7 +5927,7 @@ GLOBAL_TRACER_FLUX_PREPARE_FRAGMENT_SHAPES = (('flux_u', (('any_1d',),)), ('flux
 GLOBAL_TRACER_FLUX_PREPARE_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlatitude', 'ctypes.c_int32'), ('nlongitude', 'ctypes.c_int32')]
 GLOBAL_TRACER_FLUX_PREPARE_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_TRACER_FLUX_PREPARE_FRAGMENT_LAYOUT_HASH = '3d521819ecb1e4bc68184eb100b64a797a0996887da5837d2b8bf66558ed6374'
-GLOBAL_TRACER_FLUX_PREPARE_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_FLUX_PREPARE_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_FLUX_PREPARE_RESIDENT_FRAGMENT_RESOURCES = (('flux_u', 'float64_bits', 'read'), ('flux_v', 'float64_bits', 'read'), ('omega', 'float64_bits', 'read'), ('x_scale', 'float64_bits', 'read'), ('y_face', 'float64_bits', 'read'), ('psi_x', 'float64_bits', 'read_write'), ('psi_y', 'float64_bits', 'read_write'), ('psi_z', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_FLUX_PREPARE_RESIDENT_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
@@ -5935,7 +5935,7 @@ GLOBAL_TRACER_FLUX_PREPARE_RESIDENT_FRAGMENT_SHAPES = (('flux_u', (('any_1d',),)
 GLOBAL_TRACER_FLUX_PREPARE_RESIDENT_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlatitude', 'ctypes.c_int32'), ('nlongitude', 'ctypes.c_int32')]
 GLOBAL_TRACER_FLUX_PREPARE_RESIDENT_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_TRACER_FLUX_PREPARE_RESIDENT_FRAGMENT_LAYOUT_HASH = '1c4680184cb943d2ec6b0a9f469721eccea48b6c9baf730dda57e8b90542b6f2'
-GLOBAL_TRACER_FLUX_PREPARE_RESIDENT_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_FLUX_PREPARE_RESIDENT_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_COURANT_ROW_FRAGMENT_RESOURCES = (('density', 'float64_bits', 'read'), ('psi', 'float64_bits', 'read'), ('dt', 'float64_bits', 'read'), ('row_max', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_COURANT_ROW_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -5943,7 +5943,7 @@ GLOBAL_TRACER_COURANT_ROW_FRAGMENT_SHAPES = (('density', (('any_1d',),)), ('psi'
 GLOBAL_TRACER_COURANT_ROW_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlatitude', 'ctypes.c_int32'), ('nlongitude', 'ctypes.c_int32')]
 GLOBAL_TRACER_COURANT_ROW_FRAGMENT_THREADS_PER_GROUP = 64
 GLOBAL_TRACER_COURANT_ROW_FRAGMENT_LAYOUT_HASH = '351709896eab38bd7c393ef70fe4c29c5fcd8472cb985330ac89996a572586e4'
-GLOBAL_TRACER_COURANT_ROW_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_COURANT_ROW_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_COURANT_ROW_FINALIZE_FRAGMENT_RESOURCES = (('row_max', 'float64_bits', 'read'), ('limit', 'float64_bits', 'read'), ('row_steps', 'int32', 'read_write'), ('summary', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_COURANT_ROW_FINALIZE_FRAGMENT_ACCESS = ('read', 'read', 'read_write', 'read_write')
@@ -5951,7 +5951,7 @@ GLOBAL_TRACER_COURANT_ROW_FINALIZE_FRAGMENT_SHAPES = (('row_max', (('nlatitude',
 GLOBAL_TRACER_COURANT_ROW_FINALIZE_FRAGMENT_PARAM_FIELDS = [('nlatitude', 'ctypes.c_int32')]
 GLOBAL_TRACER_COURANT_ROW_FINALIZE_FRAGMENT_THREADS_PER_GROUP = 1
 GLOBAL_TRACER_COURANT_ROW_FINALIZE_FRAGMENT_LAYOUT_HASH = '1bf2cff7bd844c9f2a6e5c61bea12e50bf54f226f8e48e60a3e69cc76fb0a787'
-GLOBAL_TRACER_COURANT_ROW_FINALIZE_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_COURANT_ROW_FINALIZE_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_COURANT_SCALAR_FRAGMENT_RESOURCES = (('density', 'float64_bits', 'read'), ('psi', 'float64_bits', 'read'), ('inv_width', 'float64_bits', 'read'), ('dt', 'float64_bits', 'read'), ('partial', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_COURANT_SCALAR_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -5959,7 +5959,7 @@ GLOBAL_TRACER_COURANT_SCALAR_FRAGMENT_SHAPES = (('density', (('any_1d',),)), ('p
 GLOBAL_TRACER_COURANT_SCALAR_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlatitude', 'ctypes.c_int32'), ('nlongitude', 'ctypes.c_int32'), ('axis', 'ctypes.c_int32'), ('chunk', 'ctypes.c_int32'), ('count', 'ctypes.c_int32'), ('nblock', 'ctypes.c_int32')]
 GLOBAL_TRACER_COURANT_SCALAR_FRAGMENT_THREADS_PER_GROUP = 64
 GLOBAL_TRACER_COURANT_SCALAR_FRAGMENT_LAYOUT_HASH = 'c4dce3734bb388f0227eb0966562925c569ea46d0491e925bb17ada879739360'
-GLOBAL_TRACER_COURANT_SCALAR_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_COURANT_SCALAR_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_COURANT_SCALAR_FINALIZE_FRAGMENT_RESOURCES = (('partial', 'float64_bits', 'read'), ('limit', 'float64_bits', 'read'), ('summary', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_COURANT_SCALAR_FINALIZE_FRAGMENT_ACCESS = ('read', 'read', 'read_write')
@@ -5967,7 +5967,7 @@ GLOBAL_TRACER_COURANT_SCALAR_FINALIZE_FRAGMENT_SHAPES = (('partial', (('npartial
 GLOBAL_TRACER_COURANT_SCALAR_FINALIZE_FRAGMENT_PARAM_FIELDS = [('npartial', 'ctypes.c_int32')]
 GLOBAL_TRACER_COURANT_SCALAR_FINALIZE_FRAGMENT_THREADS_PER_GROUP = 1
 GLOBAL_TRACER_COURANT_SCALAR_FINALIZE_FRAGMENT_LAYOUT_HASH = 'd9f16bf9f8a0bf2b872f01b5fda8678d2ca5acf9dd8d4d9b2693dc704b444c53'
-GLOBAL_TRACER_COURANT_SCALAR_FINALIZE_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_COURANT_SCALAR_FINALIZE_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_ZONAL_ROWS_FRAGMENT_RESOURCES = (('mass', 'float64_bits', 'read'), ('density', 'float64_bits', 'read'), ('psi', 'float64_bits', 'read'), ('row_steps', 'int32', 'read'), ('dt', 'float64_bits', 'read'), ('new_mass', 'float64_bits', 'read_write'), ('new_density', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_ZONAL_ROWS_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -5975,7 +5975,7 @@ GLOBAL_TRACER_ZONAL_ROWS_FRAGMENT_SHAPES = (('mass', (('any_1d',),)), ('density'
 GLOBAL_TRACER_ZONAL_ROWS_FRAGMENT_PARAM_FIELDS = [('ntracer', 'ctypes.c_int32'), ('nlevel', 'ctypes.c_int32'), ('nlatitude', 'ctypes.c_int32'), ('nlongitude', 'ctypes.c_int32'), ('iteration', 'ctypes.c_int32')]
 GLOBAL_TRACER_ZONAL_ROWS_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_TRACER_ZONAL_ROWS_FRAGMENT_LAYOUT_HASH = 'ada54809025d252a83f5fbd9620870364db0133895903f55b620e716232387a4'
-GLOBAL_TRACER_ZONAL_ROWS_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_ZONAL_ROWS_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_PRESSURE_COORDS_FRAGMENT_RESOURCES = (('density', 'float64_bits', 'read'), ('p_top', 'float64_bits', 'read'), ('p_half', 'float64_bits', 'read_write'), ('p_full', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_PRESSURE_COORDS_FRAGMENT_ACCESS = ('read', 'read', 'read_write', 'read_write')
@@ -5983,7 +5983,7 @@ GLOBAL_TRACER_PRESSURE_COORDS_FRAGMENT_SHAPES = (('density', (('any_1d',),)), ('
 GLOBAL_TRACER_PRESSURE_COORDS_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('ncolumn', 'ctypes.c_int32')]
 GLOBAL_TRACER_PRESSURE_COORDS_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_TRACER_PRESSURE_COORDS_FRAGMENT_LAYOUT_HASH = '063bee484fc7a4fc10d0232e987031fd808b9d160d055a0def878f565ae2a1a9'
-GLOBAL_TRACER_PRESSURE_COORDS_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_PRESSURE_COORDS_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_VERTICAL_FRAGMENT_RESOURCES = (('mass', 'float64_bits', 'read'), ('density', 'float64_bits', 'read'), ('psi', 'float64_bits', 'read'), ('p_half', 'float64_bits', 'read'), ('p_full', 'float64_bits', 'read'), ('sub', 'float64_bits', 'read'), ('new_mass', 'float64_bits', 'read_write'), ('new_density', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_VERTICAL_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -5991,7 +5991,7 @@ GLOBAL_TRACER_VERTICAL_FRAGMENT_SHAPES = (('mass', (('any_1d',),)), ('density', 
 GLOBAL_TRACER_VERTICAL_FRAGMENT_PARAM_FIELDS = [('ntracer', 'ctypes.c_int32'), ('nlevel', 'ctypes.c_int32'), ('ncolumn', 'ctypes.c_int32')]
 GLOBAL_TRACER_VERTICAL_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_TRACER_VERTICAL_FRAGMENT_LAYOUT_HASH = '9083c5cca5f41b4f720a3b4f8f3eebbaf2fc4355b97f37dc6254e92af502961b'
-GLOBAL_TRACER_VERTICAL_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_VERTICAL_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_FLOOR_FRAGMENT_RESOURCES = (('mass', 'float64_bits', 'read_write'), ('density', 'float64_bits', 'read'), ('row_weight', 'float64_bits', 'read'), ('negative', 'float64_bits', 'read_write'), ('positive', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_FLOOR_FRAGMENT_ACCESS = ('read_write', 'read', 'read', 'read_write', 'read_write')
@@ -5999,7 +5999,7 @@ GLOBAL_TRACER_FLOOR_FRAGMENT_SHAPES = (('mass', (('any_1d',),)), ('density', (('
 GLOBAL_TRACER_FLOOR_FRAGMENT_PARAM_FIELDS = [('ntracer', 'ctypes.c_int32'), ('nlevel', 'ctypes.c_int32'), ('nlatitude', 'ctypes.c_int32'), ('nlongitude', 'ctypes.c_int32'), ('chunk', 'ctypes.c_int32'), ('nblock', 'ctypes.c_int32')]
 GLOBAL_TRACER_FLOOR_FRAGMENT_THREADS_PER_GROUP = 64
 GLOBAL_TRACER_FLOOR_FRAGMENT_LAYOUT_HASH = '8593aec0c91356b1e7e73892dddf3080176b8c53ea756a3d7035b5b5931361e3'
-GLOBAL_TRACER_FLOOR_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_FLOOR_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 GLOBAL_TRACER_FLOOR_FINALIZE_FRAGMENT_RESOURCES = (('negative', 'float64_bits', 'read'), ('positive', 'float64_bits', 'read'), ('neg_total', 'float64_bits', 'read_write'), ('pos_total', 'float64_bits', 'read_write'))
 GLOBAL_TRACER_FLOOR_FINALIZE_FRAGMENT_ACCESS = ('read', 'read', 'read_write', 'read_write')
@@ -6007,7 +6007,7 @@ GLOBAL_TRACER_FLOOR_FINALIZE_FRAGMENT_SHAPES = (('negative', (('any_1d',),)), ('
 GLOBAL_TRACER_FLOOR_FINALIZE_FRAGMENT_PARAM_FIELDS = [('ntracer', 'ctypes.c_int32'), ('nblock', 'ctypes.c_int32')]
 GLOBAL_TRACER_FLOOR_FINALIZE_FRAGMENT_THREADS_PER_GROUP = 64
 GLOBAL_TRACER_FLOOR_FINALIZE_FRAGMENT_LAYOUT_HASH = '4783acae5b913329b22bb1f15539b8afce00ab3c3e5d43749955b97d11854a40'
-GLOBAL_TRACER_FLOOR_FINALIZE_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_FLOOR_FINALIZE_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 NOAH_MOSAIC_PACK_RESOURCES = (('psfc_a', 'float', 'read'), ('sfcprs_a', 'float', 'read'), ('sfctmp_a', 'float', 'read'), ('qv1_a', 'float', 'read'), ('qgh_a', 'float', 'read'), ('dz8w1_a', 'float', 'read'), ('glw_a', 'float', 'read'), ('swdown_a', 'float', 'read'), ('rainbl_a', 'float', 'read'), ('sr_a', 'float', 'read'), ('chs_a', 'float', 'read'), ('cqs2_a', 'float', 'read'), ('chs2_a', 'float', 'read'), ('rib_a', 'float', 'read'), ('vegfra_a', 'float', 'read'), ('shdmin_a', 'float', 'read'), ('shdmax_a', 'float', 'read'), ('tmn_a', 'float', 'read'), ('xland_a', 'float', 'read'), ('xice_a', 'float', 'read'), ('snoalb_a', 'float', 'read'), ('embck_a', 'float', 'read'), ('tsk_a', 'float', 'read'), ('hfx_a', 'float', 'read'), ('qfx_a', 'float', 'read'), ('lh_a', 'float', 'read'), ('grdflx_a', 'float', 'read'), ('qsfc_a', 'float', 'read'), ('canwat_a', 'float', 'read'), ('snow_a', 'float', 'read'), ('snowc_a', 'float', 'read'), ('snowh_a', 'float', 'read'), ('albedo_a', 'float', 'read'), ('albbck_a', 'float', 'read'), ('emiss_a', 'float', 'read'), ('znt_a', 'float', 'read'), ('z0_a', 'float', 'read'), ('snotime_a', 'float', 'read'), ('lai_a', 'float', 'read'), ('smstav_a', 'float', 'read'), ('smstot_a', 'float', 'read'), ('sfcrunoff_a', 'float', 'read'), ('udrunoff_a', 'float', 'read'), ('acsnow_a', 'float', 'read'), ('acsnom_a', 'float', 'read'), ('snopcx_a', 'float', 'read'), ('potevp_a', 'float', 'read'), ('noahres_a', 'float', 'read'), ('chklowq_a', 'float', 'read'), ('smois_a', 'float', 'read'), ('tslb_a', 'float', 'read'), ('sh2o_a', 'float', 'read'), ('smcrel_a', 'float', 'read'), ('state_fields', 'float', 'read_write'))
 NOAH_MOSAIC_PACK_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -6119,7 +6119,7 @@ GLOBAL_TRACER_WALLED_RESIDENT_FRAGMENT_SHAPES = (('mass', (('any_1d',),)), ('den
 GLOBAL_TRACER_WALLED_RESIDENT_FRAGMENT_PARAM_FIELDS = [('ntracer', 'ctypes.c_int32'), ('nouter', 'ctypes.c_int32'), ('axis_length', 'ctypes.c_int32'), ('stride', 'ctypes.c_int32')]
 GLOBAL_TRACER_WALLED_RESIDENT_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_TRACER_WALLED_RESIDENT_FRAGMENT_LAYOUT_HASH = '8f2ed84f4734a70b5a845716437b144c59101fb058b48ac06adcd1058e407d70'
-GLOBAL_TRACER_WALLED_RESIDENT_FRAGMENT_SHADER_HASH = '2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5'
+GLOBAL_TRACER_WALLED_RESIDENT_FRAGMENT_SHADER_HASH = 'a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c'
 
 FLUX_DIV_SCALAR_VORDER_RESOURCES = (('q', 'float', 'read'), ('ru', 'float', 'read'), ('rv', 'float', 'read'), ('rw', 'float', 'read'), ('tend', 'float', 'read_write'), ('rdnw', 'float', 'read'), ('fnm', 'float', 'read'), ('fnp', 'float', 'read'), ('msf', 'float', 'read'))
 FLUX_DIV_SCALAR_VORDER_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read', 'read', 'read', 'read')
@@ -6488,3 +6488,11 @@ ENSEMBLE_SURFACE_OFFSET_SST_PARAM_FIELDS = [('columns', 'ctypes.c_int32'), ('app
 ENSEMBLE_SURFACE_OFFSET_SST_THREADS_PER_GROUP = 128
 ENSEMBLE_SURFACE_OFFSET_SST_LAYOUT_HASH = '50b722ac9be513cceb82f4181d5cc6a5b73ccdb78ec9383572d2ece415f52795'
 ENSEMBLE_SURFACE_OFFSET_SST_SHADER_HASH = '1ad7171900d127092c629a276be58a9419c66a52fa42693815e82660be0d4d05'
+
+HEX_SCALAR_RK_UPDATE_FRAGMENT_RESOURCES = (('output', 'float', 'read_write'), ('scalar_old', 'float', 'read'), ('scalar_stage', 'float', 'read'), ('rho_old', 'float', 'read'), ('target_density', 'float', 'read'), ('horizontal_velocity', 'float', 'read'), ('vertical_velocity', 'float', 'read'), ('source', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('edge_counts', 'int32', 'read'), ('edge_signs', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('dv_edge', 'float', 'read'), ('adv_coefs', 'float', 'read'), ('adv_coefs_3rd', 'float', 'read'), ('n_adv_cells_for_edge', 'int32', 'read'), ('adv_cells_for_edge', 'int32', 'read'), ('area_cell', 'float', 'read'), ('inv_area_cell', 'float', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('rdzw', 'float', 'read'))
+HEX_SCALAR_RK_UPDATE_FRAGMENT_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+HEX_SCALAR_RK_UPDATE_FRAGMENT_SHAPES = (('output', (('any_1d',),)), ('scalar_old', (('any_1d',),)), ('scalar_stage', (('any_1d',),)), ('rho_old', (('any_1d',),)), ('target_density', (('any_1d',),)), ('horizontal_velocity', (('any_1d',),)), ('vertical_velocity', (('any_1d',),)), ('source', (('any_1d',),)), ('edges_on_cell', (('any_1d',),)), ('edge_counts', (('any_1d',),)), ('edge_signs', (('any_1d',),)), ('cells_on_edge', (('any_1d',),)), ('dv_edge', (('any_1d',),)), ('adv_coefs', (('any_1d',),)), ('adv_coefs_3rd', (('any_1d',),)), ('n_adv_cells_for_edge', (('any_1d',),)), ('adv_cells_for_edge', (('any_1d',),)), ('area_cell', (('any_1d',),)), ('inv_area_cell', (('any_1d',),)), ('fzm', (('any_1d',),)), ('fzp', (('any_1d',),)), ('rdzw', (('any_1d',),)))
+HEX_SCALAR_RK_UPDATE_FRAGMENT_PARAM_FIELDS = [('ntracers', 'ctypes.c_int32'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32'), ('max_adv', 'ctypes.c_int32'), ('horizontal_order', 'ctypes.c_int32'), ('vertical_order', 'ctypes.c_int32'), ('use_inverse_area', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('horizontal_coefficient', 'ctypes.c_float'), ('vertical_coefficient', 'ctypes.c_float')]
+HEX_SCALAR_RK_UPDATE_FRAGMENT_THREADS_PER_GROUP = 128
+HEX_SCALAR_RK_UPDATE_FRAGMENT_LAYOUT_HASH = '565736b2982d8f3de4840f343f1c28adc2c6a43fc65f50372eb9ade56a754c10'
+HEX_SCALAR_RK_UPDATE_FRAGMENT_SHADER_HASH = '24f288446296f3f96666088cb765950d68ec9ba85b87e40a4c19f8ccac438fd2'

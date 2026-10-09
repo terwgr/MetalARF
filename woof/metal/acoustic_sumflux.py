@@ -81,11 +81,24 @@ def prepare_sumflux(name: str, targets: tuple, sources: tuple = (),
     All resources are captured by the returned launch closure, matching the
     CUDA call's allocation lifetime through command-buffer completion.
     """
+    context, call = prepare_sumflux_call(name, targets, sources, nsub)
+    if call is None:
+        return lambda: None
+
+    def launch():
+        context.submit_kernel_batch((call,), label=name)
+
+    return launch
+
+
+def prepare_sumflux_call(name: str, targets: tuple, sources: tuple = (),
+                         nsub: int = 0):
+    """Freeze one sumflux dispatch for composition with adjacent kernels."""
     targets, sources = tuple(targets), tuple(sources)
     context, sizes, nmax, nx, ny, nz = _validate(
         name, targets, sources, nsub)
     if nmax == 0:
-        return lambda: None
+        return context, None
     params = {"nx": nx, "ny": ny, "nz": nz,
               "nu": sizes[0], "nv": sizes[1], "nw": sizes[2],
               "nmax": nmax}
@@ -95,9 +108,6 @@ def prepare_sumflux(name: str, targets: tuple, sources: tuple = (),
     if sources:
         resources.update(zip(("ru", "rv", "ww"), sources))
 
-    def launch():
-        return context.submit_kernel(
-            name, resources, params, exact_policy=WRF_EXACT,
-            grid_size=nmax)
-
-    return launch
+    call = context.prepare_kernel_call(
+        name, resources, params, exact_policy=WRF_EXACT, grid_size=nmax)
+    return context, call

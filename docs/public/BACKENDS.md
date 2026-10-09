@@ -33,6 +33,9 @@ and Global are preview models, and their Metal coverage is limited to the
 implemented forecast paths. CUDA installation uses the matching `all-cu12` or
 `all-cu13` extra on Linux; install one CUDA/CuPy major per environment.
 
+Check an install with `woof selftest` (one tiny regional, Hex and Global
+step on the chosen backend).
+
 ## Metal memory and environment
 
 Before allocating forecast state, Metal estimates device use against the

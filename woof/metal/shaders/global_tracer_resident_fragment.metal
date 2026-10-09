@@ -111,6 +111,7 @@ kernel void global_tracer_courant_row_finalize_fragment(
 kernel void global_tracer_courant_scalar_fragment(
     constant GlobalTracerCourantScalarFragmentResources &r [[buffer(0)]],
     constant GlobalTracerCourantScalarFragmentParams &p [[buffer(1)]], uint block [[thread_position_in_grid]]) {
+    if(block>=uint(p.nblock))return;
     const uint start=block*uint(p.chunk), stop=min(uint(p.count),start+uint(p.chunk));
     ulong largest=0ul;
     const uint nx=uint(p.nlongitude), ny=uint(p.nlatitude);
@@ -325,6 +326,7 @@ kernel void global_tracer_vertical_fragment(
 kernel void global_tracer_floor_fragment(
     constant GlobalTracerFloorFragmentResources &r [[buffer(0)]],
     constant GlobalTracerFloorFragmentParams &p [[buffer(1)]], uint block [[thread_position_in_grid]]) {
+    if(block>=uint(p.ntracer)*uint(p.nblock))return;
     const uint ncell=uint(p.nlevel)*uint(p.nlatitude)*uint(p.nlongitude);
     const uint tracer=block/uint(p.nblock), part=block%uint(p.nblock);
     const uint start=part*uint(p.chunk), stop=min(ncell,start+uint(p.chunk));

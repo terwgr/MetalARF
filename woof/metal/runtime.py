@@ -7,6 +7,7 @@ compiler and never compiles shader source when a user imports WOOF.
 from __future__ import annotations
 
 import ctypes
+from contextlib import contextmanager
 from dataclasses import dataclass
 from collections import deque
 import fcntl
@@ -66,6 +67,11 @@ def _serialized_enqueue(*, graph: bool):
         @wraps(method)
         def wrapped(self, *args, **kwargs):
             with self._enqueue_lock:
+                # A deferred typed-kernel sequence must be committed before
+                # any operation that is not itself captured, so mixed queue
+                # APIs retain their original serial ordering.
+                if method.__name__ != "submit_kernel":
+                    self._flush_deferred_kernel_calls()
                 # MPSGraph's queue-run API doesn't expose its committed command
                 # buffer. Drain all prior work before graph submission, and
                 # drain graph callbacks before returning to caller-owned queue
@@ -74,7 +80,14 @@ def _serialized_enqueue(*, graph: bool):
                     self._wait_submissions()
                 else:
                     self._wait_graph_submissions()
-                self._ensure_submission_capacity()
+                deferred_kernel = (
+                    method.__name__ == "submit_kernel"
+                    and getattr(self._kernel_batch_local, "active", None)
+                    is not None)
+                if deferred_kernel:
+                    self._raise_deferred_error()
+                else:
+                    self._ensure_submission_capacity()
                 self._raise_deferred_error()
                 return method(self, *args, **kwargs)
         return wrapped
@@ -224,6 +237,8 @@ class MetalContext:
         self._buffers = weakref.WeakSet()
         self._submission_lock = threading.RLock()
         self._enqueue_lock = threading.RLock()
+        self._kernel_batch_local = threading.local()
+        self._seen_kernel_pipelines: set[tuple[str, bool, str]] = set()
         # Keep native submission tokens alive until poll/wait retires them.
         # A weak set let fire-and-forget WOOF kernels lose their Python token
         # before the next enqueue, leaking native status records and making
@@ -476,12 +491,70 @@ class MetalContext:
     @_serialized_enqueue(graph=False)
     def submit_kernel(self, entrypoint: str, arrays, parameters: dict, *,
                       exact_policy: bool, grid_size: int,
-                      threads_per_group: int | None = None) -> MetalSubmission:
-        """Submit one generated typed-argument-buffer kernel entry point."""
+                      threads_per_group: int | None = None
+                      ) -> MetalSubmission | None:
+        """Submit or defer one typed-argument-buffer kernel dispatch."""
         call = self.prepare_kernel_call(
             entrypoint, arrays, parameters, exact_policy=exact_policy,
             grid_size=grid_size, threads_per_group=threads_per_group)
-        return self._submit_kernel_batch((call,), label=entrypoint)
+        batch = getattr(self._kernel_batch_local, "active", None)
+        if batch is None:
+            return self._submit_kernel_batch((call,), label=entrypoint)
+        key = self._kernel_pipeline_key(call)
+        if key not in self._seen_kernel_pipelines:
+            # Resolve first-use pipelines in their original order and commit
+            # each before buffering warmed dispatches. This lets GPU work
+            # overlap later pipeline creation on a cold context.
+            self._flush_deferred_kernel_calls()
+            self._ensure_submission_capacity()
+            return self._submit_kernel_batch(
+                (call,), label=f"{batch['label']} pipeline warm-up: {entrypoint}")
+        batch["calls"].append(call)
+        if len(batch["calls"]) == 64:
+            self._flush_deferred_kernel_calls()
+        return None
+
+    @staticmethod
+    def _kernel_pipeline_key(call: _PreparedKernelCall):
+        return (call.cache_identity, call.exact_policy, call.entrypoint)
+
+    @contextmanager
+    def defer_kernel_submissions(self, label: str):
+        """Batch repeated typed kernels in a scoped serial queue sequence.
+
+        First-use pipelines submit singly so compilation can overlap later
+        preparation. Warm dispatches are committed in batches of at most 64,
+        matching the native descriptor budget. Other Metal submission APIs
+        flush this queue before they enqueue, preserving cross-API ordering.
+
+        Callers must discard the return values of captured kernel submissions;
+        first-use submissions still return their real token.
+        """
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError("deferred Metal sequence label must be non-empty")
+        with self._enqueue_lock:
+            if getattr(self._kernel_batch_local, "active", None) is not None:
+                raise RuntimeError("nested deferred Metal sequences are unsupported")
+            batch = {"label": label.strip(), "calls": [], "chunk": 0}
+            self._kernel_batch_local.active = batch
+            try:
+                yield
+            finally:
+                try:
+                    self._flush_deferred_kernel_calls()
+                finally:
+                    del self._kernel_batch_local.active
+
+    def _flush_deferred_kernel_calls(self) -> None:
+        batch = getattr(self._kernel_batch_local, "active", None)
+        if batch is None or not batch["calls"]:
+            return
+        calls = tuple(batch["calls"])
+        batch["calls"].clear()
+        batch["chunk"] += 1
+        self._ensure_submission_capacity()
+        self._submit_kernel_batch(
+            calls, label=f"{batch['label']} chunk {batch['chunk']}")
 
     def prepare_kernel_call(self, entrypoint: str, arrays, parameters: dict, *,
                             exact_policy: bool, grid_size: int,
@@ -651,11 +724,68 @@ class MetalContext:
             owners=tuple(owners))
 
     @_serialized_enqueue(graph=False)
-    def submit_kernel_batch(self, calls, *, label: str) -> MetalSubmission:
-        """Submit a short immutable sequence of already-resolved dispatches."""
+    def submit_kernel_batch(self, calls, *, label: str,
+                            first_use_singletons=()) -> MetalSubmission:
+        """Submit a short sequence, optionally isolating first-use dispatches.
+
+        A cold Metal context creates compute pipelines synchronously. Callers
+        can keep selected edge dispatches out of the initial batch so their
+        pipeline creation overlaps device work from the adjacent batch. Once
+        cached, those dispatches rejoin the full batch.
+        """
         if not isinstance(label, str) or not label.strip():
             raise ValueError("Metal batch label must be non-empty")
-        return self._submit_kernel_batch(tuple(calls), label=label.strip())
+        calls = tuple(calls)
+        if not calls or len(calls) > 64:
+            raise ValueError("Metal kernel batch requires 1 to 64 dispatches")
+        if any(not isinstance(call, _PreparedKernelCall) for call in calls):
+            raise TypeError("Metal kernel batches require prepared dispatches")
+        if sum(len(call.resources) for call in calls) > 4096:
+            raise ValueError("Metal kernel batch exceeds 4096 resources")
+
+        batch_label = label.strip()
+        first_use_singletons = tuple(first_use_singletons)
+        if any(not isinstance(call, _PreparedKernelCall)
+               for call in first_use_singletons):
+            raise TypeError("first-use singletons require prepared dispatches")
+        isolated_keys = {
+            self._kernel_pipeline_key(call) for call in first_use_singletons}
+        call_keys = {self._kernel_pipeline_key(call) for call in calls}
+        if not isolated_keys.issubset(call_keys):
+            raise ValueError("first-use singletons must belong to this batch")
+        if not isolated_keys:
+            return self._submit_kernel_batch(calls, label=batch_label)
+
+        submissions = []
+        buffered = []
+
+        def flush_buffered():
+            if not buffered:
+                return
+            self._ensure_submission_capacity()
+            submissions.append(self._submit_kernel_batch(
+                tuple(buffered), label=batch_label))
+            buffered.clear()
+
+        for call in calls:
+            key = self._kernel_pipeline_key(call)
+            if (key not in self._seen_kernel_pipelines
+                    and key in isolated_keys):
+                flush_buffered()
+                self._ensure_submission_capacity()
+                submissions.append(self._submit_kernel_batch(
+                    (call,), label=(
+                        f"{batch_label} pipeline warm-up: {call.entrypoint}")))
+                continue
+            buffered.append(call)
+        flush_buffered()
+
+        # The final token completes after earlier command buffers on this
+        # serial queue. Preserve the batch-level metadata expected by callers.
+        submission = submissions[-1]
+        submission.label = batch_label
+        submission.entrypoints = tuple(call.entrypoint for call in calls)
+        return submission
 
     @_serialized_enqueue(graph=False)
     def submit_prepared_kernel_call(self, call: _PreparedKernelCall, *,
@@ -676,6 +806,7 @@ class MetalContext:
             int(call.exact_policy), resources, len(call.resources),
             ctypes.cast(params, ctypes.c_void_p), len(call.parameter_bytes),
             call.grid_size, call.threads_per_group, ctypes.byref(handle)))
+        self._seen_kernel_pipelines.add(self._kernel_pipeline_key(call))
         return MetalSubmission(self, handle.value, call.owners,
                                label=label.strip(),
                                entrypoints=(call.entrypoint,))
@@ -723,8 +854,11 @@ class MetalContext:
             len(parameters), ctypes.byref(handle)))
         owners = tuple(owner for call in calls for owner in call.owners)
         entrypoints = tuple(call.entrypoint for call in calls)
-        return MetalSubmission(
+        submission = MetalSubmission(
             self, handle.value, owners, label=label, entrypoints=entrypoints)
+        self._seen_kernel_pipelines.update(
+            self._kernel_pipeline_key(call) for call in calls)
+        return submission
 
     @_serialized_enqueue(graph=True)
     def submit_fft2(self, source, target, *, inverse: bool) -> MetalSubmission:
@@ -839,6 +973,7 @@ class MetalContext:
                     self._deferred_errors.append(error)
 
     def _wait_submissions(self) -> None:
+        self._flush_deferred_kernel_calls()
         with self._submission_lock:
             submissions = tuple(self._submissions)
         failures = []

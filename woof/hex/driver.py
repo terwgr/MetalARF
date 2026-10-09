@@ -101,6 +101,7 @@ from .terrain import TerrainCoupling, build_terrain_coupling, recover_velocities
 from .transport import (
     AdvectionCoefficients,
     advance_scalar_transport,
+    build_metal_scalar_transport_workspace,
     build_advection_coefficients,
 )
 from .vertical import VerticalGrid, build_vertical_grid
@@ -3022,6 +3023,23 @@ class DryDycoreDriver:
         stage_tend_rho = tend_rho_saved
         if self.regional is not None:
             stage_tend_rho = tend_rho_saved.copy()
+        scalar_metal_workspace = None
+        resident_scalar_stage = None
+        if (
+            self.metal_context is not None
+            and self.config.config_scalar_advection
+            and not self.config.config_split_dynamics_transport
+            and self.regional is None
+            and saved.scalars.dtype == np.dtype(np.float32)
+            and saved.scalars.shape[0] > 0
+        ):
+            scalar_metal_workspace = build_metal_scalar_transport_workspace(
+                self.metal_context, self.mesh, saved.scalars,
+                self.advection_coefficients, fzm=self.vertical_grid.fzm,
+                fzp=self.vertical_grid.fzp, rdzw=self.vertical_grid.rdzw,
+                inv_area_cell=v841_inv_area_cell,
+                config_scalar_adv_order=self.config.config_scalar_adv_order,
+            )
         for stage in schedule.stages:
             if stage.stage == 2:
                 coefficients = self._vertical_coefficients(
@@ -3448,8 +3466,11 @@ class DryDycoreDriver:
                     config_apply_lbcs=False,
                     inv_area_cell=v841_inv_area_cell,
                     metal_context=self.metal_context,
+                    metal_workspace=scalar_metal_workspace,
+                    resident_scalar_stage=resident_scalar_stage,
                 )
                 candidate.scalars = np.asarray(transported.scalars)
+                resident_scalar_stage = transported.metal_scalars
             elif not self.config.config_scalar_advection:
                 candidate.scalars = saved.scalars.copy()
             elif self.config.config_split_dynamics_transport:
@@ -3695,6 +3716,21 @@ class DryDycoreDriver:
             # subcycles.  Its t0 density is deliberately the outer state, not
             # the final subcycle's time-level-one density.
             scalar_stage = outer_saved.scalars.copy()
+            split_scalar_metal_workspace = None
+            resident_split_scalar_stage = None
+            if (
+                self.metal_context is not None
+                and self.regional is None
+                and outer_saved.scalars.dtype == np.dtype(np.float32)
+                and outer_saved.scalars.shape[0] > 0
+            ):
+                split_scalar_metal_workspace = build_metal_scalar_transport_workspace(
+                    self.metal_context, self.mesh, outer_saved.scalars,
+                    self.advection_coefficients, fzm=self.vertical_grid.fzm,
+                    fzp=self.vertical_grid.fzp, rdzw=self.vertical_grid.rdzw,
+                    inv_area_cell=v841_inv_area_cell,
+                    config_scalar_adv_order=self.config.config_scalar_adv_order,
+                )
             for stage in scalar_schedule.stages:
                 transported = advance_scalar_transport(
                     self.mesh,
@@ -3731,8 +3767,11 @@ class DryDycoreDriver:
                     ),
                     inv_area_cell=v841_inv_area_cell,
                     metal_context=self.metal_context,
+                    metal_workspace=split_scalar_metal_workspace,
+                    resident_scalar_stage=resident_split_scalar_stage,
                 )
                 scalar_stage = np.asarray(transported.scalars)
+                resident_split_scalar_stage = transported.metal_scalars
                 if self.regional is not None:
                     # atm_srk3:2688-2717: after every split-transport RK
                     # stage the relaxation zone is filtered toward -- and

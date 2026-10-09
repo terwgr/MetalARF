@@ -132335,6 +132335,292 @@
       },
       "source": "woof/metal/shaders/ensemble_surface_recipe_fragment.metal",
       "threads_per_group": 128
+    },
+    {
+      "name": "hex_scalar_rk_update_fragment",
+      "module": "hex_scalar_transport",
+      "source": "woof/metal/shaders/hex_scalar_rk_update_fragment.metal",
+      "cuda_source": "woof/hex/transport.py",
+      "cuda_symbol": "advance_scalars",
+      "resources": [
+        [
+          "output",
+          "float",
+          "read_write"
+        ],
+        [
+          "scalar_old",
+          "float",
+          "read"
+        ],
+        [
+          "scalar_stage",
+          "float",
+          "read"
+        ],
+        [
+          "rho_old",
+          "float",
+          "read"
+        ],
+        [
+          "target_density",
+          "float",
+          "read"
+        ],
+        [
+          "horizontal_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "vertical_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "source",
+          "float",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_signs",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "adv_coefs",
+          "float",
+          "read"
+        ],
+        [
+          "adv_coefs_3rd",
+          "float",
+          "read"
+        ],
+        [
+          "n_adv_cells_for_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "adv_cells_for_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "fzm",
+          "float",
+          "read"
+        ],
+        [
+          "fzp",
+          "float",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "output": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalar_old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalar_stage": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target_density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "horizontal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertical_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_signs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv_coefs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv_coefs_3rd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_adv_cells_for_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv_cells_for_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "max_adv",
+          "int32"
+        ],
+        [
+          "horizontal_order",
+          "int32"
+        ],
+        [
+          "vertical_order",
+          "int32"
+        ],
+        [
+          "use_inverse_area",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "horizontal_coefficient",
+          "float32"
+        ],
+        [
+          "vertical_coefficient",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
     }
   ],
   "schema": "woof-metal-kernel-signatures-v1"

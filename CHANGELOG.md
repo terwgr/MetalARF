@@ -1,5 +1,33 @@
 # Changelog
 
+## MetalARF 1.0.1
+
+A speed release. Forecast output is bitwise identical to 1.0.0.
+
+Faster:
+
+- Hex: the Metal dynamical core keeps scalar transport and the acoustic
+  solve resident on the GPU and batches their dispatches. Hex forecasts are
+  substantially faster.
+- Regional: acoustic and repeated dycore kernels are batched into fewer
+  command buffers, and cold kernels are prepared before the first step.
+  Legacy RRTMG shortwave uses hardware single precision where it is
+  bit-exact, and the software double-precision library uses faster exact
+  routines for multiply, normalize and square root. Regional forecasts,
+  including the HRRR configuration, are modestly faster, with a faster
+  first step.
+- MYNN checks its tendencies with one GPU scan and no longer copies them to
+  the host each step.
+
+Fixed:
+
+- Global: rounded-up tracer Courant and floor dispatches lacked tail guards
+  and could write past their buffers under concurrent GPU load, failing the
+  water-fixer check intermittently.
+- Packaging: the prebuilt Metal shader library (`woof/libexec/metal`) and
+  some vendored Rust lock and source files were missing from the 1.0.0
+  source snapshot. They are included again.
+
 ## MetalARF 1.0.0 (WOOF 1.0.3 on Apple Silicon)
 
 WOOF runs on Apple Silicon. This release adds a Metal backend for the
@@ -33,9 +61,9 @@ Notes:
 
 - macOS 14 or newer on Apple Silicon. Hex and Global Metal paths are
   previews.
-- The full 401 x 301 HRRR cut needs more GPU memory than a 16 GB Mac
-  provides; the preflight refuses it there. A 201 x 151 domain with the
-  same physics runs.
+- Large domains such as the full 401 x 301 HRRR cut need more GPU memory
+  than smaller Macs provide; the preflight refuses them there. A smaller
+  domain with the same physics runs.
 - Documentation is consolidated: one backend guide replaces scattered
   CUDA-only hardware notes.
 

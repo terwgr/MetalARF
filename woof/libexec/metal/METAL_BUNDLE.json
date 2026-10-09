@@ -1,0 +1,24 @@
+{
+  "abi_version": 65543,
+  "files": {
+    "libwoof_metal.dylib": {
+      "sha256": "ec2349a4c3bafedb65c658b4e4cc85c8511c6a11481639808886d8f42428a900",
+      "size": 187856
+    },
+    "woof_default.metallib": {
+      "sha256": "41a8e5cb4a0222b4842b8e6694ccf8d561f50a8778e1c626448f1c06d085a33c",
+      "size": 10672707
+    },
+    "woof_exact.metallib": {
+      "sha256": "ac70f59bffc9806082ca2b74238a6632135366d1fa54b82f6f6356f01ef2cece",
+      "size": 6855573
+    }
+  },
+  "implementation_file_count": 1865,
+  "implementation_sha256": "a936d4640d30b56c7a4b9593a5aedf233aad73c977b836fa08e8dfc8a005eb09",
+  "metal_inputs_sha256": "9ba069e53997ca7b360e7a998ef334ee327a988dc5cb98eb163769438504f001",
+  "minimum_os": "14.0",
+  "platform": "darwin-arm64",
+  "schema": "woof-metal-bundle-v1",
+  "source_commit": "2a1494e11160501ab69594a4f9d50fec2b7aa88f"
+}

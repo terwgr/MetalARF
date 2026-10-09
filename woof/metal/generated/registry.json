@@ -11139,7 +11139,7 @@
       "name": "rrtmg_legacy_sw_inatm",
       "parameter_size": 16,
       "resource_count": 10,
-      "shader_hash": "5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24",
+      "shader_hash": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
       "threads_per_group": 128
     },
     {
@@ -11155,7 +11155,7 @@
       "name": "rrtmg_legacy_sw_cldprmc",
       "parameter_size": 24,
       "resource_count": 15,
-      "shader_hash": "5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24",
+      "shader_hash": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
       "threads_per_group": 128
     },
     {
@@ -11171,7 +11171,7 @@
       "name": "rrtmg_legacy_sw_setcoef",
       "parameter_size": 12,
       "resource_count": 28,
-      "shader_hash": "5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24",
+      "shader_hash": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
       "threads_per_group": 128
     },
     {
@@ -11187,7 +11187,7 @@
       "name": "rrtmg_legacy_sw_laysolfr",
       "parameter_size": 8,
       "resource_count": 5,
-      "shader_hash": "5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24",
+      "shader_hash": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
       "threads_per_group": 128
     },
     {
@@ -11203,7 +11203,7 @@
       "name": "rrtmg_legacy_sw_taumol",
       "parameter_size": 12,
       "resource_count": 24,
-      "shader_hash": "5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24",
+      "shader_hash": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
       "threads_per_group": 128
     },
     {
@@ -11219,7 +11219,7 @@
       "name": "rrtmg_legacy_sw_sfluxzen",
       "parameter_size": 12,
       "resource_count": 17,
-      "shader_hash": "5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24",
+      "shader_hash": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
       "threads_per_group": 128
     },
     {
@@ -11235,7 +11235,7 @@
       "name": "rrtmg_legacy_sw_spcvmc",
       "parameter_size": 16,
       "resource_count": 25,
-      "shader_hash": "5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24",
+      "shader_hash": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
       "threads_per_group": 128
     },
     {
@@ -11251,7 +11251,7 @@
       "name": "rrtmg_legacy_sw_accum",
       "parameter_size": 8,
       "resource_count": 22,
-      "shader_hash": "5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24",
+      "shader_hash": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
       "threads_per_group": 128
     },
     {
@@ -11267,7 +11267,7 @@
       "name": "rrtmg_legacy_sw_post",
       "parameter_size": 12,
       "resource_count": 7,
-      "shader_hash": "5ee9d0ba30e155a8c79299a2d3e40c8e9270e742e40a43b30dfd7b64e684ef24",
+      "shader_hash": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
       "threads_per_group": 128
     },
     {
@@ -12019,7 +12019,7 @@
       "name": "global_tracer_pack_fragment",
       "parameter_size": 4,
       "resource_count": 3,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 128
     },
     {
@@ -12035,7 +12035,7 @@
       "name": "global_tracer_flux_prepare_fragment",
       "parameter_size": 12,
       "resource_count": 8,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 128
     },
     {
@@ -12051,7 +12051,7 @@
       "name": "global_tracer_flux_prepare_resident_fragment",
       "parameter_size": 12,
       "resource_count": 8,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 128
     },
     {
@@ -12067,7 +12067,7 @@
       "name": "global_tracer_courant_row_fragment",
       "parameter_size": 12,
       "resource_count": 4,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 64
     },
     {
@@ -12083,7 +12083,7 @@
       "name": "global_tracer_courant_row_finalize_fragment",
       "parameter_size": 4,
       "resource_count": 4,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 1
     },
     {
@@ -12099,7 +12099,7 @@
       "name": "global_tracer_courant_scalar_fragment",
       "parameter_size": 28,
       "resource_count": 5,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 64
     },
     {
@@ -12115,7 +12115,7 @@
       "name": "global_tracer_courant_scalar_finalize_fragment",
       "parameter_size": 4,
       "resource_count": 3,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 1
     },
     {
@@ -12131,7 +12131,7 @@
       "name": "global_tracer_zonal_rows_fragment",
       "parameter_size": 20,
       "resource_count": 7,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 128
     },
     {
@@ -12147,7 +12147,7 @@
       "name": "global_tracer_pressure_coords_fragment",
       "parameter_size": 8,
       "resource_count": 4,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 128
     },
     {
@@ -12163,7 +12163,7 @@
       "name": "global_tracer_vertical_fragment",
       "parameter_size": 12,
       "resource_count": 8,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 128
     },
     {
@@ -12179,7 +12179,7 @@
       "name": "global_tracer_floor_fragment",
       "parameter_size": 24,
       "resource_count": 5,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 64
     },
     {
@@ -12195,7 +12195,7 @@
       "name": "global_tracer_floor_finalize_fragment",
       "parameter_size": 8,
       "resource_count": 4,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 64
     },
     {
@@ -12419,7 +12419,7 @@
       "name": "global_tracer_walled_resident_fragment",
       "parameter_size": 16,
       "resource_count": 9,
-      "shader_hash": "2b6d229da371c5079facd9a8ca0da1be5f044c5e981a3d854d3b13f3c9a4ddb5",
+      "shader_hash": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
       "threads_per_group": 128
     },
     {
@@ -13182,6 +13182,22 @@
       "parameter_size": 16,
       "resource_count": 6,
       "shader_hash": "1ad7171900d127092c629a276be58a9419c66a52fa42693815e82660be0d4d05",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/transport.py",
+      "cuda_symbol": "advance_scalars",
+      "layout_hash": "565736b2982d8f3de4840f343f1c28adc2c6a43fc65f50372eb9ade56a754c10",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hex_scalar_rk_update_fragment.metal",
+      "module": "hex_scalar_transport",
+      "name": "hex_scalar_rk_update_fragment",
+      "parameter_size": 48,
+      "resource_count": 22,
+      "shader_hash": "24f288446296f3f96666088cb765950d68ec9ba85b87e40a4c19f8ccac438fd2",
       "threads_per_group": 128
     }
   ],
