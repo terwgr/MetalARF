@@ -1,11 +1,12 @@
 # MetalARF
 
-**Recast WOOF on Apple Silicon: a GPU weather model that runs on your Mac.**
+MetalARF is a port of [Recast WOOF](https://github.com/recastsystems/woof)
+1.0.3 to Apple Silicon. WOOF is a GPU weather model with WRF-class physics,
+preprocessing, data assimilation and plotting. Upstream it runs on NVIDIA
+GPUs through CUDA; MetalARF adds a Metal backend so the same models run on
+the GPU of an Apple Silicon Mac, without CUDA or CuPy.
 
-MetalARF is [Recast WOOF](https://github.com/recastsystems/woof) 1.0.3 with a
-native Metal backend. WOOF is a regional weather model with WRF-class physics,
-preprocessing, data assimilation and plotting; MetalARF runs all of it on the
-Apple GPU, with no CUDA or CuPy. One install carries three models:
+The package contains three models:
 
 | Model | Command | Status | Metal |
 | --- | --- | --- | --- |
@@ -13,12 +14,12 @@ Apple GPU, with no CUDA or CuPy. One install carries three models:
 | Hex (MPAS-style unstructured mesh) | `woof hex` | Preview | Forecast, restart, history |
 | Global (spectral, with ensemble DA) | `woof global` | Preview | `sl_si`, `ssprk3`, restart, DA cycle |
 
-The regional model runs the operational HRRR configuration (Thompson, MYNN
-GSD 4.1, RUC, legacy RRTMG) on Metal, along with nests, ensembles,
-restart, history products and local data assimilation. FP64 physics paths use
-software binary64, so results track the NumPy reference without GPU double
-precision. Coverage per feature is in the [backend guide](docs/public/BACKENDS.md);
-changes are in the [changelog](CHANGELOG.md).
+On Metal, the regional model runs the operational HRRR configuration
+(Thompson, MYNN GSD 4.1, RUC and legacy RRTMG), as well as nests, ensembles,
+restarts, history products and local data assimilation. Apple GPUs have no
+hardware double precision, so the physics that WRF computes in double uses a
+software implementation, and results match the NumPy reference. The [backend guide](docs/public/BACKENDS.md)
+lists coverage by feature, and the [changelog](CHANGELOG.md) lists changes.
 
 Production means the regional commands and their config and checkpoint
 formats are covered by the upstream major-version promise. It is not a
@@ -77,19 +78,16 @@ woof render --diff runA/ runB/ --out diff/
 The pair must share the grid and the valid times; a mismatch is refused by
 name.
 
-Hex and Global:
-
-```bash
-woof hex forecast ... --backend metal
-woof global run CONFIG.toml --metal
-```
+The Hex and Global models take the same backend choice:
+`woof hex forecast --backend metal` and `woof global run CONFIG.toml --metal`.
+`woof hex --help` and `woof global --help` list their options.
 
 ## Memory
 
-Before allocating forecast state, the Metal backend estimates the run's GPU
-memory against the device's recommended working set and refuses a domain that
-will not fit, naming the estimate and the budget. Shrink the domain or use a
-Mac with more memory.
+Before it allocates any forecast state, the Metal backend estimates how much
+GPU memory the run needs and compares it with the working set macOS
+recommends for the device. If the domain will not fit, WOOF stops and reports
+both numbers. Use a smaller domain or a Mac with more memory.
 
 | Variable | Effect |
 | --- | --- |
