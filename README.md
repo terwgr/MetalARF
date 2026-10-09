@@ -29,9 +29,8 @@ statement about forecast accuracy; see Science and limits below.
 - Apple Silicon Mac (M1 or newer), macOS 14 or newer.
 - Python 3.11 or newer, and a Rust toolchain (`cargo`) to build the native
   data bridges.
-- Unified memory sets the largest domain you can run. A 16 GB Mac runs a
-  201 x 151 x 50 HRRR-physics domain; larger domains need more memory.
-  WOOF checks this before it starts (see Memory below).
+- Unified memory sets the largest domain you can run; WOOF checks this
+  before it starts (see Memory below).
 
 ## Install
 

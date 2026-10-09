@@ -1,0 +1,40 @@
+// Generated from kernel_signatures.json; layout 565736b2982d8f3de4840f343f1c28adc2c6a43fc65f50372eb9ade56a754c10.
+struct HexScalarRkUpdateFragmentResources {
+    device float *output [[id(0)]];
+    device const float *scalar_old [[id(1)]];
+    device const float *scalar_stage [[id(2)]];
+    device const float *rho_old [[id(3)]];
+    device const float *target_density [[id(4)]];
+    device const float *horizontal_velocity [[id(5)]];
+    device const float *vertical_velocity [[id(6)]];
+    device const float *source [[id(7)]];
+    device const int *edges_on_cell [[id(8)]];
+    device const int *edge_counts [[id(9)]];
+    device const float *edge_signs [[id(10)]];
+    device const int *cells_on_edge [[id(11)]];
+    device const float *dv_edge [[id(12)]];
+    device const float *adv_coefs [[id(13)]];
+    device const float *adv_coefs_3rd [[id(14)]];
+    device const int *n_adv_cells_for_edge [[id(15)]];
+    device const int *adv_cells_for_edge [[id(16)]];
+    device const float *area_cell [[id(17)]];
+    device const float *inv_area_cell [[id(18)]];
+    device const float *fzm [[id(19)]];
+    device const float *fzp [[id(20)]];
+    device const float *rdzw [[id(21)]];
+};
+struct HexScalarRkUpdateFragmentParams {
+    int ntracers;
+    int nlev;
+    int ncells;
+    int nedges;
+    int max_edges;
+    int max_adv;
+    int horizontal_order;
+    int vertical_order;
+    int use_inverse_area;
+    float dt;
+    float horizontal_coefficient;
+    float vertical_coefficient;
+};
+static_assert(sizeof(HexScalarRkUpdateFragmentParams) == 48, "hex_scalar_rk_update_fragment parameter ABI size changed");

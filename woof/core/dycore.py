@@ -2351,6 +2351,17 @@ def _compute_wrf_smag_tendencies(state: DomainState, cfg: RunConfig,
 
 
 def prepare_fixed_tendencies(state: DomainState, cfg: RunConfig) -> None:
+    """Build fixed tendencies with repeated Metal kernels in bounded batches."""
+    if getattr(state, "_metal_setup_state", False):
+        context = state._array_module.context
+        with context.defer_kernel_submissions("fixed tendencies and diffusion"):
+            _prepare_fixed_tendencies_impl(state, cfg)
+        return
+    _prepare_fixed_tendencies_impl(state, cfg)
+
+
+def _prepare_fixed_tendencies_impl(state: DomainState,
+                                   cfg: RunConfig) -> None:
     """Build WRF's time-t ``*_tendf``/``scalar_tends`` once per step.
 
     ``module_first_rk_step_part2`` computes km_opt=4 mixing and sixth-order
@@ -3182,10 +3193,15 @@ def apply_diff6(state: DomainState, cfg: RunConfig) -> None:
 
 def _prepare_emdiv_filter_launch(state: DomainState, cfg: RunConfig,
                                   mudf: cp.ndarray,
-                                  mu_prev: cp.ndarray | None = None):
+                                  mu_prev: cp.ndarray | None = None,
+                                  *, prepared: bool = False):
     """Bind one stage's invariant external-mode filter launch."""
     if getattr(state, "_metal_setup_state", False):
-        from woof.metal.dycore import submit_apply_emdiv
+        from woof.metal.dycore import (prepare_apply_emdiv_call,
+                                       submit_apply_emdiv)
+
+        if prepared:
+            return prepare_apply_emdiv_call(state, cfg, mudf, mu_prev)
 
         def launch_metal() -> None:
             submit_apply_emdiv(state, cfg, mudf, mu_prev)
@@ -3276,14 +3292,19 @@ def _update_emdiv_mudf(state: DomainState, cfg: RunConfig,
 
 
 def _prepare_sumflux_launch(name: str, targets: tuple, sources: tuple = (),
-                            nsub: int = 0):
+                            nsub: int = 0, *, prepared: bool = False):
     """Bind one invariant batched WRF sumflux launch."""
     from woof.metal.array import MetalArray
     arrays = (*targets, *sources)
     if any(isinstance(array, MetalArray) for array in arrays):
         if not all(isinstance(array, MetalArray) for array in arrays):
             raise TypeError("WRF sumflux cannot mix Metal and host arrays")
-        from woof.metal.acoustic_sumflux import prepare_sumflux
+        from woof.metal.acoustic_sumflux import (prepare_sumflux,
+                                                 prepare_sumflux_call)
+        if prepared:
+            _, call = prepare_sumflux_call(
+                name, tuple(targets), tuple(sources), nsub)
+            return call
         return prepare_sumflux(name, tuple(targets), tuple(sources), nsub)
     sizes = tuple(np.uint64(array.size) for array in targets)
     nmax = max(int(size) for size in sizes)
@@ -4447,10 +4468,21 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
         acoustic_coefficients = prepare_acoustic_coefficients(
             state, cfg, dtau, cq=stage_cq)            # fixed for this stage
         mudf = None
+        fused_metal_acoustic = bool(
+            getattr(state, "_metal_setup_state", False)
+            and not WRF_EXACT)
+        acoustic_prefix_calls = ()
+        acoustic_suffix_calls = ()
         if emdiv:
             mudf = state.scratch(state.mup.shape, "acoustic_mudf")
-            launch_emdiv_filter = _prepare_emdiv_filter_launch(
-                state, cfg, mudf)
+            if fused_metal_acoustic:
+                acoustic_prefix_calls = (
+                    _prepare_emdiv_filter_launch(
+                        state, cfg, mudf, prepared=True),)
+                launch_emdiv_filter = None
+            else:
+                launch_emdiv_filter = _prepare_emdiv_filter_launch(
+                    state, cfg, mudf)
             if istage == 0:
                 # WRF small_step_prep zeros MUDF under IF(rk_step==1) ONLY
                 # (module_small_step_em.F:128-136); stages 2/3 must inherit
@@ -4459,7 +4491,8 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
                 mudf[...] = 0
         launch_acoustic_substep = prepare_acoustic_substep_launch(
             state, cfg, dtau, acoustic_coefficients, mudf=mudf,
-            label=f"RK stage {istage + 1}")
+            label=f"RK stage {istage + 1}",
+            prefix_calls=acoustic_prefix_calls)
         # WRF sumflux (module_small_step_em.F:1473, called every acoustic
         # iteration, solve_em.F:1561): accumulate the small-timestep
         # time-averaged mass fluxes ru_m/rv_m/ww_m -- "needed for
@@ -4477,16 +4510,31 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
             ww_m = state.scratch((nzs + 1, nys, nxs), "rk_ww_m")
             _sumflux_launch(                          # sumflux iteration==1
                 "zero_sumflux", (ru_m, rv_m, ww_m))
-            launch_sumflux_accumulation = _prepare_sumflux_launch(
-                "accumulate_sumflux", (ru_m, rv_m, ww_m),
-                (state.u_pp, state.v_pp, state.ww_pp))
+            if fused_metal_acoustic:
+                acoustic_suffix_calls = (
+                    _prepare_sumflux_launch(
+                        "accumulate_sumflux", (ru_m, rv_m, ww_m),
+                        (state.u_pp, state.v_pp, state.ww_pp),
+                        prepared=True),)
+                launch_sumflux_accumulation = None
+            else:
+                launch_sumflux_accumulation = _prepare_sumflux_launch(
+                    "accumulate_sumflux", (ru_m, rv_m, ww_m),
+                    (state.u_pp, state.v_pp, state.ww_pp))
+        if fused_metal_acoustic and acoustic_suffix_calls:
+            launch_acoustic_substep = prepare_acoustic_substep_launch(
+                state, cfg, dtau, acoustic_coefficients, mudf=mudf,
+                label=f"RK stage {istage + 1}",
+                prefix_calls=acoustic_prefix_calls,
+                suffix_calls=acoustic_suffix_calls)
         for i in range(nsub):
-            if emdiv:
+            if emdiv and launch_emdiv_filter is not None:
                 launch_emdiv_filter()                 # previous substep's
                                                       # mudf (zero only on
                                                       # step's 1st substep)
             launch_acoustic_substep(first=(i == 0))
-            if scalars:                               # WRF sumflux: post-
+            if scalars and launch_sumflux_accumulation is not None:
+                                                      # WRF sumflux: post-
                 launch_sumflux_accumulation()
             if mass_flux_observer is not None and istage == 2:
                 mass_flux_observer(

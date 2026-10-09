@@ -966,6 +966,7 @@ def build(output: Path) -> dict:
                 ("global_grid_plane_broadcast_fragment", ROOT / "woof/metal/shaders/global_grid_plane_broadcast_fragment.metal"),
                 ("global_spectral_project_fragment", ROOT / "woof/metal/shaders/global_spectral_project_fragment.metal"),
                 ("hex_scalar_fct_fragment", ROOT / "woof/metal/shaders/hex_scalar_fct_fragment.metal"),
+                ("hex_scalar_rk_update_fragment", ROOT / "woof/metal/shaders/hex_scalar_rk_update_fragment.metal"),
                 ("hex_fct_cell_scales_fragment", ROOT / "woof/metal/shaders/hex_fct_cell_scales_fragment.metal"),
                 ("hex_fct_apply_fragment", ROOT / "woof/metal/shaders/hex_fct_apply_fragment.metal"),
                 ("hex_fct_edge_flux_fragment", ROOT / "woof/metal/shaders/hex_fct_edge_flux_fragment.metal"),

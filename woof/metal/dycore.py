@@ -387,6 +387,13 @@ def submit_small_step_finish(state, cfg, hdiab_dt=0.0):
 
 def submit_apply_emdiv(state, cfg, mudf, mu_prev=None):
     """Apply WRF's dry external-mode filter before an acoustic substep."""
+    call = prepare_apply_emdiv_call(state, cfg, mudf, mu_prev)
+    return state._array_module.context.submit_kernel_batch(
+        (call,), label="apply_emdiv")
+
+
+def prepare_apply_emdiv_call(state, cfg, mudf, mu_prev=None):
+    """Freeze the external-mode filter dispatch without submitting it."""
     if WRF_EXACT:
         raise NotImplementedError(
             "Metal emdiv currently supports ordinary arithmetic only")
@@ -412,7 +419,7 @@ def submit_apply_emdiv(state, cfg, mudf, mu_prev=None):
         "spec_zone": int(getattr(cfg, "spec_zone", 0)),
         "save_mu": int(save_mu), "nz": nz, "ny": ny, "nx": nx,
     }
-    return state._array_module.context.submit_kernel(
+    return state._array_module.context.prepare_kernel_call(
         "apply_emdiv", arrays, params, exact_policy=False,
         grid_size=nz*(ny+1)*(nx+1))
 

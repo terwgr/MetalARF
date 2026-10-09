@@ -151,9 +151,14 @@ static inline ulong soft64_pack_extended(bool sign, int exponent, ulong ext)
         ext = soft64_shift_right_jam(ext, 1u);
         exponent += 1;
     }
-    while ((ext & 0x0080000000000000ul) == 0ul && exponent > -1022) {
-        ext <<= 1;
-        exponent -= 1;
+    // Left-normalize to bit 55 in one shift, stopping at exponent -1022
+    // (the bit-at-a-time loop's two exits).  ext < 2^56 here.
+    const int lead = int(metal::clz(ext)) - 8;
+    const int room = exponent + 1022;
+    if (lead > 0 && room > 0) {
+        const int shift = metal::min(lead, room);
+        ext <<= uint(shift);
+        exponent -= shift;
     }
     if (exponent < -1022) {
         const int distance = -1022 - exponent;
@@ -262,25 +267,11 @@ static inline ulong soft64_sub(ulong a, ulong b)
 
 static inline Soft64Wide soft64_multiply_wide(ulong a, ulong b)
 {
-    const ulong a0 = ulong(uint(a)), a1 = a >> 32;
-    const ulong b0 = ulong(uint(b)), b1 = b >> 32;
-    const ulong p00 = a0 * b0;
-    const ulong p01 = a0 * b1;
-    const ulong p10 = a1 * b0;
-    const ulong p11 = a1 * b1;
-
-    ulong lo = p00;
-    ulong hi = p11;
-    const ulong add01 = p01 << 32;
-    lo += add01;
-    hi += (p01 >> 32) + ulong(lo < add01);
-    const ulong add10 = p10 << 32;
-    const ulong before10 = lo;
-    lo += add10;
-    hi += (p10 >> 32) + ulong(lo < before10);
+    // The exact 128-bit product: mulhi is the high word of the 64x64
+    // unsigned product and the wrapping a * b its low word.
     Soft64Wide out;
-    out.hi = hi;
-    out.lo = lo;
+    out.hi = metal::mulhi(a, b);
+    out.lo = a * b;
     return out;
 }
 
@@ -305,7 +296,7 @@ static inline ulong soft64_wide_shift_right_jam(Soft64Wide value,
     return ulong(value.hi != 0ul || value.lo != 0ul);
 }
 
-// Square root using a 128-bit integer radicand and exact integer search.
+// Square root using a 128-bit integer radicand and an exact integer root.
 // The scaled root contains the 53-bit significand and three RN-even rounding
 // bits; the residual is retained as sticky. No native FP64 path is involved.
 static inline int soft64_wide_compare(Soft64Wide a, Soft64Wide b)
@@ -331,14 +322,27 @@ static inline ulong soft64_sqrt(ulong bits)
         radicand.hi = d.significand >> 6;
         radicand.lo = d.significand << 58;
     }
-    ulong lo = 1ul << 55;
-    ulong hi = 1ul << 57;
-    while (lo + 1ul < hi) {
-        const ulong mid = (lo + hi) >> 1;
-        const Soft64Wide square = soft64_multiply_wide(mid, mid);
-        if (soft64_wide_compare(square, radicand) <= 0) lo = mid;
-        else hi = mid;
+    // lo = floor(sqrt(radicand)), radicand in [2^110, 2^112).  An FP32
+    // estimate and two residual corrections only choose where to start;
+    // the integer fix-up below enforces lo^2 <= radicand < (lo + 1)^2, so
+    // lo is the exact integer root whatever the estimate's accuracy.
+    ulong lo = ulong(metal::sqrt(float(radicand.hi)) * 0x1p32f);
+    for (int pass = 0; pass < 2; ++pass) {
+        const Soft64Wide sq = soft64_multiply_wide(lo, lo);
+        const bool above = soft64_wide_compare(sq, radicand) > 0;
+        const Soft64Wide big = above ? sq : radicand;
+        const Soft64Wide small = above ? radicand : sq;
+        const ulong dlo = big.lo - small.lo;
+        const ulong dhi = big.hi - small.hi - ulong(big.lo < small.lo);
+        const float residual = float(dhi) * 0x1p64f + float(dlo);
+        const ulong step = ulong(residual / (2.0f * float(lo)));
+        lo = above ? lo - step : lo + step;
     }
+    while (soft64_wide_compare(soft64_multiply_wide(lo, lo), radicand) > 0)
+        lo -= 1ul;
+    while (soft64_wide_compare(soft64_multiply_wide(lo + 1ul, lo + 1ul),
+                               radicand) <= 0)
+        lo += 1ul;
     const Soft64Wide square = soft64_multiply_wide(lo, lo);
     const ulong ext = lo | ulong(soft64_wide_compare(square, radicand) != 0);
     return soft64_pack_extended(false, d.exponent / 2, ext);

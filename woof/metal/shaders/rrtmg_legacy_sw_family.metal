@@ -20,8 +20,8 @@ using namespace metal;
 // FP32 add/sub/mul as a single IEEE .rn instruction with gradual underflow
 // (the direct-beam transmittance chain really produces subnormals), and
 // its glibc logf/expf run their binary64 steps as separate __d*_rn ops.
-// Here both are integer-bit soft floats: soft32 for AD/SU/MU/DV/SQ (RN-even,
-// subnormals kept, independent of the GPU's FP32 denormal mode) and soft64
+// Here AD/SU/MU/DV/SQ give soft32's values (RN-even, subnormals kept,
+// independent of the GPU's FP32 denormal mode; see rsw_add) and soft64
 // for the libm's double steps (mul then add, no FMA, as in the CUDA rsw_
 // transcription -- NOT the fused gfk_ variants).
 
@@ -29,11 +29,40 @@ typedef float real;
 
 #define RSW_F(bits) as_type<float>(bits)
 #define RSW_U(x) as_type<uint>(x)
-#define AD(a, b) RSW_F(soft32_add(RSW_U((float)(a)), RSW_U((float)(b))))
-#define SU(a, b) RSW_F(soft32_sub(RSW_U((float)(a)), RSW_U((float)(b))))
-#define MU(a, b) RSW_F(soft32_mul(RSW_U((float)(a)), RSW_U((float)(b))))
-#define DV(a, b) RSW_F(soft32_div(RSW_U((float)(a)), RSW_U((float)(b))))
-#define SQ(a) RSW_F(soft32_sqrt(RSW_U((float)(a))))
+
+// The GPU's FP32 add/sub/mul/div/sqrt (safe math mode, precise fp32
+// functions, no contraction) are RN-even like soft32 but flush subnormal
+// operands and results to zero.  Each operation therefore takes the
+// hardware result when both operands and the result are finite with
+// magnitude >= 2^-125, and the soft32 result otherwise (zeros, subnormals,
+// the boundary band, Inf and NaN).  Every value is the soft32 value.
+static inline bool rsw_hw_ok(float v)
+{ const float m = fabs(v); return m >= 0x1p-125f && m <= 0x1.fffffep127f; }
+static inline float rsw_add(float a, float b)
+{ const float r = a + b;
+  return (rsw_hw_ok(a) && rsw_hw_ok(b) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_add(RSW_U(a), RSW_U(b))); }
+static inline float rsw_sub(float a, float b)
+{ const float r = a - b;
+  return (rsw_hw_ok(a) && rsw_hw_ok(b) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_sub(RSW_U(a), RSW_U(b))); }
+static inline float rsw_mul(float a, float b)
+{ const float r = a * b;
+  return (rsw_hw_ok(a) && rsw_hw_ok(b) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_mul(RSW_U(a), RSW_U(b))); }
+static inline float rsw_div(float a, float b)
+{ const float r = a / b;
+  return (rsw_hw_ok(a) && rsw_hw_ok(b) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_div(RSW_U(a), RSW_U(b))); }
+static inline float rsw_sqrt(float a)
+{ const float r = sqrt(a);
+  return (a > 0.0f && rsw_hw_ok(a) && rsw_hw_ok(r))
+      ? r : RSW_F(soft32_sqrt(RSW_U(a))); }
+#define AD(a, b) rsw_add((float)(a), (float)(b))
+#define SU(a, b) rsw_sub((float)(a), (float)(b))
+#define MU(a, b) rsw_mul((float)(a), (float)(b))
+#define DV(a, b) rsw_div((float)(a), (float)(b))
+#define SQ(a) rsw_sqrt((float)(a))
 #define EQ0(x) ((RSW_U(x) & 0x7fffffffu) == 0u)
 
 #define RSW_NGPT 112

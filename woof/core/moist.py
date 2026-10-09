@@ -870,13 +870,15 @@ def advance_scalars_stage(state: DomainState, cfg: RunConfig,
     coupling, the lateral fold and the specified-ring exclusion.
     """
     if getattr(state, "_metal_setup_state", False):
-        return _advance_scalars_stage_metal(
-            state, cfg, ru, rv, ww, dt_eff, final,
-            apply_relax=apply_relax,
-            physics_tendencies=physics_tendencies,
-            fixed_tendencies=fixed_tendencies,
-            export_advective_forcing=export_advective_forcing,
-            implicit=implicit)
+        context = state._array_module.context
+        with context.defer_kernel_submissions("scalar advection"):
+            return _advance_scalars_stage_metal(
+                state, cfg, ru, rv, ww, dt_eff, final,
+                apply_relax=apply_relax,
+                physics_tendencies=physics_tendencies,
+                fixed_tendencies=fixed_tendencies,
+                export_advective_forcing=export_advective_forcing,
+                implicit=implicit)
     ww_explicit = ww if implicit is None else implicit[0]
     nz, ny, nx = state.p.shape
     mu0 = state.mub2d + state.mup0                     # time-t column mass

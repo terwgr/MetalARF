@@ -642,7 +642,9 @@ def submit_metal_acoustic_boundary_frame(state: DomainState,
 
 def prepare_acoustic_substep_launch(state: DomainState, cfg: RunConfig,
                                     dtau: float, coefficients: tuple, *,
-                                    mudf=None, label: str = "acoustic"):
+                                    mudf=None, label: str = "acoustic",
+                                    prefix_calls: tuple = (),
+                                    suffix_calls: tuple = ()):
     """Bind one stage's invariant acoustic launch metadata once.
 
     The returned callable submits the same raw kernels, grids, blocks and
@@ -702,10 +704,13 @@ def prepare_acoustic_substep_launch(state: DomainState, cfg: RunConfig,
             batch_label = (
                 f"{topology.label} substep {substep_index + 1}: "
                 + " -> ".join(topology.entrypoints))
+            batch_calls = (*prefix_calls, *calls, *suffix_calls)
             if context.batch_kernel_calls:
-                context.submit_kernel_batch(tuple(calls), label=batch_label)
+                context.submit_kernel_batch(
+                    batch_calls, label=batch_label,
+                    first_use_singletons=(*prefix_calls, *suffix_calls))
             else:
-                for call in calls:
+                for call in batch_calls:
                     context.submit_prepared_kernel_call(
                         call, label=f"{batch_label}; direct {call.entrypoint}")
             substep_index += 1

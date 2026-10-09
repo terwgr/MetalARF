@@ -239,6 +239,112 @@ def submit_acoustic_postsolve_damping(
     return arrays["rw_p"].to_numpy()
 
 
+def submit_acoustic_solve_and_damping(
+    context, *, rw_p, a_tri, alpha_tri, gamma_tri, rw_save, rw, dss, w,
+    rho_zz, zz, fzm, fzp, dts, solve_scale,
+):
+    """Solve every acoustic column and damp it in one ordered Metal batch.
+
+    The solve and damping kernels share the velocity array on device. This
+    avoids per-column uploads/readbacks and keeps the intermediate between
+    dependent dispatches resident until the completed field is consumed.
+    """
+    from woof.metal.array import MetalArrayModule
+    from woof.metal.generated import kernel_specs
+
+    values = {name: np.asarray(value, dtype=np.float32) for name, value in {
+        "rw_p": rw_p, "a_tri": a_tri, "alpha_tri": alpha_tri,
+        "gamma_tri": gamma_tri, "rw_save": rw_save, "rw": rw,
+        "dss": dss, "w": w, "rho_zz": rho_zz, "zz": zz,
+        "fzm": fzm, "fzp": fzp,
+    }.items()}
+    nlev, ncells = values["rho_zz"].shape
+    for name in ("dss", "w"):
+        if values[name].shape == (nlev, ncells):
+            values[name] = np.pad(values[name], ((0, 1), (0, 0)))
+    for name in ("fzm", "fzp"):
+        if values[name].shape == (nlev,):
+            values[name] = np.pad(values[name], (0, 1))
+    if (values["rw_p"].shape != (nlev + 1, ncells)
+            or any(values[name].shape != (nlev, ncells)
+                   for name in ("a_tri", "alpha_tri", "gamma_tri", "rho_zz", "zz"))
+            or any(values[name].shape != (nlev + 1, ncells)
+                   for name in ("rw_save", "rw"))
+            or any(values[name].shape != (nlev + 1, ncells)
+                   for name in ("dss", "w"))
+            or values["fzm"].shape != (nlev + 1,)
+            or values["fzp"].shape != (nlev + 1,)):
+        raise ValueError("Hex acoustic solve/damping arrays mismatch: "
+                         + str({name: value.shape
+                                for name, value in values.items()}))
+
+    metal = MetalArrayModule(context)
+    arrays = {name: metal.asarray(np.ascontiguousarray(value))
+              for name, value in values.items()}
+    solve = context.prepare_kernel_call(
+        "hex_solve_vertical_system",
+        {"rhs": arrays["rw_p"], "a_tri": arrays["a_tri"],
+         "alpha_tri": arrays["alpha_tri"], "gamma_tri": arrays["gamma_tri"]},
+        {"nlev": int(nlev), "ncells": int(ncells),
+         "a_scale": float(solve_scale)},
+        exact_policy=False, grid_size=int(ncells),
+        threads_per_group=kernel_specs.HEX_SOLVE_VERTICAL_SYSTEM_THREADS_PER_GROUP,
+    )
+    damping = context.prepare_kernel_call(
+        "hex_acoustic_postsolve_damping",
+        {name: arrays[name] for name in ("rw_p", "rw_save", "rw", "dss", "w",
+                                          "rho_zz", "zz", "fzm", "fzp")},
+        {"nlev": int(nlev), "ncells": int(ncells), "dts": float(dts)},
+        exact_policy=False, grid_size=(nlev - 1) * ncells,
+        threads_per_group=kernel_specs.HEX_ACOUSTIC_POSTSOLVE_DAMPING_THREADS_PER_GROUP,
+    )
+    context.submit_kernel_batch((solve, damping), label="hex_acoustic_solve_damping")
+    return arrays["rw_p"].to_numpy()
+
+
+class MetalScalarTransportWorkspace:
+    """Reuse mesh, stencil, and scalar buffers across one RK transport cycle."""
+
+    def __init__(self, context, static_arrays, dimensions):
+        from woof.metal.array import MetalArrayModule
+
+        self.context = context
+        self.module = MetalArrayModule(context)
+        self.static = {
+            name: self.module.asarray(np.ascontiguousarray(value))
+            for name, value in static_arrays.items()
+        }
+        self.dimensions = dict(dimensions)
+
+    def update(self, *, scalar_stage, resident_stage, dynamic_arrays, params,
+               stage_size):
+        from woof.metal.generated import kernel_specs
+
+        if resident_stage is None:
+            stage_device = self.module.asarray(
+                np.ascontiguousarray(scalar_stage, dtype=np.float32).reshape(-1)
+            )
+        else:
+            if (resident_stage.dtype != np.dtype(np.float32)
+                    or resident_stage.size != stage_size):
+                raise ValueError("resident Hex scalar stage has an invalid shape or dtype")
+            stage_device = resident_stage
+        resources = dict(self.static)
+        resources["scalar_stage"] = stage_device
+        resources.update({
+            name: self.module.asarray(np.ascontiguousarray(value, dtype=np.float32).reshape(-1))
+            for name, value in dynamic_arrays.items()
+        })
+        resources["output"] = self.module.empty((stage_size,), dtype=np.float32)
+        call = self.context.prepare_kernel_call(
+            "hex_scalar_rk_update_fragment", resources, params,
+            exact_policy=False, grid_size=stage_size,
+            threads_per_group=kernel_specs.HEX_SCALAR_RK_UPDATE_FRAGMENT_THREADS_PER_GROUP,
+        )
+        self.context.submit_kernel_batch((call,), label="hex_scalar_rk_stage")
+        return resources["output"]
+
+
 def submit_pressure_diagnostics(context, *, rho_theta, rho, zz, rgas,
                                 cp, reference_pressure):
     """Dispatch the integrated theta, Exner and pressure diagnostic stages."""

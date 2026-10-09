@@ -26,6 +26,8 @@ try:
     import cupy as cp
 except ImportError:
     cp = None
+import weakref
+
 import numpy as np
 
 from woof.core.kernels import get_kernel
@@ -567,6 +569,38 @@ def _validity_flags() -> cp.ndarray:
     return flags
 
 
+#: Per-context holder for the grouped health scan's cached workspace.
+_METAL_SCAN_HOLDERS = weakref.WeakKeyDictionary()
+
+
+def _metal_first_nonfinite(context, names, arrays):
+    """Name of the first field (in ``names`` order) holding a non-finite
+    value, or None, from one grouped device scan."""
+    from types import SimpleNamespace
+    from woof.core.health import FieldRule, HealthField
+    from woof.metal.array import MetalArrayModule
+    from woof.metal.health_family import submit_validate_full_state
+
+    holder = _METAL_SCAN_HOLDERS.get(context)
+    if holder is None:
+        holder = SimpleNamespace(
+            _metal_setup_state=True,
+            _array_module=MetalArrayModule(context))
+        _METAL_SCAN_HOLDERS[context] = holder
+    fields = tuple(
+        HealthField(name=f"mynn_pbl.{name}", values=array,
+                    rule=FieldRule("generic"))
+        for name, array in zip(names, arrays))
+    submission, result = submit_validate_full_state(holder, fields)
+    if submission is None:
+        return None
+    submission.wait()
+    _status, packed = (int(value) for value in result.to_numpy())
+    if packed == (1 << 64) - 1:
+        return None
+    return names[packed >> 48]
+
+
 def validate_mynn_tendencies(out: Mapping[str, cp.ndarray]) -> None:
     """Refuse a non-finite MYNN tendency before it reaches RK3.
 
@@ -589,9 +623,19 @@ def validate_mynn_tendencies(out: Mapping[str, cp.ndarray]) -> None:
     except ImportError:
         MetalArray = ()
     if isinstance(out[names[0]], MetalArray):
-        # Until the compact device reduction is part of the registered Metal
-        # family, read back only the six public tendency fields for this
-        # guard. This keeps the step fail-closed on non-finite output.
+        arrays = [out[name] for name in names]
+        context = arrays[0].buffer.context
+        if all(isinstance(a, MetalArray) and a.dtype == np.dtype(np.float32)
+               and a.flags.c_contiguous and a.buffer.context is context
+               for a in arrays):
+            # One grouped device scan; only its compact first-failure
+            # record is read back.  The record's high bits are the index
+            # of the first failing field, in ``names`` order.
+            bad = _metal_first_nonfinite(context, names, arrays)
+            if bad is not None:
+                raise FloatingPointError(
+                    f"MYNN PBL produced a non-finite {bad} tendency")
+            return
         for name in names:
             if not np.isfinite(out[name].to_numpy()).all():
                 raise FloatingPointError(

@@ -643,26 +643,19 @@ def advance_acoustic_step_v841(
             - ewp[:-1] * coefficients.coftz[:-1, cell] * out.rw_p[:-1, cell]
         )
     if batch_metal_solve:
-        out.rw_p[:] = solve_vertical_system_v841(
-            out.rw_p, coefficients, dts=dts, metal_context=metal_context
-        )
+        from .metal_preview import submit_acoustic_solve_and_damping
+        out.rw_p[:] = submit_acoustic_solve_and_damping(
+            metal_context, rw_p=out.rw_p,
+            a_tri=coefficients.a_tri,
+            alpha_tri=coefficients.alpha_tri,
+            gamma_tri=coefficients.gamma_tri,
+            rw_save=forcing.rw_save, rw=forcing.rw,
+            dss=forcing.dss, w=forcing.w, rho_zz=forcing.rho_zz,
+            zz=forcing.zz, fzm=fzm_a, fzp=fzp_a, dts=dts,
+            solve_scale=dtype.type(dts) ** 2)
         for cell in range(ncells):
             rs = rs_all[:, cell]
             ts = ts_all[:, cell]
-            for level in range(1, nlev):
-                delta_saved = forcing.rw_save[level, cell] - forcing.rw[level, cell]
-                damping = forcing.dss[level, cell]
-                density_at_interface = (
-                    fzm_a[level] * forcing.zz[level, cell]
-                    + fzp_a[level] * forcing.zz[level - 1, cell]
-                ) * (
-                    fzm_a[level] * forcing.rho_zz[level, cell]
-                    + fzp_a[level] * forcing.rho_zz[level - 1, cell]
-                )
-                out.rw_p[level, cell] = (
-                    out.rw_p[level, cell] + delta_saved
-                    - dts_r * damping * density_at_interface * forcing.w[level, cell]
-                ) / (one + dts_r * damping) - delta_saved
             out.ww_avg[1:nlev, cell] = out.ww_avg[1:nlev, cell] + (
                 ewp[1:nlev] * out.rw_p[1:nlev, cell]
             )
