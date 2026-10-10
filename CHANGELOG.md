@@ -1,5 +1,47 @@
 # Changelog
 
+## MetalARF 1.0.2
+
+A cleanup release: a smaller repository and no change to forecasts. The
+Metal bundle's metallibs and dylib are byte-identical to 1.0.1. The tree
+drops from about 59,000 files and 1.7 GB to about 17,000 files and 0.8 GB.
+
+Changed:
+
+- The native data bridges download their Rust dependencies from crates.io
+  during the build, at the versions pinned in each `Cargo.lock`. The
+  vendored crates.io mirror (41,000 files, 730 MB) is gone; the project's
+  own crates and rustwx's pinned git dependencies stay in the tree.
+- `recast-woof-data` installs from PyPI; the copy in the repository is gone.
+- The README installs from a shallow clone (`git clone --depth 1`), which
+  fetches only the current release.
+- The generated Metal ABI headers are no longer tracked;
+  `tools/build_metal_backend.py` regenerates them before compiling.
+
+Removed:
+
+- The CUDA and Windows installers, `install.sh` and `install.ps1`.
+- Code that nothing in the package, its tests or its user docs used: 73 tool
+  scripts, 9 tool folders, 19 `tilestream` modules and 7 of its notes, two
+  Hex modules, and 13 Metal family drivers, with the shaders and signature
+  fragments of the 12 families that never reached the bundle.
+
+Added:
+
+- The `metalarf` command, a second name for `woof`.
+- `AGENTS.md` (read by Claude Code through `CLAUDE.md`) describes how the
+  port is laid out and the rules for changing it, and `MAINTAINING.md`
+  covers upstream merges, releases and the reasons behind this cleanup.
+  `.ignore` keeps vendored crates, fixtures, generated files and CUDA
+  kernels out of code searches.
+- `tools/upstream-prune.txt` lists the upstream WOOF paths MetalARF removes,
+  so the cut can be reapplied after merging a new WOOF release.
+
+Fixed:
+
+- The CLI reference (`docs/public/CLI-OPTIONS.md`) lists the Metal
+  `--backend` and `--state-backend` options.
+
 ## MetalARF 1.0.1
 
 A speed release. Forecast output is bitwise identical to 1.0.0 on every

@@ -1,4 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "diff6_bindings.metalh"
-#include "diff6_seam_u_bindings.metalh"
-#include "diff6_seam_v_bindings.metalh"

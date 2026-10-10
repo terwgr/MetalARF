@@ -1,8 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "morrison_finalize_levels_bindings.metalh"
-#include "morrison_finish_bindings.metalh"
-#include "morrison_prepare_fields_bindings.metalh"
-#include "morrison_process_levels_bindings.metalh"
-#include "morrison_sediment_256_bindings.metalh"
-#include "morrison_sediment_64_bindings.metalh"
-#include "morrison_validate_diagnostics_bindings.metalh"

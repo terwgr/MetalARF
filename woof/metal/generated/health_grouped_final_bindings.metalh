@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout 1bae9ac521c90f8e7bc155b0eb4a3d7300c760465438b7d27d652f7b9e8ccf30.
-struct HealthGroupedFinalResources {
-    device const ulong *partial [[id(0)]];
-    device ulong *result [[id(1)]];
-};
-struct HealthGroupedFinalParams {
-    int records;
-};
-static_assert(sizeof(HealthGroupedFinalParams) == 4, "health_grouped_final parameter ABI size changed");

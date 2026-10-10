@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout 53a9c56e35f235c3c92f3b257cef7bcea46cbeaaa81cb47a1953cac1c728df1a.
-struct ThompsonWarmSourceGraupelPowLogCompensateSumResources {
-    device ulong *cloud_state [[id(0)]];
-};
-struct ThompsonWarmSourceGraupelPowLogCompensateSumParams {
-    int mode;
-    int n;
-};
-static_assert(sizeof(ThompsonWarmSourceGraupelPowLogCompensateSumParams) == 8, "thompson_warm_source_graupel_pow_log_compensate_sum parameter ABI size changed");

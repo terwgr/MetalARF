@@ -1,7 +1,0 @@
-/target/
-/full-target/
-/tmp/
-/bin/
-/.cargo/
-/receipts/*.done
-/receipts/*launcher.log

@@ -1,2 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "jacobi_eigh_fp64_batched_bindings.metalh"

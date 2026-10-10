@@ -1,8 +1,0 @@
-// Generated from kernel_signatures.json; layout 7650ff64dd4c125d816e6b33db588f7a9f84b3f1b75cafeb2a5335c0ea76b4c4.
-struct ThompsonWarmSourceGraupelCloudRateBaseResources {
-    device ulong *cloud_state [[id(0)]];
-};
-struct ThompsonWarmSourceGraupelCloudRateBaseParams {
-    int n;
-};
-static_assert(sizeof(ThompsonWarmSourceGraupelCloudRateBaseParams) == 4, "thompson_warm_source_graupel_cloud_rate_base parameter ABI size changed");

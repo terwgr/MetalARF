@@ -1,5 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "topo_wind_static_bindings.metalh"
-#include "terrain_pbl_top_bindings.metalh"
-#include "gwdo_column_bindings.metalh"
-#include "gwdo_gsl_column_bindings.metalh"

@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout 7a2e39489e6c0bc831a1dc590a94cd0260b35890185160e0dcae20e562cecada.
-struct GlobalConvectiveCountFinalizeFragmentResources {
-    device const uint *mixed_pairs [[id(0)]];
-    device uint *mixed_total [[id(1)]];
-};
-struct GlobalConvectiveCountFinalizeFragmentParams {
-    int count;
-};
-static_assert(sizeof(GlobalConvectiveCountFinalizeFragmentParams) == 4, "global_convective_count_finalize_fragment parameter ABI size changed");

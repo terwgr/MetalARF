@@ -1,8 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "milbrandt2_cold_bindings.metalh"
-#include "milbrandt2_diagnostics_bindings.metalh"
-#include "milbrandt2_geometry_bindings.metalh"
-#include "milbrandt2_prelim_bindings.metalh"
-#include "milbrandt2_sediment_256_bindings.metalh"
-#include "milbrandt2_sediment_64_bindings.metalh"
-#include "milbrandt2_warm_bindings.metalh"

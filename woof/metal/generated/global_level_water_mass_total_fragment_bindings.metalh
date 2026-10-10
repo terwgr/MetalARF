@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout 2dcc0787103047ca54c4a9ab05b677476dcf28eb2016e369bcf1791d2575203a.
-struct GlobalLevelWaterMassTotalFragmentResources {
-    device const ulong *mass [[id(0)]];
-    device ulong *total [[id(1)]];
-};
-struct GlobalLevelWaterMassTotalFragmentParams {
-    int count;
-};
-static_assert(sizeof(GlobalLevelWaterMassTotalFragmentParams) == 4, "global_level_water_mass_total_fragment parameter ABI size changed");

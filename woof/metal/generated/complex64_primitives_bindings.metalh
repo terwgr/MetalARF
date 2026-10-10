@@ -1,5 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "complex64_add_bindings.metalh"
-#include "complex64_conjugate_bindings.metalh"
-#include "complex64_multiply_bindings.metalh"
-#include "complex64_squared_magnitude_bindings.metalh"

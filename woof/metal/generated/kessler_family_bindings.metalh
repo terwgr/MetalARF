@@ -1,4 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "kessler_column_bindings.metalh"
-#include "kessler_finish_bindings.metalh"
-#include "kessler_prepare_bindings.metalh"

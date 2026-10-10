@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "mynn_surface_column_bindings.metalh"
-#include "mynn_surface_seed_bindings.metalh"

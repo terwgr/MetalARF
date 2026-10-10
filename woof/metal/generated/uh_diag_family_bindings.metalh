@@ -1,4 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "uh_boundary_copy_bindings.metalh"
-#include "uh_columns_bindings.metalh"
-#include "uh_smooth_max_bindings.metalh"

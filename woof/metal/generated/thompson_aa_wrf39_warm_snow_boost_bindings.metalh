@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout 01022c695b4eaec5a6e2936538249aab0ca2a172ecf24a5aec8c784cb4f231da.
-struct ThompsonAaWrf39WarmSnowBoostResources {
-    device const float *entry_warm_mask [[id(0)]];
-    device float *velocity_boost [[id(1)]];
-};
-struct ThompsonAaWrf39WarmSnowBoostParams {
-    int n;
-};
-static_assert(sizeof(ThompsonAaWrf39WarmSnowBoostParams) == 4, "thompson_aa_wrf39_warm_snow_boost parameter ABI size changed");

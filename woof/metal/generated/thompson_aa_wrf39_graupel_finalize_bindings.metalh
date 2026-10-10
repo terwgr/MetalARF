@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout b8bc9a24ac063fbd5ecd6b21add45c43cf75f4cb4b8e189687b251986516c5ce.
-struct ThompsonAaWrf39GraupelFinalizeResources {
-    device float *qg [[id(0)]];
-};
-struct ThompsonAaWrf39GraupelFinalizeParams {
-    float r1;
-    int n;
-};
-static_assert(sizeof(ThompsonAaWrf39GraupelFinalizeParams) == 8, "thompson_aa_wrf39_graupel_finalize parameter ABI size changed");

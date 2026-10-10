@@ -1,4 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "accumulate_sumflux_bindings.metalh"
-#include "finish_sumflux_bindings.metalh"
-#include "zero_sumflux_bindings.metalh"

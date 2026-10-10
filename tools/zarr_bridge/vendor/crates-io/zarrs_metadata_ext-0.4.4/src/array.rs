@@ -1,1 +1,0 @@
-//! Zarr array extension metadata.

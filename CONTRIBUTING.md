@@ -40,37 +40,19 @@ has and has not been verified.
 
 Practicalities:
 
-- Python 3.11+; install the checkout's companion first with
-  `pip install -e recast-woof-data` (the engine requires the companion of its
-  own version, which PyPI does not carry until that version is published),
-  then `pip install -e '.[gpu-cu12,render,dev]'`
-  (`gpu-cu13` instead on a CUDA-13-only box);
-  build each vendored Rust workspace the installers build with
-  `cargo build --release --locked --offline` run inside its own directory
-  (the vendored, locked build is the supported one): `tools/grib1_bridge`,
-  `tools/rustwx`, `tools/arwen-tui`, `tools/zarr_bridge`, `tools/rw_wps`
-  and `tools/region_global_dealias`. `bash install.sh` (PowerShell:
-  `.\install.ps1`) does all of this except the `dev` extra.
-- This repository builds **two** distributions. `pyproject.toml` at the
-  root builds `woof`; `recast-woof-data/pyproject.toml` builds `recast-woof-data`,
-  which carries the RRTMGP and Thompson table directories because the
-  single wheel had reached 103.62 MiB against PyPI's 100 MiB cap. Build
-  them with `python -m build --wheel` and `python -m build --wheel
-  recast-woof-data`, from a tree with no stale `build/` in either place. They
-  share one version string and are cut and uploaded together
-  (RELEASE_CHECKLIST.md).
-  A checkout needs no `pip install -e recast-woof-data` to READ the tables:
-  `woof.data_assets` falls to the sibling directory when `woof` is
-  running out of the same tree. Reach those files through
-  `data_assets.data_path()` and never by joining onto `woof/data`.
-  `woof doctor` is a different question and will still report
-  `recast-woof-data: not installed` in such an environment, correctly: it
-  reads the installed distribution's metadata, and an installed `woof`
-  really is missing a dependency it declares. Install the companion
-  (`pip install -e recast-woof-data`) to clear the line.
+- Apple Silicon, Python 3.11+ and a Rust toolchain. Follow the install
+  steps in the README: `tools/build_darwin_native.py` builds the native
+  bridges (Cargo fetches crates.io dependencies, pinned by each
+  `Cargo.lock`), and `pip install -e '.[dev]'` installs the checkout with
+  the `recast-woof-data` companion from PyPI. Reach packaged tables
+  through `data_assets.data_path()` and never by joining onto `woof/data`.
+- After changing a shader, rebuild the Metal library with
+  `python tools/build_metal_backend.py --output woof/libexec/metal` and
+  commit the shader and the bundle together. See AGENTS.md for how the
+  Metal port is laid out.
 - Run the focused tests for the changed surface first, then the broad
-  CPU suite it touches. Rust changes must pass locked offline tests
-  and strict formatting.
+  CPU suite it touches. Rust changes must pass locked tests and strict
+  formatting.
 - A Rust change that touches arithmetic a published number is read off
   also runs the mutation gate over its own diff:
 

@@ -42,7 +42,7 @@ def inventory():
 def selected_packages():
     selected, counts = {}, {}
     for target in TARGETS:
-        done = subprocess.run(["cargo", "metadata", "--locked", "--offline", "--format-version", "1",
+        done = subprocess.run(["cargo", "metadata", "--locked", "--format-version", "1",
                                "--filter-platform", target], cwd=WORKSPACE, check=True,
                               stdout=subprocess.PIPE, encoding="utf-8")
         document = json.loads(done.stdout)

@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout ffc285bfd55a30e1cf620c3672d8240f21f4c74a75463bc55942cea43b2c1167.
-struct GlobalTracerExtremaFinalizeFragmentResources {
-    device const ulong *partial_extrema [[id(0)]];
-    device ulong *extrema [[id(1)]];
-};
-struct GlobalTracerExtremaFinalizeFragmentParams {
-    int partial_count;
-};
-static_assert(sizeof(GlobalTracerExtremaFinalizeFragmentParams) == 4, "global_tracer_extrema_finalize_fragment parameter ABI size changed");

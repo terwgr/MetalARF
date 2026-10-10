@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout 5058459c00702bf2c12818c51b4123e3187bc4200ec1f9196aa4bfc1e0039b7d.
-struct GlueAddResources {
-    device const float *src [[id(0)]];
-    device float *dst [[id(1)]];
-};
-struct GlueAddParams {
-    int n;
-};
-static_assert(sizeof(GlueAddParams) == 4, "glue_add parameter ABI size changed");

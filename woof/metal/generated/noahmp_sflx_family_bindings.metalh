@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "k_sflx_error_bindings.metalh"
-#include "k_sflx_marshal_bindings.metalh"

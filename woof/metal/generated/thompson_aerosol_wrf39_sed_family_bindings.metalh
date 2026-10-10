@@ -1,8 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "thompson_aa_wrf39_ice_sediment_64_bindings.metalh"
-#include "thompson_aa_wrf39_ice_sediment_256_bindings.metalh"
-#include "thompson_aa_wrf39_graupel_sediment_64_bindings.metalh"
-#include "thompson_aa_wrf39_graupel_sediment_256_bindings.metalh"
-#include "thompson_aa_wrf39_snow_sediment_64_bindings.metalh"
-#include "thompson_aa_wrf39_snow_sediment_256_bindings.metalh"
-#include "thompson_aa_wrf39_warm_snow_boost_bindings.metalh"

@@ -1,4 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "wsm6_column_bindings.metalh"
-#include "wsm6_finish_bindings.metalh"
-#include "wsm6_prepare_bindings.metalh"

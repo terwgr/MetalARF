@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "global_semilag_tracer_mass_fragment_bindings.metalh"
-#include "global_semilag_tracer_scale_fragment_bindings.metalh"

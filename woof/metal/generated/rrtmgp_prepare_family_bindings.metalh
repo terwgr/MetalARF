@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "rrtmgp_prepare_clamp_top_bindings.metalh"
-#include "rrtmgp_prepare_clear_upper_fields_bindings.metalh"
-#include "rrtmgp_prepare_gas_vmr_bindings.metalh"
-#include "rrtmgp_prepare_interface_temperatures_bindings.metalh"
-#include "rrtmgp_prepare_lw_profile_bindings.metalh"
-#include "rrtmgp_prepare_pack_columns_bindings.metalh"
-#include "rrtmgp_prepare_solver_temperatures_bindings.metalh"
-#include "rrtmgp_prepare_sw_profile_bindings.metalh"

@@ -1,2 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "flux_div_scalar_bindings.metalh"

@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout 2df9f42dc3d5a768af01ca3f2928c1f34a8f825e30d6e20d62506d1bbffb6ef9.
-struct GlobalBettsMillerDeepFinalizeFragmentResources {
-    device const uint *deep [[id(0)]];
-    device uint *deep_count [[id(1)]];
-};
-struct GlobalBettsMillerDeepFinalizeFragmentParams {
-    int count;
-};
-static_assert(sizeof(GlobalBettsMillerDeepFinalizeFragmentParams) == 4, "global_betts_miller_deep_finalize_fragment parameter ABI size changed");

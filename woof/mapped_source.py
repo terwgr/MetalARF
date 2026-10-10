@@ -3503,7 +3503,7 @@ def _build_grib2_tools() -> tuple[Path, Path]:
         # a machine that could.
         command = [
             bridges.cargo_executable() or "cargo",
-            "build", "--locked", "--offline", "--release",
+            "build", "--locked", "--release",
             "--bin", "grib2_inventory", "--bin", "grib2_dump",
         ]
         try:

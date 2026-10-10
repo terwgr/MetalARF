@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout 17ae5a6175662da2239ad2db85d952ff05987301f3b59c2e481369294e80bf92.
-struct GlobalSumFinalizeFragmentResources {
-    device const ulong *partial_sums [[id(0)]];
-    device ulong *total [[id(1)]];
-};
-struct GlobalSumFinalizeFragmentParams {
-    int count;
-};
-static_assert(sizeof(GlobalSumFinalizeFragmentParams) == 4, "global_sum_finalize_fragment parameter ABI size changed");

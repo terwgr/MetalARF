@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "rrtmgp_mcica_maxran_bindings.metalh"
-#include "rrtmgp_mcica_prepare_seed_bindings.metalh"

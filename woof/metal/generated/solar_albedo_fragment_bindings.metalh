@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "solar_albedo_validate_bindings.metalh"
-#include "solar_albedo_update_bindings.metalh"

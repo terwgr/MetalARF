@@ -1,4 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "nssl2_driver_gather_initialize_bindings.metalh"
-#include "nssl2_driver_reduce_precipitation_bindings.metalh"
-#include "nssl2_driver_scatter_bindings.metalh"

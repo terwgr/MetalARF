@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout e0dcb2a06de590e00e472a9b9a351c1876cecff655429c159861e6003359fcef.
-struct GlobalFiniteFinalizeFragmentResources {
-    device const uint *partial_nonfinite [[id(0)]];
-    device uint *finite [[id(1)]];
-};
-struct GlobalFiniteFinalizeFragmentParams {
-    int partial_count;
-};
-static_assert(sizeof(GlobalFiniteFinalizeFragmentParams) == 4, "global_finite_finalize_fragment parameter ABI size changed");

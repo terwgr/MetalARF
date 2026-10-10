@@ -1,7 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "nest_blend_terrain_bindings.metalh"
-#include "nest_copy_fcn_bindings.metalh"
-#include "nest_copy_fcnm_bindings.metalh"
-#include "nest_smooth_i_bindings.metalh"
-#include "nest_smooth_j_bindings.metalh"
-#include "nest_copy_fcn_theta_bindings.metalh"

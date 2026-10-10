@@ -1,0 +1,26 @@
+# Search fence for ripgrep and the agents that use it. Everything here is
+# still in the repository; `rg -uu` searches it all.
+
+# Test fixtures, oracle captures and receipts (binary or machine-written)
+tests/data/
+tests/fixtures/
+docs/public/receipts/
+
+# Rust code we do not edit: the project's own vendored crates
+tools/*/vendor/
+
+# Generated or built Metal artifacts
+woof/metal/generated/
+woof/metal/kernel_signatures.json
+woof/libexec/
+
+# Upstream CUDA kernels (read them on purpose when porting a kernel)
+*.cu
+*.cuh
+
+# Upstream investigation notes and large legal records
+tilestream/*.md
+PROVENANCE.md
+NOTICE
+licenses/
+woof/physics_registry_history.json

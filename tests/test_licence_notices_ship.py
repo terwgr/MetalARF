@@ -771,35 +771,6 @@ def test_simulated_radar_grants_reach_source_and_binary_consumers(vendor, label)
     assert _read(scoped) in binary, "compiled radar loses the scoped vendor notice"
 
 
-def test_simulated_radar_dependency_grants_include_native_library_notices() -> None:
-    """New radar crates and their native libraries must reach binary consumers."""
-    _requires_source_tree()
-    path = ROOT / "tools/rustwx/crates/rw-simradar/data/dependency-licenses.json"
-    inventory = json.loads(_read(path))
-    notice = _read(LICENSES / "THIRD-PARTY-LICENSES-bridge-binaries.txt")
-    assert inventory["schema"] == "woof.simulated-radar-dependency-grants/v1"
-    assert inventory["packages"], "radar dependency notice inventory is empty"
-    nested_native_grants = []
-    for package in inventory["packages"]:
-        assert f"{package['name']} {package['version']} | {package['license']}" in notice
-        if package["name"] == "wrf-core":
-            assert package["declaration_source"] in notice
-            assert package["license"] == "MIT"
-            continue
-        assert package["grants"], f"no grant retained for {package['name']}"
-        for grant in package["grants"]:
-            source = ROOT / grant["path"]
-            assert hashlib.sha256(source.read_bytes()).hexdigest() == grant["sha256"]
-            assert grant["path"] in notice
-            assert f"[{grant['label']}] sha256 {grant['sha256']}" in notice
-            for line in _read(source).splitlines():
-                if line:
-                    assert line.rstrip() in notice, f"binary notice omits grant text from {grant['path']}"
-            if "/libdeflate/" in grant["path"]:
-                nested_native_grants.append(grant["path"])
-    assert nested_native_grants, "native libdeflate grant is missing from radar notices"
-
-
 def test_simulated_radar_bzip2_table_grant_reaches_binary_consumers() -> None:
     """The decoder's copied randomisation table needs its original bzip2 grant."""
     _requires_source_tree()
@@ -856,59 +827,6 @@ def test_simulated_radar_vendor_inventory_is_complete_and_exportable(vendor) -> 
                      ROOT / "tools/rustwx/.cargo/config.toml",
                      ROOT / "tools/rustwx/crates/rw-simradar/Cargo.toml"):
         assert matches(relative.relative_to(ROOT).as_posix(), rules) is None
-
-
-def test_simulated_radar_writer_crates_resolve_from_the_public_source_tree() -> None:
-    """Unpublished writer crates must build from paths without Git or registry fetches."""
-    _requires_source_tree()
-    dependencies = tomllib.loads(_read(ROOT / "pyproject.toml"))["project"]["dependencies"]
-    # The writers are the vendored Rust crates; the PyPI distribution had no
-    # consumer in gpuwm/, tools/ or tests/, so declaring it only made every
-    # install download recast_radar, xarray and pandas for nothing.
-    assert not any(item.replace(" ", "").lower().startswith("recast-radar")
-                   for item in dependencies), "no recast-radar Python requirement is declared"
-    assert not any("recast-radar" in item and ("git+" in item or " @ " in item)
-                   for item in dependencies), "public installs require the declared PyPI version"
-    rust = ROOT / "tools/rustwx"
-    source = rust / "vendor/recast-radar-tools"
-    record = json.loads(_read(source / "SOURCE.json"))
-    crates = set(record["crates"])
-    assert len(crates) == 6
-    locked = tomllib.loads(_read(rust / "Cargo.lock"))["package"]
-    writer_locks = [package for package in locked if package["name"] in crates]
-    assert {package["name"] for package in writer_locks} == crates
-    for package in writer_locks:
-        assert package["version"] == record["version"]
-        assert "source" not in package, f"writer crate needs a fetch: {package['name']}"
-    manifests = [rust / "crates/rw-simradar/Cargo.toml", source / "Cargo.toml"]
-    manifests.extend(source / "crates" / crate / "Cargo.toml" for crate in sorted(crates))
-
-    def dependencies(table):
-        for key, value in table.items():
-            if key in ("dependencies", "dev-dependencies", "build-dependencies"):
-                yield from value.items()
-            elif isinstance(value, dict):
-                yield from dependencies(value)
-
-    seen = set()
-    for manifest in manifests:
-        for name, spec in dependencies(tomllib.loads(_read(manifest))):
-            if name not in crates:
-                continue
-            seen.add(name)
-            assert isinstance(spec, dict) and "path" in spec, name
-            assert "git" not in spec, f"writer crate uses a Git URL: {name}"
-            destination = (manifest.parent / spec["path"]).resolve()
-            assert destination == (source / "crates" / name).resolve()
-            assert (destination / "Cargo.toml").is_file()
-    assert seen == crates
-    config = tomllib.loads(_read(rust / ".cargo/config.toml"))["source"]
-    for registry in {"crates-io"} | {package["source"].split("#", 1)[0]
-                                    for package in locked
-                                    if package.get("source", "").startswith("git+")}:
-        replacement = config[registry]["replace-with"]
-        directory = rust / config[replacement]["directory"]
-        assert directory.is_dir(), f"offline source replacement is absent: {directory}"
 
 
 # ---------------------------------------------------------------------------

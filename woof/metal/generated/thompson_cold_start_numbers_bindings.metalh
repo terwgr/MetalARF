@@ -1,5 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "cold_start_numbers_bindings.metalh"
-#include "cold_start_seed_compact_bindings.metalh"
-#include "cold_start_temperature_bindings.metalh"
-#include "cold_start_temperature_scatter_bindings.metalh"

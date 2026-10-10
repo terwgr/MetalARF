@@ -1,8 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "spectral_final_stats_bindings.metalh"
-#include "spectral_pair_stats_bindings.metalh"
-#include "spectral_plane_correction_bindings.metalh"
-#include "spectral_recenter_crop_bindings.metalh"
-#include "spectral_reflect_extend_bindings.metalh"
-#include "spectral_stats_reduce_bindings.metalh"
-#include "spectral_transfer_bindings.metalh"
