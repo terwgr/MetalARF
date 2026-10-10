@@ -596,11 +596,11 @@ def _decoder(env: dict[str, str], *, as_posted: bool = False) -> Path:
     except FileNotFoundError:
         if overridden or not BRIDGE_CRATE.is_dir():
             raise
-    # A checkout that has simply not built the crate yet: build it where
-    # its vendored registry lives, then resolve through the same ladder
-    # so the answer is the one every other consumer would have got.
+    # A checkout that has simply not built the crate yet: build it in its
+    # workspace, then resolve through the same ladder so the answer is the
+    # one every other consumer would have got.
     _run([
-        "cargo", "build", "--release", "--locked", "--offline",
+        "cargo", "build", "--release", "--locked",
         "--bin", "hrrr_grib2_bridge",
     ], env, cwd=BRIDGE_CRATE)
     return bridges.resolve_source_decoder("hrrr", **mode)

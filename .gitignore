@@ -108,3 +108,11 @@ docs/branch-dispositions-private.md
 # Cargo checksum manifests require every upstream source and documentation file.
 !tools/arwen-ui-vendor/**
 tools/arwen-ui-vendor/**/__pycache__/
+
+# Local agent scratch space and Finder metadata
+.scratch/
+.DS_Store
+
+# Metal ABI headers: tools/build_metal_backend.py regenerates them from
+# woof/metal/kernel_signatures.json before every shader compile.
+woof/metal/generated/*.metalh

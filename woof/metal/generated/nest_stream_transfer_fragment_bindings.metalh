@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "nest_rect_gather_f32_bindings.metalh"
-#include "nest_rect_scatter_f32_bindings.metalh"

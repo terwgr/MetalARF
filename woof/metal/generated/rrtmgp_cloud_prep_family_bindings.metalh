@@ -1,8 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "rrtmgp_cal_cldfra1_bindings.metalh"
-#include "rrtmgp_cloudy_background_radii_bindings.metalh"
-#include "rrtmgp_hydrometeor_paths_bindings.metalh"
-#include "rrtmgp_mynn_cloud_merge_bindings.metalh"
-#include "rrtmgp_mynn_cloud_supplied_bindings.metalh"
-#include "rrtmgp_surface_emissivity_bindings.metalh"
-#include "rrtmgp_validate_call_bindings.metalh"

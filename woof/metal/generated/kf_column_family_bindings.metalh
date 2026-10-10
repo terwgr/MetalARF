@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "kf_column_bindings.metalh"
-#include "kf_driver_merge_bindings.metalh"

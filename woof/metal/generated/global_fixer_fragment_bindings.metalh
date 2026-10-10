@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "global_column_positivity_fragment_bindings.metalh"
-#include "global_spectral_mass_offset_fragment_bindings.metalh"

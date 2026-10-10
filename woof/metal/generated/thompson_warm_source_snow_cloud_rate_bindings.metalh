@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout c535cf1288dec625eba3ca5134a70021f982061d195f51689a8c5b7b0c690d22.
-struct ThompsonWarmSourceSnowCloudRateResources {
-    device const ulong *snow_cloud_efficiency [[id(0)]];
-    device ulong *cloud_state [[id(1)]];
-};
-struct ThompsonWarmSourceSnowCloudRateParams {
-    int n;
-};
-static_assert(sizeof(ThompsonWarmSourceSnowCloudRateParams) == 4, "thompson_warm_source_snow_cloud_rate parameter ABI size changed");

@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "urban_bep_couple_bindings.metalh"
-#include "urban_bep_sfcdiag_bindings.metalh"

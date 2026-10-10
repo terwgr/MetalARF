@@ -76,7 +76,7 @@ NOTES: dict[str, str] = {
 }
 
 #: Doors that are the same program reached by a second name.
-ALIASES = {"woof-wrf-init": "rw-wps"}
+ALIASES = {"woof-wrf-init": "rw-wps", "metalarf": "woof"}
 
 #: Console-script modules whose parser factory is not ``build_parser``.
 #: Everything absent from this table is asked for ``build_parser``, and a

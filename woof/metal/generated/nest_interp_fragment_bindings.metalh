@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "nest_bdy_interp1_fragment_bindings.metalh"
-#include "nest_sint_fragment_bindings.metalh"

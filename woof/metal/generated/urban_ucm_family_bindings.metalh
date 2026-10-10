@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "ucm_overrides_noah_bindings.metalh"
-#include "ucm_overrides_noahmp_bindings.metalh"

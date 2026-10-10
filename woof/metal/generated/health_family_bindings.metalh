@@ -1,6 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "health_final_bindings.metalh"
-#include "health_grouped_final_bindings.metalh"
-#include "health_grouped_scan_bindings.metalh"
-#include "health_partial_bindings.metalh"
-#include "health_partial_tile_bindings.metalh"

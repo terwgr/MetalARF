@@ -1,2 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "hex_pressure_gradient_euler_bindings.metalh"

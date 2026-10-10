@@ -1,5 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "advance_stage_theta_bindings.metalh"
-#include "advance_stage_u_bindings.metalh"
-#include "advance_stage_v_bindings.metalh"
-#include "advance_stage_w_bindings.metalh"

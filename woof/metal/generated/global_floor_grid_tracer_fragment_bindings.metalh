@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout 64ea3974572b213448e516d9b4e962751377412d6ebba68fe1adbdfb68e1c5fe.
-struct GlobalFloorGridTracerFragmentResources {
-    device const ulong *values [[id(0)]];
-    device ulong *floored [[id(1)]];
-};
-struct GlobalFloorGridTracerFragmentParams {
-    int count;
-};
-static_assert(sizeof(GlobalFloorGridTracerFragmentParams) == 4, "global_floor_grid_tracer_fragment parameter ABI size changed");

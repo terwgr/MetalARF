@@ -1,5 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "couple_ru_bindings.metalh"
-#include "couple_rv_bindings.metalh"
-#include "omega_column_scan_bindings.metalh"
-#include "stage_face_masses_bindings.metalh"

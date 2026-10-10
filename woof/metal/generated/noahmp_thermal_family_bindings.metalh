@@ -1,6 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "noahmp_thermal_hrt_bindings.metalh"
-#include "noahmp_thermal_hstep_bindings.metalh"
-#include "noahmp_thermal_phasechange_bindings.metalh"
-#include "noahmp_thermal_thermoprop_bindings.metalh"
-#include "noahmp_thermal_tsnosoi_bindings.metalh"

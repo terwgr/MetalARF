@@ -1,11 +1,8 @@
-# Source replacement: every crates.io and git dependency resolves to the
-# checked-in vendor/crates-io directory (emitted by `cargo vendor --locked`),
-# so a clean clone builds with --offline and without touching the network.
+# Source replacement for the pinned git dependencies only: they resolve to
+# vendor/crates-io, which holds just those crates. crates.io dependencies
+# are fetched by cargo, pinned by Cargo.lock.
 # The three git sources are all FahrenheitResearch (the project's own) repositories,
 # pinned to the exact revisions the campaign renderer was built against.
-
-[source.crates-io]
-replace-with = "vendored-sources"
 
 [source."git+https://github.com/FahrenheitResearch/ecape-rs?rev=82922534c02a888e773c50463b5a49d535606276"]
 git = "https://github.com/FahrenheitResearch/ecape-rs"

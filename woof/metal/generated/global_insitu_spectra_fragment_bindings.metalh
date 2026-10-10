@@ -1,3 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "global_insitu_spectra_modes_fragment_bindings.metalh"
-#include "global_insitu_spectra_pack_fragment_bindings.metalh"

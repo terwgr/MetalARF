@@ -57,6 +57,7 @@ all = ["recast-woof[all-cu12]"]
 
 [project.scripts]
 woof = "woof.cli:main"
+metalarf = "woof.cli:main"
 woof-carried-channel = "tools.carried_physics_channel:main"
 woof-wrf-init = "woof.source_cli:main"
 rw-wps = "woof.source_cli:main"

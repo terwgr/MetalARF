@@ -481,7 +481,7 @@ def build_rust_bridge(*, release: bool = True) -> Path:
         # with a working rustup this refused to build and told its owner
         # to install Rust.  See woof.bridges.cargo_executable.
         command = [bridges.cargo_executable() or "cargo",
-                   "build", "--locked", "--offline"]
+                   "build", "--locked"]
         if release:
             command.append("--release")
         try:

@@ -1,9 +1,0 @@
-// Generated from kernel_signatures.json; layout a458502f8ece1caa22489e77970c0db38e13d0dec6dbc34788e81ac9147cec00.
-struct GlobalGridMeanFinalizeFragmentResources {
-    device const ulong *weighted_rows [[id(0)]];
-    device ulong *mean [[id(1)]];
-};
-struct GlobalGridMeanFinalizeFragmentParams {
-    int nlat;
-};
-static_assert(sizeof(GlobalGridMeanFinalizeFragmentParams) == 4, "global_grid_mean_finalize_fragment parameter ABI size changed");

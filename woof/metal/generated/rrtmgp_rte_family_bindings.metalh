@@ -1,7 +1,0 @@
-// Generated from kernel_signatures.json; do not edit.
-#include "rrtmgp_delta_scale_bindings.metalh"
-#include "rrtmgp_fluxes_to_radiation_bindings.metalh"
-#include "rrtmgp_lw_flux_reduce_bindings.metalh"
-#include "rrtmgp_lw_noscat_bindings.metalh"
-#include "rrtmgp_sw_2stream_bindings.metalh"
-#include "rrtmgp_sw_flux_reduce_bindings.metalh"

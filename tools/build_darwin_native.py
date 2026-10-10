@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build and stage selected WOOF native artifacts for Apple Silicon.
 
-This local helper uses existing locked/offline Cargo workspaces and stages
+This local helper uses the existing locked Cargo workspaces and stages
 artifacts under their existing Unix filenames. ``--artifact NAME`` builds one
 artifact; ``--all`` builds the complete declared Darwin bridge set into the
 per-artifact layout accepted by ``stage_wheel_bridges.py --from-native-dir
@@ -207,7 +207,6 @@ def main() -> int:
         env.pop(name, None)
     env.update(
         CARGO_TARGET_DIR=str(target_dir),
-        CARGO_NET_OFFLINE="true",
         # macOS 27 dyld rejects dylibs stripped by rustc/llvm-objcopy because
         # their LC_SYMTAB string pool may be only 4-byte aligned. Keep this
         # Darwin release build unstripped; we use Apple's strip below after
@@ -244,7 +243,7 @@ def main() -> int:
             target_args = (["--lib"] if artifact in LIBRARY_ARTIFACTS
                            else ["--bin", artifact])
             cargo_command = [
-                "cargo", "build", "--locked", "--offline", "--release",
+                "cargo", "build", "--locked", "--release",
                 "--target", TRIPLE, *package_args, *target_args,
             ]
             run("Cargo release build", cargo_command, cwd=workspace, env=env, log=log)

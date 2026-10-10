@@ -76,6 +76,7 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 | `--source-orography-variable` | _(the parser declares no help text for this option)_ |
 | `--source-root` | the folder holding the source's files: the fetched HRRR cycle, the 20CRv3 member files --author-only reads, or, for a source whose fetch-route row declares its folder layout, the folder whose inputs and supplements it binds itself, authoring DIR/inputs.json and preparing into CONFIG-prepared beside the experiment config (CONFIG-prepared-2 and on once that exists) unless --output-root names one |
 | `--source-top-pressure-pa` | smallest pressure represented by the selected source; used by --namelist-support-report to reject vertical extrapolation |
+| `--state-backend {preprocess,cuda,cpu,metal}` | storage for the initialized state (Metal requires CPU preprocessing and a single domain) |
 | `--static-cache` | _(the parser declares no help text for this option)_ |
 | `--static-input` | _(the parser declares no help text for this option)_ |
 | `--static-receipt` | _(the parser declares no help text for this option)_ |
@@ -645,6 +646,7 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 
 | option | what it does |
 |---|---|
+| `--backend {cuda,metal}` | state and forecast backend for prepared member runs |
 | `--cycle YYYY-MM-DDTHH\|latest` | download routes only: run the config at this cycle; wins over the config's [fetch] cycle the way --transport does. The config is re-timed (start time, delayed nests, namelists) into <outdir>/cycles/<cycle>/; latest is resolved once, under the run's posting rule (as posted: the newest cycle whose start needs are posted) |
 | `--data-dir DIR` | download routes only: use this existing download instead of the automatically managed request cache |
 | `--devices N` | resident slab count; replaces [devices] count |
@@ -771,6 +773,7 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 
 | option | what it does |
 |---|---|
+| `--backend {cuda,metal}` | state and forecast backend for prepared member runs |
 | `--cycle YYYY-MM-DDTHH\|latest` | download routes only: run the config at this cycle; wins over the config's [fetch] cycle the way --transport does. The config is re-timed (start time, delayed nests, namelists) into <outdir>/cycles/<cycle>/; latest is resolved once, under the run's posting rule (as posted: the newest cycle whose start needs are posted) |
 | `--data-dir DIR` | download routes only: use this existing download instead of the automatically managed request cache |
 | `--devices N` | resident slab count; replaces [devices] count |
@@ -840,6 +843,7 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 
 | option | what it does |
 |---|---|
+| `--backend {cuda,metal}` | execution backend for --run or --launch (default cuda) |
 | `--budget-seconds` | advisory wall-time target for preparation, forecast and cycles; does not reduce cycles or impose a runtime deadline |
 | `--cadence-seconds` | exact requested whole-second cadence; otherwise derived from scale; never shortened to meet a cost estimate |
 | `--capabilities` | print the companion command and field contract without pricing |
@@ -880,6 +884,7 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 | `--status PLAN` | print the continuous status document of a saved plan with its controller liveness, and exit |
 | `--stop PLAN` | ask the running continuous controller of a saved plan to stop after its current operation; the request is durable, and a launch made while no controller runs clears it and resumes, so ask again after that launch to stop it |
 | `--supplement` | ROLE=PATH consumed by the preparation composition; repeatable |
+| `--synthetic-case` | run a tiny in-memory analysis through the Metal local-DA solver and compare with NumPy; no forecast inputs or downloads |
 | `--vram-gib` | declared card memory in GiB; required unless a request document supplies the card |
 
 ## `woof mesh`
@@ -1142,6 +1147,7 @@ Takes no options of its own.
 | `--source-orography-variable` | _(the parser declares no help text for this option)_ |
 | `--source-root` | the folder holding the source's files: the fetched HRRR cycle, the 20CRv3 member files --author-only reads, or, for a source whose fetch-route row declares its folder layout, the folder whose inputs and supplements it binds itself, authoring DIR/inputs.json and preparing into CONFIG-prepared beside the experiment config (CONFIG-prepared-2 and on once that exists) unless --output-root names one |
 | `--source-top-pressure-pa` | smallest pressure represented by the selected source; used by --namelist-support-report to reject vertical extrapolation |
+| `--state-backend {preprocess,cuda,cpu,metal}` | storage for the initialized state (Metal requires CPU preprocessing and a single domain) |
 | `--static-cache` | _(the parser declares no help text for this option)_ |
 | `--static-input` | _(the parser declares no help text for this option)_ |
 | `--static-receipt` | _(the parser declares no help text for this option)_ |
@@ -1639,6 +1645,14 @@ Takes no options of its own.
 | `--resolve` | print the fully resolved configuration plus every automatic resolution as one JSON document, and run nothing |
 | `--sources` | print the source registry as one JSON document -- every registered source, what each one's row declares, and which run-plan route can drive it from an intent -- and run nothing; needs no plan |
 
+## `woof selftest`
+
+| option | what it does |
+|---|---|
+| `--backend {auto,metal,numpy}` | auto picks Metal when a Metal device opens, else NumPy (the regional check needs a GPU backend and is skipped on NumPy) |
+| `--explain` | print the full reasoning, alternate routes and per-item evidence behind this command's output, instead of the default one-line-per-item summary |
+| `--json` | print the results as one JSON document |
+
 ## `woof setup`
 
 | option | what it does |
@@ -2097,6 +2111,7 @@ Takes no options of its own.
 | `--simulated-radar-table JSON` | [simulated_radar] options as JSON; overrides output options without editing a prepared configuration |
 | `--source {20crv3,20crv3-cf,aifs,aigefs,aigfs,ecmwf-ens,ecmwf-open-data,era5,era5-l137,gdas,gefs,gem-gdps,gfs,hrrr,hrrr-native,hrrr-prs,icon-d2,icon-eu,icon-global,mapped,rap,rap-native,rrfs}` | _(the parser declares no help text for this option)_ |
 | `--source-manifest-sha256` | sha256 of the preparation's portable source manifest; required, except with --prepared-head-sha256 naming an as-posted head, which binds its input plan instead (its seal writes the manifest, held to that plan) |
+| `--state-backend {cuda,metal}` | array storage for the restored prepared state; Metal is resident-only and single-domain, admitting ordinary YSU + MM5 SFCLAY with radiation off, no-PBL SFCLAY on flat qv-only specified boundaries, or direct fused LW-only RRTMGP with no PBL on periodic or qv-only specified boundaries |
 | `--stream-init {auto,resident,store}` | which road a STREAMED forecast builds its domain on. `resident` restores the prepared cache into one full-domain DomainState, attaches physics to it and lets the streaming seam copy it into the pinned host store -- the road with the parity proof, and the one that caps the domain at the size of the CARD rather than of the machine (MEASURED at nz = 49: the prepared case costs about 15 780 B/column, so 1024x1024 is refused on a 16 GB card while the streamed forecast it would have fed needs about 6 GiB). `store` fills the same store one ROW SLAB at a time and never allocates a domain-shaped device array, so the ceiling is the machine's pinned RAM. `auto`, the default, prices the resident state from the cache's own state/* manifest times the measured physics headroom and takes the resident road wherever it fits inside 0.80 of the card's free memory. Meaningful only when the run streams: with [tiles] off the resident state IS the domain and this flag changes nothing |
 | `--tiles JSON` | the [tiles] table this forecast integrates under, as a JSON object with the keys woof.core.streaming.StreamingOptions takes (mode/tile_nx/tile_ny/nbuffers/halo/store/write_mode/pipeline/vram_budget_bytes/host_budget_bytes). For the caller whose hash-bound experiment cannot carry one: the native HRRR chain hands this runner the authority its preparer BUILT, which has no [tiles] table, so a user's block had nowhere to ride. Validated by the same StreamingOptions.from_mapping the config front door uses, and binds no identity -- omitted, the hash-bound experiment's own table (usually none) runs |
 | `--wps-namelist` | _(the parser declares no help text for this option)_ |
@@ -2142,6 +2157,7 @@ Takes no options of its own.
 | `--sealed-forcing-extension` | write/restore checkpoints using the explicit append-only forcing-prefix contract |
 | `--show-capabilities` | print this runner's capability JSON and exit; it must be the only argument |
 | `--simulated-radar-table JSON` | [simulated_radar] options as JSON; overrides output options without editing a prepared configuration |
+| `--state-backend {cuda,metal}` | array storage for restored prepared tree states |
 
 ## `woof-wrf-runtime-check`
 
@@ -2151,6 +2167,10 @@ Takes no options of its own.
 | `--contract` | _(the parser declares no help text for this option)_ |
 | `--receipt` | _(the parser declares no help text for this option)_ |
 | `--skip-gpu` | _(the parser declares no help text for this option)_ |
+
+## `metalarf`
+
+The same program as `woof`, under its other installed name; every option above applies.
 
 ## `woof-wrf-init`
 

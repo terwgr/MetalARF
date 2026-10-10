@@ -36,7 +36,7 @@ statement about forecast accuracy; see Science and limits below.
 ## Install
 
 ```bash
-git clone https://github.com/terwgr/MetalARF.git
+git clone --depth 1 https://github.com/terwgr/MetalARF.git
 cd MetalARF
 python3 -m venv .venv
 source .venv/bin/activate
@@ -48,6 +48,12 @@ woof fetch-tables
 woof fetch-geog --datasets wrf
 woof selftest
 ```
+
+The command is installed as both `metalarf` and `woof`; they are the same
+program, and WOOF's messages and manuals say `woof`. `--depth 1` fetches only
+the current release; drop it to get the full
+history. The first native build downloads the bridges' Rust dependencies
+from crates.io, at the versions pinned in each `Cargo.lock`.
 
 The Metal shader library ships prebuilt in `woof/libexec/metal`. After you
 change a shader, rebuild it with
@@ -117,6 +123,9 @@ run it before and after a change to the Metal path.
   tests and tools.
 - `woof --help-all` lists every command; `woof hex --help` and
   `woof global --help` list the preview models' commands.
+- [AGENTS.md](AGENTS.md): how the port is laid out and the rules for
+  changing it, for contributors and coding agents.
+  [MAINTAINING.md](MAINTAINING.md) covers upstream merges and releases.
 
 ## Science and limits
 
