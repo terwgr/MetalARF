@@ -7657,7 +7657,7 @@ def _attach_terrain_drag(state, cfg, fields, static):
 def _initialize_metal_sfclay_without_cupy(
         state, cfg, *, landmask, tsk, sst, landuse, pblh, mavail, xland,
         ivgtyp, isltyp,
-        glw_provenance, radiation, cumulus, cam_ozone, soil_temperature,
+        glw, glw_provenance, radiation, cumulus, cam_ozone, soil_temperature,
         soil_moisture, liquid_moisture, vegfra, tmn, xice, snow, snow_depth,
         noah_params, landuse_dataset, noahmp_start_time, noahmp_latitude,
         noahmp_longitude, radiation_start_time, radiation_latitude,
@@ -7789,7 +7789,7 @@ def _initialize_metal_sfclay_without_cupy(
         })
     host_fields["psfc"] = np.full(shape, DTYPE(1.0e5), dtype=DTYPE)
     host_fields["swdown"] = np.zeros(shape, dtype=DTYPE)
-    host_fields["glw"] = np.zeros(shape, dtype=DTYPE)
+    host_fields["glw"] = host_array(glw)
     host_fields["snowh"] = np.zeros(shape, dtype=DTYPE)
     # GRDFLX is a core history row even when no land-surface scheme owns a
     # ground heat-flux calculation. Keep the no-LSM lane's value explicitly
@@ -8517,7 +8517,8 @@ def initialize_physics(
         return _initialize_metal_sfclay_without_cupy(
             state, cfg, landmask=landmask, tsk=tsk, landuse=landuse,
             ivgtyp=ivgtyp, isltyp=isltyp,
-            pblh=pblh, mavail=mavail, xland=xland, glw_provenance=glw_provenance,
+            pblh=pblh, mavail=mavail, xland=xland, glw=glw,
+            glw_provenance=glw_provenance,
             radiation=radiation, cumulus=cumulus, cam_ozone=cam_ozone,
             soil_temperature=soil_temperature,
             soil_moisture=soil_moisture,

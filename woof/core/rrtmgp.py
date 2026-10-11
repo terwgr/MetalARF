@@ -5137,14 +5137,17 @@ def _fused_cloud_args(fused, tau, ncol, nlay, ngpt):
         cld_tau = profile(cloud.tau, band_shape, "tau")
         cld_ssa = profile(cloud.ssa, band_shape, "ssa")
         cld_asy = profile(cloud.g, band_shape, "asymmetry")
-        band_cache = getattr(tables, "_metal_band_maps", None)
+        # The RTE shader reads this map with as_type<int>, so upload int32
+        # bits rather than float values; the cloud finalize kernels sharing
+        # _metal_band_maps read float values and keep their own cache.
+        band_cache = getattr(tables, "_metal_band_bits", None)
         if band_cache is None:
             band_cache = {}
-            tables._metal_band_maps = band_cache
+            tables._metal_band_bits = band_cache
         bands = band_cache.get(id(context))
         if bands is None:
-            bands = MetalArrayModule(context).asarray(
-                tables.gpoint_bands, dtype=np.float32)
+            bands = MetalArrayModule(context).asarray(np.ascontiguousarray(
+                tables.gpoint_bands, dtype=np.int32).view(np.float32))
             band_cache[id(context)] = bands
         if fused.mask is None:
             mask, have_mask = tau, 0
