@@ -5570,7 +5570,7 @@
       "name": "rrtmgp_gas_optics",
       "parameter_size": 76,
       "resource_count": 34,
-      "shader_hash": "b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090",
+      "shader_hash": "cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6",
       "threads_per_group": 128
     },
     {
@@ -5586,7 +5586,7 @@
       "name": "rrtmgp_gas_optics_reference",
       "parameter_size": 76,
       "resource_count": 34,
-      "shader_hash": "b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090",
+      "shader_hash": "cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6",
       "threads_per_group": 128
     },
     {
@@ -5602,7 +5602,7 @@
       "name": "rrtmgp_gas_vmr_fill",
       "parameter_size": 28,
       "resource_count": 5,
-      "shader_hash": "b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090",
+      "shader_hash": "cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6",
       "threads_per_group": 256
     },
     {
@@ -5635,7 +5635,7 @@
       "name": "rrtmgp_interpolation_inline_reference",
       "parameter_size": 16,
       "resource_count": 9,
-      "shader_hash": "b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090",
+      "shader_hash": "cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6",
       "threads_per_group": 256
     },
     {
@@ -5651,7 +5651,7 @@
       "name": "rrtmgp_interpolation_prepass",
       "parameter_size": 16,
       "resource_count": 9,
-      "shader_hash": "b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090",
+      "shader_hash": "cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6",
       "threads_per_group": 256
     },
     {
@@ -5784,7 +5784,7 @@
       "name": "rrtmgp_planck_sources",
       "parameter_size": 44,
       "resource_count": 20,
-      "shader_hash": "b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090",
+      "shader_hash": "cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6",
       "threads_per_group": 128
     },
     {

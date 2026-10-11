@@ -7654,17 +7654,30 @@ def _attach_terrain_drag(state, cfg, fields, static):
         znu=state.znu, state=state)
 
 
+def _declare_initial_surface_carriers(carriers, glw, glw_provenance, swdown):
+    """Label the initial GLW/SWDOWN carriers on both backends."""
+    def source(value):
+        return (CARRIER_SOURCE_EXTERNAL_ARRAY
+                if hasattr(value, "shape") and getattr(value, "ndim", 0)
+                else CARRIER_SOURCE_DECLARED_CONSTANT)
+
+    carriers.declare("glw", source=(source(glw) if glw_provenance == "declared"
+                                     else CARRIER_SOURCE_UNWRITTEN))
+    carriers.declare("swdown", source=(CARRIER_SOURCE_UNWRITTEN if swdown is None
+                                        else source(swdown)))
+
+
 def _initialize_metal_sfclay_without_cupy(
         state, cfg, *, landmask, tsk, sst, landuse, pblh, mavail, xland,
         ivgtyp, isltyp,
-        glw_provenance, radiation, cumulus, cam_ozone, soil_temperature,
+        glw, glw_provenance, radiation, cumulus, cam_ozone, soil_temperature,
         soil_moisture, liquid_moisture, vegfra, tmn, xice, snow, snow_depth,
         noah_params, landuse_dataset, noahmp_start_time, noahmp_latitude,
         noahmp_longitude, radiation_start_time, radiation_latitude,
         radiation_longitude, xice_threshold, frc_urb2d=None,
         terrain_drag_static=None, lakemask=None, lake_depth=None,
         lake_depth_flag=None, lake_iswater=None, lake_mask_flag=None,
-        landusef=None, soilctop=None):
+        landusef=None, soilctop=None, swdown=None):
     """Build the no-CuPy Metal surface lane and optional RRTMGP.
 
     Cold-start fields are host constants/inputs and are uploaded; no physics
@@ -7788,8 +7801,8 @@ def _initialize_metal_sfclay_without_cupy(
             "uw_cldfra": np.zeros((nz, *shape), dtype=DTYPE),
         })
     host_fields["psfc"] = np.full(shape, DTYPE(1.0e5), dtype=DTYPE)
-    host_fields["swdown"] = np.zeros(shape, dtype=DTYPE)
-    host_fields["glw"] = np.zeros(shape, dtype=DTYPE)
+    host_fields["swdown"] = host_array(0.0 if swdown is None else swdown)
+    host_fields["glw"] = host_array(glw)
     host_fields["snowh"] = np.zeros(shape, dtype=DTYPE)
     # GRDFLX is a core history row even when no land-surface scheme owns a
     # ground heat-flux calculation. Keep the no-LSM lane's value explicitly
@@ -8170,8 +8183,7 @@ def _initialize_metal_sfclay_without_cupy(
 
     carriers = CarrierContract(getattr(
         cfg, "surface_radiation_policy", SURFACE_RADIATION_POLICY_REQUIRED))
-    carriers.declare("glw", source=CARRIER_SOURCE_UNWRITTEN)
-    carriers.declare("swdown", source=CARRIER_SOURCE_UNWRITTEN)
+    _declare_initial_surface_carriers(carriers, glw, glw_provenance, swdown)
     if noahmp_params is not None:
         carriers.declare("coszen", source=CARRIER_SOURCE_ANALYTIC_GEOMETRY,
                          model_time=0.0)
@@ -8517,7 +8529,8 @@ def initialize_physics(
         return _initialize_metal_sfclay_without_cupy(
             state, cfg, landmask=landmask, tsk=tsk, landuse=landuse,
             ivgtyp=ivgtyp, isltyp=isltyp,
-            pblh=pblh, mavail=mavail, xland=xland, glw_provenance=glw_provenance,
+            pblh=pblh, mavail=mavail, xland=xland, glw=glw,
+            glw_provenance=glw_provenance, swdown=swdown,
             radiation=radiation, cumulus=cumulus, cam_ozone=cam_ozone,
             soil_temperature=soil_temperature,
             soil_moisture=soil_moisture,
@@ -9026,24 +9039,7 @@ def initialize_physics(
     # the caller's own number or the caller's own field, and the two are
     # different sources because a receipt that cannot tell a typed
     # constant from a source dataset's GLW is not a receipt.
-    if glw_provenance == "declared":
-        carriers.declare(
-            "glw",
-            source=(CARRIER_SOURCE_EXTERNAL_ARRAY
-                    if hasattr(glw, "shape") and getattr(glw, "ndim", 0)
-                    else CARRIER_SOURCE_DECLARED_CONSTANT))
-    else:
-        carriers.declare("glw", source=CARRIER_SOURCE_UNWRITTEN)
-    # SWDOWN/GSW/COSZEN all start unwritten.  swdown's argument default is
-    # None precisely so that "the caller said nothing" and "the caller
-    # typed a number" are different states; a caller-supplied value is a
-    # declaration and is labelled as one.
-    carriers.declare(
-        "swdown",
-        source=(CARRIER_SOURCE_UNWRITTEN if swdown is None else
-                CARRIER_SOURCE_EXTERNAL_ARRAY
-                if hasattr(swdown, "shape") and getattr(swdown, "ndim", 0)
-                else CARRIER_SOURCE_DECLARED_CONSTANT))
+    _declare_initial_surface_carriers(carriers, glw, glw_provenance, swdown)
     if int(getattr(cfg, "swint_opt", 0)) == 1:
         # WRF swint_opt = 1 (woof.core.swint): the fit coefficients, the
         # reference call, SWDDIR/SWDDIF/SWDDNI and the radiation-call

@@ -2751,7 +2751,7 @@ RRTMGP_GAS_OPTICS_SHAPES = (('complement_lower', (('nminor_lower',),)), ('comple
 RRTMGP_GAS_OPTICS_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('ngas', 'ctypes.c_int32'), ('nflav', 'ctypes.c_int32'), ('ngpt', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32'), ('neta', 'ctypes.c_int32'), ('nk_lower', 'ctypes.c_int32'), ('nk_upper', 'ctypes.c_int32'), ('idx_h2o', 'ctypes.c_int32'), ('is_sw', 'ctypes.c_int32'), ('nminor_lower', 'ctypes.c_int32'), ('nminor_upper', 'ctypes.c_int32'), ('natm', 'ctypes.c_int32'), ('nbound', 'ctypes.c_int32'), ('nminor_gpt_lower', 'ctypes.c_int32'), ('nminor_gpt_upper', 'ctypes.c_int32'), ('rayleigh_len', 'ctypes.c_int32')]
 RRTMGP_GAS_OPTICS_THREADS_PER_GROUP = 128
 RRTMGP_GAS_OPTICS_LAYOUT_HASH = 'd89bd9ddda61adc453322c622c649106e68736ab34fcee4f288b97bc0b0c0ab1'
-RRTMGP_GAS_OPTICS_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_GAS_OPTICS_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_GAS_OPTICS_REFERENCE_RESOURCES = (('play', 'float', 'read'), ('plev', 'float', 'read'), ('tlay', 'float', 'read'), ('vmr', 'float', 'read'), ('iatm_meta', 'float', 'read'), ('jt_meta', 'float', 'read'), ('jp_meta', 'float', 'read'), ('ftemp_meta', 'float', 'read'), ('fpress_meta', 'float', 'read'), ('vmr_ref', 'float', 'read'), ('flavor', 'float', 'read'), ('gpoint_flavor', 'float', 'read'), ('kmajor', 'float', 'read'), ('kminor_lower', 'float', 'read'), ('kminor_upper', 'float', 'read'), ('minor_limits_lower', 'float', 'read'), ('minor_limits_upper', 'float', 'read'), ('density_lower', 'float', 'read'), ('density_upper', 'float', 'read'), ('complement_lower', 'float', 'read'), ('complement_upper', 'float', 'read'), ('idx_minor_lower', 'float', 'read'), ('idx_minor_upper', 'float', 'read'), ('idx_scaling_lower', 'float', 'read'), ('idx_scaling_upper', 'float', 'read'), ('kminor_start_lower', 'float', 'read'), ('kminor_start_upper', 'float', 'read'), ('minor_gpt_start_lower', 'float', 'read'), ('minor_gpt_list_lower', 'float', 'read'), ('minor_gpt_start_upper', 'float', 'read'), ('minor_gpt_list_upper', 'float', 'read'), ('rayleigh', 'float', 'read'), ('tau', 'float', 'read_write'), ('ssa', 'float', 'read_write'))
 RRTMGP_GAS_OPTICS_REFERENCE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -2759,7 +2759,7 @@ RRTMGP_GAS_OPTICS_REFERENCE_SHAPES = (('complement_lower', (('nminor_lower',),))
 RRTMGP_GAS_OPTICS_REFERENCE_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('ngas', 'ctypes.c_int32'), ('nflav', 'ctypes.c_int32'), ('ngpt', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32'), ('neta', 'ctypes.c_int32'), ('nk_lower', 'ctypes.c_int32'), ('nk_upper', 'ctypes.c_int32'), ('idx_h2o', 'ctypes.c_int32'), ('is_sw', 'ctypes.c_int32'), ('nminor_lower', 'ctypes.c_int32'), ('nminor_upper', 'ctypes.c_int32'), ('natm', 'ctypes.c_int32'), ('nbound', 'ctypes.c_int32'), ('nminor_gpt_lower', 'ctypes.c_int32'), ('nminor_gpt_upper', 'ctypes.c_int32'), ('rayleigh_len', 'ctypes.c_int32')]
 RRTMGP_GAS_OPTICS_REFERENCE_THREADS_PER_GROUP = 128
 RRTMGP_GAS_OPTICS_REFERENCE_LAYOUT_HASH = '5152895a516b4e752f4cff707ec2c2e2c41fd46ec0b7ef2edad46861c8af06b8'
-RRTMGP_GAS_OPTICS_REFERENCE_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_GAS_OPTICS_REFERENCE_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_GAS_VMR_FILL_RESOURCES = (('qv', 'float', 'read'), ('o3_words', 'float', 'read'), ('trace_index', 'float', 'read'), ('trace_value', 'float', 'read'), ('vmr', 'float', 'read_write'))
 RRTMGP_GAS_VMR_FILL_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -2767,7 +2767,7 @@ RRTMGP_GAS_VMR_FILL_SHAPES = (('o3_words', (('no3_words',),)), ('qv', (('ncells'
 RRTMGP_GAS_VMR_FILL_PARAM_FIELDS = [('h2o_scale', 'ctypes.c_float'), ('h2o_index', 'ctypes.c_int32'), ('o3_index', 'ctypes.c_int32'), ('ntrace', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nslot', 'ctypes.c_int32'), ('no3_words', 'ctypes.c_int32')]
 RRTMGP_GAS_VMR_FILL_THREADS_PER_GROUP = 256
 RRTMGP_GAS_VMR_FILL_LAYOUT_HASH = 'b64f4bd145c4ba3252a11ec0a6a2cc7f048b4fb834458c1568c27ed6b6887eb5'
-RRTMGP_GAS_VMR_FILL_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_GAS_VMR_FILL_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_HYDROMETEOR_PATHS_RESOURCES = (('plev', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('play', 'float', 'read'), ('tlay', 'float', 'read'), ('nc', 'float', 'read'), ('nr', 'float', 'read'), ('ni', 'float', 'read'), ('ns', 'float', 'read'), ('effc', 'float', 'read'), ('effr', 'float', 'read'), ('effi', 'float', 'read'), ('effs', 'float', 'read'), ('cldfra', 'float', 'read'), ('clwp', 'float', 'read_write'), ('ciwp', 'float', 'read_write'), ('reliq', 'float', 'read_write'), ('dgice', 'float', 'read_write'))
 RRTMGP_HYDROMETEOR_PATHS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2783,7 +2783,7 @@ RRTMGP_INTERPOLATION_INLINE_REFERENCE_SHAPES = (('fpress_out', (('ncell',),)), (
 RRTMGP_INTERPOLATION_INLINE_REFERENCE_PARAM_FIELDS = [('press_ref_trop', 'ctypes.c_float'), ('ncell', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32')]
 RRTMGP_INTERPOLATION_INLINE_REFERENCE_THREADS_PER_GROUP = 256
 RRTMGP_INTERPOLATION_INLINE_REFERENCE_LAYOUT_HASH = 'e05878ad1c98e8948251239c3503d90d5a636e7ae05d6a6c095abbc7f1eacf54'
-RRTMGP_INTERPOLATION_INLINE_REFERENCE_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_INTERPOLATION_INLINE_REFERENCE_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_INTERPOLATION_PREPASS_RESOURCES = (('play', 'float', 'read'), ('tlay', 'float', 'read'), ('press_ref', 'float', 'read'), ('temp_ref', 'float', 'read'), ('iatm_out', 'float', 'read_write'), ('jt_out', 'float', 'read_write'), ('jp_out', 'float', 'read_write'), ('ftemp_out', 'float', 'read_write'), ('fpress_out', 'float', 'read_write'))
 RRTMGP_INTERPOLATION_PREPASS_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2791,7 +2791,7 @@ RRTMGP_INTERPOLATION_PREPASS_SHAPES = (('fpress_out', (('ncell',),)), ('ftemp_ou
 RRTMGP_INTERPOLATION_PREPASS_PARAM_FIELDS = [('press_ref_trop', 'ctypes.c_float'), ('ncell', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32')]
 RRTMGP_INTERPOLATION_PREPASS_THREADS_PER_GROUP = 256
 RRTMGP_INTERPOLATION_PREPASS_LAYOUT_HASH = 'd62f9736d75a08ddd4794b813e155134c796acad9638c511fcc316fd299a5c1b'
-RRTMGP_INTERPOLATION_PREPASS_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_INTERPOLATION_PREPASS_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_LW_FLUX_REDUCE_RESOURCES = (('part_up', 'float', 'read'), ('part_dn', 'float', 'read'), ('flux_up', 'float', 'read_write'), ('flux_dn', 'float', 'read_write'))
 RRTMGP_LW_FLUX_REDUCE_ACCESS = ('read', 'read', 'read_write', 'read_write')
@@ -2855,7 +2855,7 @@ RRTMGP_PLANCK_SOURCES_SHAPES = (('flavor', (('nflav', 'nbound'),)), ('fpress_met
 RRTMGP_PLANCK_SOURCES_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('ngas', 'ctypes.c_int32'), ('ngpt', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32'), ('neta', 'ctypes.c_int32'), ('nband', 'ctypes.c_int32'), ('nplanck', 'ctypes.c_int32'), ('natm', 'ctypes.c_int32'), ('nbound', 'ctypes.c_int32')]
 RRTMGP_PLANCK_SOURCES_THREADS_PER_GROUP = 128
 RRTMGP_PLANCK_SOURCES_LAYOUT_HASH = '6b7a748b609ac9d0385a7b69b4cd0a2c5651c8e5fd3334a7014b2a62e2041361'
-RRTMGP_PLANCK_SOURCES_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_PLANCK_SOURCES_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_PREPARE_CLAMP_TOP_RESOURCES = (('plev', 'float', 'read_write'),)
 RRTMGP_PREPARE_CLAMP_TOP_ACCESS = ('read_write',)
