@@ -7780,6 +7780,8 @@ def _initialize_metal_sfclay_without_cupy(
     if int(cfg.sf_sfclay_physics) == MYNN_SFCLAY_SCHEME:
         for name in MYNN_SURFACE_OUTPUTS:
             host_fields.setdefault(name, np.zeros(shape, dtype=DTYPE))
+        # MYNN seeds USTM from UST, as on the CuPy path.
+        host_fields["ustm"] = host_fields["ust"].copy()
     if int(cfg.bl_pbl_physics) == UW_PBL_SCHEME:
         nz = int(state.p.shape[0])
         host_fields.update({
@@ -8088,8 +8090,8 @@ def _initialize_metal_sfclay_without_cupy(
                                     _F3D as NOAH_FIELDS_3D)
 
         categories = {
-            "ivgtyp": (landuse.ivgtyp if landuse is not None else 10),
-            "isltyp": (landuse.isltyp if landuse is not None else 6),
+            "ivgtyp": (landuse.ivgtyp if landuse is not None else ivgtyp),
+            "isltyp": (landuse.isltyp if landuse is not None else isltyp),
         }
         for name, value in categories.items():
             host_fields[name] = np.ascontiguousarray(
@@ -8274,6 +8276,10 @@ def _initialize_metal_sfclay_without_cupy(
         driver.terrain_drag = _attach_terrain_drag(
             state, cfg, fields, terrain_drag_static)
     state.physics = driver
+    # One-time scheme setup (Thompson aerosol fill for mp=28).
+    receipt = microphysics_cold_start(state, cfg)
+    if receipt:
+        _MICROPHYSICS_INIT_RECEIPTS[driver] = receipt
     return driver
 
 
