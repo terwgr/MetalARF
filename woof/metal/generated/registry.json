@@ -4869,7 +4869,7 @@
       "name": "p3_kloopmain",
       "parameter_size": 44,
       "resource_count": 31,
-      "shader_hash": "2ad51129cd98ecff4ee598fc3ec80af66272cb6654e84a7408d74edab7198a28",
+      "shader_hash": "7a1026cf69abd6c23bfbb6cd7483984d4c263c7f0c94721737711bd8322b5069",
       "threads_per_group": 128
     },
     {

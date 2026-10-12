@@ -2407,7 +2407,7 @@ P3_KLOOPMAIN_SHAPES = (('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx')
 P3_KLOOPMAIN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('it', 'ctypes.c_int32'), ('log_predict_nc', 'ctypes.c_int32'), ('clbfact_dep', 'ctypes.c_float'), ('clbfact_sub', 'ctypes.c_float'), ('xxlv', 'ctypes.c_float'), ('xxls', 'ctypes.c_float'), ('xlf', 'ctypes.c_float')]
 P3_KLOOPMAIN_THREADS_PER_GROUP = 128
 P3_KLOOPMAIN_LAYOUT_HASH = '405ce56c1ba7b1d07ec14867884dc13f6e97038d79dbec31b11ed8e2f8ce06c5'
-P3_KLOOPMAIN_SHADER_HASH = '2ad51129cd98ecff4ee598fc3ec80af66272cb6654e84a7408d74edab7198a28'
+P3_KLOOPMAIN_SHADER_HASH = '7a1026cf69abd6c23bfbb6cd7483984d4c263c7f0c94721737711bd8322b5069'
 
 P3_SAVEOLD_PRECIP_RESOURCES = (('theta', 'float', 'read'), ('qv', 'float', 'read'), ('th_old', 'float', 'read_write'), ('qv_old', 'float', 'read_write'), ('prt_liq', 'float', 'read'), ('prt_sol', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('sr', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'))
 P3_SAVEOLD_PRECIP_ACCESS = ('read', 'read', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')

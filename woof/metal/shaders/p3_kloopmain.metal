@@ -916,6 +916,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
 
         // ---- conservation of mass (:3515-3644) ---------------------
         float ratio;
+        bool cloud_exhausted = false;
         {
             float dumqvs = p3_qv_sat(t, pres[(k) * ncol + i], 0, pc);
             float qcon_satadj = (qv_cld - dumqvs)
@@ -971,6 +972,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         sinks = (qcaut + qcacc + qccol + qcevp + qchetc + qcheti + qcshd) * dt;
         sources = qc[(k) * ncol + i] + (qccon + qcnuc) * dt;
         if (sinks > sources && sinks >= 1.0e-20f) {                  // :3571
+            cloud_exhausted = true;
             ratio = sources / sinks;
             qcaut *= ratio; qcacc *= ratio; qcevp *= ratio; qccol *= ratio;
             qcheti *= ratio; qcshd *= ratio; ncautc *= ratio; ncacc *= ratio;
@@ -1071,7 +1073,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                                 * dt;
 
         // clipping (:3889-3918)
-        if (qc[(k) * ncol + i] < P3_QSMALL) {
+        if (cloud_exhausted || qc[(k) * ncol + i] < P3_QSMALL) {
             qv[(k) * ncol + i] = qv[(k) * ncol + i] + qc[(k) * ncol + i];
             th[(k) * ncol + i] = th[(k) * ncol + i] - invexn * qc[(k) * ncol + i] * xxlv * P3_INV_CP;
             qc[(k) * ncol + i] = 0.0f;
