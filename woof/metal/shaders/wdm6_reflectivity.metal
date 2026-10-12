@@ -53,9 +53,10 @@ static inline Wdm6Complex wdm6_cdiv(Wdm6Complex a, Wdm6Complex b) {
 static inline ulong wdm6_cabs(Wdm6Complex a) {
     return soft64_sqrt(wdm6_add(wdm6_mul(a.re,a.re),wdm6_mul(a.im,a.im)));
 }
-static inline ulong wdm6_atan_unit(ulong x, ulong pi) {
+static inline ulong wdm6_atan_unit(ulong x) {
     ulong one=soft64_from_i32(1);
-    ulong tan_pi8=wdm6_sub(soft64_sqrt(soft64_from_i32(2)),one);
+    const ulong pi4=0x3fe921fb54442d18ul;
+    const ulong tan_pi8=0x3fda827999fcef32ul;
     bool shifted=x>tan_pi8;
     if (shifted) x=wdm6_div(wdm6_sub(x,one),wdm6_add(x,one));
     ulong x2=wdm6_mul(x,x), term=x, sum=x;
@@ -63,13 +64,14 @@ static inline ulong wdm6_atan_unit(ulong x, ulong pi) {
         term=wdm6_neg(wdm6_mul(term,x2));
         sum=wdm6_add(sum,wdm6_div(term,soft64_from_i32(2*n+1)));
     }
-    return shifted ? wdm6_add(wdm6_div(pi,soft64_from_i32(4)),sum) : sum;
+    return shifted ? wdm6_add(pi4,sum) : sum;
 }
-static inline ulong wdm6_atan2(ulong y, ulong x, ulong pi) {
-    ulong pi2=wdm6_div(pi,soft64_from_i32(2));
+static inline ulong wdm6_atan2(ulong y, ulong x) {
+    const ulong pi=0x400921fb54442d18ul;
+    const ulong pi2=0x3ff921fb54442d18ul;
     ulong ax=soft64_abs_bits(x), ay=soft64_abs_bits(y);
-    ulong angle=ax>=ay ? wdm6_atan_unit(wdm6_div(ay,ax),pi)
-                       : wdm6_sub(pi2,wdm6_atan_unit(wdm6_div(ax,ay),pi));
+    ulong angle=ax>=ay ? wdm6_atan_unit(wdm6_div(ay,ax))
+                       : wdm6_sub(pi2,wdm6_atan_unit(wdm6_div(ax,ay)));
     if (soft64_sign(x)) angle=wdm6_sub(pi,angle);
     if (soft64_sign(y)) angle=wdm6_neg(angle);
     return angle;
@@ -85,9 +87,9 @@ static inline Wdm6Complex wdm6_csqrt(Wdm6Complex a, ulong half) {
                    soft64_less(a.im,0ul)?wdm6_neg(im):im};
     return c;
 }
-static inline Wdm6Complex wdm6_clog(Wdm6Complex a, ulong pi) {
+static inline Wdm6Complex wdm6_clog(Wdm6Complex a) {
     Wdm6Complex c={soft64_plm_log(wdm6_cabs(a)),
-                   wdm6_atan2(a.im,a.re,pi)};
+                   wdm6_atan2(a.im,a.re)};
     return c;
 }
 static inline Wdm6Complex wdm6_cscale(ulong scale, Wdm6Complex a) {
@@ -95,18 +97,18 @@ static inline Wdm6Complex wdm6_cscale(ulong scale, Wdm6Complex a) {
 }
 static inline Wdm6Complex wdm6_maxwell_garnett(
         ulong v2, ulong v3, Wdm6Complex m1, Wdm6Complex m2,
-        Wdm6Complex m3, ulong one, ulong two, ulong pi) {
+        Wdm6Complex m3, ulong one, ulong two) {
     Wdm6Complex a=wdm6_cmul(m1,m1), b=wdm6_cmul(m2,m2);
     Wdm6Complex c=wdm6_cmul(m3,m3), db=wdm6_csub(b,a), dc=wdm6_csub(c,a);
     Wdm6Complex beta2=wdm6_cmul(
         wdm6_cdiv(wdm6_cscale(two,a),db),
         wdm6_csub(wdm6_cmul(wdm6_cdiv(b,db),
-                              wdm6_clog(wdm6_cdiv(b,a),pi)),
+                              wdm6_clog(wdm6_cdiv(b,a))),
                    Wdm6Complex{one,0ul}));
     Wdm6Complex beta3=wdm6_cmul(
         wdm6_cdiv(wdm6_cscale(two,a),dc),
         wdm6_csub(wdm6_cmul(wdm6_cdiv(c,dc),
-                              wdm6_clog(wdm6_cdiv(c,a),pi)),
+                              wdm6_clog(wdm6_cdiv(c,a))),
                    Wdm6Complex{one,0ul}));
     ulong v1=wdm6_sub(wdm6_sub(one,v2),v3);
     Wdm6Complex numerator=wdm6_cadd(
@@ -122,14 +124,13 @@ static inline Wdm6Complex wdm6_maxwell_garnett(
 static inline Wdm6Complex wdm6_mix_nested(
         Wdm6Complex ma, Wdm6Complex mi, Wdm6Complex mw,
         ulong vair, ulong vice, ulong vwater, ulong minimum_volume,
-        ulong one, ulong two, ulong pi) {
+        ulong one, ulong two) {
     ulong volume=wdm6_add(vice,vwater);
     if (volume<minimum_volume) volume=minimum_volume;
     ulong icefrac=wdm6_div(vice,volume);
-    Wdm6Complex inner=wdm6_maxwell_garnett(0ul,icefrac,mw,ma,mi,
-                                            one,two,pi);
+    Wdm6Complex inner=wdm6_maxwell_garnett(0ul,icefrac,mw,ma,mi,one,two);
     return wdm6_maxwell_garnett(vair,0ul,inner,ma,
-                                wdm6_cscale(two,ma),one,two,pi);
+                                wdm6_cscale(two,ma),one,two);
 }
 static inline ulong wdm6_soak(
         ulong mass, ulong ageo, ulong exponent, ulong fmelt,
@@ -177,7 +178,7 @@ static inline ulong wdm6_soak(
     ulong airvolume=wdm6_sub(wdm6_sub(one,icevolume),watervolume);
     Wdm6Complex air={one,zero};
     Wdm6Complex core=wdm6_mix_nested(air,mi,mw,airvolume,icevolume,
-        watervolume,minimum_volume,one,two,pi);
+        watervolume,minimum_volume,one,two);
     Wdm6Complex core2=wdm6_cmul(core,core);
     Wdm6Complex numerator=wdm6_csub(core2,air);
     Wdm6Complex denominator=wdm6_cadd(core2,Wdm6Complex{two,zero});
@@ -267,21 +268,23 @@ kernel void refl10cm_wdm6_column(
         if (lqr[k]) zer[k]=wdm6_to_float(wdm6_mul(
             wdm6_mul(n0r[k],xcrg4),wdm6_pow_eight(ilamr[k])));
         if (lqs[k]) {
-            ulong ze=wdm6_mul(wdm6_mul(snow_factor,n0s[k]),gamma7);
-            ze=wdm6_mul(ze,wdm6_pow_seven(ilams[k]));
-            ulong amratio=wdm6_div(xams,ninehundred);
             ulong sixpi=wdm6_div(soft64_from_i32(6),pi);
+            ulong amratio=wdm6_div(xams,ninehundred);
+            ulong ze=wdm6_mul(snow_factor,wdm6_mul(sixpi,sixpi));
             ze=wdm6_mul(ze,wdm6_mul(amratio,amratio));
-            zes[k]=wdm6_to_float(wdm6_mul(ze,wdm6_mul(sixpi,sixpi)));
+            ze=wdm6_mul(ze,n0s[k]);
+            ze=wdm6_mul(ze,gamma7);
+            ze=wdm6_mul(ze,wdm6_pow_seven(ilams[k]));
+            zes[k]=wdm6_to_float(ze);
         }
         if (lqg[k]) {
-            ulong ze=wdm6_mul(snow_factor,n0g);
+            ulong sixpi=wdm6_div(soft64_from_i32(6),pi);
+            ulong amratio=wdm6_div(xamg,ninehundred);
+            ulong ze=wdm6_mul(snow_factor,wdm6_mul(sixpi,sixpi));
+            ze=wdm6_mul(ze,wdm6_mul(amratio,amratio));
+            ze=wdm6_mul(ze,n0g);
             ze=wdm6_mul(ze,gamma7);
             ze=wdm6_mul(ze,wdm6_pow_seven(ilamg[k]));
-            ulong amratio=wdm6_div(xamg,ninehundred);
-            ze=wdm6_mul(ze,wdm6_mul(amratio,amratio));
-            ze=wdm6_mul(ze,wdm6_mul(wdm6_div(
-                soft64_from_i32(6),pi),wdm6_div(soft64_from_i32(6),pi)));
             zeg[k]=wdm6_to_float(ze);
         }
     }
