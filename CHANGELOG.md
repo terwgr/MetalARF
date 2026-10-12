@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Check actual loaded Metal artifact sizes and SHA-256 hashes before native
+  loading; bind native sources and build/generator inputs to a public-tree
+  content inventory instead of an unpublished build commit.
+
 ## MetalARF 1.0.3
 
 Integrates PRs #8, #14, #13, #9, #11, #10, #12, #16 and #15 in one

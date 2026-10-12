@@ -155,14 +155,14 @@ def _refuse_unpinned_wheel(required_platform: str | None = None) -> None:
                 "platform": required_platform,
                 "minimum_os": "14.0",
                 "abi_version": manifest.get("abi_version"),
-                "source_commit": manifest.get("source_commit"),
+                "source_inputs_sha256": manifest.get("metal_inputs_sha256"),
                 "implementation_sha256": manifest.get(
                     "implementation_sha256"),
                 "implementation_file_count": manifest.get(
                     "implementation_file_count"),
             }
             metal_provenance_fields = (
-                "abi_version", "source_commit", "implementation_sha256",
+                "abi_version", "source_inputs_sha256", "implementation_sha256",
                 "implementation_file_count")
             if (metal_pin.get("manifest_sha256") != manifest_hash
                     or manifest.get("platform") != required_platform
@@ -171,6 +171,10 @@ def _refuse_unpinned_wheel(required_platform: str | None = None) -> None:
                            for name, value in expected_metal.items())
                     or any(expected_metal.get(name) in (None, "")
                            for name in metal_provenance_fields)
+                    or manifest.get("schema") != "woof-metal-bundle-v2"
+                    or not isinstance(manifest.get("metal_inputs_sha256"), str)
+                    or len(manifest.get("metal_inputs_sha256", "")) != 64
+                    or any(c not in "0123456789abcdef" for c in manifest.get("metal_inputs_sha256", ""))
                     or not isinstance(manifest.get("abi_version"), int)
                     or isinstance(manifest.get("abi_version"), bool)
                     or not isinstance(manifest.get(
@@ -315,13 +319,13 @@ def _staged_platform() -> str | None:
 
         if path == _METAL_MANIFEST:
             records = manifest.get("files")
-            if (manifest.get("schema") != "woof-metal-bundle-v1"
+            if (manifest.get("schema") != "woof-metal-bundle-v2"
                     or platform != "darwin-arm64"
                     or manifest.get("minimum_os") != "14.0"
                     or not isinstance(records, dict)
                     or set(records) != _DARWIN_METAL_FILES):
                 raise SystemExit(
-                    f"{path} must be a complete woof-metal-bundle-v1 "
+                    f"{path} must be a complete woof-metal-bundle-v2 "
                     "darwin-arm64/macOS-14.0 bundle listing exactly "
                     f"{sorted(_DARWIN_METAL_FILES)}")
             abi = manifest.get("abi_version")
