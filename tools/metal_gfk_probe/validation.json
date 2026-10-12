@@ -1,0 +1,174 @@
+{
+  "baseline": {
+    "rows": 25104,
+    "seed": 20261012,
+    "synchronous": true,
+    "mismatches": {
+      "logf_fp32": 0,
+      "expf_fp32": 0,
+      "powf_fp32": 0,
+      "pow_log2_binary64": 10403,
+      "exp2_core_binary64": 52
+    },
+    "witnesses": {
+      "logf_fp32": [],
+      "expf_fp32": [],
+      "powf_fp32": [],
+      "pow_log2_binary64": [
+        {
+          "x_bits": "0x3f32fffd",
+          "y_bits": "0x3dce67ff",
+          "expected": "0xbfe084958c800be2",
+          "metal": "0xbfe084958c800be3"
+        },
+        {
+          "x_bits": "0x3f330000",
+          "y_bits": "0x407c815d",
+          "expected": "0xbfe08494c66c6d44",
+          "metal": "0xbfe08494c66c6d45"
+        },
+        {
+          "x_bits": "0x3f330002",
+          "y_bits": "0x40ab1352",
+          "expected": "0xbfe08494425f6497",
+          "metal": "0xbfe08494425f6498"
+        },
+        {
+          "x_bits": "0x3f330003",
+          "y_bits": "0xc0f3240d",
+          "expected": "0xbfe084940058e0cd",
+          "metal": "0xbfe084940058e0ce"
+        },
+        {
+          "x_bits": "0x42b17215",
+          "y_bits": "0x40d83107",
+          "expected": "0x3fde28af8ae17f9a",
+          "metal": "0x3fde28af8ae17f98"
+        },
+        {
+          "x_bits": "0x42b17216",
+          "y_bits": "0xc0cb94f3",
+          "expected": "0x3fde28b01016a7b0",
+          "metal": "0x3fde28b01016a7b1"
+        },
+        {
+          "x_bits": "0x42b17217",
+          "y_bits": "0xbf75c4b4",
+          "expected": "0x3fde28b0954bcf05",
+          "metal": "0x3fde28b0954bcf08"
+        },
+        {
+          "x_bits": "0x42b17218",
+          "y_bits": "0x4096e040",
+          "expected": "0x3fde28b11a80f5a0",
+          "metal": "0x3fde28b11a80f59f"
+        }
+      ],
+      "exp2_core_binary64": [
+        {
+          "x_bits": "0x3f52fffd",
+          "y_bits": "0xbfafac76",
+          "expected": "0x40023da43211ce7b",
+          "metal": "0x40023da43211ce7c"
+        },
+        {
+          "x_bits": "0x3f7ff00d",
+          "y_bits": "0x3fec2f17",
+          "expected": "0x4005bdafbff0a60b",
+          "metal": "0x4005bdafbff0a60c"
+        },
+        {
+          "x_bits": "0x3f7ff204",
+          "y_bits": "0xc07915d0",
+          "expected": "0x4005bdda77cefec3",
+          "metal": "0x4005bdda77cefec4"
+        },
+        {
+          "x_bits": "0x3f7ff8d9",
+          "y_bits": "0xbf79d481",
+          "expected": "0x4005be6f03e03612",
+          "metal": "0x4005be6f03e03610"
+        },
+        {
+          "x_bits": "0x3f7ff924",
+          "y_bits": "0xc02a2091",
+          "expected": "0x4005be7562abad5a",
+          "metal": "0x4005be7562abad59"
+        },
+        {
+          "x_bits": "0x3f800062",
+          "y_bits": "0x40601b5c",
+          "expected": "0x4005bf1b316319f0",
+          "metal": "0x4005bf1b316319f1"
+        },
+        {
+          "x_bits": "0x3f8003f2",
+          "y_bits": "0x407b38a0",
+          "expected": "0x4005bfb6252d1395",
+          "metal": "0x4005bfb6252d1394"
+        },
+        {
+          "x_bits": "0x3f800513",
+          "y_bits": "0x40e08a3b",
+          "expected": "0x4005bfe7403dd4c0",
+          "metal": "0x4005bfe7403dd4bf"
+        }
+      ]
+    },
+    "input_sha256": "4228cf9ef5c39de2e455e06f09d6a6930ad7fae7648ce2f15363cda08147ca93",
+    "shader_sha256": {
+      "soft_binary32.metalh": "2094726a6b2a341ea0d51fcc5738c642224303e0e0b13f76ea96622659875961",
+      "soft_binary64.metalh": "9dd9167a730d5d001688e39a49fc07f2935e29c0b43ee8894c9855a9072dd5cf",
+      "soft_gfk_atan.metalh": "18cbcc5a8346b92ba33d65a59b31d5c0267c22f1c1b0334d8278c10d729e347f",
+      "soft_gfk_exp.metalh": "e174871f4ec0cdb81c5cfaafa99ceaee59513d740d8f1d6d281caebbb78325f6",
+      "soft_gfk_log.metalh": "4eaee789a2df7cf5d2c65a8def2b2502f812bb5e92c37f22b2432e684ec38671",
+      "soft_gfk_pow.metalh": "e99160da8a2bceb7e06ce7317cfd8f2db0eca0d43c6cf1c015e2fac50dc17eee",
+      "soft_gfk_tgamma.metalh": "6e861c90f952246b3fb9efcd6563870b381d829f7764fbd15e68a7e4632428e0",
+      "soft_libm64.metalh": "db5e290399d258708d831f17ee529d451a3966735732e20b364e603b0a52f3f9"
+    },
+    "result_sha256": {
+      "reference.bin": "e7f6a9c4eff35b787eb69b3f7c96cf1908ea18e51f88c6a13a8abe184a00128b",
+      "metal.bin": "174c2560aa5e6791d19569a61dd3a47764545eb6a8bcbcba219a3a4a5b080dc4"
+    }
+  },
+  "fixed": {
+    "rows": 25104,
+    "seed": 20261012,
+    "synchronous": true,
+    "mismatches": {
+      "logf_fp32": 0,
+      "expf_fp32": 0,
+      "powf_fp32": 0,
+      "pow_log2_binary64": 0,
+      "exp2_core_binary64": 0
+    },
+    "witnesses": {
+      "logf_fp32": [],
+      "expf_fp32": [],
+      "powf_fp32": [],
+      "pow_log2_binary64": [],
+      "exp2_core_binary64": []
+    },
+    "input_sha256": "4228cf9ef5c39de2e455e06f09d6a6930ad7fae7648ce2f15363cda08147ca93",
+    "shader_sha256": {
+      "soft_binary32.metalh": "2094726a6b2a341ea0d51fcc5738c642224303e0e0b13f76ea96622659875961",
+      "soft_binary64.metalh": "9dd9167a730d5d001688e39a49fc07f2935e29c0b43ee8894c9855a9072dd5cf",
+      "soft_gfk_atan.metalh": "18cbcc5a8346b92ba33d65a59b31d5c0267c22f1c1b0334d8278c10d729e347f",
+      "soft_gfk_exp.metalh": "5f35a2dc62a07ea3962d53b24ee16fa04af3afd25d4da18cdc7f25ed58024b8b",
+      "soft_gfk_log.metalh": "ba143b8b0cbe3a28cfe6d1f017e3b6c2550e791453898dbc5c0c65e2e07893f3",
+      "soft_gfk_pow.metalh": "7d3b9e97ecef445bfa4f6982b5ccb33b4b97ce458f7d940d0a4ecf65a3027d33",
+      "soft_gfk_tgamma.metalh": "6e861c90f952246b3fb9efcd6563870b381d829f7764fbd15e68a7e4632428e0",
+      "soft_libm64.metalh": "db5e290399d258708d831f17ee529d451a3966735732e20b364e603b0a52f3f9"
+    },
+    "result_sha256": {
+      "reference.bin": "e7f6a9c4eff35b787eb69b3f7c96cf1908ea18e51f88c6a13a8abe184a00128b",
+      "metal.bin": "e7f6a9c4eff35b787eb69b3f7c96cf1908ea18e51f88c6a13a8abe184a00128b"
+    }
+  },
+  "environment": {
+    "device": "Apple M2",
+    "macOS": "27.0",
+    "python": "3.12.14",
+    "numpy": "2.5.3"
+  }
+}
