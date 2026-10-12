@@ -24,7 +24,8 @@
       },
       "parameters": [
         ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
-        ["dt", "float32"]
+        ["dt", "float32"], ["precip_scale", "float32"],
+        ["sr_denominator_floor", "float32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,

@@ -23,7 +23,7 @@ kernel void p3_entry_prepare(
         // Keep the source multiply before exponentiation and the separate
         // theta-times-Exner store.  This is the only unresolved libm edge in
         // this entry slice; later P3 processing is not implied by this kernel.
-        const float scaled_pressure = r.pressure[idx] * 1.0e-5f;
+        const float scaled_pressure = r.pressure[idx] * p.pressure_scale;
         const float tm = pow(scaled_pressure, p.exponent);
         r.tmparr1[idx] = tm;
         r.temperature[idx] = r.theta[idx] * tm;
@@ -32,16 +32,16 @@ kernel void p3_entry_prepare(
         r.h_diabatic[idx] = r.theta[idx];
         r.qv[idx] = fmax(r.qv[idx], 0.0f);
 
-        r.zdbz[idx] = -99.0f;
-        r.effc[idx] = 10.0e-6f;
-        r.effi[idx] = 25.0e-6f;
-        r.vmi[idx] = 0.0f;
-        r.di[idx] = 0.0f;
-        r.rhopo[idx] = 0.0f;
+        r.zdbz[idx] = p.zdbz_default;
+        r.effc[idx] = p.effc_default;
+        r.effi[idx] = p.effi_default;
+        r.vmi[idx] = p.vmi_default;
+        r.di[idx] = p.di_default;
+        r.rhopo[idx] = p.rhopo_default;
     }
 
-    r.prt_liq[column] = 0.0f;
-    r.prt_sol[column] = 0.0f;
+    r.prt_liq[column] = p.prt_liq_default;
+    r.prt_sol[column] = p.prt_sol_default;
     r.flags[column] = 0.0f;
     r.flags[ncol + column] = 0.0f;
 }
