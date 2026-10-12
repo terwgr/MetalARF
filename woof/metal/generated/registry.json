@@ -5031,7 +5031,7 @@
       "name": "refl10cm_kessler_cell",
       "parameter_size": 12,
       "resource_count": 5,
-      "shader_hash": "f6a66a9bb877fd48bbd3c5c4d07b0d42799f9a135dcb780f5f5c94fc9e141468",
+      "shader_hash": "ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026",
       "threads_per_group": 256
     },
     {
@@ -5086,7 +5086,7 @@
       "name": "refl_temperature_product",
       "parameter_size": 12,
       "resource_count": 3,
-      "shader_hash": "f6a66a9bb877fd48bbd3c5c4d07b0d42799f9a135dcb780f5f5c94fc9e141468",
+      "shader_hash": "ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026",
       "threads_per_group": 256
     },
     {
@@ -13199,6 +13199,76 @@
       "resource_count": 22,
       "shader_hash": "24f288446296f3f96666088cb765950d68ec9ba85b87e40a4c19f8ccac438fd2",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "fp32-output",
+        "fp32-power"
+      ],
+      "cuda_source": "woof/da/obsop.py",
+      "cuda_symbol": "_nssl_reflectivity",
+      "layout_hash": "6247181d839be28ba6fae82c8eccad9eb8b7d4310d6f9ab34ca20a57e5380ce5",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/refl_family.metal",
+      "module": "refl_family",
+      "name": "da_observation_thermodynamics",
+      "parameter_size": 28,
+      "resource_count": 4,
+      "shader_hash": "ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026",
+      "threads_per_group": 256
+    },
+    {
+      "arithmetic_policies": [
+        "fp32-output",
+        "fp32-rn-divide"
+      ],
+      "cuda_source": "woof/da/obsop.py",
+      "cuda_symbol": "_nssl_reflectivity",
+      "layout_hash": "1fd34a9242f7ad76cd60505b3d7b722e5dd8c516ece85d82d213e992e6da5141",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/refl_family.metal",
+      "module": "refl_family",
+      "name": "da_air_density",
+      "parameter_size": 16,
+      "resource_count": 2,
+      "shader_hash": "ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026",
+      "threads_per_group": 256
+    },
+    {
+      "arithmetic_policies": [
+        "fp32-output",
+        "fp32-rn"
+      ],
+      "cuda_source": "woof/core/kernels/milbrandt2_zet.cu",
+      "cuda_symbol": "milbrandt2_zet",
+      "layout_hash": "d29c03b9c0dddb8246c114143c765394815ba9e133080da2ffb821cd249e28a7",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/milbrandt2_zet.metal",
+      "module": "milbrandt2_zet",
+      "name": "milbrandt2_zet",
+      "parameter_size": 56,
+      "resource_count": 14,
+      "shader_hash": "9f578220676bd075e9c392f3b2ddc607a89c805ecc2368fa78a0b86e732c8009",
+      "threads_per_group": 256
+    },
+    {
+      "arithmetic_policies": [
+        "software-binary64",
+        "software-complex128",
+        "fp32-output",
+        "software-libm-approximation-unverified"
+      ],
+      "cuda_source": "woof/core/kernels/wdm6_refl.cu",
+      "cuda_symbol": "refl10cm_wdm6_column",
+      "layout_hash": "263dac6e30a1cbf29556af44dd61ff52ae909d55762f20fed1851ccea6c39587",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wdm6_reflectivity.metal",
+      "module": "wdm6_reflectivity",
+      "name": "refl10cm_wdm6_column",
+      "parameter_size": 12,
+      "resource_count": 9,
+      "shader_hash": "e959f3f02da525c448ca7b7695c37aa5bb9f9f25e85568d5b07bb147cceb9c23",
+      "threads_per_group": 32
     }
   ],
   "schema": "woof-metal-registry-v1"

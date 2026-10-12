@@ -472,6 +472,13 @@ def launch_refl10cm_wdm6(qv, qr, nr, qs, qg, t, p, refl, *,
     state, and the driver hands the routine the same ``nr`` array the
     scheme just updated (module_mp_wdm6.F:281-296).
     """
+    from woof.metal.array import MetalArray
+    if isinstance(refl, MetalArray):
+        from woof.metal.wdm6_reflectivity import launch_refl10cm_wdm6 as launch_metal
+
+        launch_metal(qv, qr, nr, qs, qg, t, p, refl,
+                     hail_opt=hail_opt)
+        return
     shape = refl.shape
     if len(shape) != 3:
         raise ValueError(f"refl fields must be 3-D, got {shape}")
@@ -765,20 +772,28 @@ def compute_refl_10cm(
         raise ValueError("temperature and pressure must be supplied together")
     nz, ny, nx = state.p.shape
     if temperature is None:
-        if getattr(state, "_metal_setup_state", False):
+        from woof.metal.array import MetalArray
+        if isinstance(state.p, MetalArray):
+            from woof.metal.refl_family import submit_da_observation_temperature
+
+            t = state.scratch((nz, ny, nx), "refl_t")
+            submit_da_observation_temperature(state, t)
+            p = state.p
+        elif getattr(state, "_metal_setup_state", False):
             raise NotImplementedError(
                 "Metal REFL_10CM requires explicit post-scheme temperature "
                 "and prepared pressure; the standalone current-state path "
                 "has not been ported")
-        import cupy as cp
+        else:
+            import cupy as cp
 
-        thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
-        t = state.scratch((nz, ny, nx), "refl_t")
-        p = state.p
-        # Standalone-current-state path.  Production output passes the
-        # microphysics adapter's post-call T and prepared p explicitly.
-        t[...] = (thb + state.thp) * cp.power(
-            p / DTYPE(c.P0), DTYPE(c.RCP))
+            thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
+            t = state.scratch((nz, ny, nx), "refl_t")
+            p = state.p
+            # Standalone-current-state path.  Production output passes the
+            # microphysics adapter's post-call T and prepared p explicitly.
+            t[...] = (thb + state.thp) * cp.power(
+                p / DTYPE(c.P0), DTYPE(c.RCP))
     else:
         t = temperature
         p = pressure

@@ -1,0 +1,48 @@
+{
+  "kernels": [
+    {
+      "name": "milbrandt2_zet",
+      "module": "milbrandt2_zet",
+      "source": "woof/metal/shaders/milbrandt2_zet.metal",
+      "cuda_source": "woof/core/kernels/milbrandt2_zet.cu",
+      "cuda_symbol": "milbrandt2_zet",
+      "resources": [
+        ["temperature", "float", "read"], ["pressure", "float", "read"],
+        ["qr", "float", "read"], ["qi", "float", "read"],
+        ["qs", "float", "read"], ["qg", "float", "read"],
+        ["qh", "float", "read"], ["nr", "float", "read"],
+        ["ni", "float", "read"], ["ns", "float", "read"],
+        ["ng", "float", "read"], ["nh", "float", "read"],
+        ["refl", "float", "read_write"], ["ck", "float", "read"]
+      ],
+      "shapes": {
+        "temperature": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]],
+        "qi": [["nz", "ny", "nx"]],
+        "qs": [["nz", "ny", "nx"]],
+        "qg": [["nz", "ny", "nx"]],
+        "qh": [["nz", "ny", "nx"]],
+        "nr": [["nz", "ny", "nx"]],
+        "ni": [["nz", "ny", "nx"]],
+        "ns": [["nz", "ny", "nx"]],
+        "ng": [["nz", "ny", "nx"]],
+        "nh": [["nz", "ny", "nx"]],
+        "refl": [["nz", "ny", "nx"]],
+        "ck": [["nck"]]
+      },
+      "parameters": [
+        ["concentration_space", "int32"], ["n", "int32"],
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["nck", "int32"], ["eps_q", "float32"],
+        ["eps_n", "float32"], ["dielectric_factor", "float32"],
+        ["z_factor", "float32"], ["minimum_zet", "float32"],
+        ["trpl", "float32"], ["rgas_d", "float32"],
+        ["dbz_scale", "float32"]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-output", "fp32-rn"]
+    }
+  ]
+}

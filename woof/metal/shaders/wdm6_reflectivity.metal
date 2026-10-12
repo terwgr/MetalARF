@@ -76,10 +76,10 @@ static inline ulong wdm6_atan2(ulong y, ulong x) {
     if (soft64_sign(y)) angle=wdm6_neg(angle);
     return angle;
 }
-static inline Wdm6Complex wdm6_csqrt(Wdm6Complex a, ulong half) {
+static inline Wdm6Complex wdm6_csqrt(Wdm6Complex a, ulong half_bits) {
     ulong mag=wdm6_cabs(a);
-    ulong realarg=wdm6_mul(half,wdm6_add(mag,a.re));
-    ulong imagarg=wdm6_mul(half,wdm6_sub(mag,a.re));
+    ulong realarg=wdm6_mul(half_bits,wdm6_add(mag,a.re));
+    ulong imagarg=wdm6_mul(half_bits,wdm6_sub(mag,a.re));
     if (soft64_sign(realarg)) realarg=0ul;
     if (soft64_sign(imagarg)) imagarg=0ul;
     ulong im=soft64_sqrt(imagarg);
@@ -136,7 +136,7 @@ static inline ulong wdm6_soak(
         ulong mass, ulong ageo, ulong exponent, ulong fmelt,
         ulong meltoutside, Wdm6Complex mw, Wdm6Complex mi,
         ulong pi, ulong pi5, ulong lambda4, ulong minimum_volume,
-        ulong one, ulong zero, ulong ten, ulong ninehundred,
+        ulong one, ulong two, ulong zero, ulong ten, ulong ninehundred,
         ulong thousand, ulong minimum_diameter, ulong six) {
     ulong fm=fmelt;
     if (soft64_sign(fm)) fm=zero;
@@ -293,15 +293,15 @@ kernel void refl10cm_wdm6_column(
             if (lqs[k]&&lqs[k0]) {
                 ulong fraction=wdm6_sub(one,wdm6_div(
                     wdm6_from_float(rs[k]),wdm6_from_float(rs[k0])));
-                if (fraction<melt_min) fraction=melt_min;
-                if (fraction>melt_max) fraction=melt_max;
+                if (soft64_less(fraction,melt_min)) fraction=melt_min;
+                if (soft64_greater(fraction,melt_max)) fraction=melt_max;
                 ulong eta=zero, lambda=wdm6_div(one,ilams[k]);
                 for (int n=0;n<50;++n) {
                     ulong d=tab[45u+uint(n)], width=tab[95u+uint(n)];
                     ulong mass=wdm6_mul(wdm6_mul(xams,d),d);
                     mass=wdm6_mul(mass,d);
                     ulong cb=wdm6_soak(mass,xocms,exponent,fraction,
-                        meltoutside,mw,mi,pi,pi5,lambda4,min_volume,one,zero,
+                        meltoutside,mw,mi,pi,pi5,lambda4,min_volume,one,two,zero,
                         ten,ninehundred,thousand,minimum_diameter,six);
                     ulong term=wdm6_mul(n0s[k],soft64_plm_exp(
                         wdm6_neg(wdm6_mul(lambda,d))));
@@ -314,15 +314,15 @@ kernel void refl10cm_wdm6_column(
             if (lqg[k]&&lqg[k0]) {
                 ulong fraction=wdm6_sub(one,wdm6_div(
                     wdm6_from_float(rg[k]),wdm6_from_float(rg[k0])));
-                if (fraction<melt_min) fraction=melt_min;
-                if (fraction>melt_max) fraction=melt_max;
+                if (soft64_less(fraction,melt_min)) fraction=melt_min;
+                if (soft64_greater(fraction,melt_max)) fraction=melt_max;
                 ulong eta=zero, lambda=wdm6_div(one,ilamg[k]);
                 for (int n=0;n<50;++n) {
                     ulong d=tab[145u+uint(n)], width=tab[195u+uint(n)];
                     ulong mass=wdm6_mul(wdm6_mul(xamg,d),d);
                     mass=wdm6_mul(mass,d);
                     ulong cb=wdm6_soak(mass,xocmg,exponent,fraction,
-                        meltoutside,mw,mi,pi,pi5,lambda4,min_volume,one,zero,
+                        meltoutside,mw,mi,pi,pi5,lambda4,min_volume,one,two,zero,
                         ten,ninehundred,thousand,minimum_diameter,six);
                     ulong term=wdm6_mul(n0g,soft64_plm_exp(
                         wdm6_neg(wdm6_mul(lambda,d))));

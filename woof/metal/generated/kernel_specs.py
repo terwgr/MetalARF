@@ -2487,7 +2487,7 @@ REFL10CM_KESSLER_CELL_SHAPES = (('p', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny
 REFL10CM_KESSLER_CELL_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 REFL10CM_KESSLER_CELL_THREADS_PER_GROUP = 256
 REFL10CM_KESSLER_CELL_LAYOUT_HASH = '6f2c2ec649ced58008679d0e36fa0cb774c26ddbeb843bc56cf1ecefc799a3b5'
-REFL10CM_KESSLER_CELL_SHADER_HASH = 'f6a66a9bb877fd48bbd3c5c4d07b0d42799f9a135dcb780f5f5c94fc9e141468'
+REFL10CM_KESSLER_CELL_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
 
 REFL10CM_MORRISON_COLUMN_RESOURCES = (('qv', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('qs', 'float', 'read'), ('ns', 'float', 'read'), ('qg', 'float', 'read'), ('ng', 'float', 'read'), ('theta', 'float', 'read'), ('pii', 'float', 'read'), ('p', 'float', 'read'), ('refl', 'float', 'read_write'), ('tables', 'uint64', 'read'))
 REFL10CM_MORRISON_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')
@@ -2511,7 +2511,7 @@ REFL_TEMPERATURE_PRODUCT_SHAPES = (('pii', (('nz', 'ny', 'nx'),)), ('temperature
 REFL_TEMPERATURE_PRODUCT_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 REFL_TEMPERATURE_PRODUCT_THREADS_PER_GROUP = 256
 REFL_TEMPERATURE_PRODUCT_LAYOUT_HASH = 'c4191db1c177310b76a2d69785b7cbe7a2e59463a5a12ff50dba5a70720e9ddf'
-REFL_TEMPERATURE_PRODUCT_SHADER_HASH = 'f6a66a9bb877fd48bbd3c5c4d07b0d42799f9a135dcb780f5f5c94fc9e141468'
+REFL_TEMPERATURE_PRODUCT_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
 
 RK_TOTAL_MU_RESOURCES = (('mub2d', 'float', 'read'), ('mup', 'float', 'read'), ('out', 'float', 'read_write'))
 RK_TOTAL_MU_ACCESS = ('read', 'read', 'read_write')
@@ -6496,3 +6496,35 @@ HEX_SCALAR_RK_UPDATE_FRAGMENT_PARAM_FIELDS = [('ntracers', 'ctypes.c_int32'), ('
 HEX_SCALAR_RK_UPDATE_FRAGMENT_THREADS_PER_GROUP = 128
 HEX_SCALAR_RK_UPDATE_FRAGMENT_LAYOUT_HASH = '565736b2982d8f3de4840f343f1c28adc2c6a43fc65f50372eb9ade56a754c10'
 HEX_SCALAR_RK_UPDATE_FRAGMENT_SHADER_HASH = '24f288446296f3f96666088cb765950d68ec9ba85b87e40a4c19f8ccac438fd2'
+
+DA_OBSERVATION_THERMODYNAMICS_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('pressure', 'float', 'read'), ('temperature', 'float', 'read_write'))
+DA_OBSERVATION_THERMODYNAMICS_ACCESS = ('read', 'read', 'read', 'read_write')
+DA_OBSERVATION_THERMODYNAMICS_SHAPES = (('thb', (('nz',), ('nz', 'ny', 'nx'))), ('thp', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)))
+DA_OBSERVATION_THERMODYNAMICS_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float')]
+DA_OBSERVATION_THERMODYNAMICS_THREADS_PER_GROUP = 256
+DA_OBSERVATION_THERMODYNAMICS_LAYOUT_HASH = '6247181d839be28ba6fae82c8eccad9eb8b7d4310d6f9ab34ca20a57e5380ce5'
+DA_OBSERVATION_THERMODYNAMICS_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
+
+DA_AIR_DENSITY_RESOURCES = (('alt', 'float', 'read'), ('air_density', 'float', 'read_write'))
+DA_AIR_DENSITY_ACCESS = ('read', 'read_write')
+DA_AIR_DENSITY_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('air_density', (('nz', 'ny', 'nx'),)))
+DA_AIR_DENSITY_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+DA_AIR_DENSITY_THREADS_PER_GROUP = 256
+DA_AIR_DENSITY_LAYOUT_HASH = '1fd34a9242f7ad76cd60505b3d7b722e5dd8c516ece85d82d213e992e6da5141'
+DA_AIR_DENSITY_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
+
+MILBRANDT2_ZET_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qr', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('qh', 'float', 'read'), ('nr', 'float', 'read'), ('ni', 'float', 'read'), ('ns', 'float', 'read'), ('ng', 'float', 'read'), ('nh', 'float', 'read'), ('refl', 'float', 'read_write'), ('ck', 'float', 'read'))
+MILBRANDT2_ZET_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')
+MILBRANDT2_ZET_SHAPES = (('temperature', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qs', (('nz', 'ny', 'nx'),)), ('qg', (('nz', 'ny', 'nx'),)), ('qh', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('ns', (('nz', 'ny', 'nx'),)), ('ng', (('nz', 'ny', 'nx'),)), ('nh', (('nz', 'ny', 'nx'),)), ('refl', (('nz', 'ny', 'nx'),)), ('ck', (('nck',),)))
+MILBRANDT2_ZET_PARAM_FIELDS = [('concentration_space', 'ctypes.c_int32'), ('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nck', 'ctypes.c_int32'), ('eps_q', 'ctypes.c_float'), ('eps_n', 'ctypes.c_float'), ('dielectric_factor', 'ctypes.c_float'), ('z_factor', 'ctypes.c_float'), ('minimum_zet', 'ctypes.c_float'), ('trpl', 'ctypes.c_float'), ('rgas_d', 'ctypes.c_float'), ('dbz_scale', 'ctypes.c_float')]
+MILBRANDT2_ZET_THREADS_PER_GROUP = 256
+MILBRANDT2_ZET_LAYOUT_HASH = 'd29c03b9c0dddb8246c114143c765394815ba9e133080da2ffb821cd249e28a7'
+MILBRANDT2_ZET_SHADER_HASH = '9f578220676bd075e9c392f3b2ddc607a89c805ecc2368fa78a0b86e732c8009'
+
+REFL10CM_WDM6_COLUMN_RESOURCES = (('qv', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('t', 'float', 'read'), ('p', 'float', 'read'), ('refl', 'float', 'read_write'), ('tables', 'uint64', 'read'))
+REFL10CM_WDM6_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')
+REFL10CM_WDM6_COLUMN_SHAPES = (('qv', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('qs', (('nz', 'ny', 'nx'),)), ('qg', (('nz', 'ny', 'nx'),)), ('t', (('nz', 'ny', 'nx'),)), ('p', (('nz', 'ny', 'nx'),)), ('refl', (('nz', 'ny', 'nx'),)), ('tables', ((295,),)))
+REFL10CM_WDM6_COLUMN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+REFL10CM_WDM6_COLUMN_THREADS_PER_GROUP = 32
+REFL10CM_WDM6_COLUMN_LAYOUT_HASH = '263dac6e30a1cbf29556af44dd61ff52ae909d55762f20fed1851ccea6c39587'
+REFL10CM_WDM6_COLUMN_SHADER_HASH = 'e959f3f02da525c448ca7b7695c37aa5bb9f9f25e85568d5b07bb147cceb9c23'

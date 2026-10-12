@@ -1,0 +1,28 @@
+{
+  "kernels": [
+    {
+      "name": "da_air_density",
+      "module": "refl_family",
+      "source": "woof/metal/shaders/refl_family.metal",
+      "cuda_source": "woof/da/obsop.py",
+      "cuda_symbol": "_nssl_reflectivity",
+      "origin_kind": "python_fp32_expression",
+      "origin_expression": "air_density = 1.0 / state.alt",
+      "resources": [
+        ["alt", "float", "read"],
+        ["air_density", "float", "read_write"]
+      ],
+      "shapes": {
+        "alt": [["nz", "ny", "nx"]],
+        "air_density": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["n", "int32"], ["nz", "int32"], ["ny", "int32"],
+        ["nx", "int32"]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-output", "fp32-rn-divide"]
+    }
+  ]
+}
