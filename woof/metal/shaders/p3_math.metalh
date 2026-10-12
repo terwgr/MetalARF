@@ -1,0 +1,27 @@
+#ifndef WOOF_P3_MATH_METALH
+#define WOOF_P3_MATH_METALH
+
+#include "soft_libm64.metalh"
+
+static inline ulong p3_soft64(float value)
+{
+    return soft64_from_f32_bits(as_type<uint>(value));
+}
+
+static inline float p3_float32(ulong value)
+{
+    return as_type<float>(soft64_to_f32_bits(value));
+}
+
+static inline ulong p3_exp64(float value)
+{
+    return soft64_plm_exp(p3_soft64(value));
+}
+
+static inline float p3_log10(float value)
+{
+    const ulong logarithm = soft64_plm_log(p3_soft64(value));
+    return p3_float32(soft64_div(logarithm, 0x40026bb1bbb55516ul));
+}
+
+#endif

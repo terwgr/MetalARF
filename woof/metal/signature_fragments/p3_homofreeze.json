@@ -13,7 +13,8 @@
         ["nc", "float", "read_write"], ["qr", "float", "read_write"],
         ["nr", "float", "read_write"], ["qi", "float", "read_write"],
         ["qir", "float", "read_write"], ["ni", "float", "read_write"],
-        ["qib", "float", "read_write"], ["flags", "float", "read"]
+        ["qib", "float", "read_write"], ["flags", "float", "read"],
+        ["constants", "float", "read"]
       ],
       "shapes": {
         "theta": [["nz", "ny", "nx"]], "temperature": [["nz", "ny", "nx"]],
@@ -22,10 +23,12 @@
         "nc": [["nz", "ny", "nx"]], "qr": [["nz", "ny", "nx"]],
         "nr": [["nz", "ny", "nx"]], "qi": [["nz", "ny", "nx"]],
         "qir": [["nz", "ny", "nx"]], "ni": [["nz", "ny", "nx"]],
-        "qib": [["nz", "ny", "nx"]], "flags": [[2, "ny", "nx"]]
+        "qib": [["nz", "ny", "nx"]], "flags": [[2, "ny", "nx"]],
+        "constants": [[52]]
       },
       "parameters": [
-        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["xlf", "float32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,

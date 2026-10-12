@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 #include "p3_sed_rain_bindings.metalh"
+#include "p3_constants.metalh"
 
 using namespace metal;
 
@@ -8,14 +9,6 @@ using namespace metal;
 // Native pow/log/exp stand in for P3's pinned source libm and are not a
 // CUDA-parity claim.
 #pragma clang fp contract(off)
-
-constant float P3_PI = 0x1.921fb60000000p+1f;
-constant float P3_THRD = 0x1.5555560000000p-2f;
-constant float P3_CONS1 = 0x1.05cca60000000p+9f;
-constant float P3_QSMALL = 0x1.6849b80000000p-47f;
-constant float P3_NSMALL = 0x1.cd2b2a0000000p-54f;
-constant float P3_INV_DRMAX = 0x1.f3fffe0000000p+8f;
-constant float P3_INV_RHOW = 0x1.0624de0000000p-10f;
 
 static inline float p3_rain_table(device const float *table,
                                   int ii, int jj, float rii, float rjj) {
@@ -29,7 +22,8 @@ static inline float p3_rain_table(device const float *table,
 }
 
 static inline void p3_rain_dsd(thread float &nr, float qr,
-                               thread float &lambda) {
+                               thread float &lambda,
+                               device const float *pc) {
     float n=fmax(nr,P3_NSMALL);
     lambda=pow(P3_CONS1*n*6.0f/qr,P3_THRD);
     const float lammin=P3_INV_DRMAX;
@@ -43,7 +37,8 @@ static inline void p3_rain_dsd(thread float &nr, float qr,
 
 static inline void p3_find_rain_table(float lambda, thread int &ii,
                                       thread int &jj, thread float &rii,
-                                      thread float &rjj) {
+                                      thread float &rjj,
+                                      device const float *pc) {
     const float dum1=1.0f/lambda;
     if (dum1<=195.0e-6f) {
         rii=(dum1*1.0e6f+5.0f)*0.1f;
@@ -65,6 +60,7 @@ kernel void p3_sed_rain(
     uint column [[thread_position_in_grid]]) {
     const uint ncol=uint(p.ny)*uint(p.nx);
     if (column>=ncol || r.flags[ncol+column]==0.0f) return;
+    device const float *pc = r.constants;
     const int nz=p.nz;
     const ulong base=ulong(column), stride=ulong(ncol);
     int ktop=0, present=0;
@@ -96,10 +92,10 @@ kernel void p3_sed_rain(
             if (r.qr[idx]>P3_QSMALL) {
                 r.nr[idx]=fmax(r.nr[idx],P3_NSMALL);
                 float nr=r.nr[idx],lamr;
-                p3_rain_dsd(nr,r.qr[idx],lamr);
+                p3_rain_dsd(nr,r.qr[idx],lamr,pc);
                 r.nr[idx]=nr;
                 int ii,jj; float rii,rjj;
-                p3_find_rain_table(lamr,ii,jj,rii,rjj);
+                p3_find_rain_table(lamr,ii,jj,rii,rjj,pc);
                 r.vq[idx]=p3_rain_table(r.vm_table,ii,jj,rii,rjj)
                           *r.rhofacr[idx];
                 r.vn[idx]=p3_rain_table(r.vn_table,ii,jj,rii,rjj)

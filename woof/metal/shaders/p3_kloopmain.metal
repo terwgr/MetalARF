@@ -1,5 +1,8 @@
 #include <metal_stdlib>
 #include "p3_kloopmain_bindings.metalh"
+#include "p3_constants.metalh"
+#include "p3_math.metalh"
+#include "soft_gfk_tgamma.metalh"
 using namespace metal;
 // P3's k_loop_main process rates, conservation limits, and prognostic update
 // (module_mp_p3.F:2449-3927; p3.cu:p3_step_kloopmain_levels). One invocation
@@ -9,37 +12,11 @@ using namespace metal;
 #pragma clang fp contract(off)
 
 constant int P3_ISIZE=50, P3_DENSIZE=5, P3_RIMSIZE=4, P3_RCOLLSIZE=30, P3_TABSIZE=14;
-constant float P3_PI=0x1.921fb60000000p+1f, P3_THRD=0x1.5555560000000p-2f;
-constant float P3_MAX_TOTAL_NI=0x1.e848000000000p+20f, P3_NCCNST=0x1.7d78400000000p+27f;
-constant float P3_CP=0x1.f680000000000p+9f, P3_INV_CP=0x1.04d6fe0000000p-10f;
-constant float P3_G=0x1.3a1cac0000000p+3f, P3_RD=0x1.1f26660000000p+8f;
-constant float P3_RV=0x1.cd82900000000p+8f, P3_EP_2=0x1.3e76c80000000p-1f;
-constant float P3_RHOSUR=0x1.4662840000000p+0f, P3_RHOSUI=0x1.a69ad80000000p-1f;
-constant float P3_F1R=0x1.8f5c280000000p-1f, P3_F2R=0x1.47ae140000000p-2f;
-constant float P3_RHOW=0x1.f400000000000p+9f, P3_CPW=0x1.07a0000000000p+12f;
-constant float P3_INV_RHOW=0x1.0624de0000000p-10f, P3_INV_DRMAX=0x1.f3fffe0000000p+8f;
-constant float P3_RHO_RIMEMIN=0x1.9000000000000p+5f, P3_RHO_RIMEMAX=0x1.c200000000000p+9f;
-constant float P3_INV_RHO_RIMEMAX=0x1.2345680000000p-10f, P3_QSMALL=0x1.6849b80000000p-47f;
-constant float P3_NSMALL=0x1.cd2b2a0000000p-54f, P3_BSMALL=0x1.99ed7a0000000p-57f;
-constant float P3_AIMM=0x1.4ccccc0000000p-1f, P3_MI0=0x1.0fa6980000000p-48f;
-constant float P3_ECI=0.5f, P3_ERI=1.0f, P3_BCN=2.0f, P3_NMLTRATIO=1.0f;
-constant float P3_MU_R_CONSTANT=0.0f;
-constant float P3_CONS1=0x1.05cca60000000p+9f, P3_CONS3=0x1.c758900000000p+33f;
-constant float P3_CONS5=0x1.0c15240000000p+0f, P3_CONS6=0x1.1227dc0000000p+9f;
-constant float P3_CONS7=0x1.2dd58a0000000p-48f, P3_E0=0x1.319eb60000000p+9f;
-constant float P3_XXLV=0x1.314d540000000p+21f, P3_XXLS=0x1.5a09740000000p+21f;
-constant float P3_XLF=0x1.45e1000000000p+18f, P3_MW=0x1.26e9780000000p-6f;
+constant float P3_MW=0x1.26e9780000000p-6f;
 constant float P3_RR=0x1.0a32ca0000000p+3f, P3_BACT=0x1.4efb0a0000000p-1f;
 constant float P3_INV_RM1=0x1.312d000000000p+24f, P3_SIG1=2.0f, P3_NANEW1=0x1.1e1a300000000p+28f;
 constant float P3_INV_RM2=0x1.7799d80000000p+19f, P3_SIG2=2.5f, P3_NANEW2=0.0f;
-constant float P3_GAMMA_COEFFS[9] = {
-    0.99999999999980993f, 676.5203681218851f, -1259.1392167224028f,
-    771.32342877765313f, -176.61502916214059f, 12.507343278686905f,
-    -0.13857109526572012f, 9.9843695780195716e-6f,
-    1.5056327351493116e-7f
-};
 static inline float p3_div_rn(float a,float b){return a/b;}
-static inline float p3_log10(float x){return log10(x);}
 #define ITAB(jj, ii, i2, idx) (itab[(((((jj) * P3_RIMSIZE + (ii)) * P3_ISIZE + (i2)) * P3_TABSIZE) + (idx))])
 #define ICOLL(jj, ii, i2, j2, idx) (icoll[(((((jj) * P3_RIMSIZE + (ii)) * P3_ISIZE + (i2)) * P3_RCOLLSIZE + (j2)) * 2) + (idx)])
 #define RTAB(tb, a, b) ((tb)[(a) * 10 + (b)])
@@ -56,20 +33,9 @@ static inline float p3_erf(float x)
     return sign * (1.0f - tau);
 }
 
-static inline float p3_gamma(float z)
-{
-    // Lanczos g=7 approximation; the P3 call sites use positive arguments.
-    if (z < 0.5f) return as_type<float>(0x7fc00000u);
-    const float zm1 = z - 1.0f;
-    float a = P3_GAMMA_COEFFS[0];
-    for (int i = 1; i < 9; ++i) a += P3_GAMMA_COEFFS[i] / (zm1 + float(i));
-    const float t = zm1 + 7.5f;
-    return 2.50662827463100050242f * pow(t, zm1 + 0.5f) * exp(-t) * a;
-}
-
 static inline float p3_gam(float x)
 {
-    return p3_gamma(x);
+    return soft_gfk_tgammaf(x);
 }
 
 static inline int p3_int(float x) { return int(x); }
@@ -113,7 +79,8 @@ static inline float p3_polysvp1(float t, int i_type)
                         + p3_log10(1013.246f)) * 100.0f;
 }
 
-static inline float p3_qv_sat(float t_atm, float p_atm, int i_wrt)
+static inline float p3_qv_sat(float t_atm, float p_atm, int i_wrt,
+                              device const float *pc)
 {
     float e_pres = p3_polysvp1(t_atm, i_wrt);
     return P3_EP_2 * e_pres / fmax(1.0e-3f, p_atm - e_pres);
@@ -204,7 +171,9 @@ static inline void p3_find_lt_1a(float qitot, float nitot, float qirim, float rh
     *dum1 = d1; *dum4 = d4; *dum5 = d5;
 }
 
-static inline void p3_find_lt_1b(float qr, float nr, thread int* dumj, thread float * dum3)
+static inline void p3_find_lt_1b(float qr, float nr, thread int* dumj,
+                                 thread float * dum3,
+                                 device const float *pc)
 {
     if (qr >= P3_QSMALL && nr > 0.0f) {
         float dumlr = pow(qr / (P3_PI * P3_RHOW * nr), P3_THRD);
@@ -221,7 +190,8 @@ static inline void p3_find_lt_1b(float qr, float nr, thread int* dumj, thread fl
 }
 
 static inline void p3_find_lt_3(float mu_r, float lamr, thread int* dumii, thread int* dumjj,
-                             thread float * rdumii, thread float * rdumjj)
+                             thread float * rdumii, thread float * rdumjj,
+                             device const float *pc)
 {
     float dum1 = (mu_r + 1.0f) / lamr;
     float rii, inv_dum3;
@@ -268,7 +238,8 @@ static inline float p3_rain_table(device const float * tb,
 
 static inline void p3_get_cloud_dsd2(thread float * nc_grd, float qc_grd, float rho,
                                   float iscf, thread float * mu_c_o, thread float * lamc_o,
-                                  thread float * cdist_o, thread float * cdist1_o)
+                                  thread float * cdist_o, thread float * cdist1_o,
+                                  device const float *pc)
 {
     float qc = qc_grd * iscf;
     if (qc >= P3_QSMALL) {
@@ -305,7 +276,8 @@ static inline void p3_get_cloud_dsd2(thread float * nc_grd, float qc_grd, float 
 
 static inline void p3_get_rain_dsd2(thread float * nr_grd, float qr_grd, float ispf,
                                  thread float * mu_r_o, thread float * lamr_o,
-                                 thread float * cdistr_o, thread float * logn0r_o)
+                                 thread float * cdistr_o, thread float * logn0r_o,
+                                 device const float *pc)
 {
     float qr = qr_grd * ispf;
     if (qr >= P3_QSMALL) {
@@ -338,7 +310,8 @@ static inline void p3_get_rain_dsd2(thread float * nr_grd, float qr_grd, float i
 }
 
 static inline void p3_calc_bulk_rho_rime(float qi_tot, thread float * qi_rim,
-                                      thread float * bi_rim, thread float * rho_rime_o)
+                                      thread float * bi_rim, thread float * rho_rime_o,
+                                      device const float *pc)
 {
     float qir = *qi_rim, bir = *bi_rim, rho_rime;
     if (bir >= 1.0e-15f) {
@@ -361,7 +334,8 @@ static inline void p3_calc_bulk_rho_rime(float qi_tot, thread float * qi_rim,
     *qi_rim = qir; *bi_rim = bir; *rho_rime_o = rho_rime;
 }
 
-static inline float p3_impose_max_ni(float nitot, float inv_rho)
+static inline float p3_impose_max_ni(float nitot, float inv_rho,
+                                     device const float *pc)
 {
     if (nitot >= 1.0e-20f) {
         float dum = P3_MAX_TOTAL_NI * inv_rho / nitot;
@@ -374,14 +348,15 @@ static inline void p3_activate_droplets(int log_predictNc, float sup_cld, int it
                                      float t, float pres, float qc, float nc,
                                      float qv_cld, float inv_rho, float iscf,
                                      float scf, float odt,
-                                     thread float * qcnuc, thread float * ncnuc)
+                                     thread float * qcnuc, thread float * ncnuc,
+                                     device const float *pc, float xxlv)
 {
     if (!log_predictNc && sup_cld > 1.0e-6f && it > 1) {
         float dum = P3_NCCNST * inv_rho * P3_CONS7 - qc;
         dum = fmax(0.0f, dum * iscf);
-        float dumqvs = p3_qv_sat(t, pres, 0);
-        float dqsdT = P3_XXLV * dumqvs / (P3_RV * t * t);
-        float ab = 1.0f + dqsdT * P3_XXLV * P3_INV_CP;
+        float dumqvs = p3_qv_sat(t, pres, 0, pc);
+        float dqsdT = xxlv * dumqvs / (P3_RV * t * t);
+        float ab = 1.0f + dqsdT * xxlv * P3_INV_CP;
         dum = fmax(0.0f, fmin(dum, (qv_cld - dumqvs) / ab));
         *qcnuc = dum * odt * scf;
     }
@@ -408,10 +383,12 @@ static inline void p3_activate_droplets(int log_predictNc, float sup_cld, int it
 }
 static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, constant P3KloopmainParams &p, uint column)
 {
+    device const float *pc = r.constants;
     const int ncol = p.ny * p.nx; const int nk = p.nz;
     const float dt = p.dt; const int it = p.it;
     const int log_predictNc = p.log_predict_nc;
     const float clbfact_dep = p.clbfact_dep, clbfact_sub = p.clbfact_sub;
+    const float xxlv = p.xxlv, xxls = p.xxls, xlf = p.xlf;
     const int i = int(column), k_start = 0, k_stride = 1;
     device float *FLG = r.flags;
     device const float *itab = r.itab, *icoll = r.icoll, *revap = r.revap;
@@ -504,10 +481,10 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             float dv = 8.794e-5f * pow(t, 1.81f) / pres[(k) * ncol + i];    // :2532
             float sc = mu / (rho * dv);                              // :2533
             dum = 1.0f / (P3_RV * (t * t));                          // :2534 int **2
-            dqsdT = P3_XXLV * qvs * dum;                             // :2535
-            float dqsidT = P3_XXLS * qvi * dum;                      // :2536
-            ab = 1.0f + dqsdT * P3_XXLV * P3_INV_CP;                 // :2537
-            abi = 1.0f + dqsidT * P3_XXLS * P3_INV_CP;               // :2538
+            dqsdT = xxlv * qvs * dum;                                // :2535
+            float dqsidT = xxls * qvi * dum;                          // :2536
+            ab = 1.0f + dqsdT * xxlv * P3_INV_CP;                    // :2537
+            abi = 1.0f + dqsidT * xxls * P3_INV_CP;                  // :2538
             float kap = 1.414e3f * mu;                               // :2539
             float eii;
             if (t < 253.15f)      eii = 0.001f;                      // :2547
@@ -517,15 +494,15 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
 
             {   float ncg = nc[(k) * ncol + i];
                 p3_get_cloud_dsd2(&ncg, qc[(k) * ncol + i], rho, iscf,
-                                  &mu_c, &lamc, &cdist, &cdist1);
+                                  &mu_c, &lamc, &cdist, &cdist1, pc);
                 nc[(k) * ncol + i] = ncg; }
             {   float nrg = nr[(k) * ncol + i];
                 p3_get_rain_dsd2(&nrg, qr[(k) * ncol + i], ispf,
-                                 &mu_r, &lamr, &cdistr, &logn0r);
+                                 &mu_r, &lamr, &cdistr, &logn0r, pc);
                 nr[(k) * ncol + i] = nrg; }
 
             epsi_tot = 0.0f;                                         // :2564
-            ni[(k) * ncol + i] = p3_impose_max_ni(ni[(k) * ncol + i], inv_rho);        // :2566
+            ni[(k) * ncol + i] = p3_impose_max_ni(ni[(k) * ncol + i], inv_rho, pc); // :2566
 
             float eii_fact = 1.0f;
             if (qi[(k) * ncol + i] >= P3_QSMALL) {                            // :2570
@@ -533,13 +510,13 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                 nr[(k) * ncol + i] = fmax(nr[(k) * ncol + i], P3_NSMALL);
                 float rhop;
                 {   float qq = qir[(k) * ncol + i], bb = qib[(k) * ncol + i];
-                    p3_calc_bulk_rho_rime(qi[(k) * ncol + i], &qq, &bb, &rhop);
+                    p3_calc_bulk_rho_rime(qi[(k) * ncol + i], &qq, &bb, &rhop, pc);
                     qir[(k) * ncol + i] = qq; qib[(k) * ncol + i] = bb; }
                 int dumi, dumjj, dumii, dumj;
                 float d1, d4, d5, d3;
                 p3_find_lt_1a(qi[(k) * ncol + i], ni[(k) * ncol + i], qir[(k) * ncol + i], rhop,
                               &dumi, &dumjj, &dumii, &d1, &d4, &d5);
-                p3_find_lt_1b(qr[(k) * ncol + i], nr[(k) * ncol + i], &dumj, &d3);
+                p3_find_lt_1b(qr[(k) * ncol + i], nr[(k) * ncol + i], &dumj, &d3, pc);
                 f1pr02 = p3_access_lookup_table(itab, dumjj, dumii, dumi, 2,
                                                 d1, d4, d5);
                 f1pr03 = p3_access_lookup_table(itab, dumjj, dumii, dumi, 3,
@@ -622,8 +599,8 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                 qimlt = (p3_div_rn((f1pr05 + f1pr14 * pow(sc, P3_THRD)
                           * pow(rhofaci * rho / mu, 0.5f))
                          * ((t - 273.15f) * kap
-                            - rho * P3_XXLV * dv * (qsat0 - qv_cld))
-                         * 2.0f * P3_PI, P3_XLF) + dum) * ni[(k) * ncol + i];
+                            - rho * xxlv * dv * (qsat0 - qv_cld))
+                         * 2.0f * P3_PI, xlf) + dum) * ni[(k) * ncol + i];
                 qimlt = fmax(qimlt, 0.0f);
                 nimlt = qimlt * (ni[(k) * ncol + i] / qi[(k) * ncol + i]);
             }
@@ -635,9 +612,9 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                 qwgrth = ((f1pr05 + f1pr14 * pow(sc, P3_THRD)
                            * pow(rhofaci * rho / mu, 0.5f))
                           * 2.0f * P3_PI
-                          * (rho * P3_XXLV * dv * (qsat0 - qv_cld)
+                          * (rho * xxlv * dv * (qsat0 - qv_cld)
                              - (t - 273.15f) * kap)
-                          / (P3_XLF + P3_CPW * (t - 273.15f))) * ni[(k) * ncol + i];
+                          / (xlf + P3_CPW * (t - 273.15f))) * ni[(k) * ncol + i];
                 qwgrth = fmax(qwgrth, 0.0f);
                 dum = fmax(0.0f, (qccol + qrcol) - qwgrth);
                 if (dum >= 1.0e-10f) {
@@ -708,8 +685,9 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                 tmp1 = cdist1 * exp(P3_AIMM * (273.15f - t));
                 float gam_q = p3_gam(7.0f + mu_c);
                 float gam_n = p3_gam(mu_c + 4.0f);
-                float Q_nuc = P3_CONS6 * gam_q * tmp1
-                              * (dum * dum);                         // :2995 int **2
+                float Q_nuc = P3_CONS6 * gam_q * tmp1;
+                Q_nuc = Q_nuc * dum;
+                Q_nuc = Q_nuc * dum;                                 // :2995 int **2
                 float N_nuc = P3_CONS5 * gam_n * tmp1 * dum;
                 if (!isfinite(Q_nuc) || !isfinite(N_nuc)) {
                     // The argument is built in FLOAT32 and only the exp is
@@ -719,14 +697,23 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                     // bare `273.15` here would also be an unsuffixed double
                     // literal, which tests/test_p3_cuda.py refuses in this
                     // file on purpose.
-                    float exp_aimm = exp(P3_AIMM * (273.15f - t));
                     float dcdist1 = cdist1;
                     float ddum = dum;
+                    const ulong exp_aimm = p3_exp64(P3_AIMM * (273.15f - t));
                     if (!isfinite(Q_nuc)) {
-                        Q_nuc = P3_CONS6 * gam_q * dcdist1 * exp_aimm * ddum * ddum;
+                        ulong qwide = soft64_mul(p3_soft64(P3_CONS6), p3_soft64(gam_q));
+                        qwide = soft64_mul(qwide, p3_soft64(dcdist1));
+                        qwide = soft64_mul(qwide, exp_aimm);
+                        qwide = soft64_mul(qwide, p3_soft64(ddum));
+                        qwide = soft64_mul(qwide, p3_soft64(ddum));
+                        Q_nuc = p3_float32(qwide);
                     }
                     if (!isfinite(N_nuc)) {
-                        N_nuc = P3_CONS5 * gam_n * dcdist1 * exp_aimm * ddum;
+                        ulong nwide = soft64_mul(p3_soft64(P3_CONS5), p3_soft64(gam_n));
+                        nwide = soft64_mul(nwide, p3_soft64(dcdist1));
+                        nwide = soft64_mul(nwide, exp_aimm);
+                        nwide = soft64_mul(nwide, p3_soft64(ddum));
+                        N_nuc = p3_float32(nwide);
                     }
                 }
                 qcheti = Q_nuc;
@@ -736,23 +723,29 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             // immersion freezing of rain (:3021-3043) -- the authority's
             // own double excursion, kept double.
             if (qr[(k) * ncol + i] * ispf >= P3_QSMALL && t <= 269.15f) {
-                float tmpdbl1 = exp(log(cdistr) + log(p3_gam(7.0f + mu_r))
-                                    - 6.0f * log(lamr));
-                float tmpdbl2 = exp(log(cdistr) + log(p3_gam(mu_r + 4.0f))
-                                    - 3.0f * log(lamr));
-                float tmpdbl3 = exp(P3_AIMM * (273.15f - t));
-                qrheti = P3_CONS6 * (tmpdbl1 * tmpdbl3) * spf;
-                nrheti = P3_CONS5 * (tmpdbl2 * tmpdbl3) * spf;
+                ulong tmpdbl1 = p3_exp64(log(cdistr) + log(p3_gam(7.0f + mu_r))
+                                         - 6.0f * log(lamr));
+                ulong tmpdbl2 = p3_exp64(log(cdistr) + log(p3_gam(mu_r + 4.0f))
+                                         - 3.0f * log(lamr));
+                ulong tmpdbl3 = p3_exp64(P3_AIMM * (273.15f - t));
+                qrheti = P3_CONS6 * p3_float32(soft64_mul(tmpdbl1, tmpdbl3)) * spf;
+                nrheti = P3_CONS5 * p3_float32(soft64_mul(tmpdbl2, tmpdbl3)) * spf;
                 // Same class as the droplet branch above: WRF's
                 // sngl(tmpdbl1*tmpdbl3) (:3037-3038) can round a double to
                 // +Inf for the same cold-cloud reason and reach the same
                 // limiter.  The double product is in hand, so the rescue is
                 // one more multiply.
                 if (!isfinite(qrheti)) {
-                    qrheti = P3_CONS6 * tmpdbl1 * tmpdbl3 * spf;
+                    ulong qwide = soft64_mul(p3_soft64(P3_CONS6), tmpdbl1);
+                    qwide = soft64_mul(qwide, tmpdbl3);
+                    qwide = soft64_mul(qwide, p3_soft64(spf));
+                    qrheti = p3_float32(qwide);
                 }
                 if (!isfinite(nrheti)) {
-                    nrheti = P3_CONS5 * tmpdbl2 * tmpdbl3 * spf;
+                    ulong nwide = soft64_mul(p3_soft64(P3_CONS5), tmpdbl2);
+                    nwide = soft64_mul(nwide, tmpdbl3);
+                    nwide = soft64_mul(nwide, p3_soft64(spf));
+                    nrheti = p3_float32(nwide);
                 }
             }
 
@@ -762,7 +755,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                 int dumii_r, dumjj_r;
                 float rdumii, rdumjj;
                 p3_find_lt_3(mu_r, lamr, &dumii_r, &dumjj_r,
-                             &rdumii, &rdumjj);
+                             &rdumii, &rdumjj, pc);
                 dum = p3_rain_table(revap, dumii_r, dumjj_r, rdumii, rdumjj);
                 epsr = 2.0f * P3_PI * cdistr * rho * dv
                        * (P3_F1R * p3_gam(mu_r + 2.0f) / lamr
@@ -778,7 +771,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             if (t < 273.15f) {
                 oabi = 1.0f / abi;
                 xx = epsc + epsr + epsi_tot
-                     * (1.0f + P3_XXLS * P3_INV_CP * dqsdT) * oabi;
+                     * (1.0f + xxls * P3_INV_CP * dqsdT) * oabi;
             } else {
                 oabi = 1.0f / abi;
                 xx = epsc + epsr;
@@ -790,7 +783,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             if (t < 273.15f) {
                 aaa = (qv[(k) * ncol + i] - qv_old[(k) * ncol + i]) * odt
                       - dqsdT * (-dum * P3_G * P3_INV_CP)
-                      - (qvs - dumqvi) * (1.0f + P3_XXLS * P3_INV_CP * dqsdT)
+                      - (qvs - dumqvi) * (1.0f + xxls * P3_INV_CP * dqsdT)
                         * oabi * epsi_tot;
             } else {
                 aaa = (qv[(k) * ncol + i] - qv_old[(k) * ncol + i]) * odt
@@ -807,12 +800,12 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             if (qc[(k) * ncol + i] >= P3_QSMALL) {                            // :3202
                 qccon = (aaa * epsc * oxx
                          + (ssat_cld * scf - aaa * oxx) * odt * epsc * oxx
-                           * (1.0f - exp(-(xx * dt)))) / ab;
+                          * (1.0f - p3_float32(p3_exp64(-(xx * dt))))) / ab;
             }
             if (qr[(k) * ncol + i] >= P3_QSMALL) {                            // :3204
                 qrcon = (aaa * epsr * oxx
                          + (ssat_r * spf - aaa * oxx) * odt * epsr * oxx
-                           * (1.0f - exp(-(xx * dt)))) / ab;
+                          * (1.0f - p3_float32(p3_exp64(-(xx * dt))))) / ab;
             }
 
             if (sup_cld < -0.001f && qc[(k) * ncol + i] < 1.0e-12f)
@@ -834,7 +827,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             if (qi[(k) * ncol + i] >= P3_QSMALL && t < 273.15f) {             // :3231
                 qidep = (aaa * epsi * oxx
                          + (ssat_cld * scf - aaa * oxx) * odt * epsi * oxx
-                           * (1.0f - exp(-(xx * dt)))) * oabi
+                           * (1.0f - p3_float32(p3_exp64(-(xx * dt))))) * oabi
                         + (qvs - dumqvi) * epsi * oabi;
             }
             if (supi_cld < -0.001f && qi[(k) * ncol + i] < 1.0e-12f)
@@ -870,16 +863,16 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         // SEAM 2 -- droplet activation, both log_predictNc branches.
         p3_activate_droplets(log_predictNc, sup_cld, it, t, pres[(k) * ncol + i],
                              qc[(k) * ncol + i], nc[(k) * ncol + i], qv_cld, inv_rho, iscf, scf,
-                             odt, &qcnuc, &ncnuc);
+                             odt, &qcnuc, &ncnuc, pc, xxlv);
 
         // first-step saturation adjustment (:3348-3356)
         if (it <= 1) {
             float dumt = th[(k) * ncol + i] * pow(pres[(k) * ncol + i] * 1.0e-5f,
                                            P3_RD * P3_INV_CP);
             float dumqv = qv_cld;
-            float dumqvs = p3_qv_sat(dumt, pres[(k) * ncol + i], 0);
+            float dumqvs = p3_qv_sat(dumt, pres[(k) * ncol + i], 0, pc);
             float dums = dumqv - dumqvs;
-            qccon = dums / (1.0f + (P3_XXLV * P3_XXLV) * dumqvs
+            qccon = dums / (1.0f + (xxlv * xxlv) * dumqvs
                             / (P3_CP * P3_RV * (dumt * dumt)))
                     * odt * scf;                         // :3353, integer **2
             qccon = fmax(0.0f, qccon);
@@ -924,9 +917,9 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         // ---- conservation of mass (:3515-3644) ---------------------
         float ratio;
         {
-            float dumqvs = p3_qv_sat(t, pres[(k) * ncol + i], 0);
+            float dumqvs = p3_qv_sat(t, pres[(k) * ncol + i], 0, pc);
             float qcon_satadj = (qv_cld - dumqvs)
-                / (1.0f + (P3_XXLV * P3_XXLV) * dumqvs
+                / (1.0f + (xxlv * xxlv) * dumqvs
                    / (P3_CP * P3_RV * (t * t))) * odt * scf;  // :3516 int **2
             tmp1 = qccon + qrcon + qcnuc;
             if (tmp1 > 0.0f && qcon_satadj < 0.0f) {
@@ -951,10 +944,10 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             float qv_tmp = qv_cld + (-qcnuc - qccon - qrcon + qcevp + qrevp)
                            * dt;
             float t_tmp = t + (qcnuc + qccon + qrcon - qcevp - qrevp)
-                          * P3_XXLV * P3_INV_CP * dt;
-            float dumqvi = p3_qv_sat(t_tmp, pres[(k) * ncol + i], 1);
+                          * xxlv * P3_INV_CP * dt;
+            float dumqvi = p3_qv_sat(t_tmp, pres[(k) * ncol + i], 1, pc);
             float qdep_satadj = (qv_tmp - dumqvi)
-                / (1.0f + (P3_XXLS * P3_XXLS) * dumqvi
+                / (1.0f + (xxls * xxls) * dumqvi
                    / (P3_CP * P3_RV * (t_tmp * t_tmp))) * odt * scf;
             tmp1 = qidep + qinuc;
             if (tmp1 > 0.0f && qdep_satadj < 0.0f) {
@@ -1058,10 +1051,10 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
 
         qv[(k) * ncol + i] = qv[(k) * ncol + i] + (-qidep + qisub - qinuc) * dt;
         th[(k) * ncol + i] = th[(k) * ncol + i] + invexn * ((qidep - qisub + qinuc)
-                                          * P3_XXLS * P3_INV_CP
+                                          * xxls * P3_INV_CP
                                           + (qrcol + qccol + qchetc + qcheti
                                              + qrhetc + qrheti + qrmul - qimlt)
-                                            * P3_XLF * P3_INV_CP) * dt;
+                                            * xlf * P3_INV_CP) * dt;
 
         // warm-phase updates (:3869-3885)
         qc[(k) * ncol + i] = qc[(k) * ncol + i] + (-qcacc - qcaut + qcnuc + qccon - qcevp) * dt;
@@ -1074,13 +1067,13 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         nr[(k) * ncol + i] = nr[(k) * ncol + i] + (ncautr - nrslf - nrevp) * dt;       // iparam=3
         qv[(k) * ncol + i] = qv[(k) * ncol + i] + (-qcnuc - qccon - qrcon + qcevp + qrevp) * dt;
         th[(k) * ncol + i] = th[(k) * ncol + i] + invexn * ((qcnuc + qccon + qrcon - qcevp
-                                           - qrevp) * P3_XXLV * P3_INV_CP)
+                                           - qrevp) * xxlv * P3_INV_CP)
                                 * dt;
 
         // clipping (:3889-3918)
         if (qc[(k) * ncol + i] < P3_QSMALL) {
             qv[(k) * ncol + i] = qv[(k) * ncol + i] + qc[(k) * ncol + i];
-            th[(k) * ncol + i] = th[(k) * ncol + i] - invexn * qc[(k) * ncol + i] * P3_XXLV * P3_INV_CP;
+            th[(k) * ncol + i] = th[(k) * ncol + i] - invexn * qc[(k) * ncol + i] * xxlv * P3_INV_CP;
             qc[(k) * ncol + i] = 0.0f;
             nc[(k) * ncol + i] = 0.0f;
         } else {
@@ -1089,7 +1082,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
 
         if (qr[(k) * ncol + i] < P3_QSMALL) {
             qv[(k) * ncol + i] = qv[(k) * ncol + i] + qr[(k) * ncol + i];
-            th[(k) * ncol + i] = th[(k) * ncol + i] - invexn * qr[(k) * ncol + i] * P3_XXLV * P3_INV_CP;
+            th[(k) * ncol + i] = th[(k) * ncol + i] - invexn * qr[(k) * ncol + i] * xxlv * P3_INV_CP;
             qr[(k) * ncol + i] = 0.0f;
             nr[(k) * ncol + i] = 0.0f;
         } else {
@@ -1098,7 +1091,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
 
         if (qi[(k) * ncol + i] < P3_QSMALL) {
             qv[(k) * ncol + i] = qv[(k) * ncol + i] + qi[(k) * ncol + i];
-            th[(k) * ncol + i] = th[(k) * ncol + i] - invexn * qi[(k) * ncol + i] * P3_XXLS * P3_INV_CP;
+            th[(k) * ncol + i] = th[(k) * ncol + i] - invexn * qi[(k) * ncol + i] * xxls * P3_INV_CP;
             qi[(k) * ncol + i] = 0.0f;
             ni[(k) * ncol + i] = 0.0f;
             qir[(k) * ncol + i] = 0.0f;
@@ -1108,7 +1101,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         }
 
         qv[(k) * ncol + i] = fmax(0.0f, qv[(k) * ncol + i]);
-        ni[(k) * ncol + i] = p3_impose_max_ni(ni[(k) * ncol + i], inv_rho);
+        ni[(k) * ncol + i] = p3_impose_max_ni(ni[(k) * ncol + i], inv_rho, pc);
         // 555 continue
     }
 

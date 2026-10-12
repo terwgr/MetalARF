@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from .p3_constants import P3_CONSTANT_NAMES
 from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
@@ -16,7 +17,8 @@ _SCRATCH = ("rho", "inv_rho", "qvs", "qvi", "sup", "supi",
 
 
 def submit_p3_kloopmain(*, fields: dict, scratch: dict, flags,
-                        itab, icoll, revap, dt: float, it: int,
+                        itab, icoll, revap, constants, xxlv, xxls, xlf,
+                        dt: float, it: int,
                         log_predict_nc: bool = False,
                         clbfact_dep: float = 1.0,
                         clbfact_sub: float = 1.0) -> None:
@@ -71,6 +73,16 @@ def submit_p3_kloopmain(*, fields: dict, scratch: dict, flags,
     if flags.buffer.context is not context:
         raise ValueError("P3 Metal k_loop_main flags belong to another context")
     arrays["flags"] = flags
+    if (not isinstance(constants, MetalArray)
+            or constants.shape != (len(P3_CONSTANT_NAMES),)
+            or constants.dtype != np.dtype(np.float32)
+            or not constants.flags.c_contiguous):
+        raise TypeError(
+            "P3 Metal k_loop_main constants must be contiguous FP32 "
+            f"({len(P3_CONSTANT_NAMES)},)")
+    if constants.buffer.context is not context:
+        raise ValueError("P3 Metal k_loop_main constants belong to another context")
+    arrays["constants"] = constants
     for name, value, length in (("itab", itab, 14000),
                                 ("icoll", icoll, 60000),
                                 ("revap", revap, 3000)):
@@ -89,13 +101,18 @@ def submit_p3_kloopmain(*, fields: dict, scratch: dict, flags,
         raise ValueError("P3 Metal k_loop_main dt must be positive finite FP32")
     if not np.isfinite(dep) or not np.isfinite(sub):
         raise ValueError("P3 Metal k_loop_main cloud fractions must be finite FP32")
+    latent = tuple(np.float32(value) for value in (xxlv, xxls, xlf))
+    if not all(np.isfinite(value) for value in latent):
+        raise ValueError("P3 Metal k_loop_main latent heats must be finite FP32")
     if int(it) < 0:
         raise ValueError("P3 Metal k_loop_main timestep index must be nonnegative")
     context.submit_kernel(
         "p3_kloopmain", arrays,
         {"nz": nz, "ny": ny, "nx": nx, "dt": float(step),
          "it": int(it), "log_predict_nc": int(bool(log_predict_nc)),
-         "clbfact_dep": float(dep), "clbfact_sub": float(sub)},
+         "clbfact_dep": float(dep), "clbfact_sub": float(sub),
+         "xxlv": float(latent[0]), "xxls": float(latent[1]),
+         "xlf": float(latent[2])},
         exact_policy=False, grid_size=ny * nx)
 
 

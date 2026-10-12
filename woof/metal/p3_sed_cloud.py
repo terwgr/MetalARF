@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from .p3_constants import P3_CONSTANT_NAMES
 from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
@@ -13,7 +14,8 @@ _SCRATCH = ("rho", "inv_rho", "acn", "vq", "vn", "fq", "fn")
 
 
 def submit_p3_sed_cloud(*, fields: dict, scratch: dict, prt_liq, flags,
-                        dt: float, log_predict_nc: bool = False) -> None:
+                        constants, dt: float,
+                        log_predict_nc: bool = False) -> None:
     """Run P3's source-ordered cloud sedimentation over flagged columns.
 
     Field and workspace volumes are contiguous FP32 ``(nz,ny,nx)`` arrays;
@@ -76,6 +78,16 @@ def submit_p3_sed_cloud(*, fields: dict, scratch: dict, prt_liq, flags,
         raise ValueError("P3 Metal cloud sedimentation flags use another context")
     arrays["prt_liq"] = prt_liq
     arrays["flags"] = flags
+    if (not isinstance(constants, MetalArray)
+            or constants.shape != (len(P3_CONSTANT_NAMES),)
+            or constants.dtype != np.dtype(np.float32)
+            or not constants.flags.c_contiguous):
+        raise TypeError(
+            "P3 Metal cloud sedimentation constants must be contiguous FP32 "
+            f"({len(P3_CONSTANT_NAMES)},)")
+    if constants.buffer.context is not context:
+        raise ValueError("P3 Metal cloud sedimentation constants use another context")
+    arrays["constants"] = constants
     step = np.float32(dt)
     if not np.isfinite(step) or step <= 0.0:
         raise ValueError("P3 Metal cloud sedimentation dt must be positive finite FP32")

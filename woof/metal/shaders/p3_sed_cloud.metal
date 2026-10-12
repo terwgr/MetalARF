@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 #include "p3_sed_cloud_bindings.metalh"
+#include "p3_constants.metalh"
 #include "soft_gfk_tgamma.metalh"
 
 using namespace metal;
@@ -10,17 +11,9 @@ using namespace metal;
 // pinned libm operations; CUDA parity remains unverified.
 #pragma clang fp contract(off)
 
-constant float P3_CONS1 = 0x1.05cca60000000p+9f;
-constant float P3_THRD = 0x1.5555560000000p-2f;
-constant float P3_BCN = 0x1.0000000000000p+1f;
-constant float P3_QSMALL = 0x1.6849b80000000p-47f;
-constant float P3_NSMALL = 0x1.cd2b2a0000000p-54f;
-constant float P3_PI = 0x1.921fb60000000p+1f;
-constant float P3_RHOW = 0x1.f400000000000p+9f;
-constant float P3_INV_RHOW = 0x1.0624de0000000p-10f;
-
 static inline void p3_cloud_dsd(thread float &nc, float qc, float rho,
-                                thread float &mu, thread float &lambda) {
+                                thread float &mu, thread float &lambda,
+                                device const float *pc) {
     float n=fmax(nc,P3_NSMALL);
     mu=0.0005714f*(n*1.0e-6f*rho)+0.2714f;
     mu=1.0f/(mu*mu)-1.0f;
@@ -46,6 +39,7 @@ kernel void p3_sed_cloud(
     uint column [[thread_position_in_grid]]) {
     const uint ncol=uint(p.ny)*uint(p.nx);
     if (column>=ncol || r.flags[ncol+column]==0.0f) return;
+    device const float *pc = r.constants;
     const int nz=p.nz;
     const ulong base=ulong(column);
     const ulong stride=ulong(ncol);
@@ -76,7 +70,7 @@ kernel void p3_sed_cloud(
             const ulong idx=ulong(k)*stride+base;
             if (r.qc[idx]>P3_QSMALL) {
                 float mu_c,lamc,nc=r.nc[idx];
-                p3_cloud_dsd(nc,r.qc[idx],r.rho[idx],mu_c,lamc);
+                p3_cloud_dsd(nc,r.qc[idx],r.rho[idx],mu_c,lamc,pc);
                 r.nc[idx]=nc;
                 const float dum=1.0f/pow(lamc,P3_BCN);
                 r.vq[idx]=r.acn[idx]

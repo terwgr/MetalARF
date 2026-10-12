@@ -1,28 +1,15 @@
 #include <metal_stdlib>
 #include "p3_final_bindings.metalh"
+#include "p3_constants.metalh"
+#include "p3_math.metalh"
 
 using namespace metal;
 
 // P3 post-freezing cleanup and diagnostics (p3.cu:1827-1926). One thread
-// owns one column and visits levels in order. Native MSL pow/log10 and the
-// shared GFK gamma stand in for source-pinned r_pow/log10/tgamma; their P3
-// identity is unverified, so this remains ordinary-mode source only.
+// owns one column and visits levels in order. Native MSL pow and the shared
+// GFK gamma stand in for source-pinned r_pow/tgamma; log10 uses soft64.
+// This remains ordinary-mode source only.
 #pragma clang fp contract(off)
-
-constant float P3_PI = 0x1.921fb60000000p+1f;
-constant float P3_THRD = 0x1.5555560000000p-2f;
-constant float P3_MAX_TOTAL_NI = 0x1.e848000000000p+20f;
-constant float P3_RHOW = 0x1.f400000000000p+9f;
-constant float P3_INV_DRMAX = 0x1.f3fffe0000000p+8f;
-constant float P3_RHO_RIMEMIN = 0x1.9000000000000p+5f;
-constant float P3_RHO_RIMEMAX = 0x1.c200000000000p+9f;
-constant float P3_INV_RHO_RIMEMAX = 0x1.2345680000000p-10f;
-constant float P3_QSMALL = 0x1.6849b80000000p-47f;
-constant float P3_NSMALL = 0x1.cd2b2a0000000p-54f;
-constant float P3_CONS1 = 0x1.05cca60000000p+9f;
-constant float P3_XXLV = 0x1.314d540000000p+21f;
-constant float P3_XXLS = 0x1.5a09740000000p+21f;
-constant float P3_INV_CP = 0x1.04d6fe0000000p-10f;
 
 static inline ulong p3_itab_index(int jj, int ii, int i, int idx) {
     return (((ulong(jj) * 4ul + ulong(ii)) * 50ul + ulong(i)) * 14ul
@@ -58,7 +45,7 @@ static inline void p3_find_ice(float qi, float ni, float qir, float rhop,
                                thread int &i, thread int &jj,
                                thread int &ii, thread float &d1,
                                thread float &d4, thread float &d5) {
-    d1 = (log10(qi/ni)+18.0f)*3.444606f-10.0f;
+    d1 = (p3_log10(qi/ni)+18.0f)*3.444606f-10.0f;
     int di = int(d1);
     d1 = fmax(fmin(d1,50.0f),1.0f);
     di = max(1,min(49,di));
@@ -74,7 +61,8 @@ static inline void p3_find_ice(float qi, float ni, float qir, float rhop,
     i=di; ii=dii; jj=djj;
 }
 
-static inline float p3_impose_max_ni(float ni, float inv_rho) {
+static inline float p3_impose_max_ni(float ni, float inv_rho,
+                                     device const float *pc) {
     if (ni >= 1.0e-20f) {
         const float dum = P3_MAX_TOTAL_NI*inv_rho/ni;
         ni = ni*fmin(dum,1.0f);
@@ -83,7 +71,8 @@ static inline float p3_impose_max_ni(float ni, float inv_rho) {
 }
 
 static inline void p3_calc_rime(float qi, thread float &qir,
-                                thread float &qib, thread float &rhop) {
+                                thread float &qib, thread float &rhop,
+                                device const float *pc) {
     float rho_rime;
     if (qib >= 1.0e-15f) {
         rho_rime = qir/qib;
@@ -99,7 +88,8 @@ static inline void p3_calc_rime(float qi, thread float &qir,
 }
 
 static inline void p3_cloud_dsd(thread float &nc, float qc, float rho,
-                                thread float &mu, thread float &lambda) {
+                                thread float &mu, thread float &lambda,
+                                device const float *pc) {
     float n= fmax(nc,P3_NSMALL);
     mu=0.0005714f*(n*1.0e-6f*rho)+0.2714f;
     mu=1.0f/(mu*mu)-1.0f;
@@ -120,7 +110,8 @@ static inline void p3_cloud_dsd(thread float &nc, float qc, float rho,
 }
 
 static inline void p3_rain_dsd(thread float &nr, float qr,
-                               thread float &lambda) {
+                               thread float &lambda,
+                               device const float *pc) {
     const float mu=0.0f;
     float n=fmax(nr,P3_NSMALL);
     lambda=pow(P3_CONS1*n*(mu+3.0f)*(mu+2.0f)*(mu+1.0f)/qr,P3_THRD);
@@ -139,6 +130,8 @@ kernel void p3_final(
     uint column [[thread_position_in_grid]]) {
     const uint ncol=uint(p.ny)*uint(p.nx);
     if (column>=ncol) return;
+    device const float *pc = r.constants;
+    const float xxlv = p.xxlv, xxls = p.xxls;
     if (r.flags[ncol+column]==0.0f) {
         // The state-owned radii use microns; P3's entry defaults and solver
         // outputs are metres. Convert even inactive columns after entry has
@@ -158,18 +151,18 @@ kernel void p3_final(
 
         if (r.qc[idx]>=P3_QSMALL) {
             float mu_c,lamc,nc=r.nc[idx];
-            p3_cloud_dsd(nc,r.qc[idx],rho,mu_c,lamc);
+            p3_cloud_dsd(nc,r.qc[idx],rho,mu_c,lamc,pc);
             r.nc[idx]=nc;
             r.effc[idx]=0.5f*(mu_c+3.0f)/lamc;
         } else {
             r.qv[idx]=r.qv[idx]+r.qc[idx];
-            r.theta[idx]=r.theta[idx]-invexn*r.qc[idx]*P3_XXLV*P3_INV_CP;
+            r.theta[idx]=r.theta[idx]-invexn*r.qc[idx]*xxlv*P3_INV_CP;
             r.qc[idx]=0.0f; r.nc[idx]=0.0f;
         }
 
         if (r.qr[idx]>=P3_QSMALL) {
             float nr=r.nr[idx],lamr;
-            p3_rain_dsd(nr,r.qr[idx],lamr);
+            p3_rain_dsd(nr,r.qr[idx],lamr,pc);
             r.nr[idx]=nr;
             const float l2=lamr*lamr;
             const float lam6=(l2*l2)*l2;
@@ -177,16 +170,16 @@ kernel void p3_final(
             ze_rain=fmax(ze_rain,1.0e-22f);
         } else {
             r.qv[idx]=r.qv[idx]+r.qr[idx];
-            r.theta[idx]=r.theta[idx]-invexn*r.qr[idx]*P3_XXLV*P3_INV_CP;
+            r.theta[idx]=r.theta[idx]-invexn*r.qr[idx]*xxlv*P3_INV_CP;
             r.qr[idx]=0.0f; r.nr[idx]=0.0f;
         }
 
-        r.ni[idx]=p3_impose_max_ni(r.ni[idx],inv_rho);
+        r.ni[idx]=p3_impose_max_ni(r.ni[idx],inv_rho,pc);
         if (r.qi[idx]>=P3_QSMALL) {
             r.ni[idx]=fmax(r.ni[idx],P3_NSMALL);
             r.nr[idx]=fmax(r.nr[idx],P3_NSMALL);
             float qir=r.qir[idx],qib=r.qib[idx],rhop;
-            p3_calc_rime(r.qi[idx],qir,qib,rhop);
+            p3_calc_rime(r.qi[idx],qir,qib,rhop,pc);
             r.qir[idx]=qir; r.qib[idx]=qib;
             int i,jj,ii; float d1,d4,d5;
             p3_find_ice(r.qi[idx],r.ni[idx],r.qir[idx],rhop,
@@ -207,11 +200,11 @@ kernel void p3_final(
             ze_ice=fmax(ze_ice,1.0e-22f);
         } else {
             r.qv[idx]=r.qv[idx]+r.qi[idx];
-            r.theta[idx]=r.theta[idx]-invexn*r.qi[idx]*P3_XXLS*P3_INV_CP;
+            r.theta[idx]=r.theta[idx]-invexn*r.qi[idx]*xxls*P3_INV_CP;
             r.qi[idx]=0.0f; r.ni[idx]=0.0f;
             r.qir[idx]=0.0f; r.qib[idx]=0.0f; r.di[idx]=0.0f;
         }
-        r.zdbz[idx]=10.0f*log10((ze_rain+ze_ice)*1.0e18f);
+        r.zdbz[idx]=10.0f*p3_log10((ze_rain+ze_ice)*1.0e18f);
         if (r.qr[idx]<P3_QSMALL) r.nr[idx]=0.0f;
         r.effc[idx]=r.effc[idx]*1.0e6f;
         r.effi[idx]=r.effi[idx]*1.0e6f;

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from .p3_constants import P3_CONSTANT_NAMES
 from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
@@ -14,7 +15,8 @@ _VOLUMES = (
 )
 
 
-def submit_p3_homofreeze(*, fields: dict, scratch: dict, flags) -> None:
+def submit_p3_homofreeze(*, fields: dict, scratch: dict, flags,
+                         constants, xlf) -> None:
     """Apply homogeneous freezing to flagged columns on Metal.
 
     ``fields`` contains P3's mutable species/theta and read-only temperature;
@@ -56,9 +58,22 @@ def submit_p3_homofreeze(*, fields: dict, scratch: dict, flags) -> None:
     if flags.buffer.context is not context:
         raise ValueError("P3 Metal homogeneous freezing flags use another context")
     arrays["flags"] = flags
+    if (not isinstance(constants, MetalArray)
+            or constants.shape != (len(P3_CONSTANT_NAMES),)
+            or constants.dtype != np.dtype(np.float32)
+            or not constants.flags.c_contiguous):
+        raise TypeError(
+            "P3 Metal homogeneous freezing constants must be contiguous FP32 "
+            f"({len(P3_CONSTANT_NAMES)},)")
+    if constants.buffer.context is not context:
+        raise ValueError("P3 Metal homogeneous freezing constants use another context")
+    arrays["constants"] = constants
+    latent = np.float32(xlf)
+    if not np.isfinite(latent):
+        raise ValueError("P3 Metal homogeneous freezing latent heat must be finite FP32")
     context.submit_kernel(
         "p3_homofreeze", arrays,
-        {"nz": nz, "ny": ny, "nx": nx},
+        {"nz": nz, "ny": ny, "nx": nx, "xlf": float(latent)},
         exact_policy=False, grid_size=ny * nx)
 
 

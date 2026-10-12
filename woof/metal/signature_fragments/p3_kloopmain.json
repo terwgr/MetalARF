@@ -20,7 +20,7 @@
         ["rhofacr", "float", "read_write"], ["rhofaci", "float", "read_write"],
         ["acn", "float", "read_write"], ["temperature", "float", "read_write"],
         ["tmparr1", "float", "read_write"], ["qv_cld", "float", "read_write"],
-        ["flags", "float", "read_write"],
+        ["flags", "float", "read_write"], ["constants", "float", "read"],
         ["itab", "float", "read"], ["icoll", "float", "read"],
         ["revap", "float", "read"]
       ],
@@ -38,14 +38,15 @@
         "rhofacr": [["nz", "ny", "nx"]], "rhofaci": [["nz", "ny", "nx"]],
         "acn": [["nz", "ny", "nx"]], "temperature": [["nz", "ny", "nx"]],
         "tmparr1": [["nz", "ny", "nx"]], "qv_cld": [["nz", "ny", "nx"]],
-        "flags": [[2, "ny", "nx"]],
+        "flags": [[2, "ny", "nx"]], "constants": [[52]],
         "itab": [[14000]], "icoll": [[60000]], "revap": [[3000]]
       },
       "parameters": [
         ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
         ["dt", "float32"], ["it", "int32"],
         ["log_predict_nc", "int32"], ["clbfact_dep", "float32"],
-        ["clbfact_sub", "float32"]
+        ["clbfact_sub", "float32"], ["xxlv", "float32"],
+        ["xxls", "float32"], ["xlf", "float32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,
