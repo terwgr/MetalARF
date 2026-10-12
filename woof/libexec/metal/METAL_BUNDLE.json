@@ -2,7 +2,7 @@
   "abi_version": 65543,
   "files": {
     "libwoof_metal.dylib": {
-      "sha256": "65480a0e575c2310c163a39a2e8c1f73c0b696d7ba1b7f1a7c39b6ae8af19c15",
+      "sha256": "dd766c7eb2267696d6a98a3e98c34ebf93f805e850830b30ed0416f48381d9e4",
       "size": 187856
     },
     "woof_default.metallib": {
@@ -20,5 +20,5 @@
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v1",
-  "source_commit": "c309e1e04de83f463cd09d2e5bec2f273618145d"
+  "source_commit": "88205bc4c9c4d08a3f60d8e94972c90142c8e102"
 }
