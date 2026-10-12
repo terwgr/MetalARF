@@ -17,7 +17,6 @@ constant float P3_MW=0x1.26e9780000000p-6f;
 constant float P3_RR=0x1.0a32ca0000000p+3f, P3_BACT=0x1.4efb0a0000000p-1f;
 constant float P3_INV_RM1=0x1.312d000000000p+24f, P3_SIG1=2.0f, P3_NANEW1=0x1.1e1a300000000p+28f;
 constant float P3_INV_RM2=0x1.7799d80000000p+19f, P3_SIG2=2.5f, P3_NANEW2=0.0f;
-static inline float p3_div_rn(float a,float b){return a/b;}
 #define ITAB(jj, ii, i2, idx) (itab[(((((jj) * P3_RIMSIZE + (ii)) * P3_ISIZE + (i2)) * P3_TABSIZE) + (idx))])
 #define ICOLL(jj, ii, i2, j2, idx) (icoll[(((((jj) * P3_RIMSIZE + (ii)) * P3_ISIZE + (i2)) * P3_RCOLLSIZE + (j2)) * 2) + (idx)])
 #define RTAB(tb, a, b) ((tb)[(a) * 10 + (b)])
@@ -27,7 +26,7 @@ static inline float p3_erf(float x)
     const float sign = x < 0.0f ? -1.0f : 1.0f;
     const float ax = fabs(x);
     const float t = 1.0f / (1.0f + 0.5f * ax);
-    const float tau = t * exp(-ax * ax - 1.26551223f + t * (
+    const float tau = t * p3_exp(-ax * ax - 1.26551223f + t * (
         1.00002368f + t * (0.37409196f + t * (0.09678418f + t * (
         -0.18628806f + t * (0.27886807f + t * (-1.13520398f + t * (
         1.48851587f + t * (-0.82215223f + t * 0.17087277f)))))))));
@@ -55,7 +54,7 @@ static inline float p3_polysvp1(float t, int i_type)
                         + dt * (a5i + dt * (a6i + dt * (a7i + a8i * dt)))))));
             return out * 100.0f;
         }
-        return pow(10.0f, -9.09718f * (273.16f / t - 1.0f)
+        return p3_pow(10.0f, -9.09718f * (273.16f / t - 1.0f)
                             - 3.56654f * p3_log10(273.16f / t)
                             + 0.876793f * (1.0f - p3_div_rn(t, 273.16f))
                             + p3_log10(6.1071f)) * 100.0f;
@@ -71,11 +70,11 @@ static inline float p3_polysvp1(float t, int i_type)
                     + dt * (a5 + dt * (a6 + dt * (a7 + a8 * dt)))))));
         return out * 100.0f;
     }
-    return pow(10.0f, -7.90298f * (373.16f / t - 1.0f)
+    return p3_pow(10.0f, -7.90298f * (373.16f / t - 1.0f)
                         + 5.02808f * p3_log10(373.16f / t)
-                        - 1.3816e-7f * (pow(10.0f, 11.344f
+                        - 1.3816e-7f * (p3_pow(10.0f, 11.344f
                                         * (1.0f - p3_div_rn(t, 373.16f))) - 1.0f)
-                        + 8.1328e-3f * (pow(10.0f, -3.49149f
+                        + 8.1328e-3f * (p3_pow(10.0f, -3.49149f
                                         * (373.16f / t - 1.0f)) - 1.0f)
                         + p3_log10(1013.246f)) * 100.0f;
 }
@@ -177,7 +176,7 @@ static inline void p3_find_lt_1b(float qr, float nr, thread int* dumj,
                                  device const float *pc)
 {
     if (qr >= P3_QSMALL && nr > 0.0f) {
-        float dumlr = pow(qr / (P3_PI * P3_RHOW * nr), P3_THRD);
+        float dumlr = p3_pow(qr / (P3_PI * P3_RHOW * nr), P3_THRD);
         float d3 = (p3_log10(1.0f * dumlr) + 5.0f) * 10.70415f;
         int dj = p3_int(d3);
         d3 = fmin(d3, float(P3_RCOLLSIZE));
@@ -251,7 +250,7 @@ static inline void p3_get_cloud_dsd2(thread float * nc_grd, float qc_grd, float 
         mu_c = fmax(mu_c, 2.0f);
         mu_c = fmin(mu_c, 15.0f);
         // iparam = 3 (:193), so nu is 0 and dnu is unread (:6666-6670).
-        float lamc = pow(P3_CONS1 * nc * (mu_c + 3.0f) * (mu_c + 2.0f)
+        float lamc = p3_pow(P3_CONS1 * nc * (mu_c + 3.0f) * (mu_c + 2.0f)
                            * (mu_c + 1.0f) / qc, P3_THRD);
         float lammin = (mu_c + 1.0f) * 2.5e4f;
         float lammax = (mu_c + 1.0f) * 1.0e6f;
@@ -285,20 +284,20 @@ static inline void p3_get_rain_dsd2(thread float * nr_grd, float qr_grd, float i
         float nr = *nr_grd * ispf;
         nr = fmax(nr, P3_NSMALL);
         float mu_r = P3_MU_R_CONSTANT;
-        float lamr = pow(P3_CONS1 * nr * (mu_r + 3.0f) * (mu_r + 2.0f)
+        float lamr = p3_pow(P3_CONS1 * nr * (mu_r + 3.0f) * (mu_r + 2.0f)
                            * (mu_r + 1.0f) / qr, P3_THRD);
         float lammax = (mu_r + 1.0f) * 1.0e5f;
         float lammin = (mu_r + 1.0f) * P3_INV_DRMAX;
         if (lamr < lammin) {
             lamr = lammin;
-            nr = p3_div_rn(exp(3.0f * log(lamr) + log(qr)
-                       + log(p3_gam(mu_r + 1.0f))
-                       - log(p3_gam(mu_r + 4.0f))), P3_CONS1);
+            nr = p3_div_rn(p3_exp(3.0f * p3_log(lamr) + p3_log(qr)
+                       + p3_log(p3_gam(mu_r + 1.0f))
+                       - p3_log(p3_gam(mu_r + 4.0f))), P3_CONS1);
         } else if (lamr > lammax) {
             lamr = lammax;
-            nr = p3_div_rn(exp(3.0f * log(lamr) + log(qr)
-                       + log(p3_gam(mu_r + 1.0f))
-                       - log(p3_gam(mu_r + 4.0f))), P3_CONS1);
+            nr = p3_div_rn(p3_exp(3.0f * p3_log(lamr) + p3_log(qr)
+                       + p3_log(p3_gam(mu_r + 1.0f))
+                       - p3_log(p3_gam(mu_r + 4.0f))), P3_CONS1);
         }
         *logn0r_o = p3_log10(nr) + (mu_r + 1.0f) * p3_log10(lamr)
                     - p3_log10(p3_gam(mu_r + 1.0f));
@@ -363,13 +362,13 @@ static inline void p3_activate_droplets(int log_predictNc, float sup_cld, int it
     }
     if (log_predictNc) {
         if (sup_cld > 1.0e-6f) {
-            float dum1 = 1.0f / pow(P3_BACT, 0.5f);
+            float dum1 = 1.0f / p3_pow(P3_BACT, 0.5f);
             float sigvl = 0.0761f - 1.55e-4f * (t - 273.15f);
             float aact = 2.0f * P3_MW / (P3_RHOW * P3_RR * t) * sigvl;
-            float sm1 = 2.0f * dum1 * pow(aact * P3_THRD * P3_INV_RM1, 1.5f);
-            float sm2 = 2.0f * dum1 * pow(aact * P3_THRD * P3_INV_RM2, 1.5f);
-            float uu1 = 2.0f * log(sm1 / sup_cld) / (4.242f * log(P3_SIG1));
-            float uu2 = 2.0f * log(sm2 / sup_cld) / (4.242f * log(P3_SIG2));
+            float sm1 = 2.0f * dum1 * p3_pow(aact * P3_THRD * P3_INV_RM1, 1.5f);
+            float sm2 = 2.0f * dum1 * p3_pow(aact * P3_THRD * P3_INV_RM2, 1.5f);
+            float uu1 = 2.0f * p3_log(sm1 / sup_cld) / (4.242f * p3_log(P3_SIG1));
+            float uu2 = 2.0f * p3_log(sm2 / sup_cld) / (4.242f * p3_log(P3_SIG2));
             // derf is the DOUBLE erf in the authority (:3324-3325).
             dum1 = P3_NANEW1 * 0.5f * (1.0f - p3_erf(uu1));
             float dum2 = P3_NANEW2 * 0.5f * (1.0f - p3_erf(uu2));
@@ -478,8 +477,8 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         float dum, dum1, dum2, tmp1, tmp2;
 
         if (!log_exitlevel) {
-            float mu = 1.496e-6f * pow(t, 1.5f) / (t + 120.0f);    // :2531
-            float dv = 8.794e-5f * pow(t, 1.81f) / pres[(k) * ncol + i];    // :2532
+            float mu = 1.496e-6f * p3_pow(t, 1.5f) / (t + 120.0f);    // :2531
+            float dv = 8.794e-5f * p3_pow(t, 1.81f) / pres[(k) * ncol + i];    // :2532
             float sc = mu / (rho * dv);                              // :2533
             dum = 1.0f / (P3_RV * (t * t));                          // :2534 int **2
             dqsdT = xxlv * qvs * dum;                                // :2535
@@ -576,14 +575,14 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             // collection of rain (:2725-2748)
             if (qi[(k) * ncol + i] >= P3_QSMALL && qr[(k) * ncol + i] >= P3_QSMALL
                 && t <= 273.15f) {
-                qrcol = pow(10.0f, f1pr08 + logn0r) * rho * rhofaci
+                qrcol = p3_pow(10.0f, f1pr08 + logn0r) * rho * rhofaci
                         * P3_ERI * ni[(k) * ncol + i] * iscf * (spf - spf_clr);
-                nrcol = pow(10.0f, f1pr07 + logn0r) * rho * rhofaci
+                nrcol = p3_pow(10.0f, f1pr07 + logn0r) * rho * rhofaci
                         * P3_ERI * ni[(k) * ncol + i] * iscf * (spf - spf_clr);
             }
             if (qi[(k) * ncol + i] >= P3_QSMALL && qr[(k) * ncol + i] >= P3_QSMALL
                 && t > 273.15f) {
-                nrcol = pow(10.0f, f1pr07 + logn0r) * rho * rhofaci
+                nrcol = p3_pow(10.0f, f1pr07 + logn0r) * rho * rhofaci
                         * P3_ERI * ni[(k) * ncol + i] * iscf * (spf - spf_clr);
             }
 
@@ -597,8 +596,8 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             if (qi[(k) * ncol + i] >= P3_QSMALL && t > 273.15f) {
                 float qsat0 = 0.622f * P3_E0 / (pres[(k) * ncol + i] - P3_E0);
                 dum = 0.0f;
-                qimlt = (p3_div_rn((f1pr05 + f1pr14 * pow(sc, P3_THRD)
-                          * pow(rhofaci * rho / mu, 0.5f))
+                qimlt = (p3_div_rn((f1pr05 + f1pr14 * p3_pow(sc, P3_THRD)
+                          * p3_pow(rhofaci * rho / mu, 0.5f))
                          * ((t - 273.15f) * kap
                             - rho * xxlv * dv * (qsat0 - qv_cld))
                          * 2.0f * P3_PI, xlf) + dum) * ni[(k) * ncol + i];
@@ -610,8 +609,8 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             if (qi[(k) * ncol + i] >= P3_QSMALL
                 && (qc[(k) * ncol + i] + qr[(k) * ncol + i]) >= 1.0e-6f && t < 273.15f) {
                 float qsat0 = 0.622f * P3_E0 / (pres[(k) * ncol + i] - P3_E0);
-                qwgrth = ((f1pr05 + f1pr14 * pow(sc, P3_THRD)
-                           * pow(rhofaci * rho / mu, 0.5f))
+                qwgrth = ((f1pr05 + f1pr14 * p3_pow(sc, P3_THRD)
+                           * p3_pow(rhofaci * rho / mu, 0.5f))
                           * 2.0f * P3_PI
                           * (rho * xxlv * dv * (qsat0 - qv_cld)
                              - (t - 273.15f) * kap)
@@ -632,8 +631,8 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
 
             // inverse supersaturation relaxation timescale (:2900-2906)
             if (qi[(k) * ncol + i] >= P3_QSMALL && t < 273.15f) {
-                epsi = ((f1pr05 + f1pr14 * pow(sc, P3_THRD)
-                         * pow(rhofaci * rho / mu, 0.5f))
+                epsi = ((f1pr05 + f1pr14 * p3_pow(sc, P3_THRD)
+                         * p3_pow(rhofaci * rho / mu, 0.5f))
                         * 2.0f * P3_PI * rho * dv) * ni[(k) * ncol + i];
                 epsi_tot = epsi_tot + epsi;
             } else {
@@ -646,7 +645,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                 float iTc = 1.0f / fmin(-0.001f, t - 273.15f);
                 if (qc[(k) * ncol + i] >= P3_QSMALL) {
                     float Vt_qc = acn * p3_gam(4.0f + P3_BCN + mu_c)
-                                  / (pow(lamc, P3_BCN)
+                                  / (p3_pow(lamc, P3_BCN)
                                      * p3_gam(mu_c + 4.0f));
                     float D_c = (mu_c + 4.0f) / lamc;
                     float V_impact = fabs(vtrmi1 - Vt_qc);
@@ -672,7 +671,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             if (qc[(k) * ncol + i] >= P3_QSMALL && t <= 269.15f) {
                 float d = 1.0f / lamc;
                 dum = (d * d) * d;                                   // :2988 int **3
-                tmp1 = cdist1 * exp(P3_AIMM * (273.15f - t));
+                tmp1 = cdist1 * p3_exp(P3_AIMM * (273.15f - t));
                 float gam_q = p3_gam(7.0f + mu_c);
                 float gam_n = p3_gam(mu_c + 4.0f);
                 const float Q_prefactor = P3_CONS6 * gam_q * tmp1;
@@ -715,10 +714,10 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             // immersion freezing of rain (:3021-3043) -- the authority's
             // own double excursion, kept double.
             if (qr[(k) * ncol + i] * ispf >= P3_QSMALL && t <= 269.15f) {
-                ulong tmpdbl1 = p3_exp64(log(cdistr) + log(p3_gam(7.0f + mu_r))
-                                         - 6.0f * log(lamr));
-                ulong tmpdbl2 = p3_exp64(log(cdistr) + log(p3_gam(mu_r + 4.0f))
-                                         - 3.0f * log(lamr));
+                ulong tmpdbl1 = p3_exp64(p3_log(cdistr) + p3_log(p3_gam(7.0f + mu_r))
+                                         - 6.0f * p3_log(lamr));
+                ulong tmpdbl2 = p3_exp64(p3_log(cdistr) + p3_log(p3_gam(mu_r + 4.0f))
+                                         - 3.0f * p3_log(lamr));
                 ulong tmpdbl3 = p3_exp64(P3_AIMM * (273.15f - t));
                 qrheti = P3_CONS6 * p3_float32(soft64_mul(tmpdbl1, tmpdbl3)) * spf;
                 nrheti = P3_CONS5 * p3_float32(soft64_mul(tmpdbl2, tmpdbl3)) * spf;
@@ -751,8 +750,8 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                 dum = p3_rain_table(revap, dumii_r, dumjj_r, rdumii, rdumjj);
                 epsr = 2.0f * P3_PI * cdistr * rho * dv
                        * (P3_F1R * p3_gam(mu_r + 2.0f) / lamr
-                          + P3_F2R * pow(rho / mu, 0.5f)
-                            * pow(sc, P3_THRD) * dum);
+                          + P3_F2R * p3_pow(rho / mu, 0.5f)
+                            * p3_pow(sc, P3_THRD) * dum);
             } else {
                 epsr = 0.0f;
             }
@@ -842,7 +841,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
 
         // deposition/condensation-freezing nucleation, Cooper 1986 (:3264)
         if (t < 258.15f && supi_cld >= 0.05f) {
-            dum = 0.005f * exp(0.304f * (273.15f - t)) * 1000.0f * inv_rho;
+            dum = 0.005f * p3_exp(0.304f * (273.15f - t)) * 1000.0f * inv_rho;
             dum = fmin(dum, 100.0e3f * inv_rho * scf);
             float N_nuc = fmax(0.0f, (dum - ni[(k) * ncol + i]) * odt);
             if (N_nuc >= 1.0e-20f) {
@@ -859,7 +858,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
 
         // first-step saturation adjustment (:3348-3356)
         if (it <= 1) {
-            float dumt = th[(k) * ncol + i] * pow(pres[(k) * ncol + i] * 1.0e-5f,
+            float dumt = th[(k) * ncol + i] * p3_pow(pres[(k) * ncol + i] * 1.0e-5f,
                                            P3_RD * P3_INV_CP);
             float dumqv = qv_cld;
             float dumqvs = p3_qv_sat(dumt, pres[(k) * ncol + i], 0, pc);
@@ -874,8 +873,8 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         // autoconversion, iparam = 3, KK2000 (:3396-3402)
         if (qc[(k) * ncol + i] * iscf >= 1.0e-8f) {
             dum = qc[(k) * ncol + i] * iscf;
-            qcaut = 1350.0f * pow(dum, 2.47f)
-                    * pow(nc[(k) * ncol + i] * iscf * 1.0e-6f * rho, -1.79f) * scf;
+            qcaut = 1350.0f * p3_pow(dum, 2.47f)
+                    * p3_pow(nc[(k) * ncol + i] * iscf * 1.0e-6f * rho, -1.79f) * scf;
             ncautr = qcaut * P3_CONS3;
             ncautc = qcaut * nc[(k) * ncol + i] / qc[(k) * ncol + i];
             if (qcaut == 0.0f) ncautc = 0.0f;
@@ -888,7 +887,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         // accretion, iparam = 3 (:3458-3462)
         if (qr[(k) * ncol + i] >= P3_QSMALL && qc[(k) * ncol + i] >= P3_QSMALL) {
             dum2 = spf - spf_clr;
-            qcacc = 67.0f * pow(qc[(k) * ncol + i] * iscf * qr[(k) * ncol + i] * ispf, 1.15f)
+            qcacc = 67.0f * p3_pow(qc[(k) * ncol + i] * iscf * qr[(k) * ncol + i] * ispf, 1.15f)
                     * dum2;
             ncacc = qcacc * nc[(k) * ncol + i] / qc[(k) * ncol + i];
             if (qcacc == 0.0f) ncacc = 0.0f;
@@ -899,16 +898,15 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         if (qr[(k) * ncol + i] >= P3_QSMALL) {
             dum1 = 280.0e-6f;
             nr[(k) * ncol + i] = fmax(nr[(k) * ncol + i], P3_NSMALL);
-            dum2 = pow(qr[(k) * ncol + i] / (P3_PI * P3_RHOW * nr[(k) * ncol + i]), P3_THRD);
+            dum2 = p3_pow(qr[(k) * ncol + i] / (P3_PI * P3_RHOW * nr[(k) * ncol + i]), P3_THRD);
             if (dum2 < dum1) dum = 1.0f;
-            else             dum = 2.0f - exp(2300.0f * (dum2 - dum1));
+            else             dum = 2.0f - p3_exp(2300.0f * (dum2 - dum1));
             nrslf = dum * 5.78f * nr[(k) * ncol + i] * ispf * qr[(k) * ncol + i] * ispf
                     * rho * spf;
         }
 
         // ---- conservation of mass (:3515-3644) ---------------------
         float ratio;
-        bool cloud_exhausted = false;
         {
             float dumqvs = p3_qv_sat(t, pres[(k) * ncol + i], 0, pc);
             float qcon_satadj = (qv_cld - dumqvs)
@@ -961,20 +959,27 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         }
 
         float sinks, sources;
-        sinks = (qcaut + qcacc + qccol + qcevp + qchetc + qcheti + qcshd) * dt;
-        sources = qc[(k) * ncol + i] + (qccon + qcnuc) * dt;
+        // Preserve each reference FP32 rounding boundary at the cloud limiter.
+        sinks = p3_add_rn(qcaut, qcacc);
+        sinks = p3_add_rn(sinks, qccol);
+        sinks = p3_add_rn(sinks, qcevp);
+        sinks = p3_add_rn(sinks, qchetc);
+        sinks = p3_add_rn(sinks, qcheti);
+        sinks = p3_mul_rn(p3_add_rn(sinks, qcshd), dt);
+        sources = p3_add_rn(qc[(k) * ncol + i], p3_mul_rn(p3_add_rn(qccon, qcnuc), dt));
         if (sinks > sources && sinks >= 1.0e-20f) {                  // :3571
-            cloud_exhausted = true;
-            ratio = sources / sinks;
-            qcaut *= ratio; qcacc *= ratio; qcevp *= ratio; qccol *= ratio;
-            qcheti *= ratio; qcshd *= ratio; ncautc *= ratio; ncacc *= ratio;
-            nccol *= ratio; ncheti *= ratio;
+            ratio = p3_div_rn(sources, sinks);
+            qcaut = p3_mul_rn(qcaut, ratio); qcacc = p3_mul_rn(qcacc, ratio);
+            qcevp = p3_mul_rn(qcevp, ratio); qccol = p3_mul_rn(qccol, ratio);
+            qcheti = p3_mul_rn(qcheti, ratio); qcshd = p3_mul_rn(qcshd, ratio);
+            ncautc = p3_mul_rn(ncautc, ratio); ncacc = p3_mul_rn(ncacc, ratio);
+            nccol = p3_mul_rn(nccol, ratio); ncheti = p3_mul_rn(ncheti, ratio);
         }
 
         sinks = (qrevp + qrcol + qrhetc + qrheti + qrmul) * dt;
         sources = qr[(k) * ncol + i] + (qrcon + qcaut + qcacc + qimlt + qcshd) * dt;
         if (sinks > sources && sinks >= 1.0e-20f) {                  // :3593
-            ratio = sources / sinks;
+            ratio = p3_div_rn(sources, sinks);
             qrevp *= ratio; qrcol *= ratio; qrheti *= ratio; qrmul *= ratio;
             nrevp *= ratio; nrcol *= ratio; nrheti *= ratio;
         }
@@ -983,14 +988,14 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
         sources = qi[(k) * ncol + i] + (qidep + qinuc + qrcol + qccol + qrhetc
                                + qrheti + qchetc + qcheti + qrmul) * dt;
         if (sinks > sources && sinks >= 1.0e-20f) {                  // :3609
-            ratio = sources / sinks;
+            ratio = p3_div_rn(sources, sinks);
             qisub *= ratio; qimlt *= ratio; nisub *= ratio; nimlt *= ratio;
         }
 
         sinks = (qccon + qrcon + qcnuc + qidep + qinuc) * dt;
         sources = qv[(k) * ncol + i] + (qcevp + qrevp + qisub) * dt;
         if (sinks > sources && sinks >= 1.0e-20f) {                  // :3633
-            ratio = sources / sinks;
+            ratio = p3_div_rn(sources, sinks);
             qccon *= ratio; qrcon *= ratio; qcnuc *= ratio; qidep *= ratio;
             qinuc *= ratio; ninuc *= ratio; ncnuc *= ratio;
         }
@@ -1003,7 +1008,8 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
             rimefraction = qir[(k) * ncol + i] * tmp1;
         }
 
-        qc[(k) * ncol + i] = qc[(k) * ncol + i] + (-qchetc - qcheti - qccol - qcshd) * dt;
+        qc[(k) * ncol + i] = p3_add_rn(qc[(k) * ncol + i],
+            p3_mul_rn(p3_sub_rn(p3_sub_rn(p3_sub_rn(-qchetc, qcheti), qccol), qcshd), dt));
         if (log_predictNc) {                                         // :3770
             nc[(k) * ncol + i] = nc[(k) * ncol + i] + (-nccol - nchetc - ncheti) * dt;
         }
@@ -1051,7 +1057,8 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                                             * xlf * P3_INV_CP) * dt;
 
         // warm-phase updates (:3869-3885)
-        qc[(k) * ncol + i] = qc[(k) * ncol + i] + (-qcacc - qcaut + qcnuc + qccon - qcevp) * dt;
+        qc[(k) * ncol + i] = p3_add_rn(qc[(k) * ncol + i],
+            p3_mul_rn(p3_sub_rn(p3_add_rn(p3_add_rn(p3_sub_rn(-qcacc, qcaut), qcnuc), qccon), qcevp), dt));
         qr[(k) * ncol + i] = qr[(k) * ncol + i] + (qcacc + qcaut + qrcon - qrevp) * dt;
         if (log_predictNc) {                                         // :3872
             nc[(k) * ncol + i] = nc[(k) * ncol + i] + (-ncacc - ncautc + ncslf + ncnuc) * dt;
@@ -1065,7 +1072,7 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
                                 * dt;
 
         // clipping (:3889-3918)
-        if (cloud_exhausted || qc[(k) * ncol + i] < P3_QSMALL) {
+        if (qc[(k) * ncol + i] < P3_QSMALL) {
             qv[(k) * ncol + i] = qv[(k) * ncol + i] + qc[(k) * ncol + i];
             th[(k) * ncol + i] = th[(k) * ncol + i] - invexn * qc[(k) * ncol + i] * xxlv * P3_INV_CP;
             qc[(k) * ncol + i] = 0.0f;

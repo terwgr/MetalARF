@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Parameterize P3 Metal physics constants and preserve cold immersion-freezing mass rates.
+- Parameterize P3 Metal physics constants, preserve cold immersion-freezing mass rates,
+  and restore exact NumPy parity on the complete tiny and cold regression profiles.
 
 ## MetalARF 1.0.2
 

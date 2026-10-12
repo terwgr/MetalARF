@@ -4822,7 +4822,7 @@
       "name": "p3_final",
       "parameter_size": 20,
       "resource_count": 24,
-      "shader_hash": "4e247d59c87c8f53b6d719a664cd33efa7023f94b96800c4388806e937a5a85e",
+      "shader_hash": "ade4b36dfc22f45b666097693c8c6b61f4fbfc72420616ba26964f9d17ba708a",
       "threads_per_group": 128
     },
     {
@@ -4854,7 +4854,7 @@
       "name": "p3_kloop1",
       "parameter_size": 28,
       "resource_count": 28,
-      "shader_hash": "39db3af4874948dfc26b163c3a4def2652a8eb30f4b79446b478961e710d95cf",
+      "shader_hash": "3bc59a8aa85e351b6bb17712bb27e43d59614782fc0bbdb56c1788f4171e7e34",
       "threads_per_group": 128
     },
     {
@@ -4871,7 +4871,7 @@
       "name": "p3_kloopmain",
       "parameter_size": 44,
       "resource_count": 31,
-      "shader_hash": "c4fa224d3b56c5e22238a8b4d7ff0c2685252619970d1186be97072522f449ef",
+      "shader_hash": "76d06a1851780d9352801574bc20b254cceb3bf61249412e5d4d66491f00496b",
       "threads_per_group": 128
     },
     {
@@ -4903,7 +4903,7 @@
       "name": "p3_sed_cloud",
       "parameter_size": 20,
       "resource_count": 13,
-      "shader_hash": "fa7e9f62e8f36d5f2d50a9fbb4cbf4220c2ef90a668813a4b4249a2c36e8ebbb",
+      "shader_hash": "24f1252425803e8d4dd7cc4d7a2f6a49e90d1d019e6d855152bb4b74393f4508",
       "threads_per_group": 128
     },
     {
@@ -4919,7 +4919,7 @@
       "name": "p3_sed_ice",
       "parameter_size": 16,
       "resource_count": 18,
-      "shader_hash": "df73c391aac22de9a506c39066efd26891d350ec86f45cd782352122e24297b2",
+      "shader_hash": "5de4dacd280d6567e1f805fcc6bafda3625bfd90db28ee4325987e9c25fe00b1",
       "threads_per_group": 128
     },
     {
@@ -4935,7 +4935,7 @@
       "name": "p3_sed_rain",
       "parameter_size": 16,
       "resource_count": 15,
-      "shader_hash": "5b0138470aa245a25390fe7b612b225cee8bdcaca82cfe94cdce8494f5f9763d",
+      "shader_hash": "a8e236864e6cb1ed84ba597b8ecea3150396b9ba6635622abc9d54438b77545a",
       "threads_per_group": 128
     },
     {

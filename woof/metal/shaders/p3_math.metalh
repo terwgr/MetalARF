@@ -2,6 +2,8 @@
 #define WOOF_P3_MATH_METALH
 
 #include "soft_libm64.metalh"
+#include "p3_reference_pow.metalh"
+#include "soft_gfk_log.metalh"
 
 static inline ulong p3_soft64(float value)
 {
@@ -23,5 +25,21 @@ static inline float p3_log10(float value)
     const ulong logarithm = soft64_plm_log(p3_soft64(value));
     return p3_float32(soft64_div(logarithm, 0x40026bb1bbb55516ul));
 }
+
+// Match the reference float32 operation boundaries, including subnormals.
+static inline float p3_add_rn(float a, float b)
+{ return as_type<float>(soft32_add(as_type<uint>(a), as_type<uint>(b))); }
+static inline float p3_sub_rn(float a, float b)
+{ return as_type<float>(soft32_sub(as_type<uint>(a), as_type<uint>(b))); }
+static inline float p3_mul_rn(float a, float b)
+{ return as_type<float>(soft32_mul(as_type<uint>(a), as_type<uint>(b))); }
+static inline float p3_div_rn(float a, float b)
+{ return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
+static inline float p3_pow(float a, float b)
+{ return as_type<float>(p3_reference_pow_bits(as_type<uint>(a), as_type<uint>(b))); }
+static inline float p3_exp(float a)
+{ return as_type<float>(soft_gfk_exp(as_type<uint>(a))); }
+static inline float p3_log(float a)
+{ return as_type<float>(soft_gfk_log(as_type<uint>(a))); }
 
 #endif

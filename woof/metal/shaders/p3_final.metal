@@ -6,8 +6,8 @@
 using namespace metal;
 
 // P3 post-freezing cleanup and diagnostics (p3.cu:1827-1926). One thread
-// owns one column and visits levels in order. Native MSL pow and the shared
-// GFK gamma stand in for source-pinned r_pow/tgamma; log10 uses soft64.
+// owns one column and visits levels in order. Shared pinned power and
+// gamma preserve the source math; log10 uses soft64.
 // This remains ordinary-mode source only.
 #pragma clang fp contract(off)
 
@@ -45,11 +45,11 @@ static inline void p3_find_ice(float qi, float ni, float qir, float rhop,
                                thread int &i, thread int &jj,
                                thread int &ii, thread float &d1,
                                thread float &d4, thread float &d5) {
-    d1 = (p3_log10(qi/ni)+18.0f)*3.444606f-10.0f;
+    d1 = (p3_log10(p3_div_rn(qi,ni))+18.0f)*3.444606f-10.0f;
     int di = int(d1);
     d1 = fmax(fmin(d1,50.0f),1.0f);
     di = max(1,min(49,di));
-    d4 = (qir/qi)*3.0f+1.0f;
+    d4 = (p3_div_rn(qir,qi))*3.0f+1.0f;
     int dii = int(d4);
     d4 = fmax(fmin(d4,4.0f),1.0f);
     dii = max(1,min(3,dii));
@@ -64,7 +64,7 @@ static inline void p3_find_ice(float qi, float ni, float qir, float rhop,
 static inline float p3_impose_max_ni(float ni, float inv_rho,
                                      device const float *pc) {
     if (ni >= 1.0e-20f) {
-        const float dum = P3_MAX_TOTAL_NI*inv_rho/ni;
+        const float dum = p3_div_rn(P3_MAX_TOTAL_NI*inv_rho,ni);
         ni = ni*fmin(dum,1.0f);
     }
     return ni;
@@ -75,14 +75,14 @@ static inline void p3_calc_rime(float qi, thread float &qir,
                                 device const float *pc) {
     float rho_rime;
     if (qib >= 1.0e-15f) {
-        rho_rime = qir/qib;
+        rho_rime = p3_div_rn(qir,qib);
         if (rho_rime < P3_RHO_RIMEMIN) {
-            rho_rime=P3_RHO_RIMEMIN; qib=qir/rho_rime;
+            rho_rime=P3_RHO_RIMEMIN; qib=p3_div_rn(qir,rho_rime);
         } else if (rho_rime > P3_RHO_RIMEMAX) {
-            rho_rime=P3_RHO_RIMEMAX; qib=qir/rho_rime;
+            rho_rime=P3_RHO_RIMEMAX; qib=p3_div_rn(qir,rho_rime);
         }
     } else { qir=0.0f; qib=0.0f; rho_rime=0.0f; }
-    if (qir > qi && rho_rime > 0.0f) { qir=qi; qib=qir/rho_rime; }
+    if (qir > qi && rho_rime > 0.0f) { qir=qi; qib=p3_div_rn(qir,rho_rime); }
     if (qir < P3_QSMALL) { qir=0.0f; qib=0.0f; }
     rhop=rho_rime;
 }
@@ -94,7 +94,7 @@ static inline void p3_cloud_dsd(thread float &nc, float qc, float rho,
     mu=0.0005714f*(n*1.0e-6f*rho)+0.2714f;
     mu=1.0f/(mu*mu)-1.0f;
     mu=fmin(fmax(mu,2.0f),15.0f);
-    lambda=pow(P3_CONS1*n*(mu+3.0f)*(mu+2.0f)*(mu+1.0f)/qc,P3_THRD);
+    lambda=p3_pow(P3_CONS1*n*(mu+3.0f)*(mu+2.0f)*(mu+1.0f)/qc,P3_THRD);
     const float lammin=(mu+1.0f)*2.5e4f;
     const float lammax=(mu+1.0f)*1.0e6f;
     if (lambda < lammin) {
@@ -114,12 +114,12 @@ static inline void p3_rain_dsd(thread float &nr, float qr,
                                device const float *pc) {
     const float mu=0.0f;
     float n=fmax(nr,P3_NSMALL);
-    lambda=pow(P3_CONS1*n*(mu+3.0f)*(mu+2.0f)*(mu+1.0f)/qr,P3_THRD);
+    lambda=p3_pow(P3_CONS1*n*(mu+3.0f)*(mu+2.0f)*(mu+1.0f)/qr,P3_THRD);
     const float lammin=(mu+1.0f)*P3_INV_DRMAX;
     const float lammax=(mu+1.0f)*1.0e5f;
     if (lambda < lammin || lambda > lammax) {
         lambda=clamp(lambda,lammin,lammax);
-        n=exp(3.0f*log(lambda)+log(qr)+log(1.0f)-log(6.0f))/P3_CONS1;
+        n=p3_exp(3.0f*p3_log(lambda)+p3_log(qr)+p3_log(1.0f)-p3_log(6.0f))/P3_CONS1;
     }
     nr=n;
 }
@@ -146,7 +146,7 @@ kernel void p3_final(
     for (uint k=0;k<uint(p.nz);++k) {
         const ulong idx=ulong(k)*ulong(ncol)+ulong(column);
         const float rho=r.rho[idx], inv_rho=r.inv_rho[idx];
-        const float invexn=1.0f/r.tmparr1[idx];
+        const float invexn=p3_div_rn(1.0f,r.tmparr1[idx]);
         float ze_ice=1.0e-22f, ze_rain=1.0e-22f;
 
         if (r.qc[idx]>=P3_QSMALL) {
@@ -164,8 +164,7 @@ kernel void p3_final(
             float nr=r.nr[idx],lamr;
             p3_rain_dsd(nr,r.qr[idx],lamr,pc);
             r.nr[idx]=nr;
-            const float l2=lamr*lamr;
-            const float lam6=(l2*l2)*l2;
+            const float lam6=p3_pow(lamr,6.0f);
             ze_rain=rho*nr*6.0f*5.0f*4.0f*3.0f*2.0f*1.0f/lam6;
             ze_rain=fmax(ze_rain,1.0e-22f);
         } else {

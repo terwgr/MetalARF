@@ -42,14 +42,14 @@ static inline void p3_bulk_rime(float qi, thread float &qir,
                                 device const float *pc) {
     float rho_rime;
     if (qib>=1.0e-15f) {
-        rho_rime=qir/qib;
+        rho_rime=p3_div_rn(qir,qib);
         if (rho_rime<P3_RHO_RIMEMIN) {
-            rho_rime=P3_RHO_RIMEMIN; qib=qir/rho_rime;
+            rho_rime=P3_RHO_RIMEMIN; qib=p3_div_rn(qir,rho_rime);
         } else if (rho_rime>P3_RHO_RIMEMAX) {
-            rho_rime=P3_RHO_RIMEMAX; qib=qir/rho_rime;
+            rho_rime=P3_RHO_RIMEMAX; qib=p3_div_rn(qir,rho_rime);
         }
     } else { qir=0.0f; qib=0.0f; rho_rime=0.0f; }
-    if (qir>qi && rho_rime>0.0f) { qir=qi; qib=qir/rho_rime; }
+    if (qir>qi && rho_rime>0.0f) { qir=qi; qib=p3_div_rn(qir,rho_rime); }
     if (qir<P3_QSMALL) { qir=0.0f; qib=0.0f; }
     rhop=rho_rime;
 }
@@ -58,10 +58,10 @@ static inline void p3_find_ice(float qi, float ni, float qir, float rhop,
                                thread int &i, thread int &jj,
                                thread int &ii, thread float &d1,
                                thread float &d4, thread float &d5) {
-    d1=(p3_log10(qi/ni)+18.0f)*3.444606f-10.0f;
+    d1=(p3_log10(p3_div_rn(qi,ni))+18.0f)*3.444606f-10.0f;
     int di=int(d1);
     d1=fmax(fmin(d1,50.0f),1.0f); di=max(1,min(49,di));
-    d4=(qir/qi)*3.0f+1.0f;
+    d4=(p3_div_rn(qir,qi))*3.0f+1.0f;
     int dii=int(d4);
     d4=fmax(fmin(d4,4.0f),1.0f); dii=max(1,min(3,dii));
     if (rhop<=650.0f) d5=(rhop-50.0f)*0.005f+1.0f;
@@ -73,7 +73,7 @@ static inline void p3_find_ice(float qi, float ni, float qir, float rhop,
 
 static inline float p3_impose_max_ni(float ni, float inv_rho,
                                      device const float *pc) {
-    if (ni>=1.0e-20f) ni=ni*fmin(P3_MAX_TOTAL_NI*inv_rho/ni,1.0f);
+    if (ni>=1.0e-20f) ni=ni*fmin(p3_div_rn(P3_MAX_TOTAL_NI*inv_rho,ni),1.0f);
     return ni;
 }
 
@@ -129,10 +129,10 @@ kernel void p3_sed_ice(
                 r.vq[idx]=f02*r.rhofaci[idx];
                 r.vn[idx]=f01*r.rhofaci[idx];
             }
-            co_max=fmax(co_max,r.vq[idx]*dt_left*(1.0f/r.dz[idx]));
+            co_max=fmax(co_max,r.vq[idx]*dt_left*(p3_div_rn(1.0f,r.dz[idx])));
         }
         const int tmpint1=int(co_max+1.0f);
-        const float dt_sub=fmin(dt_left,dt_left/float(tmpint1));
+        const float dt_sub=fmin(dt_left,p3_div_rn(dt_left,float(tmpint1)));
         const int ktemp=(kbot==0)?kbot:kbot-1;
         for (int k=ktemp;k<=ktop;++k) {
             const ulong idx=ulong(k)*stride+base;
@@ -144,7 +144,7 @@ kernel void p3_sed_ice(
         if (kbot==0) prt_accum=prt_accum+r.fq[base]*dt_sub;
         {
             const ulong idx=ulong(ktop)*stride+base;
-            const float idz=1.0f/r.dz[idx], irho=r.inv_rho[idx];
+            const float idz=p3_div_rn(1.0f,r.dz[idx]), irho=r.inv_rho[idx];
             r.qi[idx]=r.qi[idx]+(-r.fq[idx]*idz)*dt_sub*irho;
             r.qir[idx]=r.qir[idx]+(-r.fqir[idx]*idz)*dt_sub*irho;
             r.qib[idx]=r.qib[idx]+(-r.fbir[idx]*idz)*dt_sub*irho;
@@ -153,7 +153,7 @@ kernel void p3_sed_ice(
         for (int k=ktop-1;k>=ktemp;--k) {
             const ulong idx=ulong(k)*stride+base;
             const ulong below=ulong(k+1)*stride+base;
-            const float idz=1.0f/r.dz[idx], irho=r.inv_rho[idx];
+            const float idz=p3_div_rn(1.0f,r.dz[idx]), irho=r.inv_rho[idx];
             r.qi[idx]=r.qi[idx]+((r.fq[below]-r.fq[idx])*idz)*dt_sub*irho;
             r.qir[idx]=r.qir[idx]+((r.fqir[below]-r.fqir[idx])*idz)*dt_sub*irho;
             r.qib[idx]=r.qib[idx]+((r.fbir[below]-r.fbir[idx])*idz)*dt_sub*irho;
@@ -163,5 +163,5 @@ kernel void p3_sed_ice(
         if (kbot!=0) kbot=kbot-1;
     }
     r.prt_sol[column]=r.prt_sol[column]
-        +prt_accum*P3_INV_RHOW*(1.0f/p.dt);
+        +prt_accum*P3_INV_RHOW*(p3_div_rn(1.0f,p.dt));
 }

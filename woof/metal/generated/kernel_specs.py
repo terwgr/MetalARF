@@ -2383,7 +2383,7 @@ P3_FINAL_SHAPES = (('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),)),
 P3_FINAL_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('xxlv', 'ctypes.c_float'), ('xxls', 'ctypes.c_float')]
 P3_FINAL_THREADS_PER_GROUP = 128
 P3_FINAL_LAYOUT_HASH = '4decbca6a0770f93593aea767f589b72a8b18c1a5f78cb7b172a55c3921ba306'
-P3_FINAL_SHADER_HASH = '4e247d59c87c8f53b6d719a664cd33efa7023f94b96800c4388806e937a5a85e'
+P3_FINAL_SHADER_HASH = 'ade4b36dfc22f45b666097693c8c6b61f4fbfc72420616ba26964f9d17ba708a'
 
 P3_HOMOFREEZE_RESOURCES = (('theta', 'float', 'read_write'), ('temperature', 'float', 'read'), ('tmparr1', 'float', 'read'), ('qv', 'float', 'read'), ('qv_cld', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('flags', 'float', 'read'), ('constants', 'float', 'read'))
 P3_HOMOFREEZE_ACCESS = ('read_write', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read')
@@ -2399,7 +2399,7 @@ P3_KLOOP1_SHAPES = (('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),))
 P3_KLOOP1_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('log_predict_nc', 'ctypes.c_int32'), ('xxlv', 'ctypes.c_float'), ('xxls', 'ctypes.c_float'), ('xlf', 'ctypes.c_float')]
 P3_KLOOP1_THREADS_PER_GROUP = 128
 P3_KLOOP1_LAYOUT_HASH = '98f45b26da624180b8f0aa2412acd01e1db8271b43c691a071c324ee1219f262'
-P3_KLOOP1_SHADER_HASH = '39db3af4874948dfc26b163c3a4def2652a8eb30f4b79446b478961e710d95cf'
+P3_KLOOP1_SHADER_HASH = '3bc59a8aa85e351b6bb17712bb27e43d59614782fc0bbdb56c1788f4171e7e34'
 
 P3_KLOOPMAIN_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('th_old', 'float', 'read'), ('qv_old', 'float', 'read'), ('ssat', 'float', 'read_write'), ('pressure', 'float', 'read'), ('rho', 'float', 'read_write'), ('inv_rho', 'float', 'read_write'), ('qvs', 'float', 'read_write'), ('qvi', 'float', 'read_write'), ('sup', 'float', 'read_write'), ('supi', 'float', 'read_write'), ('rhofacr', 'float', 'read_write'), ('rhofaci', 'float', 'read_write'), ('acn', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('tmparr1', 'float', 'read_write'), ('qv_cld', 'float', 'read_write'), ('flags', 'float', 'read_write'), ('constants', 'float', 'read'), ('itab', 'float', 'read'), ('icoll', 'float', 'read'), ('revap', 'float', 'read'))
 P3_KLOOPMAIN_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read')
@@ -2407,7 +2407,7 @@ P3_KLOOPMAIN_SHAPES = (('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx')
 P3_KLOOPMAIN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('it', 'ctypes.c_int32'), ('log_predict_nc', 'ctypes.c_int32'), ('clbfact_dep', 'ctypes.c_float'), ('clbfact_sub', 'ctypes.c_float'), ('xxlv', 'ctypes.c_float'), ('xxls', 'ctypes.c_float'), ('xlf', 'ctypes.c_float')]
 P3_KLOOPMAIN_THREADS_PER_GROUP = 128
 P3_KLOOPMAIN_LAYOUT_HASH = '26577dbc3ea06b4547bbb65f96ca84665c2aa5076bc778b53c1694d5fe04b58b'
-P3_KLOOPMAIN_SHADER_HASH = 'c4fa224d3b56c5e22238a8b4d7ff0c2685252619970d1186be97072522f449ef'
+P3_KLOOPMAIN_SHADER_HASH = '76d06a1851780d9352801574bc20b254cceb3bf61249412e5d4d66491f00496b'
 
 P3_SAVEOLD_PRECIP_RESOURCES = (('theta', 'float', 'read'), ('qv', 'float', 'read'), ('th_old', 'float', 'read_write'), ('qv_old', 'float', 'read_write'), ('prt_liq', 'float', 'read'), ('prt_sol', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('sr', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'))
 P3_SAVEOLD_PRECIP_ACCESS = ('read', 'read', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2423,7 +2423,7 @@ P3_SED_CLOUD_SHAPES = (('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx')
 P3_SED_CLOUD_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('log_predict_nc', 'ctypes.c_int32')]
 P3_SED_CLOUD_THREADS_PER_GROUP = 128
 P3_SED_CLOUD_LAYOUT_HASH = '64a50f0ac5b4b46bd5310cbef59082ec0c73733ce7e6915eb360f8920905699b'
-P3_SED_CLOUD_SHADER_HASH = 'fa7e9f62e8f36d5f2d50a9fbb4cbf4220c2ef90a668813a4b4249a2c36e8ebbb'
+P3_SED_CLOUD_SHADER_HASH = '24f1252425803e8d4dd7cc4d7a2f6a49e90d1d019e6d855152bb4b74393f4508'
 
 P3_SED_ICE_RESOURCES = (('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('dz', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('rhofaci', 'float', 'read'), ('vq', 'float', 'read_write'), ('vn', 'float', 'read_write'), ('fq', 'float', 'read_write'), ('fn', 'float', 'read_write'), ('fqir', 'float', 'read_write'), ('fbir', 'float', 'read_write'), ('itab', 'float', 'read'), ('prt_sol', 'float', 'read_write'), ('flags', 'float', 'read'), ('constants', 'float', 'read'))
 P3_SED_ICE_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read')
@@ -2431,7 +2431,7 @@ P3_SED_ICE_SHAPES = (('qi', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),
 P3_SED_ICE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float')]
 P3_SED_ICE_THREADS_PER_GROUP = 128
 P3_SED_ICE_LAYOUT_HASH = '61d7884d830dfce4312f7e56715e0adef93ca185cd86fa891a1edbe5ac151783'
-P3_SED_ICE_SHADER_HASH = 'df73c391aac22de9a506c39066efd26891d350ec86f45cd782352122e24297b2'
+P3_SED_ICE_SHADER_HASH = '5de4dacd280d6567e1f805fcc6bafda3625bfd90db28ee4325987e9c25fe00b1'
 
 P3_SED_RAIN_RESOURCES = (('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('dz', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('rhofacr', 'float', 'read'), ('vq', 'float', 'read_write'), ('vn', 'float', 'read_write'), ('fq', 'float', 'read_write'), ('fn', 'float', 'read_write'), ('vm_table', 'float', 'read'), ('vn_table', 'float', 'read'), ('prt_liq', 'float', 'read_write'), ('flags', 'float', 'read'), ('constants', 'float', 'read'))
 P3_SED_RAIN_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read')
@@ -2439,7 +2439,7 @@ P3_SED_RAIN_SHAPES = (('qr', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),
 P3_SED_RAIN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float')]
 P3_SED_RAIN_THREADS_PER_GROUP = 128
 P3_SED_RAIN_LAYOUT_HASH = 'b05eafaf8ccf655bba4486c96f1650307e6c585261cae03a84712700e49a3ff3'
-P3_SED_RAIN_SHADER_HASH = '5b0138470aa245a25390fe7b612b225cee8bdcaca82cfe94cdce8494f5f9763d'
+P3_SED_RAIN_SHADER_HASH = 'a8e236864e6cb1ed84ba597b8ecea3150396b9ba6635622abc9d54438b77545a'
 
 PD_FLUXES_RESOURCES = (('q', 'float', 'read'), ('q0', 'float', 'read'), ('ru', 'float', 'read'), ('rv', 'float', 'read'), ('rw', 'float', 'read'), ('mut', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('rdnw', 'float', 'read'), ('fnm', 'float', 'read'), ('fnp', 'float', 'read'), ('msft', 'float', 'read'), ('fxl', 'float', 'read_write'), ('fxc', 'float', 'read_write'), ('fyl', 'float', 'read_write'), ('fyc', 'float', 'read_write'), ('fzl', 'float', 'read_write'), ('fzc', 'float', 'read_write'))
 PD_FLUXES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')

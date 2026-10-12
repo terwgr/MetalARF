@@ -7,7 +7,7 @@ using namespace metal;
 
 // P3 k_loop_1 (module_mp_p3.F:2320-2411; p3.cu:651-780).  One invocation
 // owns one complete column, retaining its level order and source update
-// order. Native MSL pow replaces source-pinned r_pow.
+// order. Shared power follows the NumPy scalar authority.
 #pragma clang fp contract(off)
 
 static inline float p3_polysvp1(float t, int ice) {
@@ -23,7 +23,7 @@ static inline float p3_polysvp1(float t, int ice) {
                 * (a4 + dt * (a5 + dt * (a6 + dt * (a7 + a8 * dt)))))));
             return out * 100.0f;
         }
-        return pow(10.0f, -9.09718f * (273.16f / t - 1.0f)
+        return p3_pow(10.0f, -9.09718f * (273.16f / t - 1.0f)
             - 3.56654f * p3_log10(273.16f / t)
             + 0.876793f * (1.0f - t / 273.16f)
             + p3_log10(6.1071f)) * 100.0f;
@@ -39,10 +39,10 @@ static inline float p3_polysvp1(float t, int ice) {
             * (a4 + dt * (a5 + dt * (a6 + dt * (a7 + a8 * dt)))))));
         return out * 100.0f;
     }
-    return pow(10.0f, -7.90298f * (373.16f / t - 1.0f)
+    return p3_pow(10.0f, -7.90298f * (373.16f / t - 1.0f)
         + 5.02808f * p3_log10(373.16f / t)
-        - 1.3816e-7f * (pow(10.0f, 11.344f * (1.0f - t / 373.16f)) - 1.0f)
-        + 8.1328e-3f * (pow(10.0f, -3.49149f * (373.16f / t - 1.0f)) - 1.0f)
+        - 1.3816e-7f * (p3_pow(10.0f, 11.344f * (1.0f - t / 373.16f)) - 1.0f)
+        + 8.1328e-3f * (p3_pow(10.0f, -3.49149f * (373.16f / t - 1.0f)) - 1.0f)
         + p3_log10(1013.246f)) * 100.0f;
 }
 
@@ -83,9 +83,9 @@ kernel void p3_kloop1(
         const float supi = r.qv_old[idx] / qvi - 1.0f;
         r.sup[idx] = sup;
         r.supi[idx] = supi;
-        r.rhofacr[idx] = pow(P3_RHOSUR * inv_rho, 0.54f);
-        r.rhofaci[idx] = pow(P3_RHOSUI * inv_rho, 0.54f);
-        const float dum = 1.496e-6f * pow(t, 1.5f) / (t + 120.0f);
+        r.rhofacr[idx] = p3_pow(P3_RHOSUR * inv_rho, 0.54f);
+        r.rhofaci[idx] = p3_pow(P3_RHOSUI * inv_rho, 0.54f);
+        const float dum = 1.496e-6f * p3_pow(t, 1.5f) / (t + 120.0f);
         r.acn[idx] = P3_G * P3_RHOW / (18.0f * dum);
         if (p.log_predict_nc == 0) r.nc[idx] = P3_NCCNST * inv_rho;
 
