@@ -2,6 +2,7 @@
 #include "p3_kloopmain_bindings.metalh"
 #include "p3_constants.metalh"
 #include "p3_math.metalh"
+#include "soft_binary32.metalh"
 #include "soft_gfk_tgamma.metalh"
 using namespace metal;
 // P3's k_loop_main process rates, conservation limits, and prognostic update
@@ -664,30 +665,21 @@ static inline int p3_step_kloopmain_levels(constant P3KloopmainResources &r, con
 
             // immersion freezing of droplets (:2984-3015)
             //
-            // OVERFLOW RESCUE, and the divergence is exactly the overflowing
-            // case.  WRF's left-to-right single-precision chain
-            // cons6*gamma*tmp1*dum**2 reaches 4.8e45 on the partial product
-            // at t = 198.99 K / cdist1 = 3.394e5 / mu_c = 12.576 /
-            // lamc = 1.6846e4 -- MEASURED, in the cell that took a real 6 h
-            // forecast non-finite at step 284 -- while the mathematical
-            // result 4.4e19 is an ordinary float.  The +Inf then meets the
-            // conservation limiter at :3571-3583, ratio = sources/sinks is
-            // 0, and Inf*0 is the NaN that reached theta and vapour.
-            // Fortran does not fix the association of a*b*c*d, so WRF is
-            // UNDEFINED here rather than authoritative; P3's own authors
-            // left the double form commented out at :2999-3002.  The float
-            // chain runs first and unchanged, so every representable value
-            // is still WRF's bit for bit.  Mirrors
-            // gpuwm/core/p3.py _rescue_overflowed_product exactly.
+            // CUDA groups the float32 inner square before multiplying the
+            // prefactor. Evaluate its rounding in integer bits so a
+            // subnormal square survives Metal FTZ; retain the soft64 rescue
+            // for nonfinite results.
             if (qc[(k) * ncol + i] >= P3_QSMALL && t <= 269.15f) {
                 float d = 1.0f / lamc;
                 dum = (d * d) * d;                                   // :2988 int **3
                 tmp1 = cdist1 * exp(P3_AIMM * (273.15f - t));
                 float gam_q = p3_gam(7.0f + mu_c);
                 float gam_n = p3_gam(mu_c + 4.0f);
-                float Q_nuc = P3_CONS6 * gam_q * tmp1;
-                Q_nuc = Q_nuc * dum;
-                Q_nuc = Q_nuc * dum;                                 // :2995 int **2
+                const float Q_prefactor = P3_CONS6 * gam_q * tmp1;
+                const uint dum_squared = soft32_mul(
+                    as_type<uint>(dum), as_type<uint>(dum));
+                float Q_nuc = as_type<float>(soft32_mul(
+                    as_type<uint>(Q_prefactor), dum_squared));       // :2995 int **2
                 float N_nuc = P3_CONS5 * gam_n * tmp1 * dum;
                 if (!isfinite(Q_nuc) || !isfinite(N_nuc)) {
                     // The argument is built in FLOAT32 and only the exp is

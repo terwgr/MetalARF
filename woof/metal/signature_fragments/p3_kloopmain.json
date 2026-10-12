@@ -50,7 +50,7 @@
       ],
       "threads_per_group": 128,
       "layout_version": 1,
-      "arithmetic_policies": ["default"]
+      "arithmetic_policies": ["float32_ordered", "soft32_mul"]
     }
   ]
 }

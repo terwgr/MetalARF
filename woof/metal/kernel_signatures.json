@@ -46156,7 +46156,8 @@
       "threads_per_group": 128,
       "layout_version": 1,
       "arithmetic_policies": [
-        "default"
+        "float32_ordered",
+        "soft_glibc_2_39_pow"
       ]
     },
     {
@@ -47496,7 +47497,8 @@
       "threads_per_group": 128,
       "layout_version": 1,
       "arithmetic_policies": [
-        "default"
+        "float32_ordered",
+        "soft32_mul"
       ]
     },
     {

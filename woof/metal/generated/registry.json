@@ -4794,18 +4794,19 @@
     },
     {
       "arithmetic_policies": [
-        "default"
+        "float32_ordered",
+        "soft_glibc_2_39_pow"
       ],
       "cuda_source": "woof/core/kernels/p3.cu",
       "cuda_symbol": "p3k_prep",
-      "layout_hash": "ca6743cab43b27b3df6f5a20a6412f2a28a71de0e3c46de68ff079af5e0309a4",
+      "layout_hash": "34e9ff440acff227a599d27665ef098dafc4b28ea00d6447d19cca0acf1f421c",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/p3_entry.metal",
       "module": "p3_entry",
       "name": "p3_entry_prepare",
       "parameter_size": 52,
       "resource_count": 15,
-      "shader_hash": "fd1a46f99c389df6149a1761c3e3c87bfeee9eba37c671c07a3ff4118203cb5d",
+      "shader_hash": "4f1a4bb141d4355a92eb6af407805fb3e0a35c6ddcfdab4caebdabf7f12705af",
       "threads_per_group": 128
     },
     {
@@ -4858,18 +4859,19 @@
     },
     {
       "arithmetic_policies": [
-        "default"
+        "float32_ordered",
+        "soft32_mul"
       ],
       "cuda_source": "woof/core/kernels/p3.cu",
       "cuda_symbol": "p3_step_kloopmain_levels",
-      "layout_hash": "405ce56c1ba7b1d07ec14867884dc13f6e97038d79dbec31b11ed8e2f8ce06c5",
+      "layout_hash": "26577dbc3ea06b4547bbb65f96ca84665c2aa5076bc778b53c1694d5fe04b58b",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/p3_kloopmain.metal",
       "module": "p3_kloopmain",
       "name": "p3_kloopmain",
       "parameter_size": 44,
       "resource_count": 31,
-      "shader_hash": "7a1026cf69abd6c23bfbb6cd7483984d4c263c7f0c94721737711bd8322b5069",
+      "shader_hash": "c4fa224d3b56c5e22238a8b4d7ff0c2685252619970d1186be97072522f449ef",
       "threads_per_group": 128
     },
     {

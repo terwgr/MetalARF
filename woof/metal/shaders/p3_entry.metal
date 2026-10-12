@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#include "soft_gfk_pow.metalh"
 #include "p3_entry_prepare_bindings.metalh"
 
 using namespace metal;
@@ -6,8 +7,7 @@ using namespace metal;
 // P3's WRF wrapper entry initialization (module_mp_p3.F:2270-2288) and
 // p3_step_prep_levels (p3.cu:620-643).  A thread owns one horizontal
 // column, so its level loop preserves the source's independent column order.
-// The source uses the repository-pinned r_pow; native MSL pow below is an
-// ordinary-mode translation whose CUDA libm identity is not established.
+// The source uses the repository-pinned r_pow implementation.
 #pragma clang fp contract(off)
 
 kernel void p3_entry_prepare(
@@ -21,10 +21,10 @@ kernel void p3_entry_prepare(
     for (uint k = 0; k < nz; ++k) {
         const ulong idx = ulong(k) * ulong(ncol) + ulong(column);
         // Keep the source multiply before exponentiation and the separate
-        // theta-times-Exner store.  This is the only unresolved libm edge in
-        // this entry slice; later P3 processing is not implied by this kernel.
+        // theta-times-Exner store.
         const float scaled_pressure = r.pressure[idx] * p.pressure_scale;
-        const float tm = pow(scaled_pressure, p.exponent);
+        const float tm = as_type<float>(soft_gfk_pow_bits(
+            as_type<uint>(scaled_pressure), as_type<uint>(p.exponent)));
         r.tmparr1[idx] = tm;
         r.temperature[idx] = r.theta[idx] * tm;
         // WRF moist_physics_prep_em parks this same full theta before the
