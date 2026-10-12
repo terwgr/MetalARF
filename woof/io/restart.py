@@ -525,6 +525,10 @@ STATE_INFRA_ATTRS = frozenset({
     # RestartManifestError and no mp=50 forecast could reach its first
     # history frame or write any checkpoint at all.
     "_p3_workspace",
+    # Metal mirrors of p3_init's immutable lookup tables, keyed by context.
+    # Recreated on the first P3 call after restore; table bytes and generated
+    # rain-table code are already validated by _p3_setup_identity below.
+    "_p3_metal_tables",
 
     # Metal full-state health reduction's cached dispatch table and scratch
     # buffers (woof/metal/health_family.py).  The key is rebuilt from the
@@ -780,6 +784,11 @@ REBUILT_SCRATCH_SLOTS = frozenset({
     "p3_sed_flux_qir", "p3_sed_flux_bir",
     "p3_flags", "p3_nc", "p3_ssat", "p3_effc", "p3_effi",
     "p3_prt_liq", "p3_prt_sol",
+    # Metal P3 preparation, diagnostics and sedimentation work buffers.
+    # Preparation/entry overwrite the first group each call; sedimentation
+    # initializes all velocities and fluxes before any active-column read.
+    "p3_theta", "p3_pii", "p3_dz", "p3_z8w", "p3_temperature", "p3_zdbz",
+    "p3_v_q", "p3_v_n", "p3_flux_q", "p3_flux_n", "p3_flux_qir", "p3_flux_bir",
     "nssl2_driver_state", "nssl2_driver_surface_export",
     "nssl2_driver_ignored_accumulator",
     "nssl2_fused_temperature", "nssl2_primary_ice_target",

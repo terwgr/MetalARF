@@ -4,6 +4,8 @@
 
 - Parameterize P3 Metal physics constants, preserve cold immersion-freezing mass rates,
   and restore exact NumPy parity on the complete tiny and cold regression profiles.
+- Classify the P3 Metal table cache and per-call work buffers for restart bookkeeping,
+  allowing MP50 forecasts to publish history frames through the public CLI.
 
 ## MetalARF 1.0.2
 
