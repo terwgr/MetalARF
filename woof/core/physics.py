@@ -819,6 +819,9 @@ METAL_FAMILY_CAPS = {
 
 
 METAL_KNOWN_CONFLICTS = (
+    ("tke_budget=1 has no Metal implementation",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(getattr(cfg, "tke_budget", 0)) != 0),
     ("WRF_EXACT has no Metal physics callers",
      lambda cfg, radiation, cumulus, cam_ozone:
      _metal_wrf_exact_enabled()),
