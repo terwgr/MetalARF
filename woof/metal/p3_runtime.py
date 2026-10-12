@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .array import MetalArrayModule
+from .p3_constants import p3_constant_values, p3_latent_heat_values
 from .p3_entry import submit_p3_entry_prepare
 from .p3_final import submit_p3_final
 from .p3_homofreeze import submit_p3_homofreeze
@@ -30,6 +32,12 @@ def run_p3_metal(fields: dict, scratch: dict, diagnostics: dict,
     if "theta" not in fields and "th" in fields:
         fields["theta"] = fields.pop("th")
     flags = scratch["flags"]
+    context = tables.itab.buffer.context
+    constants = getattr(tables, "metal_constants", None)
+    if constants is None or constants.buffer.context is not context:
+        constants = MetalArrayModule(context).asarray(p3_constant_values())
+        tables.metal_constants = constants
+    xxlv, xxls, xlf = p3_latent_heat_values()
     fields["ssat"].fill(0.0)
     submit_p3_entry_prepare(
         theta=fields["theta"], pressure=fields["pressure"], qv=fields["qv"],
@@ -42,26 +50,33 @@ def run_p3_metal(fields: dict, scratch: dict, diagnostics: dict,
         flags=flags, exponent=exponent)
 
     submit_p3_kloop1(fields=fields, scratch=scratch, flags=flags,
+                     constants=constants, xxlv=xxlv, xxls=xxls, xlf=xlf,
                      log_predict_nc=log_predict_nc)
     submit_p3_kloopmain(
         fields=fields, scratch=scratch, flags=flags,
         itab=tables.itab, icoll=tables.itabcoll,
-        revap=tables.revap_table, dt=dt, it=it,
+        revap=tables.revap_table, constants=constants,
+        xxlv=xxlv, xxls=xxls, xlf=xlf, dt=dt, it=it,
         log_predict_nc=log_predict_nc,
         clbfact_dep=clbfact_dep, clbfact_sub=clbfact_sub)
     submit_p3_sed_cloud(
         fields=fields, scratch=scratch, prt_liq=surfaces["prt_liq"],
-        flags=flags, dt=dt, log_predict_nc=log_predict_nc)
+        flags=flags, constants=constants, dt=dt,
+        log_predict_nc=log_predict_nc)
     submit_p3_sed_rain(
         fields=fields, scratch=scratch, vm_table=tables.vm_table,
         vn_table=tables.vn_table, prt_liq=surfaces["prt_liq"],
+        constants=constants,
         flags=flags, dt=dt)
     submit_p3_sed_ice(
         fields=fields, scratch=scratch, itab=tables.itab,
-        prt_sol=surfaces["prt_sol"], flags=flags, dt=dt)
-    submit_p3_homofreeze(fields=fields, scratch=scratch, flags=flags)
+        prt_sol=surfaces["prt_sol"], flags=flags, constants=constants,
+        dt=dt)
+    submit_p3_homofreeze(fields=fields, scratch=scratch, flags=flags,
+                         constants=constants, xlf=xlf)
     submit_p3_final(fields=fields, scratch=scratch, diagnostics=diagnostics,
-                    itab=tables.itab, flags=flags)
+                    itab=tables.itab, flags=flags, constants=constants,
+                    xxlv=xxlv, xxls=xxls)
     submit_p3_saveold_precip(
         theta=fields["theta"], qv=fields["qv"],
         th_old=fields["th_old"], qv_old=fields["qv_old"],

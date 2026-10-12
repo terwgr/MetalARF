@@ -45912,32 +45912,11 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": [
-        "default"
-      ],
+      "name": "p3_entry_prepare",
+      "module": "p3_entry",
+      "source": "woof/metal/shaders/p3_entry.metal",
       "cuda_source": "woof/core/kernels/p3.cu",
       "cuda_symbol": "p3k_prep",
-      "layout_version": 1,
-      "module": "p3_entry",
-      "name": "p3_entry_prepare",
-      "parameters": [
-        [
-          "nz",
-          "int32"
-        ],
-        [
-          "ny",
-          "int32"
-        ],
-        [
-          "nx",
-          "int32"
-        ],
-        [
-          "exponent",
-          "float32"
-        ]
-      ],
       "resources": [
         [
           "theta",
@@ -46016,7 +45995,49 @@
         ]
       ],
       "shapes": {
-        "di": [
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_diabatic": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tmparr1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "zdbz": [
           [
             "nz",
             "ny",
@@ -46037,21 +46058,21 @@
             "nx"
           ]
         ],
-        "flags": [
-          [
-            2,
-            "ny",
-            "nx"
-          ]
-        ],
-        "h_diabatic": [
+        "vmi": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "pressure": [
+        "di": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rhopo": [
           [
             "nz",
             "ny",
@@ -46070,68 +46091,14 @@
             "nx"
           ]
         ],
-        "qv": [
+        "flags": [
           [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "rhopo": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "temperature": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "theta": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "tmparr1": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "vmi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "zdbz": [
-          [
-            "nz",
+            2,
             "ny",
             "nx"
           ]
         ]
       },
-      "source": "woof/metal/shaders/p3_entry.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/core/kernels/p3.cu",
-      "cuda_symbol": "p3k_final",
-      "layout_version": 1,
-      "module": "p3_final",
-      "name": "p3_final",
       "parameters": [
         [
           "nz",
@@ -46144,8 +46111,61 @@
         [
           "nx",
           "int32"
+        ],
+        [
+          "exponent",
+          "float32"
+        ],
+        [
+          "pressure_scale",
+          "float32"
+        ],
+        [
+          "zdbz_default",
+          "float32"
+        ],
+        [
+          "effc_default",
+          "float32"
+        ],
+        [
+          "effi_default",
+          "float32"
+        ],
+        [
+          "vmi_default",
+          "float32"
+        ],
+        [
+          "di_default",
+          "float32"
+        ],
+        [
+          "rhopo_default",
+          "float32"
+        ],
+        [
+          "prt_liq_default",
+          "float32"
+        ],
+        [
+          "prt_sol_default",
+          "float32"
         ]
       ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "float32_ordered",
+        "soft_glibc_2_39_pow"
+      ]
+    },
+    {
+      "name": "p3_final",
+      "module": "p3_final",
+      "source": "woof/metal/shaders/p3_final.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_final",
       "resources": [
         [
           "qc",
@@ -46261,10 +46281,120 @@
           "flags",
           "float",
           "read"
+        ],
+        [
+          "constants",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
-        "di": [
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qir": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qib": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tmparr1": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "inv_rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rhofaci": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "zdbz": [
           [
             "nz",
             "ny",
@@ -46285,96 +46415,14 @@
             "nx"
           ]
         ],
-        "flags": [
-          [
-            2,
-            "ny",
-            "nx"
-          ]
-        ],
-        "inv_rho": [
+        "vmi": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "itab": [
-          [
-            14000
-          ]
-        ],
-        "nc": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "ni": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "nr": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qc": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qib": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qir": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qr": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qv": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "rho": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "rhofaci": [
+        "di": [
           [
             "nz",
             "ny",
@@ -46388,54 +46436,24 @@
             "nx"
           ]
         ],
-        "temperature": [
+        "itab": [
           [
-            "nz",
+            14000
+          ]
+        ],
+        "flags": [
+          [
+            2,
             "ny",
             "nx"
           ]
         ],
-        "theta": [
+        "constants": [
           [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "tmparr1": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "vmi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "zdbz": [
-          [
-            "nz",
-            "ny",
-            "nx"
+            52
           ]
         ]
       },
-      "source": "woof/metal/shaders/p3_final.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/core/kernels/p3.cu",
-      "cuda_symbol": "p3k_homofreeze",
-      "layout_version": 1,
-      "module": "p3_homofreeze",
-      "name": "p3_homofreeze",
       "parameters": [
         [
           "nz",
@@ -46448,8 +46466,28 @@
         [
           "nx",
           "int32"
+        ],
+        [
+          "xxlv",
+          "float32"
+        ],
+        [
+          "xxls",
+          "float32"
         ]
       ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "p3_homofreeze",
+      "module": "p3_homofreeze",
+      "source": "woof/metal/shaders/p3_homofreeze.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_homofreeze",
       "resources": [
         [
           "theta",
@@ -46520,66 +46558,29 @@
           "flags",
           "float",
           "read"
+        ],
+        [
+          "constants",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
-        "flags": [
-          [
-            2,
-            "ny",
-            "nx"
-          ]
-        ],
-        "nc": [
+        "theta": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "ni": [
+        "temperature": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "nr": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qc": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qib": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qir": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qr": [
+        "tmparr1": [
           [
             "nz",
             "ny",
@@ -46600,40 +46601,75 @@
             "nx"
           ]
         ],
-        "temperature": [
+        "qc": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "theta": [
+        "nc": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "tmparr1": [
+        "qr": [
           [
             "nz",
             "ny",
             "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qir": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qib": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "flags": [
+          [
+            2,
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            52
           ]
         ]
       },
-      "source": "woof/metal/shaders/p3_homofreeze.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/core/kernels/p3.cu",
-      "cuda_symbol": "p3k_kloop1",
-      "layout_version": 1,
-      "module": "p3_kloop1",
-      "name": "p3_kloop1",
       "parameters": [
         [
           "nz",
@@ -46648,10 +46684,22 @@
           "int32"
         ],
         [
-          "log_predict_nc",
-          "int32"
+          "xlf",
+          "float32"
         ]
       ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "p3_kloop1",
+      "module": "p3_kloop1",
+      "source": "woof/metal/shaders/p3_kloop1.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_kloop1",
       "resources": [
         [
           "qc",
@@ -46787,24 +46835,15 @@
           "flags",
           "float",
           "read_write"
+        ],
+        [
+          "constants",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
-        "acn": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "flags": [
-          [
-            2,
-            "ny",
-            "nx"
-          ]
-        ],
-        "inv_rho": [
+        "qc": [
           [
             "nz",
             "ny",
@@ -46818,7 +46857,7 @@
             "nx"
           ]
         ],
-        "ni": [
+        "qr": [
           [
             "nz",
             "ny",
@@ -46832,28 +46871,7 @@
             "nx"
           ]
         ],
-        "pressure": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qc": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
         "qi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qib": [
           [
             "nz",
             "ny",
@@ -46867,7 +46885,21 @@
             "nx"
           ]
         ],
-        "qr": [
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qib": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
           [
             "nz",
             "ny",
@@ -46881,7 +46913,7 @@
             "nx"
           ]
         ],
-        "qv_cld": [
+        "th_old": [
           [
             "nz",
             "ny",
@@ -46895,14 +46927,28 @@
             "nx"
           ]
         ],
-        "qvi": [
+        "ssat": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "qvs": [
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tmparr1": [
           [
             "nz",
             "ny",
@@ -46916,21 +46962,21 @@
             "nx"
           ]
         ],
-        "rhofaci": [
+        "inv_rho": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "rhofacr": [
+        "qvs": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "ssat": [
+        "qvi": [
           [
             "nz",
             "ny",
@@ -46951,14 +46997,297 @@
             "nx"
           ]
         ],
-        "temperature": [
+        "rhofacr": [
           [
             "nz",
             "ny",
             "nx"
           ]
         ],
-        "th_old": [
+        "rhofaci": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "acn": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv_cld": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "flags": [
+          [
+            2,
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            52
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "log_predict_nc",
+          "int32"
+        ],
+        [
+          "xxlv",
+          "float32"
+        ],
+        [
+          "xxls",
+          "float32"
+        ],
+        [
+          "xlf",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "p3_kloopmain",
+      "module": "p3_kloopmain",
+      "source": "woof/metal/shaders/p3_kloopmain.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3_step_kloopmain_levels",
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "nc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qr",
+          "float",
+          "read_write"
+        ],
+        [
+          "nr",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "qir",
+          "float",
+          "read_write"
+        ],
+        [
+          "ni",
+          "float",
+          "read_write"
+        ],
+        [
+          "qib",
+          "float",
+          "read_write"
+        ],
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv",
+          "float",
+          "read_write"
+        ],
+        [
+          "th_old",
+          "float",
+          "read"
+        ],
+        [
+          "qv_old",
+          "float",
+          "read"
+        ],
+        [
+          "ssat",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read_write"
+        ],
+        [
+          "inv_rho",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvs",
+          "float",
+          "read_write"
+        ],
+        [
+          "qvi",
+          "float",
+          "read_write"
+        ],
+        [
+          "sup",
+          "float",
+          "read_write"
+        ],
+        [
+          "supi",
+          "float",
+          "read_write"
+        ],
+        [
+          "rhofacr",
+          "float",
+          "read_write"
+        ],
+        [
+          "rhofaci",
+          "float",
+          "read_write"
+        ],
+        [
+          "acn",
+          "float",
+          "read_write"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ],
+        [
+          "tmparr1",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv_cld",
+          "float",
+          "read_write"
+        ],
+        [
+          "flags",
+          "float",
+          "read_write"
+        ],
+        [
+          "constants",
+          "float",
+          "read"
+        ],
+        [
+          "itab",
+          "float",
+          "read"
+        ],
+        [
+          "icoll",
+          "float",
+          "read"
+        ],
+        [
+          "revap",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qir": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qib": [
           [
             "nz",
             "ny",
@@ -46972,26 +47301,153 @@
             "nx"
           ]
         ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "th_old": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv_old": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ssat": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "inv_rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qvs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qvi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sup": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "supi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rhofacr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rhofaci": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "acn": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
         "tmparr1": [
           [
             "nz",
             "ny",
             "nx"
           ]
+        ],
+        "qv_cld": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "flags": [
+          [
+            2,
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            52
+          ]
+        ],
+        "itab": [
+          [
+            14000
+          ]
+        ],
+        "icoll": [
+          [
+            60000
+          ]
+        ],
+        "revap": [
+          [
+            3000
+          ]
         ]
       },
-      "source": "woof/metal/shaders/p3_kloop1.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/core/kernels/p3.cu",
-      "cuda_symbol": "p3_step_kloopmain_levels",
-      "layout_version": 1,
-      "module": "p3_kloopmain",
-      "name": "p3_kloopmain",
       "parameters": [
         [
           "nz",
@@ -47024,396 +47480,33 @@
         [
           "clbfact_sub",
           "float32"
-        ]
-      ],
-      "resources": [
-        [
-          "qc",
-          "float",
-          "read_write"
         ],
         [
-          "nc",
-          "float",
-          "read_write"
+          "xxlv",
+          "float32"
         ],
         [
-          "qr",
-          "float",
-          "read_write"
+          "xxls",
+          "float32"
         ],
         [
-          "nr",
-          "float",
-          "read_write"
-        ],
-        [
-          "qi",
-          "float",
-          "read_write"
-        ],
-        [
-          "qir",
-          "float",
-          "read_write"
-        ],
-        [
-          "ni",
-          "float",
-          "read_write"
-        ],
-        [
-          "qib",
-          "float",
-          "read_write"
-        ],
-        [
-          "theta",
-          "float",
-          "read_write"
-        ],
-        [
-          "qv",
-          "float",
-          "read_write"
-        ],
-        [
-          "th_old",
-          "float",
-          "read"
-        ],
-        [
-          "qv_old",
-          "float",
-          "read"
-        ],
-        [
-          "ssat",
-          "float",
-          "read_write"
-        ],
-        [
-          "pressure",
-          "float",
-          "read"
-        ],
-        [
-          "rho",
-          "float",
-          "read_write"
-        ],
-        [
-          "inv_rho",
-          "float",
-          "read_write"
-        ],
-        [
-          "qvs",
-          "float",
-          "read_write"
-        ],
-        [
-          "qvi",
-          "float",
-          "read_write"
-        ],
-        [
-          "sup",
-          "float",
-          "read_write"
-        ],
-        [
-          "supi",
-          "float",
-          "read_write"
-        ],
-        [
-          "rhofacr",
-          "float",
-          "read_write"
-        ],
-        [
-          "rhofaci",
-          "float",
-          "read_write"
-        ],
-        [
-          "acn",
-          "float",
-          "read_write"
-        ],
-        [
-          "temperature",
-          "float",
-          "read_write"
-        ],
-        [
-          "tmparr1",
-          "float",
-          "read_write"
-        ],
-        [
-          "qv_cld",
-          "float",
-          "read_write"
-        ],
-        [
-          "flags",
-          "float",
-          "read_write"
-        ],
-        [
-          "itab",
-          "float",
-          "read"
-        ],
-        [
-          "icoll",
-          "float",
-          "read"
-        ],
-        [
-          "revap",
-          "float",
-          "read"
-        ]
-      ],
-      "shapes": {
-        "acn": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "flags": [
-          [
-            2,
-            "ny",
-            "nx"
-          ]
-        ],
-        "icoll": [
-          [
-            60000
-          ]
-        ],
-        "inv_rho": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "itab": [
-          [
-            14000
-          ]
-        ],
-        "nc": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "ni": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "nr": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "pressure": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qc": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qib": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qir": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qr": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qv": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qv_cld": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qv_old": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qvi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qvs": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "revap": [
-          [
-            3000
-          ]
-        ],
-        "rho": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "rhofaci": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "rhofacr": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "ssat": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "sup": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "supi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "temperature": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "th_old": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "theta": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "tmparr1": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ]
-      },
-      "source": "woof/metal/shaders/p3_kloopmain.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/core/kernels/p3.cu",
-      "cuda_symbol": "p3k_saveold_precip",
-      "layout_version": 1,
-      "module": "p3_saveold_precip",
-      "name": "p3_saveold_precip",
-      "parameters": [
-        [
-          "nz",
-          "int32"
-        ],
-        [
-          "ny",
-          "int32"
-        ],
-        [
-          "nx",
-          "int32"
-        ],
-        [
-          "dt",
+          "xlf",
           "float32"
         ]
       ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "float32_ordered",
+        "soft32_mul"
+      ]
+    },
+    {
+      "name": "p3_saveold_precip",
+      "module": "p3_saveold_precip",
+      "source": "woof/metal/shaders/p3_saveold_precip.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_saveold_precip",
       "resources": [
         [
           "theta",
@@ -47472,14 +47565,9 @@
         ]
       ],
       "shapes": {
-        "prt_liq": [
+        "theta": [
           [
-            "ny",
-            "nx"
-          ]
-        ],
-        "prt_sol": [
-          [
+            "nz",
             "ny",
             "nx"
           ]
@@ -47491,9 +47579,28 @@
             "nx"
           ]
         ],
+        "th_old": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
         "qv_old": [
           [
             "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "prt_liq": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "prt_sol": [
+          [
             "ny",
             "nx"
           ]
@@ -47510,6 +47617,12 @@
             "nx"
           ]
         ],
+        "sr": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
         "snownc": [
           [
             "ny",
@@ -47521,40 +47634,8 @@
             "ny",
             "nx"
           ]
-        ],
-        "sr": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "th_old": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "theta": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
         ]
       },
-      "source": "woof/metal/shaders/p3_saveold_precip.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/core/kernels/p3.cu",
-      "cuda_symbol": "p3k_sed_cloud",
-      "layout_version": 1,
-      "module": "p3_sed_cloud",
-      "name": "p3_sed_cloud",
       "parameters": [
         [
           "nz",
@@ -47573,10 +47654,26 @@
           "float32"
         ],
         [
-          "log_predict_nc",
-          "int32"
+          "precip_scale",
+          "float32"
+        ],
+        [
+          "sr_denominator_floor",
+          "float32"
         ]
       ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "p3_sed_cloud",
+      "module": "p3_sed_cloud",
+      "source": "woof/metal/shaders/p3_sed_cloud.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_sed_cloud",
       "resources": [
         [
           "qc",
@@ -47637,45 +47734,15 @@
           "flags",
           "float",
           "read"
+        ],
+        [
+          "constants",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
-        "acn": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "dz": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "flags": [
-          [
-            2,
-            "ny",
-            "nx"
-          ]
-        ],
-        "fn": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "fq": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "inv_rho": [
+        "qc": [
           [
             "nz",
             "ny",
@@ -47689,13 +47756,7 @@
             "nx"
           ]
         ],
-        "prt_liq": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "qc": [
+        "dz": [
           [
             "nz",
             "ny",
@@ -47709,7 +47770,14 @@
             "nx"
           ]
         ],
-        "vn": [
+        "inv_rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "acn": [
           [
             "nz",
             "ny",
@@ -47722,20 +47790,47 @@
             "ny",
             "nx"
           ]
+        ],
+        "vn": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fq": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fn": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "prt_liq": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "flags": [
+          [
+            2,
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            52
+          ]
         ]
       },
-      "source": "woof/metal/shaders/p3_sed_cloud.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/core/kernels/p3.cu",
-      "cuda_symbol": "p3k_sed_ice",
-      "layout_version": 1,
-      "module": "p3_sed_ice",
-      "name": "p3_sed_ice",
       "parameters": [
         [
           "nz",
@@ -47752,8 +47847,24 @@
         [
           "dt",
           "float32"
+        ],
+        [
+          "log_predict_nc",
+          "int32"
         ]
       ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "p3_sed_ice",
+      "module": "p3_sed_ice",
+      "source": "woof/metal/shaders/p3_sed_ice.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_sed_ice",
       "resources": [
         [
           "qi",
@@ -47839,84 +47950,15 @@
           "flags",
           "float",
           "read"
+        ],
+        [
+          "constants",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
-        "dz": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "fbir": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "flags": [
-          [
-            2,
-            "ny",
-            "nx"
-          ]
-        ],
-        "fn": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "fq": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "fqir": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "inv_rho": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "itab": [
-          [
-            14000
-          ]
-        ],
-        "ni": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "prt_sol": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
         "qi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qib": [
           [
             "nz",
             "ny",
@@ -47930,7 +47972,35 @@
             "nx"
           ]
         ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qib": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
         "rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "inv_rho": [
           [
             "nz",
             "ny",
@@ -47944,6 +48014,13 @@
             "nx"
           ]
         ],
+        "vq": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
         "vn": [
           [
             "nz",
@@ -47951,26 +48028,58 @@
             "nx"
           ]
         ],
-        "vq": [
+        "fq": [
           [
             "nz",
             "ny",
             "nx"
           ]
+        ],
+        "fn": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fqir": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fbir": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "itab": [
+          [
+            14000
+          ]
+        ],
+        "prt_sol": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "flags": [
+          [
+            2,
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            52
+          ]
         ]
       },
-      "source": "woof/metal/shaders/p3_sed_ice.metal",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/core/kernels/p3.cu",
-      "cuda_symbol": "p3k_sed_rain",
-      "layout_version": 1,
-      "module": "p3_sed_rain",
-      "name": "p3_sed_rain",
       "parameters": [
         [
           "nz",
@@ -47989,6 +48098,18 @@
           "float32"
         ]
       ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "p3_sed_rain",
+      "module": "p3_sed_rain",
+      "source": "woof/metal/shaders/p3_sed_rain.metal",
+      "cuda_source": "woof/core/kernels/p3.cu",
+      "cuda_symbol": "p3k_sed_rain",
       "resources": [
         [
           "qr",
@@ -48059,38 +48180,15 @@
           "flags",
           "float",
           "read"
+        ],
+        [
+          "constants",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
-        "dz": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "flags": [
-          [
-            2,
-            "ny",
-            "nx"
-          ]
-        ],
-        "fn": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "fq": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "inv_rho": [
+        "qr": [
           [
             "nz",
             "ny",
@@ -48104,13 +48202,7 @@
             "nx"
           ]
         ],
-        "prt_liq": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "qr": [
+        "dz": [
           [
             "nz",
             "ny",
@@ -48124,7 +48216,42 @@
             "nx"
           ]
         ],
+        "inv_rho": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
         "rhofacr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "vq": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "vn": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fq": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fn": [
           [
             "nz",
             "ny",
@@ -48136,28 +48263,53 @@
             3000
           ]
         ],
-        "vn": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
         "vn_table": [
           [
             3000
           ]
         ],
-        "vq": [
+        "prt_liq": [
           [
-            "nz",
             "ny",
             "nx"
           ]
+        ],
+        "flags": [
+          [
+            2,
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            52
+          ]
         ]
       },
-      "source": "woof/metal/shaders/p3_sed_rain.metal",
-      "threads_per_group": 128
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
     },
     {
       "arithmetic_policies": [
@@ -132620,6 +132772,705 @@
       "layout_version": 1,
       "arithmetic_policies": [
         "default"
+      ]
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2.cu",
+      "cuda_symbol": "nssl2_effective_radius",
+      "layout_version": 1,
+      "module": "nssl2_diagnostics",
+      "name": "nssl2_effective_radius_registry_units",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "registry_unit_numbers",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "cloud_number",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "ice_number",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "snow_number",
+          "float",
+          "read"
+        ],
+        [
+          "re_cloud",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_ice",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_snow",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "air_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "cloud_number": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ice_number": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "re_cloud": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "re_ice": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "re_snow": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_number": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/nssl2_diagnostics.metal",
+      "threads_per_group": 256
+    },
+    {
+      "name": "da_air_density",
+      "module": "refl_family",
+      "source": "woof/metal/shaders/refl_family.metal",
+      "cuda_source": "woof/da/obsop.py",
+      "cuda_symbol": "_nssl_reflectivity",
+      "origin_kind": "python_fp32_expression",
+      "origin_expression": "air_density = 1.0 / state.alt",
+      "resources": [
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "air_density",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "air_density": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "fp32-output",
+        "fp32-rn-divide"
+      ]
+    },
+    {
+      "name": "da_observation_thermodynamics",
+      "module": "refl_family",
+      "source": "woof/metal/shaders/refl_family.metal",
+      "cuda_source": "woof/da/obsop.py",
+      "cuda_symbol": "_nssl_reflectivity",
+      "origin_kind": "python_fp32_expression",
+      "origin_expression": "(thb + thp) * power(pressure / P0, RCP)",
+      "resources": [
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "thb_3d",
+          "int32"
+        ],
+        [
+          "p0",
+          "float32"
+        ],
+        [
+          "rcp",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "fp32-output",
+        "fp32-power"
+      ]
+    },
+    {
+      "name": "milbrandt2_zet",
+      "module": "milbrandt2_zet",
+      "source": "woof/metal/shaders/milbrandt2_zet.metal",
+      "cuda_source": "woof/core/kernels/milbrandt2_zet.cu",
+      "cuda_symbol": "milbrandt2_zet",
+      "resources": [
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "qh",
+          "float",
+          "read"
+        ],
+        [
+          "nr",
+          "float",
+          "read"
+        ],
+        [
+          "ni",
+          "float",
+          "read"
+        ],
+        [
+          "ns",
+          "float",
+          "read"
+        ],
+        [
+          "ng",
+          "float",
+          "read"
+        ],
+        [
+          "nh",
+          "float",
+          "read"
+        ],
+        [
+          "refl",
+          "float",
+          "read_write"
+        ],
+        [
+          "ck",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "temperature": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pressure": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ni": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ns": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ng": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nh": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "refl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ck": [
+          [
+            "nck"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "concentration_space",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nck",
+          "int32"
+        ],
+        [
+          "eps_q",
+          "float32"
+        ],
+        [
+          "eps_n",
+          "float32"
+        ],
+        [
+          "dielectric_factor",
+          "float32"
+        ],
+        [
+          "z_factor",
+          "float32"
+        ],
+        [
+          "minimum_zet",
+          "float32"
+        ],
+        [
+          "trpl",
+          "float32"
+        ],
+        [
+          "rgas_d",
+          "float32"
+        ],
+        [
+          "dbz_scale",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "fp32-output",
+        "fp32-rn"
+      ]
+    },
+    {
+      "name": "refl10cm_wdm6_column",
+      "module": "wdm6_reflectivity",
+      "source": "woof/metal/shaders/wdm6_reflectivity.metal",
+      "cuda_source": "woof/core/kernels/wdm6_refl.cu",
+      "cuda_symbol": "refl10cm_wdm6_column",
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "nr",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "refl",
+          "float",
+          "read_write"
+        ],
+        [
+          "tables",
+          "uint64",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "nr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "refl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tables": [
+          [
+            295
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "software-binary64",
+        "software-complex128",
+        "fp32-output",
+        "software-libm-approximation-unverified"
       ]
     }
   ],

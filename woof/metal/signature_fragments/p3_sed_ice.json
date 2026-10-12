@@ -15,7 +15,7 @@
         ["fq", "float", "read_write"], ["fn", "float", "read_write"],
         ["fqir", "float", "read_write"], ["fbir", "float", "read_write"],
         ["itab", "float", "read"], ["prt_sol", "float", "read_write"],
-        ["flags", "float", "read"]
+        ["flags", "float", "read"], ["constants", "float", "read"]
       ],
       "shapes": {
         "qi": [["nz", "ny", "nx"]], "qir": [["nz", "ny", "nx"]],
@@ -26,7 +26,7 @@
         "fq": [["nz", "ny", "nx"]], "fn": [["nz", "ny", "nx"]],
         "fqir": [["nz", "ny", "nx"]], "fbir": [["nz", "ny", "nx"]],
         "itab": [[14000]], "prt_sol": [["ny", "nx"]],
-        "flags": [[2, "ny", "nx"]]
+        "flags": [[2, "ny", "nx"]], "constants": [[52]]
       },
       "parameters": [
         ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],

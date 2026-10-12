@@ -1,9 +1,55 @@
 # Changelog
 
+## MetalARF 1.0.3
+
+Integrates PRs #8, #14, #13, #9, #11, #10, #12, #16 and #15 in one
+release snapshot. The shared Metal bundle was rebuilt from the combined
+shader sources and checked against its source and asset hashes.
+
+Fixed:
+
+- Use integer longwave cloud-band indices with separate consumer caches;
+  preserve supplied initial GLW and SWDOWN and their declared provenance.
+  Correct cloudy results intentionally differ from the defective baseline.
+- Correct standalone Planck band lookup and derive its flavor-table size.
+- Initialize Thompson aerosols, supplied Noah categories and MYNN USTM.
+- Correct both UW boundary-layer index conversions and NSSL radiation-radius
+  density/unit conversion, floors and caps.
+- Route Thompson, Milbrandt–Yau, WDM6 and NSSL reflectivity through the
+  observation operator. Permit NSSL and WDM6 history reflectivity on Metal,
+  evaluating WDM6 at the evolved microphysics temperature.
+- Parameterize P3 constants, preserve cold immersion-freezing mass rates,
+  and classify P3 restart caches and work buffers.
+- Reject unsupported TKE budgets at initialization, direct stepping and
+  admission inspection. Smoke commands fail for crashes, NaNs, incomplete
+  sweeps and timeouts while expected unsupported combinations remain refusals.
+
+Validation and limits:
+
+- Repeatable tools retain focused NumPy/WRF comparisons, typed Planck checks,
+  initialization checks and unchanged-state radar observation checks.
+  Both complete tiny and cold P3 profiles match NumPy exactly in FP32.
+- A fresh installed environment passed the forced-Metal selftest. Prepared
+  public forecasts evolved for ten minutes, with three identical final states
+  per admitted case: P3, UW with Thompson, NSSL, Thompson, Milbrandt–Yau and
+  WDM6. All recorded history fields in those cases were finite. Three P3
+  checkpoint resumes reproduced the continuous final state exactly.
+- The public synthetic Metal DA analysis passed; this is not certification
+  of a prepared radar assimilation cycle or every admitted coupling.
+- Morrison reflectivity requires positive finite number moments wherever
+  mass exceeds the scheme's active threshold. A separate UW/Morrison forced
+  boundary case violated that requirement and produced a NaN also reproduced
+  by NumPy; it is not an accepted finite-output forecast receipt.
+- The Vermont CUDA comparison in issue #7 remains outstanding and was not
+  attempted. Execution capsules without kernel/FTZ bindings do not establish
+  numerical certification. These bounded results are not long-duration or
+  cross-model certification.
+
 ## MetalARF 1.0.2
 
-A cleanup release: a smaller repository and no change to forecasts. The
-Metal bundle's metallibs and dylib are byte-identical to 1.0.1. The tree
+A cleanup release: a smaller repository. The Metal bundle's metallibs and
+dylib are byte-identical to 1.0.1; this establishes bundle identity, not
+forecast identity across every configuration. The tree
 drops from about 59,000 files and 1.7 GB to about 17,000 files and 0.8 GB.
 
 Changed:
@@ -39,33 +85,30 @@ Added:
 
 Fixed:
 
+- The Metal UW PBL converts its integer PBL-top index before writing `KPBL`.
 - The CLI reference (`docs/public/CLI-OPTIONS.md`) lists the Metal
   `--backend` and `--state-backend` options.
 
 ## MetalARF 1.0.1
 
-A speed release. Forecast output is bitwise identical to 1.0.0 on every
-model. Speedups below are steady-state wall time per forecast hour against
-1.0.0 on the same case; they vary with hardware and configuration.
+A speed-focused release. The published tree does not include reproducible
+case, hardware and output records for the earlier cross-model bitwise
+identity or numerical speedup claims. Those claims are withdrawn here until
+such records are available; the implementation changes are listed below.
 
-Faster:
+Changed:
 
-- Hex, about 2.4x: the Metal dynamical core keeps scalar transport and the
-  acoustic solve resident on the GPU across Runge-Kutta stages and batches
-  their dispatches into fewer command buffers.
-- Regional, about 1.1x: acoustic and repeated dycore kernels are batched
-  into fewer command buffers, and cold kernels are pipelined before the
-  first step. For the HRRR configuration the steady step is about 1.04x
-  faster and the first step, which carries startup and the first radiation
-  call, about 1.35x, giving about 1.1x end to end.
-- Legacy RRTMG shortwave runs on hardware single precision where it is
-  bit-exact, which cuts the cost of each radiation call.
-- The software double-precision library uses faster exact routines for
-  multiply, normalization and square root, which benefits MYNN, Thompson
-  and other schemes that compute in double.
-- MYNN checks its tendencies with one GPU scan instead of copying them to
-  the host each step.
-- Global is unchanged in speed.
+- Hex: scalar transport and the acoustic solve remain resident on the GPU
+  across Runge-Kutta stages, with dispatches batched into fewer command buffers.
+- Regional: acoustic and repeated dycore kernels are batched into fewer
+  command buffers, and cold kernels are pipelined before the first step.
+- Legacy RRTMG shortwave uses hardware single precision in selected paths;
+  numerical agreement of those paths is not certified by this release note.
+- The software double-precision library changes multiply, normalization and
+  square-root routines. Its contracts remain the record of verification
+  status; this note does not certify exactness for every caller.
+- MYNN checks tendencies with one GPU scan instead of copying them to the
+  host each step.
 
 Fixed:
 
@@ -86,13 +129,14 @@ New:
   streamed nests, ensembles, restart and history products),
   `woof hex forecast --backend metal`, `woof global run --metal`
   (`sl_si` and `ssprk3`, restart), `woof local-da` and `woof global da cycle`.
-- Every admitted regional physics combination runs on Metal, including
+- Metal admission lists callers for selected regional physics families, including
   Thompson (WRF 3.9 NOAA form), MYNN GSD 4.1 with EDMF, RUC with lake,
   albedo and SPP options, Grell-Freitas with SPP, legacy RRTMG with
   `aer_opt=3`, `swint_opt=1`, fifth-order vertical advection and sixth-order
   diffusion.
-- FP64 physics paths run through software binary64, matching the NumPy
-  reference without relying on GPU double precision.
+- FP64 physics paths use software binary64 without hardware GPU double
+  precision. The arithmetic contracts describe unverified parts; this does
+  not establish general agreement with NumPy, CUDA or WRF.
 - `woof selftest` runs one tiny regional, Hex and Global step on the chosen
   backend and reports wind and theta gates in a few seconds.
 - A Metal memory preflight estimates device use against the GPU's
@@ -100,12 +144,17 @@ New:
   allocation. Legacy RRTMG sizes its column chunks from the same budget.
   Controls: `WOOF_METAL_MEMORY_FRACTION`, `WOOF_METAL_RRTMG_CHUNK`,
   `WOOF_METAL_GPU_SLOTS` (see `docs/public/BACKENDS.md`).
-- A macOS arm64 wheel with native Metal bridges and staged tables.
+- Native Metal bridges and staged tables for macOS arm64. The documented
+  installation route is the MetalARF clone; upstream PyPI wheels do not
+  contain this backend.
 
 Notes:
 
 - macOS 14 or newer on Apple Silicon. Hex and Global Metal paths are
-  previews.
+  previews. Admission and finite smoke checks are not numerical parity
+  evidence; see [backend coverage and limits](docs/public/BACKENDS.md).
+- The upstream WOOF release notes below describe upstream changes and
+  evidence, not verification of this Metal backend.
 - Large domains such as the full 401 x 301 HRRR cut need more GPU memory
   than smaller Macs provide; the preflight refuses them there. A smaller
   domain with the same physics runs.

@@ -1,21 +1,14 @@
 #include <metal_stdlib>
 #include "p3_sed_rain_bindings.metalh"
+#include "p3_constants.metalh"
+#include "p3_math.metalh"
 
 using namespace metal;
 
 // P3 rain sedimentation (p3.cu:1596-1685). One thread owns a whole column;
 // the serial Courant/substep and flux loops match the source ordering.
-// Native pow/log/exp stand in for P3's pinned source libm and are not a
-// CUDA-parity claim.
+// Preserve float32 operation boundaries and use the shared pinned math.
 #pragma clang fp contract(off)
-
-constant float P3_PI = 0x1.921fb60000000p+1f;
-constant float P3_THRD = 0x1.5555560000000p-2f;
-constant float P3_CONS1 = 0x1.05cca60000000p+9f;
-constant float P3_QSMALL = 0x1.6849b80000000p-47f;
-constant float P3_NSMALL = 0x1.cd2b2a0000000p-54f;
-constant float P3_INV_DRMAX = 0x1.f3fffe0000000p+8f;
-constant float P3_INV_RHOW = 0x1.0624de0000000p-10f;
 
 static inline float p3_rain_table(device const float *table,
                                   int ii, int jj, float rii, float rjj) {
@@ -29,22 +22,24 @@ static inline float p3_rain_table(device const float *table,
 }
 
 static inline void p3_rain_dsd(thread float &nr, float qr,
-                               thread float &lambda) {
+                               thread float &lambda,
+                               device const float *pc) {
     float n=fmax(nr,P3_NSMALL);
-    lambda=pow(P3_CONS1*n*6.0f/qr,P3_THRD);
+    lambda=p3_pow(P3_CONS1*n*3.0f*2.0f*1.0f/qr,P3_THRD);
     const float lammin=P3_INV_DRMAX;
     const float lammax=1.0e5f;
     if (lambda<lammin || lambda>lammax) {
         lambda=clamp(lambda,lammin,lammax);
-        n=exp(3.0f*log(lambda)+log(qr)-log(6.0f))/P3_CONS1;
+        n=p3_exp(3.0f*p3_log(lambda)+p3_log(qr)-p3_log(6.0f))/P3_CONS1;
     }
     nr=n;
 }
 
 static inline void p3_find_rain_table(float lambda, thread int &ii,
                                       thread int &jj, thread float &rii,
-                                      thread float &rjj) {
-    const float dum1=1.0f/lambda;
+                                      thread float &rjj,
+                                      device const float *pc) {
+    const float dum1=p3_div_rn(1.0f,lambda);
     if (dum1<=195.0e-6f) {
         rii=(dum1*1.0e6f+5.0f)*0.1f;
         rii=fmin(fmax(rii,1.0f),20.0f);
@@ -65,6 +60,7 @@ kernel void p3_sed_rain(
     uint column [[thread_position_in_grid]]) {
     const uint ncol=uint(p.ny)*uint(p.nx);
     if (column>=ncol || r.flags[ncol+column]==0.0f) return;
+    device const float *pc = r.constants;
     const int nz=p.nz;
     const ulong base=ulong(column), stride=ulong(ncol);
     int ktop=0, present=0;
@@ -96,19 +92,19 @@ kernel void p3_sed_rain(
             if (r.qr[idx]>P3_QSMALL) {
                 r.nr[idx]=fmax(r.nr[idx],P3_NSMALL);
                 float nr=r.nr[idx],lamr;
-                p3_rain_dsd(nr,r.qr[idx],lamr);
+                p3_rain_dsd(nr,r.qr[idx],lamr,pc);
                 r.nr[idx]=nr;
                 int ii,jj; float rii,rjj;
-                p3_find_rain_table(lamr,ii,jj,rii,rjj);
+                p3_find_rain_table(lamr,ii,jj,rii,rjj,pc);
                 r.vq[idx]=p3_rain_table(r.vm_table,ii,jj,rii,rjj)
                           *r.rhofacr[idx];
                 r.vn[idx]=p3_rain_table(r.vn_table,ii,jj,rii,rjj)
                           *r.rhofacr[idx];
             }
-            co_max=fmax(co_max,r.vq[idx]*dt_left*(1.0f/r.dz[idx]));
+            co_max=fmax(co_max,r.vq[idx]*dt_left*(p3_div_rn(1.0f,r.dz[idx])));
         }
         const int tmpint1=int(co_max+1.0f);
-        const float dt_sub=fmin(dt_left,dt_left/float(tmpint1));
+        const float dt_sub=fmin(dt_left,p3_div_rn(dt_left,float(tmpint1)));
         const int ktemp=(kbot==0)?kbot:kbot-1;
         for (int k=ktemp;k<=ktop;++k) {
             const ulong idx=ulong(k)*stride+base;
@@ -118,7 +114,7 @@ kernel void p3_sed_rain(
         if (kbot==0) prt_accum=prt_accum+r.fq[base]*dt_sub;
         {
             const ulong idx=ulong(ktop)*stride+base;
-            const float idz=1.0f/r.dz[idx];
+            const float idz=p3_div_rn(1.0f,r.dz[idx]);
             const float fdq=-r.fq[idx]*idz;
             const float fdn=-r.fn[idx]*idz;
             r.qr[idx]=r.qr[idx]+fdq*dt_sub*r.inv_rho[idx];
@@ -127,7 +123,7 @@ kernel void p3_sed_rain(
         for (int k=ktop-1;k>=ktemp;--k) {
             const ulong idx=ulong(k)*stride+base;
             const ulong below=ulong(k+1)*stride+base;
-            const float idz=1.0f/r.dz[idx];
+            const float idz=p3_div_rn(1.0f,r.dz[idx]);
             const float fdq=(r.fq[below]-r.fq[idx])*idz;
             const float fdn=(r.fn[below]-r.fn[idx])*idz;
             r.qr[idx]=r.qr[idx]+fdq*dt_sub*r.inv_rho[idx];
@@ -136,6 +132,6 @@ kernel void p3_sed_rain(
         dt_left=dt_left-dt_sub;
         if (kbot!=0) kbot=kbot-1;
     }
-    const float odt=1.0f/p.dt;
+    const float odt=p3_div_rn(1.0f,p.dt);
     r.prt_liq[column]=r.prt_liq[column]+prt_accum*P3_INV_RHOW*odt;
 }

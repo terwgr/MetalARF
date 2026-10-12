@@ -602,7 +602,10 @@ class MetalContext:
         # contracts directly from the corresponding resources.
         for dimension, resource, measure in (
                 ("ntable_values", "tables", "size"),
-                ("ntables", "table_index", "shape0")):
+                ("ntables", "table_index", "shape0"),
+                # RRTMGP's standalone Planck ABI carries the flavor table,
+                # but not its row count. Keep the registered shape check.
+                ("nflav", "flavor", "shape0")):
             if dimension not in integer_parameters and resource in arrays:
                 value = arrays[resource]
                 integer_parameters[dimension] = int(

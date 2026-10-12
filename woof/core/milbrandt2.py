@@ -476,7 +476,6 @@ def reflectivity(state: DomainState, *, temperature=None, pressure=None):
     """
 
     nz, ny, nx = state.p.shape
-    import cupy as cp
     missing = [name for name in ("qr", "qi", "qs", "qg", "qh",
                                  "nr", "ni", "ns", "ng", "nh")
                if getattr(state, name, None) is None]
@@ -486,6 +485,27 @@ def reflectivity(state: DomainState, *, temperature=None, pressure=None):
             "state: missing " + ", ".join(missing))
     if (temperature is None) != (pressure is None):
         raise ValueError("temperature and pressure must be supplied together")
+    from woof.metal.array import MetalArray
+    if isinstance(state.p, MetalArray):
+        from woof.core.milbrandt2_constants import ck_vector
+        from woof.metal.milbrandt2_zet import submit_milbrandt2_zet
+        from woof.metal.refl_family import submit_da_observation_temperature
+
+        if temperature is None:
+            t = state.scratch((nz, ny, nx), "my2_zet_t")
+            submit_da_observation_temperature(state, t)
+            pres = state.p
+        else:
+            t, pres = temperature, pressure
+        ck_host = ck_vector()
+        ck = state.scratch(ck_host.shape, "my2_ck")
+        ck[...] = ck_host
+        zet = state.scratch((nz, ny, nx), "refl_10cm")
+        submit_milbrandt2_zet(
+            t, pres, state.qr, state.qi, state.qs, state.qg, state.qh,
+            state.nr, state.ni, state.ns, state.ng, state.nh, zet, ck)
+        return zet
+    import cupy as cp
     if temperature is None:
         thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
         t = state.scratch((nz, ny, nx), "my2_zet_t")

@@ -938,7 +938,7 @@ def test_the_per_domain_submit_stamps_carrier_provenance_per_frame():
             self.calls = []
 
         def submit(self, path, valid_time, state, *, extra_fields=None,
-                   refl_field=None, global_attrs=None):
+                   refl_field=None, global_attrs=None, completed_observer=None):
             self.calls.append(global_attrs)
 
     contract = CarrierContract()
@@ -994,7 +994,7 @@ def test_carrier_provenance_survives_the_real_checkpoint_path(
     "just written" (and admit a producer that stopped).
     """
     from woof.io import restart
-    from test_restart import _cfg, _fill_setup, _shim_driver_state
+    from tests.test_restart import _cfg, _fill_setup, _shim_driver_state
 
     cfg = _cfg(moist=True, mp_physics=10, bl_pbl_physics=1, bldt=0.0)
     source, source_driver = _shim_driver_state(cfg, monkeypatch)
@@ -1027,7 +1027,7 @@ def test_a_pre_contract_checkpoint_forces_one_producer_refresh(
     import json
 
     from woof.io import restart
-    from test_restart import _cfg, _fill_setup, _shim_driver_state
+    from tests.test_restart import _cfg, _fill_setup, _shim_driver_state
 
     cfg = _cfg(moist=True, mp_physics=10, bl_pbl_physics=1, bldt=0.0)
     source, source_driver = _shim_driver_state(cfg, monkeypatch)
@@ -1057,7 +1057,7 @@ def test_a_resume_that_changed_the_policy_is_refused(
     import json
 
     from woof.io import restart
-    from test_restart import _cfg, _fill_setup, _shim_driver_state
+    from tests.test_restart import _cfg, _fill_setup, _shim_driver_state
 
     cfg = _cfg(moist=True, mp_physics=10, bl_pbl_physics=1, bldt=0.0)
     source, _ = _shim_driver_state(cfg, monkeypatch)

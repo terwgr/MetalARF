@@ -27,6 +27,20 @@ def _validate_structural(fields: dict[str, object]) -> tuple[int, ...]:
 
 
 def _validate_inputs(fields: dict[str, object]) -> None:
+    from woof.metal.array import MetalArray
+
+    if fields and isinstance(next(iter(fields.values())), MetalArray):
+        for name, value in fields.items():
+            host_value = value.to_numpy()
+            if not np.isfinite(host_value).all():
+                raise ValueError(f"{name} must contain only finite values")
+            if name == "air_density":
+                if np.any(host_value <= DTYPE(0.0)):
+                    raise ValueError("air_density must be strictly positive")
+            elif np.any(host_value < DTYPE(0.0)):
+                raise ValueError(f"{name} must be nonnegative")
+        return
+
     import cupy as cp
 
     for name, value in fields.items():
@@ -46,9 +60,9 @@ def launch_effective_radius_concentration(
     """Diagnose WRF NSSL radii directly from internal number concentration.
 
     Number inputs are #/m3 views of the production NSSL slab, mass fields are
-    kg/kg dry air, and outputs are metres.  Unlike the frozen Registry-facing
-    launcher, this entry point does not multiply #/kg by density and therefore
-    introduces no scatter/gather unit round-trip before radiation.
+    kg/kg dry air, and outputs are metres.  This entry point does not multiply
+    #/kg by density and therefore introduces no scatter/gather unit round-trip
+    before radiation.
     """
     from woof.metal.array import MetalArray
     if isinstance(air_density, MetalArray):
@@ -118,12 +132,6 @@ def update_effective_radii(
 
     from woof.metal.array import MetalArray
     metal_state = isinstance(getattr(state, "effc", None), MetalArray)
-    if metal_state:
-        raise NotImplementedError(
-            "Registry-unit NSSL effective radii are not admitted on Metal; "
-            "the production Metal path diagnoses from concentration-space "
-            "workspace fields")
-    import cupy as cp
 
     required = (
         "qc", "qndrop", "qi", "qni", "qs", "qns",
@@ -146,6 +154,21 @@ def update_effective_radii(
         "qs": state.qs,
         "qns": state.qns,
     }
+    if metal_state:
+        if validate_values:
+            _validate_inputs(inputs)
+        from woof.metal.nssl2_diagnostics import \
+            submit_nssl2_effective_radius_concentration
+        submit_nssl2_effective_radius_concentration(
+            air_density.buffer.context, air_density, state.qc, state.qndrop,
+            state.qi, state.qni, state.qs, state.qns,
+            state.effc, state.effi, state.effs,
+            registry_unit_numbers=True)
+        from woof.metal.nssl2_runtime import submit_nssl2_radius_microns
+        submit_nssl2_radius_microns(state.effc, state.effi, state.effs)
+        return True
+
+    import cupy as cp
     _validate_structural({
         **inputs,
         "effc": state.effc,

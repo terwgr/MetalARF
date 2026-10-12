@@ -36,11 +36,15 @@
       },
       "parameters": [
         ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
-        ["exponent", "float32"]
+        ["exponent", "float32"], ["pressure_scale", "float32"],
+        ["zdbz_default", "float32"], ["effc_default", "float32"],
+        ["effi_default", "float32"], ["vmi_default", "float32"],
+        ["di_default", "float32"], ["rhopo_default", "float32"],
+        ["prt_liq_default", "float32"], ["prt_sol_default", "float32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,
-      "arithmetic_policies": ["default"]
+      "arithmetic_policies": ["float32_ordered", "soft_glibc_2_39_pow"]
     }
   ]
 }

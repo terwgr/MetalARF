@@ -1991,7 +1991,7 @@ NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_SHAPES = (('air_density', (('nz', 'ny', 'nx
 NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_THREADS_PER_GROUP = 256
 NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_LAYOUT_HASH = '0cf5633c2dd44c56590b0dd3f42d7c502f16ca747ae4ad6fb1e82c4fd47c6668'
-NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_SHADER_HASH = 'fb440af1e76f08173f3b4c45069e21373c0b5a9bb485440315e2ba42e3831595'
+NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_SHADER_HASH = '9adc13ecd2d150db95526d5f52710ae024a0d473dafae2c715ea1c520f5eb65c'
 
 NSSL2_FUSED_GS_RESOURCES = (('state', 'float', 'read_write'), ('full_theta', 'float', 'read_write'), ('air_density', 'float', 'read'), ('pressure_pa', 'float', 'read'), ('exner', 'float', 'read'), ('temperature_k', 'float', 'read_write'), ('vertical_velocity', 'float', 'read'), ('primary_ice_target_m3', 'float', 'read'), ('dz', 'float', 'read'))
 NSSL2_FUSED_GS_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read_write', 'read', 'read', 'read')
@@ -2031,7 +2031,7 @@ NSSL2_RADARDD02_SHAPES = (('air_density', (('nz', 'ny', 'nx'),)), ('qg', (('nz',
 NSSL2_RADARDD02_PARAM_FIELDS = [('concentration_space', 'ctypes.c_int32'), ('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NSSL2_RADARDD02_THREADS_PER_GROUP = 256
 NSSL2_RADARDD02_LAYOUT_HASH = '5c491cf870243c8dc40e2048dcce1a032bd7122626dc3d1142cfe50b3b4ab8e0'
-NSSL2_RADARDD02_SHADER_HASH = 'fb440af1e76f08173f3b4c45069e21373c0b5a9bb485440315e2ba42e3831595'
+NSSL2_RADARDD02_SHADER_HASH = '9adc13ecd2d150db95526d5f52710ae024a0d473dafae2c715ea1c520f5eb65c'
 
 NSSL2_RADIUS_MICRONS_RESOURCES = (('cloud', 'float', 'read_write'), ('ice', 'float', 'read_write'), ('snow', 'float', 'read_write'))
 NSSL2_RADIUS_MICRONS_ACCESS = ('read_write', 'read_write', 'read_write')
@@ -2371,75 +2371,75 @@ OPEN_ZERO_GRADIENT_Y_SHADER_HASH = '565dee628cd20356f4b739419ec62996f41c2ccf7e48
 
 P3_ENTRY_PREPARE_RESOURCES = (('theta', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('tmparr1', 'float', 'read_write'), ('zdbz', 'float', 'read_write'), ('effc', 'float', 'read_write'), ('effi', 'float', 'read_write'), ('vmi', 'float', 'read_write'), ('di', 'float', 'read_write'), ('rhopo', 'float', 'read_write'), ('prt_liq', 'float', 'read_write'), ('prt_sol', 'float', 'read_write'), ('flags', 'float', 'read_write'))
 P3_ENTRY_PREPARE_ACCESS = ('read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
-P3_ENTRY_PREPARE_SHAPES = (('di', (('nz', 'ny', 'nx'),)), ('effc', (('nz', 'ny', 'nx'),)), ('effi', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('h_diabatic', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('prt_liq', (('ny', 'nx'),)), ('prt_sol', (('ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('rhopo', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)), ('vmi', (('nz', 'ny', 'nx'),)), ('zdbz', (('nz', 'ny', 'nx'),)))
-P3_ENTRY_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('exponent', 'ctypes.c_float')]
+P3_ENTRY_PREPARE_SHAPES = (('theta', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('h_diabatic', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)), ('zdbz', (('nz', 'ny', 'nx'),)), ('effc', (('nz', 'ny', 'nx'),)), ('effi', (('nz', 'ny', 'nx'),)), ('vmi', (('nz', 'ny', 'nx'),)), ('di', (('nz', 'ny', 'nx'),)), ('rhopo', (('nz', 'ny', 'nx'),)), ('prt_liq', (('ny', 'nx'),)), ('prt_sol', (('ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)))
+P3_ENTRY_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('exponent', 'ctypes.c_float'), ('pressure_scale', 'ctypes.c_float'), ('zdbz_default', 'ctypes.c_float'), ('effc_default', 'ctypes.c_float'), ('effi_default', 'ctypes.c_float'), ('vmi_default', 'ctypes.c_float'), ('di_default', 'ctypes.c_float'), ('rhopo_default', 'ctypes.c_float'), ('prt_liq_default', 'ctypes.c_float'), ('prt_sol_default', 'ctypes.c_float')]
 P3_ENTRY_PREPARE_THREADS_PER_GROUP = 128
-P3_ENTRY_PREPARE_LAYOUT_HASH = 'c4342e12dfcf7a9574769baf212a8449773b641989b20d47dc935ef31d5bd95b'
-P3_ENTRY_PREPARE_SHADER_HASH = 'f4c751a345866dc23606ef9b9859348fa6c270a20c18244374ca8b2907534853'
+P3_ENTRY_PREPARE_LAYOUT_HASH = '34e9ff440acff227a599d27665ef098dafc4b28ea00d6447d19cca0acf1f421c'
+P3_ENTRY_PREPARE_SHADER_HASH = '4f1a4bb141d4355a92eb6af407805fb3e0a35c6ddcfdab4caebdabf7f12705af'
 
-P3_FINAL_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('temperature', 'float', 'read'), ('tmparr1', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('rhofaci', 'float', 'read'), ('zdbz', 'float', 'read_write'), ('effc', 'float', 'read_write'), ('effi', 'float', 'read_write'), ('vmi', 'float', 'read_write'), ('di', 'float', 'read_write'), ('rhopo', 'float', 'read_write'), ('itab', 'float', 'read'), ('flags', 'float', 'read'))
-P3_FINAL_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read')
-P3_FINAL_SHAPES = (('di', (('nz', 'ny', 'nx'),)), ('effc', (('nz', 'ny', 'nx'),)), ('effi', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('itab', ((14000,),)), ('nc', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('rhofaci', (('nz', 'ny', 'nx'),)), ('rhopo', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)), ('vmi', (('nz', 'ny', 'nx'),)), ('zdbz', (('nz', 'ny', 'nx'),)))
-P3_FINAL_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+P3_FINAL_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('temperature', 'float', 'read'), ('tmparr1', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('rhofaci', 'float', 'read'), ('zdbz', 'float', 'read_write'), ('effc', 'float', 'read_write'), ('effi', 'float', 'read_write'), ('vmi', 'float', 'read_write'), ('di', 'float', 'read_write'), ('rhopo', 'float', 'read_write'), ('itab', 'float', 'read'), ('flags', 'float', 'read'), ('constants', 'float', 'read'))
+P3_FINAL_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read')
+P3_FINAL_SHAPES = (('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('rhofaci', (('nz', 'ny', 'nx'),)), ('zdbz', (('nz', 'ny', 'nx'),)), ('effc', (('nz', 'ny', 'nx'),)), ('effi', (('nz', 'ny', 'nx'),)), ('vmi', (('nz', 'ny', 'nx'),)), ('di', (('nz', 'ny', 'nx'),)), ('rhopo', (('nz', 'ny', 'nx'),)), ('itab', ((14000,),)), ('flags', ((2, 'ny', 'nx'),)), ('constants', ((52,),)))
+P3_FINAL_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('xxlv', 'ctypes.c_float'), ('xxls', 'ctypes.c_float')]
 P3_FINAL_THREADS_PER_GROUP = 128
-P3_FINAL_LAYOUT_HASH = '60615ac0a1c7a870607906dbc74722fc95400ad830016dc17f9f9a42d6ca77f9'
-P3_FINAL_SHADER_HASH = '8400bd30e66b3d26e589d2b0eaa51345cc0060a4b257f81d7d88324128f615bf'
+P3_FINAL_LAYOUT_HASH = '4decbca6a0770f93593aea767f589b72a8b18c1a5f78cb7b172a55c3921ba306'
+P3_FINAL_SHADER_HASH = 'ade4b36dfc22f45b666097693c8c6b61f4fbfc72420616ba26964f9d17ba708a'
 
-P3_HOMOFREEZE_RESOURCES = (('theta', 'float', 'read_write'), ('temperature', 'float', 'read'), ('tmparr1', 'float', 'read'), ('qv', 'float', 'read'), ('qv_cld', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('flags', 'float', 'read'))
-P3_HOMOFREEZE_ACCESS = ('read_write', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read')
-P3_HOMOFREEZE_SHAPES = (('flags', ((2, 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('qv_cld', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)))
-P3_HOMOFREEZE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+P3_HOMOFREEZE_RESOURCES = (('theta', 'float', 'read_write'), ('temperature', 'float', 'read'), ('tmparr1', 'float', 'read'), ('qv', 'float', 'read'), ('qv_cld', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('flags', 'float', 'read'), ('constants', 'float', 'read'))
+P3_HOMOFREEZE_ACCESS = ('read_write', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read')
+P3_HOMOFREEZE_SHAPES = (('theta', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('qv_cld', (('nz', 'ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('constants', ((52,),)))
+P3_HOMOFREEZE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('xlf', 'ctypes.c_float')]
 P3_HOMOFREEZE_THREADS_PER_GROUP = 128
-P3_HOMOFREEZE_LAYOUT_HASH = '4e6185ea08ece6b2efafd30f4dd81ce007d32f3c228b06a4813f1483110243de'
-P3_HOMOFREEZE_SHADER_HASH = '6323ec4d6ea64d4d74fe2f7c6169c6cfdcd7a489bd7037a7b2fb603a7cfc779b'
+P3_HOMOFREEZE_LAYOUT_HASH = '7f8af55904235d4ddd42e70faf9e1820e74406c552f8d9bebe5c46bdf6f7894e'
+P3_HOMOFREEZE_SHADER_HASH = '1965ef555abb61fe029d185d44fb4ca3d057e153b8b053b6052f556bee4fa3cf'
 
-P3_KLOOP1_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('th_old', 'float', 'read'), ('qv_old', 'float', 'read'), ('ssat', 'float', 'read_write'), ('pressure', 'float', 'read'), ('temperature', 'float', 'read'), ('tmparr1', 'float', 'read'), ('rho', 'float', 'read_write'), ('inv_rho', 'float', 'read_write'), ('qvs', 'float', 'read_write'), ('qvi', 'float', 'read_write'), ('sup', 'float', 'read_write'), ('supi', 'float', 'read_write'), ('rhofacr', 'float', 'read_write'), ('rhofaci', 'float', 'read_write'), ('acn', 'float', 'read_write'), ('qv_cld', 'float', 'read_write'), ('flags', 'float', 'read_write'))
-P3_KLOOP1_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
-P3_KLOOP1_SHAPES = (('acn', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('qv_cld', (('nz', 'ny', 'nx'),)), ('qv_old', (('nz', 'ny', 'nx'),)), ('qvi', (('nz', 'ny', 'nx'),)), ('qvs', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('rhofaci', (('nz', 'ny', 'nx'),)), ('rhofacr', (('nz', 'ny', 'nx'),)), ('ssat', (('nz', 'ny', 'nx'),)), ('sup', (('nz', 'ny', 'nx'),)), ('supi', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('th_old', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)))
-P3_KLOOP1_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('log_predict_nc', 'ctypes.c_int32')]
+P3_KLOOP1_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('th_old', 'float', 'read'), ('qv_old', 'float', 'read'), ('ssat', 'float', 'read_write'), ('pressure', 'float', 'read'), ('temperature', 'float', 'read'), ('tmparr1', 'float', 'read'), ('rho', 'float', 'read_write'), ('inv_rho', 'float', 'read_write'), ('qvs', 'float', 'read_write'), ('qvi', 'float', 'read_write'), ('sup', 'float', 'read_write'), ('supi', 'float', 'read_write'), ('rhofacr', 'float', 'read_write'), ('rhofaci', 'float', 'read_write'), ('acn', 'float', 'read_write'), ('qv_cld', 'float', 'read_write'), ('flags', 'float', 'read_write'), ('constants', 'float', 'read'))
+P3_KLOOP1_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read')
+P3_KLOOP1_SHAPES = (('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('th_old', (('nz', 'ny', 'nx'),)), ('qv_old', (('nz', 'ny', 'nx'),)), ('ssat', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('qvs', (('nz', 'ny', 'nx'),)), ('qvi', (('nz', 'ny', 'nx'),)), ('sup', (('nz', 'ny', 'nx'),)), ('supi', (('nz', 'ny', 'nx'),)), ('rhofacr', (('nz', 'ny', 'nx'),)), ('rhofaci', (('nz', 'ny', 'nx'),)), ('acn', (('nz', 'ny', 'nx'),)), ('qv_cld', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('constants', ((52,),)))
+P3_KLOOP1_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('log_predict_nc', 'ctypes.c_int32'), ('xxlv', 'ctypes.c_float'), ('xxls', 'ctypes.c_float'), ('xlf', 'ctypes.c_float')]
 P3_KLOOP1_THREADS_PER_GROUP = 128
-P3_KLOOP1_LAYOUT_HASH = 'e804fd94237910dbcb12d7a05b9298571b1c824cb4b88bc9bbecd01b987a513e'
-P3_KLOOP1_SHADER_HASH = '41cec71ed0b7334d00dd4978313d4d7def35659f8b9f3025cfb8709aa011f1d1'
+P3_KLOOP1_LAYOUT_HASH = '98f45b26da624180b8f0aa2412acd01e1db8271b43c691a071c324ee1219f262'
+P3_KLOOP1_SHADER_HASH = '3bc59a8aa85e351b6bb17712bb27e43d59614782fc0bbdb56c1788f4171e7e34'
 
-P3_KLOOPMAIN_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('th_old', 'float', 'read'), ('qv_old', 'float', 'read'), ('ssat', 'float', 'read_write'), ('pressure', 'float', 'read'), ('rho', 'float', 'read_write'), ('inv_rho', 'float', 'read_write'), ('qvs', 'float', 'read_write'), ('qvi', 'float', 'read_write'), ('sup', 'float', 'read_write'), ('supi', 'float', 'read_write'), ('rhofacr', 'float', 'read_write'), ('rhofaci', 'float', 'read_write'), ('acn', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('tmparr1', 'float', 'read_write'), ('qv_cld', 'float', 'read_write'), ('flags', 'float', 'read_write'), ('itab', 'float', 'read'), ('icoll', 'float', 'read'), ('revap', 'float', 'read'))
-P3_KLOOPMAIN_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read')
-P3_KLOOPMAIN_SHAPES = (('acn', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('icoll', ((60000,),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('itab', ((14000,),)), ('nc', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('qv_cld', (('nz', 'ny', 'nx'),)), ('qv_old', (('nz', 'ny', 'nx'),)), ('qvi', (('nz', 'ny', 'nx'),)), ('qvs', (('nz', 'ny', 'nx'),)), ('revap', ((3000,),)), ('rho', (('nz', 'ny', 'nx'),)), ('rhofaci', (('nz', 'ny', 'nx'),)), ('rhofacr', (('nz', 'ny', 'nx'),)), ('ssat', (('nz', 'ny', 'nx'),)), ('sup', (('nz', 'ny', 'nx'),)), ('supi', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('th_old', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)))
-P3_KLOOPMAIN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('it', 'ctypes.c_int32'), ('log_predict_nc', 'ctypes.c_int32'), ('clbfact_dep', 'ctypes.c_float'), ('clbfact_sub', 'ctypes.c_float')]
+P3_KLOOPMAIN_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('th_old', 'float', 'read'), ('qv_old', 'float', 'read'), ('ssat', 'float', 'read_write'), ('pressure', 'float', 'read'), ('rho', 'float', 'read_write'), ('inv_rho', 'float', 'read_write'), ('qvs', 'float', 'read_write'), ('qvi', 'float', 'read_write'), ('sup', 'float', 'read_write'), ('supi', 'float', 'read_write'), ('rhofacr', 'float', 'read_write'), ('rhofaci', 'float', 'read_write'), ('acn', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('tmparr1', 'float', 'read_write'), ('qv_cld', 'float', 'read_write'), ('flags', 'float', 'read_write'), ('constants', 'float', 'read'), ('itab', 'float', 'read'), ('icoll', 'float', 'read'), ('revap', 'float', 'read'))
+P3_KLOOPMAIN_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read')
+P3_KLOOPMAIN_SHAPES = (('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('th_old', (('nz', 'ny', 'nx'),)), ('qv_old', (('nz', 'ny', 'nx'),)), ('ssat', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('qvs', (('nz', 'ny', 'nx'),)), ('qvi', (('nz', 'ny', 'nx'),)), ('sup', (('nz', 'ny', 'nx'),)), ('supi', (('nz', 'ny', 'nx'),)), ('rhofacr', (('nz', 'ny', 'nx'),)), ('rhofaci', (('nz', 'ny', 'nx'),)), ('acn', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)), ('tmparr1', (('nz', 'ny', 'nx'),)), ('qv_cld', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('constants', ((52,),)), ('itab', ((14000,),)), ('icoll', ((60000,),)), ('revap', ((3000,),)))
+P3_KLOOPMAIN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('it', 'ctypes.c_int32'), ('log_predict_nc', 'ctypes.c_int32'), ('clbfact_dep', 'ctypes.c_float'), ('clbfact_sub', 'ctypes.c_float'), ('xxlv', 'ctypes.c_float'), ('xxls', 'ctypes.c_float'), ('xlf', 'ctypes.c_float')]
 P3_KLOOPMAIN_THREADS_PER_GROUP = 128
-P3_KLOOPMAIN_LAYOUT_HASH = '149eb4fc9dcb327abd1ff901a3be8ab5e648c8f803d4e05d2b43dbbef3184cff'
-P3_KLOOPMAIN_SHADER_HASH = '65f18b7da668fc0e52ac6c661cf08254426e3617c4b215679fba3645f1e62946'
+P3_KLOOPMAIN_LAYOUT_HASH = '26577dbc3ea06b4547bbb65f96ca84665c2aa5076bc778b53c1694d5fe04b58b'
+P3_KLOOPMAIN_SHADER_HASH = '76d06a1851780d9352801574bc20b254cceb3bf61249412e5d4d66491f00496b'
 
 P3_SAVEOLD_PRECIP_RESOURCES = (('theta', 'float', 'read'), ('qv', 'float', 'read'), ('th_old', 'float', 'read_write'), ('qv_old', 'float', 'read_write'), ('prt_liq', 'float', 'read'), ('prt_sol', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('sr', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'))
 P3_SAVEOLD_PRECIP_ACCESS = ('read', 'read', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
-P3_SAVEOLD_PRECIP_SHAPES = (('prt_liq', (('ny', 'nx'),)), ('prt_sol', (('ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('qv_old', (('nz', 'ny', 'nx'),)), ('rainnc', (('ny', 'nx'),)), ('rainncv', (('ny', 'nx'),)), ('snownc', (('ny', 'nx'),)), ('snowncv', (('ny', 'nx'),)), ('sr', (('ny', 'nx'),)), ('th_old', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)))
-P3_SAVEOLD_PRECIP_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float')]
+P3_SAVEOLD_PRECIP_SHAPES = (('theta', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('th_old', (('nz', 'ny', 'nx'),)), ('qv_old', (('nz', 'ny', 'nx'),)), ('prt_liq', (('ny', 'nx'),)), ('prt_sol', (('ny', 'nx'),)), ('rainnc', (('ny', 'nx'),)), ('rainncv', (('ny', 'nx'),)), ('sr', (('ny', 'nx'),)), ('snownc', (('ny', 'nx'),)), ('snowncv', (('ny', 'nx'),)))
+P3_SAVEOLD_PRECIP_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('precip_scale', 'ctypes.c_float'), ('sr_denominator_floor', 'ctypes.c_float')]
 P3_SAVEOLD_PRECIP_THREADS_PER_GROUP = 128
-P3_SAVEOLD_PRECIP_LAYOUT_HASH = '009c1c63191c35b47620f048783b8b66a1153504d6cafd7bdc0037312a8446f9'
-P3_SAVEOLD_PRECIP_SHADER_HASH = '57181e6f01fb635b2b319a780d37e1394071252018e3e87138b903297ed0d4a0'
+P3_SAVEOLD_PRECIP_LAYOUT_HASH = '0b318d00bc6d2deebc91839372bef8597b189d7e70f7a76f1581bae36d123329'
+P3_SAVEOLD_PRECIP_SHADER_HASH = '1f7c5d3c22d219fae5059d1abcde47861874b580ffa8cecf7dbece5d22d48a4d'
 
-P3_SED_CLOUD_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('dz', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('acn', 'float', 'read'), ('vq', 'float', 'read_write'), ('vn', 'float', 'read_write'), ('fq', 'float', 'read_write'), ('fn', 'float', 'read_write'), ('prt_liq', 'float', 'read_write'), ('flags', 'float', 'read'))
-P3_SED_CLOUD_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read')
-P3_SED_CLOUD_SHAPES = (('acn', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('fn', (('nz', 'ny', 'nx'),)), ('fq', (('nz', 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),)), ('prt_liq', (('ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('vn', (('nz', 'ny', 'nx'),)), ('vq', (('nz', 'ny', 'nx'),)))
+P3_SED_CLOUD_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('dz', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('acn', 'float', 'read'), ('vq', 'float', 'read_write'), ('vn', 'float', 'read_write'), ('fq', 'float', 'read_write'), ('fn', 'float', 'read_write'), ('prt_liq', 'float', 'read_write'), ('flags', 'float', 'read'), ('constants', 'float', 'read'))
+P3_SED_CLOUD_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read')
+P3_SED_CLOUD_SHAPES = (('qc', (('nz', 'ny', 'nx'),)), ('nc', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('acn', (('nz', 'ny', 'nx'),)), ('vq', (('nz', 'ny', 'nx'),)), ('vn', (('nz', 'ny', 'nx'),)), ('fq', (('nz', 'ny', 'nx'),)), ('fn', (('nz', 'ny', 'nx'),)), ('prt_liq', (('ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('constants', ((52,),)))
 P3_SED_CLOUD_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('log_predict_nc', 'ctypes.c_int32')]
 P3_SED_CLOUD_THREADS_PER_GROUP = 128
-P3_SED_CLOUD_LAYOUT_HASH = '9510431cb6779518ffd60ad361f00c2b3c9083f9b8ed14b416e0091da2448938'
-P3_SED_CLOUD_SHADER_HASH = '650c69348233742dbd00770e4264309e9e649fe82c84e71b5cba17b27ac30f14'
+P3_SED_CLOUD_LAYOUT_HASH = '64a50f0ac5b4b46bd5310cbef59082ec0c73733ce7e6915eb360f8920905699b'
+P3_SED_CLOUD_SHADER_HASH = '24f1252425803e8d4dd7cc4d7a2f6a49e90d1d019e6d855152bb4b74393f4508'
 
-P3_SED_ICE_RESOURCES = (('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('dz', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('rhofaci', 'float', 'read'), ('vq', 'float', 'read_write'), ('vn', 'float', 'read_write'), ('fq', 'float', 'read_write'), ('fn', 'float', 'read_write'), ('fqir', 'float', 'read_write'), ('fbir', 'float', 'read_write'), ('itab', 'float', 'read'), ('prt_sol', 'float', 'read_write'), ('flags', 'float', 'read'))
-P3_SED_ICE_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read')
-P3_SED_ICE_SHAPES = (('dz', (('nz', 'ny', 'nx'),)), ('fbir', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('fn', (('nz', 'ny', 'nx'),)), ('fq', (('nz', 'ny', 'nx'),)), ('fqir', (('nz', 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('itab', ((14000,),)), ('ni', (('nz', 'ny', 'nx'),)), ('prt_sol', (('ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('rhofaci', (('nz', 'ny', 'nx'),)), ('vn', (('nz', 'ny', 'nx'),)), ('vq', (('nz', 'ny', 'nx'),)))
+P3_SED_ICE_RESOURCES = (('qi', 'float', 'read_write'), ('qir', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qib', 'float', 'read_write'), ('dz', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('rhofaci', 'float', 'read'), ('vq', 'float', 'read_write'), ('vn', 'float', 'read_write'), ('fq', 'float', 'read_write'), ('fn', 'float', 'read_write'), ('fqir', 'float', 'read_write'), ('fbir', 'float', 'read_write'), ('itab', 'float', 'read'), ('prt_sol', 'float', 'read_write'), ('flags', 'float', 'read'), ('constants', 'float', 'read'))
+P3_SED_ICE_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read')
+P3_SED_ICE_SHAPES = (('qi', (('nz', 'ny', 'nx'),)), ('qir', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('qib', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('rhofaci', (('nz', 'ny', 'nx'),)), ('vq', (('nz', 'ny', 'nx'),)), ('vn', (('nz', 'ny', 'nx'),)), ('fq', (('nz', 'ny', 'nx'),)), ('fn', (('nz', 'ny', 'nx'),)), ('fqir', (('nz', 'ny', 'nx'),)), ('fbir', (('nz', 'ny', 'nx'),)), ('itab', ((14000,),)), ('prt_sol', (('ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('constants', ((52,),)))
 P3_SED_ICE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float')]
 P3_SED_ICE_THREADS_PER_GROUP = 128
-P3_SED_ICE_LAYOUT_HASH = '571d5c8638261bee084d375d3fe8e6adf9791c5c4da573a0bad02657a5850530'
-P3_SED_ICE_SHADER_HASH = '1236c655bbbd4fa19cc8252b8aceebe87cb8850a9096e4bda99247e634469578'
+P3_SED_ICE_LAYOUT_HASH = '61d7884d830dfce4312f7e56715e0adef93ca185cd86fa891a1edbe5ac151783'
+P3_SED_ICE_SHADER_HASH = '5de4dacd280d6567e1f805fcc6bafda3625bfd90db28ee4325987e9c25fe00b1'
 
-P3_SED_RAIN_RESOURCES = (('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('dz', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('rhofacr', 'float', 'read'), ('vq', 'float', 'read_write'), ('vn', 'float', 'read_write'), ('fq', 'float', 'read_write'), ('fn', 'float', 'read_write'), ('vm_table', 'float', 'read'), ('vn_table', 'float', 'read'), ('prt_liq', 'float', 'read_write'), ('flags', 'float', 'read'))
-P3_SED_RAIN_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read')
-P3_SED_RAIN_SHAPES = (('dz', (('nz', 'ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('fn', (('nz', 'ny', 'nx'),)), ('fq', (('nz', 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('prt_liq', (('ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('rhofacr', (('nz', 'ny', 'nx'),)), ('vm_table', ((3000,),)), ('vn', (('nz', 'ny', 'nx'),)), ('vn_table', ((3000,),)), ('vq', (('nz', 'ny', 'nx'),)))
+P3_SED_RAIN_RESOURCES = (('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('dz', 'float', 'read'), ('rho', 'float', 'read'), ('inv_rho', 'float', 'read'), ('rhofacr', 'float', 'read'), ('vq', 'float', 'read_write'), ('vn', 'float', 'read_write'), ('fq', 'float', 'read_write'), ('fn', 'float', 'read_write'), ('vm_table', 'float', 'read'), ('vn_table', 'float', 'read'), ('prt_liq', 'float', 'read_write'), ('flags', 'float', 'read'), ('constants', 'float', 'read'))
+P3_SED_RAIN_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read')
+P3_SED_RAIN_SHAPES = (('qr', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx'),)), ('rho', (('nz', 'ny', 'nx'),)), ('inv_rho', (('nz', 'ny', 'nx'),)), ('rhofacr', (('nz', 'ny', 'nx'),)), ('vq', (('nz', 'ny', 'nx'),)), ('vn', (('nz', 'ny', 'nx'),)), ('fq', (('nz', 'ny', 'nx'),)), ('fn', (('nz', 'ny', 'nx'),)), ('vm_table', ((3000,),)), ('vn_table', ((3000,),)), ('prt_liq', (('ny', 'nx'),)), ('flags', ((2, 'ny', 'nx'),)), ('constants', ((52,),)))
 P3_SED_RAIN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float')]
 P3_SED_RAIN_THREADS_PER_GROUP = 128
-P3_SED_RAIN_LAYOUT_HASH = 'f2d1741d237db6c1aa4643ef2aa740f69eadab09840bbda1bb7cea6d2199e307'
-P3_SED_RAIN_SHADER_HASH = '655a4d2ca9f7a88fb7dc0b9263f1c9688e1a399b49c08814da94b318e2c1e379'
+P3_SED_RAIN_LAYOUT_HASH = 'b05eafaf8ccf655bba4486c96f1650307e6c585261cae03a84712700e49a3ff3'
+P3_SED_RAIN_SHADER_HASH = 'a8e236864e6cb1ed84ba597b8ecea3150396b9ba6635622abc9d54438b77545a'
 
 PD_FLUXES_RESOURCES = (('q', 'float', 'read'), ('q0', 'float', 'read'), ('ru', 'float', 'read'), ('rv', 'float', 'read'), ('rw', 'float', 'read'), ('mut', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('rdnw', 'float', 'read'), ('fnm', 'float', 'read'), ('fnp', 'float', 'read'), ('msft', 'float', 'read'), ('fxl', 'float', 'read_write'), ('fxc', 'float', 'read_write'), ('fyl', 'float', 'read_write'), ('fyc', 'float', 'read_write'), ('fzl', 'float', 'read_write'), ('fzc', 'float', 'read_write'))
 PD_FLUXES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2487,7 +2487,7 @@ REFL10CM_KESSLER_CELL_SHAPES = (('p', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny
 REFL10CM_KESSLER_CELL_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 REFL10CM_KESSLER_CELL_THREADS_PER_GROUP = 256
 REFL10CM_KESSLER_CELL_LAYOUT_HASH = '6f2c2ec649ced58008679d0e36fa0cb774c26ddbeb843bc56cf1ecefc799a3b5'
-REFL10CM_KESSLER_CELL_SHADER_HASH = 'f6a66a9bb877fd48bbd3c5c4d07b0d42799f9a135dcb780f5f5c94fc9e141468'
+REFL10CM_KESSLER_CELL_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
 
 REFL10CM_MORRISON_COLUMN_RESOURCES = (('qv', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('qs', 'float', 'read'), ('ns', 'float', 'read'), ('qg', 'float', 'read'), ('ng', 'float', 'read'), ('theta', 'float', 'read'), ('pii', 'float', 'read'), ('p', 'float', 'read'), ('refl', 'float', 'read_write'), ('tables', 'uint64', 'read'))
 REFL10CM_MORRISON_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')
@@ -2511,7 +2511,7 @@ REFL_TEMPERATURE_PRODUCT_SHAPES = (('pii', (('nz', 'ny', 'nx'),)), ('temperature
 REFL_TEMPERATURE_PRODUCT_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 REFL_TEMPERATURE_PRODUCT_THREADS_PER_GROUP = 256
 REFL_TEMPERATURE_PRODUCT_LAYOUT_HASH = 'c4191db1c177310b76a2d69785b7cbe7a2e59463a5a12ff50dba5a70720e9ddf'
-REFL_TEMPERATURE_PRODUCT_SHADER_HASH = 'f6a66a9bb877fd48bbd3c5c4d07b0d42799f9a135dcb780f5f5c94fc9e141468'
+REFL_TEMPERATURE_PRODUCT_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
 
 RK_TOTAL_MU_RESOURCES = (('mub2d', 'float', 'read'), ('mup', 'float', 'read'), ('out', 'float', 'read_write'))
 RK_TOTAL_MU_ACCESS = ('read', 'read', 'read_write')
@@ -2751,7 +2751,7 @@ RRTMGP_GAS_OPTICS_SHAPES = (('complement_lower', (('nminor_lower',),)), ('comple
 RRTMGP_GAS_OPTICS_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('ngas', 'ctypes.c_int32'), ('nflav', 'ctypes.c_int32'), ('ngpt', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32'), ('neta', 'ctypes.c_int32'), ('nk_lower', 'ctypes.c_int32'), ('nk_upper', 'ctypes.c_int32'), ('idx_h2o', 'ctypes.c_int32'), ('is_sw', 'ctypes.c_int32'), ('nminor_lower', 'ctypes.c_int32'), ('nminor_upper', 'ctypes.c_int32'), ('natm', 'ctypes.c_int32'), ('nbound', 'ctypes.c_int32'), ('nminor_gpt_lower', 'ctypes.c_int32'), ('nminor_gpt_upper', 'ctypes.c_int32'), ('rayleigh_len', 'ctypes.c_int32')]
 RRTMGP_GAS_OPTICS_THREADS_PER_GROUP = 128
 RRTMGP_GAS_OPTICS_LAYOUT_HASH = 'd89bd9ddda61adc453322c622c649106e68736ab34fcee4f288b97bc0b0c0ab1'
-RRTMGP_GAS_OPTICS_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_GAS_OPTICS_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_GAS_OPTICS_REFERENCE_RESOURCES = (('play', 'float', 'read'), ('plev', 'float', 'read'), ('tlay', 'float', 'read'), ('vmr', 'float', 'read'), ('iatm_meta', 'float', 'read'), ('jt_meta', 'float', 'read'), ('jp_meta', 'float', 'read'), ('ftemp_meta', 'float', 'read'), ('fpress_meta', 'float', 'read'), ('vmr_ref', 'float', 'read'), ('flavor', 'float', 'read'), ('gpoint_flavor', 'float', 'read'), ('kmajor', 'float', 'read'), ('kminor_lower', 'float', 'read'), ('kminor_upper', 'float', 'read'), ('minor_limits_lower', 'float', 'read'), ('minor_limits_upper', 'float', 'read'), ('density_lower', 'float', 'read'), ('density_upper', 'float', 'read'), ('complement_lower', 'float', 'read'), ('complement_upper', 'float', 'read'), ('idx_minor_lower', 'float', 'read'), ('idx_minor_upper', 'float', 'read'), ('idx_scaling_lower', 'float', 'read'), ('idx_scaling_upper', 'float', 'read'), ('kminor_start_lower', 'float', 'read'), ('kminor_start_upper', 'float', 'read'), ('minor_gpt_start_lower', 'float', 'read'), ('minor_gpt_list_lower', 'float', 'read'), ('minor_gpt_start_upper', 'float', 'read'), ('minor_gpt_list_upper', 'float', 'read'), ('rayleigh', 'float', 'read'), ('tau', 'float', 'read_write'), ('ssa', 'float', 'read_write'))
 RRTMGP_GAS_OPTICS_REFERENCE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -2759,7 +2759,7 @@ RRTMGP_GAS_OPTICS_REFERENCE_SHAPES = (('complement_lower', (('nminor_lower',),))
 RRTMGP_GAS_OPTICS_REFERENCE_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('ngas', 'ctypes.c_int32'), ('nflav', 'ctypes.c_int32'), ('ngpt', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32'), ('neta', 'ctypes.c_int32'), ('nk_lower', 'ctypes.c_int32'), ('nk_upper', 'ctypes.c_int32'), ('idx_h2o', 'ctypes.c_int32'), ('is_sw', 'ctypes.c_int32'), ('nminor_lower', 'ctypes.c_int32'), ('nminor_upper', 'ctypes.c_int32'), ('natm', 'ctypes.c_int32'), ('nbound', 'ctypes.c_int32'), ('nminor_gpt_lower', 'ctypes.c_int32'), ('nminor_gpt_upper', 'ctypes.c_int32'), ('rayleigh_len', 'ctypes.c_int32')]
 RRTMGP_GAS_OPTICS_REFERENCE_THREADS_PER_GROUP = 128
 RRTMGP_GAS_OPTICS_REFERENCE_LAYOUT_HASH = '5152895a516b4e752f4cff707ec2c2e2c41fd46ec0b7ef2edad46861c8af06b8'
-RRTMGP_GAS_OPTICS_REFERENCE_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_GAS_OPTICS_REFERENCE_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_GAS_VMR_FILL_RESOURCES = (('qv', 'float', 'read'), ('o3_words', 'float', 'read'), ('trace_index', 'float', 'read'), ('trace_value', 'float', 'read'), ('vmr', 'float', 'read_write'))
 RRTMGP_GAS_VMR_FILL_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -2767,7 +2767,7 @@ RRTMGP_GAS_VMR_FILL_SHAPES = (('o3_words', (('no3_words',),)), ('qv', (('ncells'
 RRTMGP_GAS_VMR_FILL_PARAM_FIELDS = [('h2o_scale', 'ctypes.c_float'), ('h2o_index', 'ctypes.c_int32'), ('o3_index', 'ctypes.c_int32'), ('ntrace', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nslot', 'ctypes.c_int32'), ('no3_words', 'ctypes.c_int32')]
 RRTMGP_GAS_VMR_FILL_THREADS_PER_GROUP = 256
 RRTMGP_GAS_VMR_FILL_LAYOUT_HASH = 'b64f4bd145c4ba3252a11ec0a6a2cc7f048b4fb834458c1568c27ed6b6887eb5'
-RRTMGP_GAS_VMR_FILL_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_GAS_VMR_FILL_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_HYDROMETEOR_PATHS_RESOURCES = (('plev', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('play', 'float', 'read'), ('tlay', 'float', 'read'), ('nc', 'float', 'read'), ('nr', 'float', 'read'), ('ni', 'float', 'read'), ('ns', 'float', 'read'), ('effc', 'float', 'read'), ('effr', 'float', 'read'), ('effi', 'float', 'read'), ('effs', 'float', 'read'), ('cldfra', 'float', 'read'), ('clwp', 'float', 'read_write'), ('ciwp', 'float', 'read_write'), ('reliq', 'float', 'read_write'), ('dgice', 'float', 'read_write'))
 RRTMGP_HYDROMETEOR_PATHS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2783,7 +2783,7 @@ RRTMGP_INTERPOLATION_INLINE_REFERENCE_SHAPES = (('fpress_out', (('ncell',),)), (
 RRTMGP_INTERPOLATION_INLINE_REFERENCE_PARAM_FIELDS = [('press_ref_trop', 'ctypes.c_float'), ('ncell', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32')]
 RRTMGP_INTERPOLATION_INLINE_REFERENCE_THREADS_PER_GROUP = 256
 RRTMGP_INTERPOLATION_INLINE_REFERENCE_LAYOUT_HASH = 'e05878ad1c98e8948251239c3503d90d5a636e7ae05d6a6c095abbc7f1eacf54'
-RRTMGP_INTERPOLATION_INLINE_REFERENCE_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_INTERPOLATION_INLINE_REFERENCE_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_INTERPOLATION_PREPASS_RESOURCES = (('play', 'float', 'read'), ('tlay', 'float', 'read'), ('press_ref', 'float', 'read'), ('temp_ref', 'float', 'read'), ('iatm_out', 'float', 'read_write'), ('jt_out', 'float', 'read_write'), ('jp_out', 'float', 'read_write'), ('ftemp_out', 'float', 'read_write'), ('fpress_out', 'float', 'read_write'))
 RRTMGP_INTERPOLATION_PREPASS_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2791,7 +2791,7 @@ RRTMGP_INTERPOLATION_PREPASS_SHAPES = (('fpress_out', (('ncell',),)), ('ftemp_ou
 RRTMGP_INTERPOLATION_PREPASS_PARAM_FIELDS = [('press_ref_trop', 'ctypes.c_float'), ('ncell', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32')]
 RRTMGP_INTERPOLATION_PREPASS_THREADS_PER_GROUP = 256
 RRTMGP_INTERPOLATION_PREPASS_LAYOUT_HASH = 'd62f9736d75a08ddd4794b813e155134c796acad9638c511fcc316fd299a5c1b'
-RRTMGP_INTERPOLATION_PREPASS_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_INTERPOLATION_PREPASS_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_LW_FLUX_REDUCE_RESOURCES = (('part_up', 'float', 'read'), ('part_dn', 'float', 'read'), ('flux_up', 'float', 'read_write'), ('flux_dn', 'float', 'read_write'))
 RRTMGP_LW_FLUX_REDUCE_ACCESS = ('read', 'read', 'read_write', 'read_write')
@@ -2855,7 +2855,7 @@ RRTMGP_PLANCK_SOURCES_SHAPES = (('flavor', (('nflav', 'nbound'),)), ('fpress_met
 RRTMGP_PLANCK_SOURCES_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('ngas', 'ctypes.c_int32'), ('ngpt', 'ctypes.c_int32'), ('ntemp', 'ctypes.c_int32'), ('npres', 'ctypes.c_int32'), ('neta', 'ctypes.c_int32'), ('nband', 'ctypes.c_int32'), ('nplanck', 'ctypes.c_int32'), ('natm', 'ctypes.c_int32'), ('nbound', 'ctypes.c_int32')]
 RRTMGP_PLANCK_SOURCES_THREADS_PER_GROUP = 128
 RRTMGP_PLANCK_SOURCES_LAYOUT_HASH = '6b7a748b609ac9d0385a7b69b4cd0a2c5651c8e5fd3334a7014b2a62e2041361'
-RRTMGP_PLANCK_SOURCES_SHADER_HASH = 'b347cc2311c09b233318a89f657cf5a0412436b68d3e772a3919ef08e7ae5090'
+RRTMGP_PLANCK_SOURCES_SHADER_HASH = 'cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6'
 
 RRTMGP_PREPARE_CLAMP_TOP_RESOURCES = (('plev', 'float', 'read_write'),)
 RRTMGP_PREPARE_CLAMP_TOP_ACCESS = ('read_write',)
@@ -4671,7 +4671,7 @@ UWPBL_COLUMNS_SHAPES = (('cldfra', (('nk', 'ny', 'nx'),)), ('err', (('1',),)), (
 UWPBL_COLUMNS_PARAM_FIELDS = [('ncols', 'ctypes.c_int32'), ('col0', 'ctypes.c_int32'), ('nchunk', 'ctypes.c_int32'), ('pool_stride', 'ctypes.c_int32'), ('nk', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('r8size', 'ctypes.c_int32'), ('i4size', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('itimestep', 'ctypes.c_int32'), ('r8cap', 'ctypes.c_int32'), ('i4cap', 'ctypes.c_int32')]
 UWPBL_COLUMNS_THREADS_PER_GROUP = 64
 UWPBL_COLUMNS_LAYOUT_HASH = 'dfdf5a08c9c1cbd22998692fc67e3d1e1e3098d706826000e66226a939cc0838'
-UWPBL_COLUMNS_SHADER_HASH = 'bd44875d76b2a4d156655a277940d3c3423aa29a017b66544c4b72a686166a22'
+UWPBL_COLUMNS_SHADER_HASH = '25d9c5f7d90b3d1ded2cf2dbe280b5e972e4c9710b2210e24c90065dd54b3a9e'
 
 W_DAMP_RESOURCES = (('rw_t', 'float', 'read_write'), ('ww', 'float', 'read'), ('w', 'float', 'read'), ('mup', 'float', 'read'), ('mub2d', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('rdnw', 'float', 'read'))
 W_DAMP_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -6496,3 +6496,43 @@ HEX_SCALAR_RK_UPDATE_FRAGMENT_PARAM_FIELDS = [('ntracers', 'ctypes.c_int32'), ('
 HEX_SCALAR_RK_UPDATE_FRAGMENT_THREADS_PER_GROUP = 128
 HEX_SCALAR_RK_UPDATE_FRAGMENT_LAYOUT_HASH = '565736b2982d8f3de4840f343f1c28adc2c6a43fc65f50372eb9ade56a754c10'
 HEX_SCALAR_RK_UPDATE_FRAGMENT_SHADER_HASH = '24f288446296f3f96666088cb765950d68ec9ba85b87e40a4c19f8ccac438fd2'
+
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_RESOURCES = (('air_density', 'float', 'read'), ('qc', 'float', 'read'), ('cloud_number', 'float', 'read'), ('qi', 'float', 'read'), ('ice_number', 'float', 'read'), ('qs', 'float', 'read'), ('snow_number', 'float', 'read'), ('re_cloud', 'float', 'read_write'), ('re_ice', 'float', 'read_write'), ('re_snow', 'float', 'read_write'))
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_SHAPES = (('air_density', (('nz', 'ny', 'nx'),)), ('cloud_number', (('nz', 'ny', 'nx'),)), ('ice_number', (('nz', 'ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qs', (('nz', 'ny', 'nx'),)), ('re_cloud', (('nz', 'ny', 'nx'),)), ('re_ice', (('nz', 'ny', 'nx'),)), ('re_snow', (('nz', 'ny', 'nx'),)), ('snow_number', (('nz', 'ny', 'nx'),)))
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('registry_unit_numbers', 'ctypes.c_int32')]
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_THREADS_PER_GROUP = 256
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_LAYOUT_HASH = '286fc183c6ccab9ea25ac98284ae0dce9a1d730b745894b0d8f26b432049152b'
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_SHADER_HASH = '9adc13ecd2d150db95526d5f52710ae024a0d473dafae2c715ea1c520f5eb65c'
+
+DA_AIR_DENSITY_RESOURCES = (('alt', 'float', 'read'), ('air_density', 'float', 'read_write'))
+DA_AIR_DENSITY_ACCESS = ('read', 'read_write')
+DA_AIR_DENSITY_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('air_density', (('nz', 'ny', 'nx'),)))
+DA_AIR_DENSITY_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+DA_AIR_DENSITY_THREADS_PER_GROUP = 256
+DA_AIR_DENSITY_LAYOUT_HASH = '1fd34a9242f7ad76cd60505b3d7b722e5dd8c516ece85d82d213e992e6da5141'
+DA_AIR_DENSITY_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
+
+DA_OBSERVATION_THERMODYNAMICS_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('pressure', 'float', 'read'), ('temperature', 'float', 'read_write'))
+DA_OBSERVATION_THERMODYNAMICS_ACCESS = ('read', 'read', 'read', 'read_write')
+DA_OBSERVATION_THERMODYNAMICS_SHAPES = (('thb', (('nz',), ('nz', 'ny', 'nx'))), ('thp', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('temperature', (('nz', 'ny', 'nx'),)))
+DA_OBSERVATION_THERMODYNAMICS_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float')]
+DA_OBSERVATION_THERMODYNAMICS_THREADS_PER_GROUP = 256
+DA_OBSERVATION_THERMODYNAMICS_LAYOUT_HASH = '6247181d839be28ba6fae82c8eccad9eb8b7d4310d6f9ab34ca20a57e5380ce5'
+DA_OBSERVATION_THERMODYNAMICS_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
+
+MILBRANDT2_ZET_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qr', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('qh', 'float', 'read'), ('nr', 'float', 'read'), ('ni', 'float', 'read'), ('ns', 'float', 'read'), ('ng', 'float', 'read'), ('nh', 'float', 'read'), ('refl', 'float', 'read_write'), ('ck', 'float', 'read'))
+MILBRANDT2_ZET_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')
+MILBRANDT2_ZET_SHAPES = (('temperature', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qs', (('nz', 'ny', 'nx'),)), ('qg', (('nz', 'ny', 'nx'),)), ('qh', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('ni', (('nz', 'ny', 'nx'),)), ('ns', (('nz', 'ny', 'nx'),)), ('ng', (('nz', 'ny', 'nx'),)), ('nh', (('nz', 'ny', 'nx'),)), ('refl', (('nz', 'ny', 'nx'),)), ('ck', (('nck',),)))
+MILBRANDT2_ZET_PARAM_FIELDS = [('concentration_space', 'ctypes.c_int32'), ('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nck', 'ctypes.c_int32'), ('eps_q', 'ctypes.c_float'), ('eps_n', 'ctypes.c_float'), ('dielectric_factor', 'ctypes.c_float'), ('z_factor', 'ctypes.c_float'), ('minimum_zet', 'ctypes.c_float'), ('trpl', 'ctypes.c_float'), ('rgas_d', 'ctypes.c_float'), ('dbz_scale', 'ctypes.c_float')]
+MILBRANDT2_ZET_THREADS_PER_GROUP = 256
+MILBRANDT2_ZET_LAYOUT_HASH = 'd29c03b9c0dddb8246c114143c765394815ba9e133080da2ffb821cd249e28a7'
+MILBRANDT2_ZET_SHADER_HASH = '9f578220676bd075e9c392f3b2ddc607a89c805ecc2368fa78a0b86e732c8009'
+
+REFL10CM_WDM6_COLUMN_RESOURCES = (('qv', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('t', 'float', 'read'), ('p', 'float', 'read'), ('refl', 'float', 'read_write'), ('tables', 'uint64', 'read'))
+REFL10CM_WDM6_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')
+REFL10CM_WDM6_COLUMN_SHAPES = (('qv', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('nr', (('nz', 'ny', 'nx'),)), ('qs', (('nz', 'ny', 'nx'),)), ('qg', (('nz', 'ny', 'nx'),)), ('t', (('nz', 'ny', 'nx'),)), ('p', (('nz', 'ny', 'nx'),)), ('refl', (('nz', 'ny', 'nx'),)), ('tables', ((295,),)))
+REFL10CM_WDM6_COLUMN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+REFL10CM_WDM6_COLUMN_THREADS_PER_GROUP = 32
+REFL10CM_WDM6_COLUMN_LAYOUT_HASH = '263dac6e30a1cbf29556af44dd61ff52ae909d55762f20fed1851ccea6c39587'
+REFL10CM_WDM6_COLUMN_SHADER_HASH = 'e959f3f02da525c448ca7b7695c37aa5bb9f9f25e85568d5b07bb147cceb9c23'

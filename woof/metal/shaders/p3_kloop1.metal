@@ -1,26 +1,14 @@
 #include <metal_stdlib>
 #include "p3_kloop1_bindings.metalh"
+#include "p3_constants.metalh"
+#include "p3_math.metalh"
 
 using namespace metal;
 
 // P3 k_loop_1 (module_mp_p3.F:2320-2411; p3.cu:651-780).  One invocation
 // owns one complete column, retaining its level order and source update
-// order. Native MSL pow/log10 replace source-pinned r_pow and double-log10;
-// they are ordinary-mode operations, not a numerical-equivalence claim.
+// order. Shared power follows the NumPy scalar authority.
 #pragma clang fp contract(off)
-
-constant float P3_NCCNST = 0x1.7d78400000000p+27f;
-constant float P3_RD = 0x1.1f26660000000p+8f;
-constant float P3_G = 0x1.3a1cac0000000p+3f;
-constant float P3_EP_2 = 0x1.3e76c80000000p-1f;
-constant float P3_RHOSUR = 0x1.4662840000000p+0f;
-constant float P3_RHOSUI = 0x1.a69ad80000000p-1f;
-constant float P3_RHOW = 0x1.f400000000000p+9f;
-constant float P3_INV_CP = 0x1.04d6fe0000000p-10f;
-constant float P3_XXLV = 0x1.314d540000000p+21f;
-constant float P3_XXLS = 0x1.5a09740000000p+21f;
-constant float P3_XLF = 0x1.45e1000000000p+18f;
-constant float P3_QSMALL = 0x1.6849b80000000p-47f;
 
 static inline float p3_polysvp1(float t, int ice) {
     if (ice == 1 && t < 273.15f) {
@@ -35,10 +23,10 @@ static inline float p3_polysvp1(float t, int ice) {
                 * (a4 + dt * (a5 + dt * (a6 + dt * (a7 + a8 * dt)))))));
             return out * 100.0f;
         }
-        return pow(10.0f, -9.09718f * (273.16f / t - 1.0f)
-            - 3.56654f * log10(273.16f / t)
+        return p3_pow(10.0f, -9.09718f * (273.16f / t - 1.0f)
+            - 3.56654f * p3_log10(273.16f / t)
             + 0.876793f * (1.0f - t / 273.16f)
-            + log10(6.1071f)) * 100.0f;
+            + p3_log10(6.1071f)) * 100.0f;
     }
     if (t >= 202.0f) {
         const float dt = t - 273.15f;
@@ -51,14 +39,15 @@ static inline float p3_polysvp1(float t, int ice) {
             * (a4 + dt * (a5 + dt * (a6 + dt * (a7 + a8 * dt)))))));
         return out * 100.0f;
     }
-    return pow(10.0f, -7.90298f * (373.16f / t - 1.0f)
-        + 5.02808f * log10(373.16f / t)
-        - 1.3816e-7f * (pow(10.0f, 11.344f * (1.0f - t / 373.16f)) - 1.0f)
-        + 8.1328e-3f * (pow(10.0f, -3.49149f * (373.16f / t - 1.0f)) - 1.0f)
-        + log10(1013.246f)) * 100.0f;
+    return p3_pow(10.0f, -7.90298f * (373.16f / t - 1.0f)
+        + 5.02808f * p3_log10(373.16f / t)
+        - 1.3816e-7f * (p3_pow(10.0f, 11.344f * (1.0f - t / 373.16f)) - 1.0f)
+        + 8.1328e-3f * (p3_pow(10.0f, -3.49149f * (373.16f / t - 1.0f)) - 1.0f)
+        + p3_log10(1013.246f)) * 100.0f;
 }
 
-static inline float p3_qv_sat(float t, float pressure, int ice) {
+static inline float p3_qv_sat(float t, float pressure, int ice,
+                              device const float *pc) {
     const float e_pres = p3_polysvp1(t, ice);
     return P3_EP_2 * e_pres / fmax(1.0e-3f, pressure - e_pres);
 }
@@ -69,6 +58,8 @@ kernel void p3_kloop1(
     uint column [[thread_position_in_grid]]) {
     const uint ncol = uint(p.ny) * uint(p.nx);
     if (column >= ncol) return;
+    device const float *pc = r.constants;
+    const float xxlv = p.xxlv, xxls = p.xxls, xlf = p.xlf;
     for (uint k = 0; k < uint(p.nz); ++k) {
         const ulong idx = ulong(k) * ulong(ncol) + ulong(column);
         const float t = r.temperature[idx];
@@ -80,8 +71,8 @@ kernel void p3_kloop1(
         r.inv_rho[idx] = inv_rho;
 
         const float t_old = r.th_old[idx] * tm;
-        float qvs = p3_qv_sat(fmax(t_old, 1.0f), r.pressure[idx], 0);
-        float qvi = p3_qv_sat(fmax(t_old, 1.0f), r.pressure[idx], 1);
+        float qvs = p3_qv_sat(fmax(t_old, 1.0f), r.pressure[idx], 0, pc);
+        float qvi = p3_qv_sat(fmax(t_old, 1.0f), r.pressure[idx], 1, pc);
         qvs = fmax(qvs, 1.0e-20f);
         qvi = fmax(qvi, 1.0e-20f);
         r.qvs[idx] = qvs;
@@ -92,9 +83,9 @@ kernel void p3_kloop1(
         const float supi = r.qv_old[idx] / qvi - 1.0f;
         r.sup[idx] = sup;
         r.supi[idx] = supi;
-        r.rhofacr[idx] = pow(P3_RHOSUR * inv_rho, 0.54f);
-        r.rhofaci[idx] = pow(P3_RHOSUI * inv_rho, 0.54f);
-        const float dum = 1.496e-6f * pow(t, 1.5f) / (t + 120.0f);
+        r.rhofacr[idx] = p3_pow(P3_RHOSUR * inv_rho, 0.54f);
+        r.rhofaci[idx] = p3_pow(P3_RHOSUI * inv_rho, 0.54f);
+        const float dum = 1.496e-6f * p3_pow(t, 1.5f) / (t + 120.0f);
         r.acn[idx] = P3_G * P3_RHOW / (18.0f * dum);
         if (p.log_predict_nc == 0) r.nc[idx] = P3_NCCNST * inv_rho;
 
@@ -107,7 +98,7 @@ kernel void p3_kloop1(
             || (r.qc[idx] < 1.0e-8f && sup < -0.1f)) {
             r.qv[idx] = r.qv[idx] + r.qc[idx];
             r.theta[idx] = r.theta[idx]
-                - invexn * r.qc[idx] * P3_XXLV * P3_INV_CP;
+                - invexn * r.qc[idx] * xxlv * P3_INV_CP;
             r.qc[idx] = 0.0f;
             r.nc[idx] = 0.0f;
         } else {
@@ -118,7 +109,7 @@ kernel void p3_kloop1(
             || (r.qr[idx] < 1.0e-8f && sup < -0.1f)) {
             r.qv[idx] = r.qv[idx] + r.qr[idx];
             r.theta[idx] = r.theta[idx]
-                - invexn * r.qr[idx] * P3_XXLV * P3_INV_CP;
+                - invexn * r.qr[idx] * xxlv * P3_INV_CP;
             r.qr[idx] = 0.0f;
             r.nr[idx] = 0.0f;
         } else {
@@ -129,7 +120,7 @@ kernel void p3_kloop1(
             || (r.qi[idx] < 1.0e-8f && supi < -0.1f)) {
             r.qv[idx] = r.qv[idx] + r.qi[idx];
             r.theta[idx] = r.theta[idx]
-                - invexn * r.qi[idx] * P3_XXLS * P3_INV_CP;
+                - invexn * r.qi[idx] * xxls * P3_INV_CP;
             r.qi[idx] = 0.0f;
             r.ni[idx] = 0.0f;
             r.qir[idx] = 0.0f;
@@ -143,7 +134,7 @@ kernel void p3_kloop1(
             r.qr[idx] = r.qr[idx] + r.qi[idx];
             r.nr[idx] = r.nr[idx] + r.ni[idx];
             r.theta[idx] = r.theta[idx]
-                - invexn * r.qi[idx] * P3_XLF * P3_INV_CP;
+                - invexn * r.qi[idx] * xlf * P3_INV_CP;
             r.qi[idx] = 0.0f;
             r.ni[idx] = 0.0f;
             r.qir[idx] = 0.0f;

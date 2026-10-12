@@ -1,0 +1,102 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nssl2.cu",
+      "cuda_symbol": "nssl2_effective_radius",
+      "layout_version": 1,
+      "module": "nssl2_diagnostics",
+      "name": "nssl2_effective_radius_registry_units",
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "registry_unit_numbers",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "air_density",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "cloud_number",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "ice_number",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "snow_number",
+          "float",
+          "read"
+        ],
+        [
+          "re_cloud",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_ice",
+          "float",
+          "read_write"
+        ],
+        [
+          "re_snow",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "air_density": [["nz", "ny", "nx"]],
+        "cloud_number": [["nz", "ny", "nx"]],
+        "ice_number": [["nz", "ny", "nx"]],
+        "qc": [["nz", "ny", "nx"]],
+        "qi": [["nz", "ny", "nx"]],
+        "qs": [["nz", "ny", "nx"]],
+        "re_cloud": [["nz", "ny", "nx"]],
+        "re_ice": [["nz", "ny", "nx"]],
+        "re_snow": [["nz", "ny", "nx"]],
+        "snow_number": [["nz", "ny", "nx"]]
+      },
+      "source": "woof/metal/shaders/nssl2_diagnostics.metal",
+      "threads_per_group": 256
+    }
+  ]
+}

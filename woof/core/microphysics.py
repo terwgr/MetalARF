@@ -1207,7 +1207,7 @@ def _apply_scheme(state: DomainState, cfg: RunConfig, dt: float, *,
         if WRF_EXACT:
             raise NotImplementedError(
                 f"Metal mp={cfg.mp_physics} does not implement WRF exact-D arithmetic")
-        if refl_10cm_due and int(cfg.mp_physics) not in (1, 8, 9, 10, 28, 50):
+        if refl_10cm_due and int(cfg.mp_physics) not in (1, 8, 9, 10, 16, 18, 28, 50):
             raise NotImplementedError(
                 f"Metal mp={cfg.mp_physics} does not yet implement its "
                 "native reflectivity output")

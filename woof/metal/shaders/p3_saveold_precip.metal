@@ -19,7 +19,7 @@ kernel void p3_saveold_precip(
         r.qv_old[idx] = r.qv[idx];
     }
 
-    const float dum1 = 1000.0f * p.dt;
+    const float dum1 = p.precip_scale * p.dt;
     const float prt_liq = r.prt_liq[column];
     const float prt_sol = r.prt_sol[column];
     const float total = prt_liq + prt_sol;
@@ -27,5 +27,5 @@ kernel void p3_saveold_precip(
     r.rainncv[column] = total * dum1;
     r.snownc[column] = r.snownc[column] + prt_sol * dum1;
     r.snowncv[column] = prt_sol * dum1;
-    r.sr[column] = prt_sol / (prt_liq + prt_sol + 1.0e-12f);
+    r.sr[column] = prt_sol / (prt_liq + prt_sol + p.sr_denominator_floor);
 }

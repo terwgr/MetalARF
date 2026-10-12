@@ -854,25 +854,40 @@ def _nssl_reflectivity(state, temperature, pressure):
     a ``DomainState`` carries; the coordinator passes ``True`` because it
     hands over the scheme's internal per-volume slab.
     """
-    import cupy as cp
+    from woof.metal.array import MetalArray
+    if isinstance(state.p, MetalArray):
+        from woof.metal.refl_family import (
+            submit_da_air_density, submit_da_observation_temperature)
+
+        shape = tuple(state.p.shape)
+        rho = state.scratch(shape, "da_nssl_rho")
+        submit_da_air_density(state.alt, rho)
+        if temperature is None:
+            t = state.scratch(shape, "da_nssl_t")
+            submit_da_observation_temperature(state, t)
+        else:
+            t = temperature
+    else:
+        import cupy as cp
+
+        from woof.core.state import DTYPE               # noqa: PLC0415
+
+        shape = tuple(state.p.shape)
+        # Dry-air density, formed the way the NSSL runtime forms it
+        # (nssl2_runtime._prepare_fields: rho = 1/alt).
+        rho = state.scratch(shape, "da_nssl_rho")
+        rho[...] = DTYPE(1.0) / state.alt
+        if temperature is None:
+            thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
+            t = state.scratch(shape, "da_nssl_t")
+            t[...] = (thb + state.thp) * cp.power(
+                state.p / DTYPE(c.P0), DTYPE(c.RCP))
+        else:
+            t = temperature
 
     from woof.core.nssl2_diagnostics import (       # noqa: PLC0415
         diagnose_radardd02_if_due,
     )
-    from woof.core.state import DTYPE               # noqa: PLC0415
-
-    shape = tuple(state.p.shape)
-    # Dry-air density, formed the way the NSSL runtime forms it
-    # (nssl2_runtime._prepare_fields: rho = 1/alt).
-    rho = state.scratch(shape, "da_nssl_rho")
-    rho[...] = DTYPE(1.0) / state.alt
-    if temperature is None:
-        thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
-        t = state.scratch(shape, "da_nssl_t")
-        t[...] = (thb + state.thp) * cp.power(
-            state.p / DTYPE(c.P0), DTYPE(c.RCP))
-    else:
-        t = temperature
     refl = state.scratch(shape, "refl_10cm")
     diagnose_radardd02_if_due(state, rho, t, refl, output_due=True,
                               concentration_space=False)
@@ -933,21 +948,28 @@ def _thompson_graupel_number(state, temperature, pressure):
     to be diagnosed at; handing the pair on is what keeps the two from
     being formed twice and differing.
     """
-    import cupy as cp                                  # noqa: PLC0415
-
-    from woof.core.state import DTYPE                 # noqa: PLC0415
     from woof.core.thompson import (                  # noqa: PLC0415
         launch_classic_graupel_number_finalize,
         launch_classic_graupel_number_init,
     )
 
     shape = tuple(state.p.shape)
+    from woof.metal.array import MetalArray
+    is_metal = isinstance(state.p, MetalArray)
     if temperature is None:
-        thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
         pressure = state.p
         temperature = state.scratch(shape, "refl_t")
-        temperature[...] = (thb + state.thp) * cp.power(
-            state.p / DTYPE(c.P0), DTYPE(c.RCP))
+        if is_metal:
+            from woof.metal.refl_family import submit_da_observation_temperature
+
+            submit_da_observation_temperature(state, temperature)
+        else:
+            import cupy as cp                                  # noqa: PLC0415
+            from woof.core.state import DTYPE                 # noqa: PLC0415
+
+            thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
+            temperature[...] = (thb + state.thp) * cp.power(
+                state.p / DTYPE(c.P0), DTYPE(c.RCP))
     shadow = state.scratch(shape, "mp_thompson_graupel_number_shadow")
     # A transient copy, not a scratch slot: it is dead when this returns,
     # and a slot would enter the pinned mp=8 arena layout for a DA-only
@@ -1092,13 +1114,13 @@ def simulated_reflectivity(state, cfg, *, temperature=None, pressure=None,
     P3-satisfiable branch is the rain-only Kessler fallback.
 
     ``mp_physics=18`` dispatches to the product's NSSL ``radardd02``
-    diagnostic exactly as the production coordinator does (CUDA only, no
+    diagnostic exactly as the production coordinator does (CUDA and Metal, no
     host mirror; see :func:`_nssl_reflectivity` for the two caveats a DA
     caller has to carry -- a 0 dBZ clear-air floor rather than -35, and the
     per-mass moment convention).  It is a supported scheme, not mapped onto
     Morrison or Thompson.
 
-    On a CuPy state this returns the state's persistent ``refl_10cm``
+    On a CuPy or Metal state this returns the state's persistent ``refl_10cm``
     scratch slot, owned by the state and reused on the next call --
     copy it if you need to keep it.  On a NumPy state it returns a fresh
     float32 array.
@@ -1116,8 +1138,9 @@ def simulated_reflectivity(state, cfg, *, temperature=None, pressure=None,
         raise NotImplementedError(refusal)
     _refuse_unrouted_reflectivity(int(cfg.mp_physics))
 
-    xp = _array_module(state.p)
-    if xp is np:
+    from woof.metal.array import MetalArray
+    is_metal = isinstance(state.p, MetalArray)
+    if not is_metal and _array_module(state.p) is np:
         return _host_reflectivity(state, cfg, temperature, pressure)
 
     if int(cfg.mp_physics) == 18:

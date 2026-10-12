@@ -1,0 +1,36 @@
+{
+  "kernels": [
+    {
+      "name": "refl10cm_wdm6_column",
+      "module": "wdm6_reflectivity",
+      "source": "woof/metal/shaders/wdm6_reflectivity.metal",
+      "cuda_source": "woof/core/kernels/wdm6_refl.cu",
+      "cuda_symbol": "refl10cm_wdm6_column",
+      "resources": [
+        ["qv", "float", "read"], ["qr", "float", "read"],
+        ["nr", "float", "read"], ["qs", "float", "read"],
+        ["qg", "float", "read"], ["t", "float", "read"],
+        ["p", "float", "read"], ["refl", "float", "read_write"],
+        ["tables", "uint64", "read"]
+      ],
+      "shapes": {
+        "qv": [["nz", "ny", "nx"]],
+        "qr": [["nz", "ny", "nx"]],
+        "nr": [["nz", "ny", "nx"]],
+        "qs": [["nz", "ny", "nx"]],
+        "qg": [["nz", "ny", "nx"]],
+        "t": [["nz", "ny", "nx"]],
+        "p": [["nz", "ny", "nx"]],
+        "refl": [["nz", "ny", "nx"]],
+        "tables": [[295]]
+      },
+      "parameters": [["nz", "int32"], ["ny", "int32"], ["nx", "int32"]],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "software-binary64", "software-complex128", "fp32-output",
+        "software-libm-approximation-unverified"
+      ]
+    }
+  ]
+}

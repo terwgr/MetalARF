@@ -20,7 +20,7 @@
         ["sup", "float", "read_write"], ["supi", "float", "read_write"],
         ["rhofacr", "float", "read_write"], ["rhofaci", "float", "read_write"],
         ["acn", "float", "read_write"], ["qv_cld", "float", "read_write"],
-        ["flags", "float", "read_write"]
+        ["flags", "float", "read_write"], ["constants", "float", "read"]
       ],
       "shapes": {
         "qc": [["nz", "ny", "nx"]], "nc": [["nz", "ny", "nx"]],
@@ -36,11 +36,12 @@
         "sup": [["nz", "ny", "nx"]], "supi": [["nz", "ny", "nx"]],
         "rhofacr": [["nz", "ny", "nx"]], "rhofaci": [["nz", "ny", "nx"]],
         "acn": [["nz", "ny", "nx"]], "qv_cld": [["nz", "ny", "nx"]],
-        "flags": [[2, "ny", "nx"]]
+        "flags": [[2, "ny", "nx"]], "constants": [[52]]
       },
       "parameters": [
         ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
-        ["log_predict_nc", "int32"]
+        ["log_predict_nc", "int32"], ["xxlv", "float32"],
+        ["xxls", "float32"], ["xlf", "float32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,

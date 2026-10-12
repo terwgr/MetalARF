@@ -42,7 +42,12 @@ def submit_p3_saveold_precip(*, theta, qv, th_old, qv_old, prt_liq,
             raise ValueError(f"P3 Metal finish {name} belongs to another context")
     context.submit_kernel(
         "p3_saveold_precip", arrays,
-        {"nz": nz, "ny": ny, "nx": nx, "dt": float(np.float32(dt))},
+        {
+            "nz": nz, "ny": ny, "nx": nx,
+            "dt": float(np.float32(dt)),
+            "precip_scale": float(np.float32(1000.0)),
+            "sr_denominator_floor": float(np.float32(1.0e-12)),
+        },
         exact_policy=False, grid_size=ny * nx)
 
 
