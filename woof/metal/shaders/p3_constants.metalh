@@ -1,0 +1,112 @@
+#ifndef WOOF_P3_CONSTANTS_METALH
+#define WOOF_P3_CONSTANTS_METALH
+
+enum P3ConstantIndex : uint {
+    P3_C_PI = 0u,
+    P3_C_THRD = 1u,
+    P3_C_SXTH = 2u,
+    P3_C_PIOV3 = 3u,
+    P3_C_PIOV6 = 4u,
+    P3_C_MAX_TOTAL_NI = 5u,
+    P3_C_NCCNST = 6u,
+    P3_C_KC = 7u,
+    P3_C_KR = 8u,
+    P3_C_CP = 9u,
+    P3_C_INV_CP = 10u,
+    P3_C_G = 11u,
+    P3_C_RD = 12u,
+    P3_C_RV = 13u,
+    P3_C_EP_2 = 14u,
+    P3_C_RHOSUR = 15u,
+    P3_C_RHOSUI = 16u,
+    P3_C_AR = 17u,
+    P3_C_BR = 18u,
+    P3_C_F1R = 19u,
+    P3_C_F2R = 20u,
+    P3_C_ECR = 21u,
+    P3_C_RHOW = 22u,
+    P3_C_CPW = 23u,
+    P3_C_INV_RHOW = 24u,
+    P3_C_MU_R_CONSTANT = 25u,
+    P3_C_INV_DRMAX = 26u,
+    P3_C_RHO_RIMEMIN = 27u,
+    P3_C_RHO_RIMEMAX = 28u,
+    P3_C_INV_RHO_RIMEMAX = 29u,
+    P3_C_QSMALL = 30u,
+    P3_C_NSMALL = 31u,
+    P3_C_BSMALL = 32u,
+    P3_C_BIMM = 33u,
+    P3_C_AIMM = 34u,
+    P3_C_RIN = 35u,
+    P3_C_MI0 = 36u,
+    P3_C_ECI = 37u,
+    P3_C_ERI = 38u,
+    P3_C_BCN = 39u,
+    P3_C_DBRK = 40u,
+    P3_C_NMLTRATIO = 41u,
+    P3_C_MU_I_INITIAL = 42u,
+    P3_C_CONS1 = 43u,
+    P3_C_CONS2 = 44u,
+    P3_C_CONS3 = 45u,
+    P3_C_CONS4 = 46u,
+    P3_C_CONS5 = 47u,
+    P3_C_CONS6 = 48u,
+    P3_C_CONS7 = 49u,
+    P3_C_CONS8 = 50u,
+    P3_C_E0 = 51u
+};
+
+#define P3_PI (pc[P3_C_PI])
+#define P3_THRD (pc[P3_C_THRD])
+#define P3_SXTH (pc[P3_C_SXTH])
+#define P3_PIOV3 (pc[P3_C_PIOV3])
+#define P3_PIOV6 (pc[P3_C_PIOV6])
+#define P3_MAX_TOTAL_NI (pc[P3_C_MAX_TOTAL_NI])
+#define P3_NCCNST (pc[P3_C_NCCNST])
+#define P3_KC (pc[P3_C_KC])
+#define P3_KR (pc[P3_C_KR])
+#define P3_CP (pc[P3_C_CP])
+#define P3_INV_CP (pc[P3_C_INV_CP])
+#define P3_G (pc[P3_C_G])
+#define P3_RD (pc[P3_C_RD])
+#define P3_RV (pc[P3_C_RV])
+#define P3_EP_2 (pc[P3_C_EP_2])
+#define P3_RHOSUR (pc[P3_C_RHOSUR])
+#define P3_RHOSUI (pc[P3_C_RHOSUI])
+#define P3_F1R (pc[P3_C_F1R])
+#define P3_F2R (pc[P3_C_F2R])
+#define P3_RHOW (pc[P3_C_RHOW])
+#define P3_CPW (pc[P3_C_CPW])
+#define P3_INV_RHOW (pc[P3_C_INV_RHOW])
+#define P3_MU_R_CONSTANT (pc[P3_C_MU_R_CONSTANT])
+#define P3_AR (pc[P3_C_AR])
+#define P3_BR (pc[P3_C_BR])
+#define P3_ECR (pc[P3_C_ECR])
+#define P3_INV_DRMAX (pc[P3_C_INV_DRMAX])
+#define P3_RHO_RIMEMIN (pc[P3_C_RHO_RIMEMIN])
+#define P3_RHO_RIMEMAX (pc[P3_C_RHO_RIMEMAX])
+#define P3_INV_RHO_RIMEMAX (pc[P3_C_INV_RHO_RIMEMAX])
+#define P3_QSMALL (pc[P3_C_QSMALL])
+#define P3_NSMALL (pc[P3_C_NSMALL])
+#define P3_BSMALL (pc[P3_C_BSMALL])
+#define P3_BIMM (pc[P3_C_BIMM])
+#define P3_AIMM (pc[P3_C_AIMM])
+#define P3_RIN (pc[P3_C_RIN])
+#define P3_MI0 (pc[P3_C_MI0])
+#define P3_ECI (pc[P3_C_ECI])
+#define P3_ERI (pc[P3_C_ERI])
+#define P3_BCN (pc[P3_C_BCN])
+#define P3_DBRK (pc[P3_C_DBRK])
+#define P3_NMLTRATIO (pc[P3_C_NMLTRATIO])
+#define P3_MU_I_INITIAL (pc[P3_C_MU_I_INITIAL])
+#define P3_CONS1 (pc[P3_C_CONS1])
+#define P3_CONS2 (pc[P3_C_CONS2])
+#define P3_CONS3 (pc[P3_C_CONS3])
+#define P3_CONS4 (pc[P3_C_CONS4])
+#define P3_CONS5 (pc[P3_C_CONS5])
+#define P3_CONS6 (pc[P3_C_CONS6])
+#define P3_CONS7 (pc[P3_C_CONS7])
+#define P3_CONS8 (pc[P3_C_CONS8])
+#define P3_E0 (pc[P3_C_E0])
+
+#endif

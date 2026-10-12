@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from .p3_constants import P3_CONSTANT_NAMES
 from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
@@ -14,7 +15,7 @@ _SCRATCH = ("rho", "inv_rho", "rhofaci", "vq", "vn", "fq", "fn",
 
 
 def submit_p3_sed_ice(*, fields: dict, scratch: dict, itab, prt_sol,
-                      flags, dt: float) -> None:
+                      flags, constants, dt: float) -> None:
     """Run P3 ice/rime sedimentation with caller-owned ITAB/workspace.
 
     Volume arrays are contiguous FP32 ``(nz,ny,nx)``; ITAB is flat FP32
@@ -22,8 +23,7 @@ def submit_p3_sed_ice(*, fields: dict, scratch: dict, itab, prt_sol,
     """
     if WRF_EXACT:
         raise NotImplementedError(
-            "P3 Metal ice sedimentation supports ordinary float32 only; "
-            "source double-log10 is not implemented")
+            "P3 Metal ice sedimentation supports ordinary float32 only")
     missing = ([n for n in _FIELDS if n not in fields]
                + [n for n in _SCRATCH if n not in scratch])
     if missing:
@@ -77,6 +77,16 @@ def submit_p3_sed_ice(*, fields: dict, scratch: dict, itab, prt_sol,
                 f"P3 Metal ice sedimentation {name} belongs to another context")
         arrays[name] = value
     arrays["itab"] = itab
+    if (not isinstance(constants, MetalArray)
+            or constants.shape != (len(P3_CONSTANT_NAMES),)
+            or constants.dtype != np.dtype(np.float32)
+            or not constants.flags.c_contiguous):
+        raise TypeError(
+            "P3 Metal ice sedimentation constants must be contiguous FP32 "
+            f"({len(P3_CONSTANT_NAMES)},)")
+    if constants.buffer.context is not context:
+        raise ValueError("P3 Metal ice sedimentation constants use another context")
+    arrays["constants"] = constants
     step = np.float32(dt)
     if not np.isfinite(step) or step <= 0.0:
         raise ValueError("P3 Metal ice sedimentation dt must be positive finite FP32")

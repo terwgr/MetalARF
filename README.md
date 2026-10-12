@@ -10,20 +10,26 @@ The package contains three models:
 
 | Model | Command | Status | Metal |
 | --- | --- | --- | --- |
-| Regional (WRF-ARW class, nests, DA) | `woof` | Production | Every admitted physics combination |
+| Regional (WRF-ARW class, nests, DA) | `woof` | Upstream interface promise | Selected combinations; see backend guide |
 | Hex (MPAS-style unstructured mesh) | `woof hex` | Preview | Forecast, restart, history |
 | Global (spectral, with ensemble DA) | `woof global` | Preview | `sl_si`, `ssprk3`, restart, DA cycle |
 
-On Metal, the regional model runs the operational HRRR configuration
-(Thompson, MYNN GSD 4.1, RUC and legacy RRTMG), as well as nests, ensembles,
-restarts, history products and local data assimilation. Apple GPUs have no
-hardware double precision, so the physics that WRF computes in double uses a
-software implementation, and results match the NumPy reference. The [backend guide](docs/public/BACKENDS.md)
-lists coverage by feature, and the [changelog](CHANGELOG.md) lists changes.
+The Metal backend includes callers for the HRRR physics forms (Thompson,
+MYNN GSD 4.1, RUC and legacy RRTMG), plus paths for nests, ensembles,
+restarts, history products and local data assimilation. Availability depends
+on the selected options and their coupling. Admission and finite smoke
+results do not establish numerical agreement for every combination.
 
-Production means the regional commands and their config and checkpoint
-formats are covered by the upstream major-version promise. It is not a
-statement about forecast accuracy; see Science and limits below.
+Apple GPUs have no hardware double precision. Metal's double-precision
+physics uses software binary64; the published arithmetic contracts still
+describe parts of that implementation as unverified. There is no general
+claim here that Metal output matches NumPy, CUDA or WRF. The
+[backend guide](docs/public/BACKENDS.md) lists admission selectors, restrictions
+and evidence limits; the [changelog](CHANGELOG.md) lists changes.
+
+The regional commands and their config and checkpoint formats inherit the
+upstream major-version promise. This describes the interface, not Metal
+forecast accuracy; see Science and limits below.
 
 ## Requirements
 
@@ -46,7 +52,7 @@ python -m pip install -e .
 woof setup
 woof fetch-tables
 woof fetch-geog --datasets wrf
-woof selftest
+woof selftest --backend metal
 ```
 
 The command is installed as both `metalarf` and `woof`; they are the same
@@ -58,6 +64,12 @@ from crates.io, at the versions pinned in each `Cargo.lock`.
 The Metal shader library ships prebuilt in `woof/libexec/metal`. After you
 change a shader, rebuild it with
 `python tools/build_metal_backend.py --output woof/libexec/metal`.
+
+The PyPI distribution `recast-woof` is upstream WOOF and does not provide
+MetalARF's Metal backend. Use the clone install above on a Mac. MetalARF
+currently retains upstream's distribution name and version; `pip show`
+alone does not distinguish the fork. Keep the clone's commit recorded with
+your run when identifying the installed source.
 
 On Linux with an NVIDIA GPU, follow the upstream install:
 `python -m pip install 'recast-woof[all-cu12]'` (or `all-cu13`).
@@ -128,6 +140,19 @@ run it before and after a change to the Metal path.
   [MAINTAINING.md](MAINTAINING.md) covers upstream merges and releases.
 
 ## Science and limits
+
+Metal numerical coverage is incomplete. The software binary64 contracts
+([base arithmetic](woof/metal/soft_binary64_contract.json) and
+[exp helper](woof/metal/soft_gfk_exp_contract.json)) do not certify all
+production callers. The combo smoke tool checks admission and finite state;
+its success does not establish physical accuracy or parity. Historical
+upstream verification results below apply to the builds and configurations
+that produced them, and do not transfer automatically to this Metal port.
+
+A reported [Vermont forecast comparison](https://github.com/terwgr/MetalARF/issues/7)
+shows substantial Metal/CUDA divergence. The proposed
+[longwave fix](https://github.com/terwgr/MetalARF/pull/8) has a small idealized
+cloud comparison, but the original real-data comparison remains outstanding.
 
 WOOF implements a WRF-ARW-class regional model and WRF-derived physics on the
 GPU. Comparisons against WRF Fortran, ULP and byte-identity checks, and the

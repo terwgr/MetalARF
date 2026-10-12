@@ -43,6 +43,8 @@ def dycore_config_refusals(cfg):
             f"Smagorinsky/sixth-order diffusion pair "
             f"(km_opt={cfg.km_opt}, diff_6th_opt={cfg.diff_6th_opt}) "
             "has no Metal kernel pair")
+    if int(getattr(cfg, "tke_budget", 0)) != 0:
+        refusals.append("tke_budget=1 has no Metal implementation")
     if cfg.zadvect_implicit != 0:
         refusals.append("IEVA vertical advection")
     if cfg.damp_opt not in (0, 3):

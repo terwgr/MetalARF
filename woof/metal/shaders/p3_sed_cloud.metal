@@ -1,5 +1,7 @@
 #include <metal_stdlib>
 #include "p3_sed_cloud_bindings.metalh"
+#include "p3_constants.metalh"
+#include "p3_math.metalh"
 #include "soft_gfk_tgamma.metalh"
 
 using namespace metal;
@@ -10,22 +12,14 @@ using namespace metal;
 // pinned libm operations; CUDA parity remains unverified.
 #pragma clang fp contract(off)
 
-constant float P3_CONS1 = 0x1.05cca60000000p+9f;
-constant float P3_THRD = 0x1.5555560000000p-2f;
-constant float P3_BCN = 0x1.0000000000000p+1f;
-constant float P3_QSMALL = 0x1.6849b80000000p-47f;
-constant float P3_NSMALL = 0x1.cd2b2a0000000p-54f;
-constant float P3_PI = 0x1.921fb60000000p+1f;
-constant float P3_RHOW = 0x1.f400000000000p+9f;
-constant float P3_INV_RHOW = 0x1.0624de0000000p-10f;
-
 static inline void p3_cloud_dsd(thread float &nc, float qc, float rho,
-                                thread float &mu, thread float &lambda) {
+                                thread float &mu, thread float &lambda,
+                                device const float *pc) {
     float n=fmax(nc,P3_NSMALL);
     mu=0.0005714f*(n*1.0e-6f*rho)+0.2714f;
     mu=1.0f/(mu*mu)-1.0f;
     mu=fmin(fmax(mu,2.0f),15.0f);
-    lambda=pow(P3_CONS1*n*(mu+3.0f)*(mu+2.0f)*(mu+1.0f)/qc,P3_THRD);
+    lambda=p3_pow(P3_CONS1*n*(mu+3.0f)*(mu+2.0f)*(mu+1.0f)/qc,P3_THRD);
     const float lammin=(mu+1.0f)*2.5e4f;
     const float lammax=(mu+1.0f)*1.0e6f;
     if (lambda<lammin) {
@@ -46,6 +40,7 @@ kernel void p3_sed_cloud(
     uint column [[thread_position_in_grid]]) {
     const uint ncol=uint(p.ny)*uint(p.nx);
     if (column>=ncol || r.flags[ncol+column]==0.0f) return;
+    device const float *pc = r.constants;
     const int nz=p.nz;
     const ulong base=ulong(column);
     const ulong stride=ulong(ncol);
@@ -76,9 +71,9 @@ kernel void p3_sed_cloud(
             const ulong idx=ulong(k)*stride+base;
             if (r.qc[idx]>P3_QSMALL) {
                 float mu_c,lamc,nc=r.nc[idx];
-                p3_cloud_dsd(nc,r.qc[idx],r.rho[idx],mu_c,lamc);
+                p3_cloud_dsd(nc,r.qc[idx],r.rho[idx],mu_c,lamc,pc);
                 r.nc[idx]=nc;
-                const float dum=1.0f/pow(lamc,P3_BCN);
+                const float dum=1.0f/p3_pow(lamc,P3_BCN);
                 r.vq[idx]=r.acn[idx]
                     *soft_gfk_tgammaf(4.0f+P3_BCN+mu_c)*dum
                     /soft_gfk_tgammaf(mu_c+4.0f);
@@ -88,10 +83,10 @@ kernel void p3_sed_cloud(
                         /soft_gfk_tgammaf(mu_c+1.0f);
                 }
             }
-            co_max=fmax(co_max,r.vq[idx]*dt_left*(1.0f/r.dz[idx]));
+            co_max=fmax(co_max,r.vq[idx]*dt_left*(p3_div_rn(1.0f,r.dz[idx])));
         }
         const int tmpint1=int(co_max+1.0f);
-        const float dt_sub=fmin(dt_left,dt_left/float(tmpint1));
+        const float dt_sub=fmin(dt_left,p3_div_rn(dt_left,float(tmpint1)));
         const int ktemp=(kbot==0)?kbot:kbot-1;
         for (int k=ktemp;k<=ktop;++k) {
             const ulong idx=ulong(k)*stride+base;
@@ -103,7 +98,7 @@ kernel void p3_sed_cloud(
         {
             const int k=ktop;
             const ulong idx=ulong(k)*stride+base;
-            const float idz=1.0f/r.dz[idx];
+            const float idz=p3_div_rn(1.0f,r.dz[idx]);
             const float fdq=-r.fq[idx]*idz;
             r.qc[idx]=r.qc[idx]+fdq*dt_sub*r.inv_rho[idx];
             if (p.log_predict_nc!=0) {
@@ -114,7 +109,7 @@ kernel void p3_sed_cloud(
         for (int k=ktop-1;k>=ktemp;--k) {
             const ulong idx=ulong(k)*stride+base;
             const ulong below=ulong(k+1)*stride+base;
-            const float idz=1.0f/r.dz[idx];
+            const float idz=p3_div_rn(1.0f,r.dz[idx]);
             const float fdq=(r.fq[below]-r.fq[idx])*idz;
             r.qc[idx]=r.qc[idx]+fdq*dt_sub*r.inv_rho[idx];
             if (p.log_predict_nc!=0) {
@@ -125,6 +120,6 @@ kernel void p3_sed_cloud(
         dt_left=dt_left-dt_sub;
         if (kbot!=0) kbot=kbot-1;
     }
-    const float odt=1.0f/p.dt;
+    const float odt=p3_div_rn(1.0f,p.dt);
     r.prt_liq[column]=prt_accum*P3_INV_RHOW*odt;
 }

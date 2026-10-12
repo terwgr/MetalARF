@@ -18,7 +18,8 @@
         ["zdbz", "float", "read_write"], ["effc", "float", "read_write"],
         ["effi", "float", "read_write"], ["vmi", "float", "read_write"],
         ["di", "float", "read_write"], ["rhopo", "float", "read_write"],
-        ["itab", "float", "read"], ["flags", "float", "read"]
+        ["itab", "float", "read"], ["flags", "float", "read"],
+        ["constants", "float", "read"]
       ],
       "shapes": {
         "qc": [["nz", "ny", "nx"]], "nc": [["nz", "ny", "nx"]],
@@ -32,10 +33,12 @@
         "zdbz": [["nz", "ny", "nx"]], "effc": [["nz", "ny", "nx"]],
         "effi": [["nz", "ny", "nx"]], "vmi": [["nz", "ny", "nx"]],
         "di": [["nz", "ny", "nx"]], "rhopo": [["nz", "ny", "nx"]],
-        "itab": [[14000]], "flags": [[2, "ny", "nx"]]
+        "itab": [[14000]], "flags": [[2, "ny", "nx"]],
+        "constants": [[52]]
       },
       "parameters": [
-        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"]
+        ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["xxlv", "float32"], ["xxls", "float32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,

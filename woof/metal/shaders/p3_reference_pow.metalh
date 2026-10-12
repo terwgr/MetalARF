@@ -1,0 +1,156 @@
+#ifndef WOOF_P3_REFERENCE_POW_METALH
+#define WOOF_P3_REFERENCE_POW_METALH
+
+#include "soft_gfk_pow.metalh"
+
+// Positive-normal binary32 power matching the Darwin NumPy scalar authority.
+// Reduce log2 and exp2 in 128 intervals, evaluating the binary64 polynomials
+// with explicit fused operations. Numerical coefficients are pinned IEEE
+// encodings from the authority's scalar powf; no host calls or native doubles.
+// Other domains retain the shared power implementation.
+constant ulong p3_reference_log_coeff[4] = {
+    0xc0471559dca827ebul, 0x404ec71c53b3b1e8ul, 0xc05715476529654cul, 0x40671547652aef42ul,
+};
+constant ulong p3_reference_log_table[256] = {
+    0x3ff6c16c16c16c17ul, 0xc05042bd4b9a7c99ul, 0x3ff6a13cd1537290ul, 0xc050014332be0033ul,
+    0x3ff6816816816817ul, 0xc04f804ae8d0cd02ul, 0x3ff661ec6a5122f9ul, 0xc04efec61b011f85ul,
+    0x3ff642c8590b2164ul, 0xc04e7df5fe538ab3ul, 0x3ff623fa77016240ul, 0xc04dfdd89d586e2bul,
+    0x3ff6058160581606ul, 0xc04d7e6c0abc3579ul, 0x3ff5e75bb8d015e7ul, 0xc04cffae611ad12bul,
+    0x3ff5c9882b931057ul, 0xc04c819dc2d45fe4ul, 0x3ff5ac056b015ac0ul, 0xc04c043859e2fdb3ul,
+    0x3ff58ed2308158edul, 0xc04b877c57b1b070ul, 0x3ff571ed3c506b3aul, 0xc04b0b67f4f46810ul,
+    0x3ff5555555555555ul, 0xc04a8ff971810a5eul, 0x3ff5390948f40febul, 0xc04a152f142981b4ul,
+    0x3ff51d07eae2f815ul, 0xc0499b072a96c6b2ul, 0x3ff5015015015015ul, 0xc04921800924dd3bul,
+    0x3ff4e5e0a72f0539ul, 0xc048a8980abfbd32ul, 0x3ff4cab88725af6eul, 0xc048304d90c11fd3ul,
+    0x3ff4afd6a052bf5bul, 0xc047b89f02cf2aadul, 0x3ff49539e3b2d067ul, 0xc047418acebbf18ful,
+    0x3ff47ae147ae147bul, 0xc046cb0f6865c8eaul, 0x3ff460cbc7f5cf9aul, 0xc046552b49986277ul,
+    0x3ff446f86562d9fbul, 0xc045dfdcf1eeae0eul, 0x3ff42d6625d51f87ul, 0xc0456b22e6b578e5ul,
+    0x3ff4141414141414ul, 0xc044f6fbb2cec598ul, 0x3ff3fb013fb013fbul, 0xc0448365e695d797ul,
+    0x3ff3e22cbce4a902ul, 0xc044106017c3eca3ul, 0x3ff3c995a47babe7ul, 0xc0439de8e1559f6ful,
+    0x3ff3b13b13b13b14ul, 0xc0432bfee370ee68ul, 0x3ff3991c2c187f63ul, 0xc042baa0c34be1ecul,
+    0x3ff3813813813814ul, 0xc04249cd2b13cd6cul, 0x3ff3698df3de0748ul, 0xc041d982c9d52708ul,
+    0x3ff3521cfb2b78c1ul, 0xc04169c05363f158ul, 0x3ff33ae45b57bcb2ul, 0xc040fa848044b351ul,
+    0x3ff323e34a2b10bful, 0xc0408bce0d95fa38ul, 0x3ff30d190130d190ul, 0xc0401d9bbcfa61d4ul,
+    0x3ff2f684bda12f68ul, 0xc03f5fd8a9063e35ul, 0x3ff2e025c04b8097ul, 0xc03e857d3d361368ul,
+    0x3ff2c9fb4d812ca0ul, 0xc03dac22d3e441d3ul, 0x3ff2b404ad012b40ul, 0xc03cd3c712d31109ul,
+    0x3ff29e4129e4129eul, 0xc03bfc67a7fff4ccul, 0x3ff288b01288b013ul, 0xc03b2602497d5346ul,
+    0x3ff27350b8812735ul, 0xc03a5094b54d2828ul, 0x3ff25e22708092f1ul, 0xc0397c1cb13c7ec1ul,
+    0x3ff2492492492492ul, 0xc038a8980abfbd32ul, 0x3ff23456789abcdful, 0xc037d60496cfbb4cul,
+    0x3ff21fb78121fb78ul, 0xc037046031c79f85ul, 0x3ff20b470c67c0d9ul, 0xc03633a8bf437ce1ul,
+    0x3ff1f7047dc11f70ul, 0xc03563dc29ffacb2ul, 0x3ff1e2ef3b3fb874ul, 0xc03494f863b8df35ul,
+    0x3ff1cf06ada2811dul, 0xc033c6fb650cde51ul, 0x3ff1bb4a4046ed29ul, 0xc032f9e32d5bfdd1ul,
+    0x3ff1a7b9611a7b96ul, 0xc0322dadc2ab3497ul, 0x3ff19453808ca29cul, 0xc03162593186da70ul,
+    0x3ff1811811811812ul, 0xc03097e38ce60649ul, 0x3ff16e0689427379ul, 0xc02f9c95dc1d1165ul,
+    0x3ff15b1e5f75270dul, 0xc02e0b1ae8f2fd56ul, 0x3ff1485f0e0acd3bul, 0xc02c7b528b70f1c5ul,
+    0x3ff135c81135c811ul, 0xc02aed391ab6674eul, 0x3ff12358e75d3033ul, 0xc02960caf9abb7caul,
+    0x3ff1111111111111ul, 0xc027d60496cfbb4cul, 0x3ff0fef010fef011ul, 0xc0264ce26c067157ul,
+    0x3ff0ecf56be69c90ul, 0xc024c560fe68af88ul, 0x3ff0db20a88f4696ul, 0xc0233f7cde14cf5aul,
+    0x3ff0c9714fbcda3bul, 0xc021bb32a600549dul, 0x3ff0b7e6ec259dc8ul, 0xc020387efbca869eul,
+    0x3ff0a6810a6810a7ul, 0xc01d6ebd1f1febfeul, 0x3ff0953f39010954ul, 0xc01a6f9c377dd31bul,
+    0x3ff0842108421084ul, 0xc0177394c9d958d5ul, 0x3ff073260a47f7c6ul, 0xc0147aa07357704ful,
+    0x3ff0624dd2f1a9fcul, 0xc01184b8e4c56af8ul, 0x3ff05197f7d73404ul, 0xc00d23afc49139f9ul,
+    0x3ff0410410410410ul, 0xc00743ee861f3556ul, 0x3ff03091b51f5e1aul, 0xc0016a21e20a0a45ul,
+    0x3ff0204081020408ul, 0xbff72c7ba20f7327ul, 0x3ff0101010101010ul, 0xbfe720d9c06a835ful,
+    0x3ff0000000000000ul, 0x0000000000000000ul, 0x3fefc07f01fc07f0ul, 0x3ff6fe50b6ef0851ul,
+    0x3fef81f81f81f820ul, 0x4006e79685c2d22aul, 0x3fef44659e4a4271ul, 0x40111cd1d5133413ul,
+    0x3fef07c1f07c1f08ul, 0x4016bad3758efd87ul, 0x3feecc07b301ecc0ul, 0x401c4dfab90aab5ful,
+    0x3fee9131abf0b767ul, 0x4020eb389fa29f9bul, 0x3fee573ac901e574ul, 0x4023aa2fdd27f1c3ul,
+    0x3fee1e1e1e1e1e1eul, 0x402663f6fac91316ul, 0x3fede5d6e3f8868aul, 0x402918a16e46335bul,
+    0x3fedae6076b981dbul, 0x402bc84240adabbaul, 0x3fed77b654b82c34ul, 0x402e72ec117fa5b2ul,
+    0x3fed41d41d41d41dul, 0x40308c588cda79e4ul, 0x3fed0cb58f6ec074ul, 0x4031dcd197552b7bul,
+    0x3fecd85689039b0bul, 0x40332ae9e278ae1aul, 0x3feca4b3055ee191ul, 0x403476a9f983f74dul,
+    0x3fec71c71c71c71cul, 0x4035c01a39fbd688ul, 0x3fec3f8f01c3f8f0ul, 0x40370742d4ef027ful,
+    0x3fec0e070381c0e0ul, 0x40384c2bd02f03b3ul, 0x3febdd2b899406f7ul, 0x40398edd077e70dful,
+    0x3febacf914c1bad0ul, 0x403acf5e2db4ec94ul, 0x3feb7d6c3dda338bul, 0x403c0db6cdd94deeul,
+    0x3feb4e81b4e81b4ful, 0x403d49ee4c325970ul, 0x3feb2036406c80d9ul, 0x403e840be74e6a4dul,
+    0x3feaf286bca1af28ul, 0x403fbc16b902680aul, 0x3feac5701ac5701bul, 0x4040790adbb03009ul,
+    0x3fea98ef606a63beul, 0x40411307dad30b76ul, 0x3fea6d01a6d01a6dul, 0x4041ac05b291f070ul,
+    0x3fea41a41a41a41aul, 0x40424407ab0e073aul, 0x3fea16d3f97a4b02ul, 0x4042db10fc4d9aaful,
+    0x3fe9ec8e951033d9ul, 0x40437124cea4cdedul, 0x3fe9c2d14ee4a102ul, 0x404406463b1b0449ul,
+    0x3fe999999999999aul, 0x40449a784bcd1b8bul, 0x3fe970e4f80cb872ul, 0x40452dbdfc4c96b3ul,
+    0x3fe948b0fcd6e9e0ul, 0x4045c01a39fbd688ul, 0x3fe920fb49d0e229ul, 0x4046518fe4677ba7ul,
+    0x3fe8f9c18f9c18faul, 0x4046e221cd9d0cdeul, 0x3fe8d3018d3018d3ul, 0x404771d2ba7efb3cul,
+    0x3fe8acb90f6bf3aaul, 0x404800a563161c54ul, 0x3fe886e5f0abb04aul, 0x40488e9c72e0b226ul,
+    0x3fe8618618618618ul, 0x40491bba891f1709ul, 0x3fe83c977ab2beddul, 0x4049a802391e232ful,
+    0x3fe8181818181818ul, 0x404a33760a7f6051ul, 0x3fe7f405fd017f40ul, 0x404abe18797f1f49ul,
+    0x3fe7d05f417d05f4ul, 0x404b47ebf73882a1ul, 0x3fe7ad2208e0ecc3ul, 0x404bd0f2e9e79031ul,
+    0x3fe78a4c8178a4c8ul, 0x404c592fad295b56ul, 0x3fe767dce434a9b1ul, 0x404ce0a4923a587dul,
+    0x3fe745d1745d1746ul, 0x404d6753e032ea0ful, 0x3fe724287f46debcul, 0x404ded3fd442364cul,
+    0x3fe702e05c0b8170ul, 0x404e726aa1e754d2ul, 0x3fe6e1f76b4337c7ul, 0x404ef6d67328e220ul,
+};
+constant ulong p3_reference_exp_coeff[2] = {
+    0x3eeebfbdff30d656ul, 0x3f762e4453e10daeul,
+};
+constant ulong p3_reference_exp_table[128] = {
+    0x3ff0000000000000ul, 0x3feff63da9fb3335ul, 0x3fefec9a3e778061ul, 0x3fefe315e86e7f85ul,
+    0x3fefd9b0d3158574ul, 0x3fefd06b29ddf6deul, 0x3fefc74518759bc8ul, 0x3fefbe3ecac6f383ul,
+    0x3fefb5586cf9890ful, 0x3fefac922b7247f7ul, 0x3fefa3ec32d3d1a2ul, 0x3fef9b66affed31bul,
+    0x3fef9301d0125b51ul, 0x3fef8abdc06c31ccul, 0x3fef829aaea92de0ul, 0x3fef7a98c8a58e51ul,
+    0x3fef72b83c7d517bul, 0x3fef6af9388c8deaul, 0x3fef635beb6fcb75ul, 0x3fef5be084045cd4ul,
+    0x3fef54873168b9aaul, 0x3fef4d5022fcd91dul, 0x3fef463b88628cd6ul, 0x3fef3f49917ddc96ul,
+    0x3fef387a6e756238ul, 0x3fef31ce4fb2a63ful, 0x3fef2b4565e27cddul, 0x3fef24dfe1f56381ul,
+    0x3fef1e9df51fdee1ul, 0x3fef187fd0dad990ul, 0x3fef1285a6e4030bul, 0x3fef0cafa93e2f56ul,
+    0x3fef06fe0a31b715ul, 0x3fef0170fc4cd831ul, 0x3feefc08b26416fful, 0x3feef6c55f929ff1ul,
+    0x3feef1a7373aa9cbul, 0x3feeecae6d05d866ul, 0x3feee7db34e59ff7ul, 0x3feee32dc313a8e5ul,
+    0x3feedea64c123422ul, 0x3feeda4504ac801cul, 0x3feed60a21f72e2aul, 0x3feed1f5d950a897ul,
+    0x3feece086061892dul, 0x3feeca41ed1d0057ul, 0x3feec6a2b5c13cd0ul, 0x3feec32af0d7d3deul,
+    0x3feebfdad5362a27ul, 0x3feebcb299fddd0dul, 0x3feeb9b2769d2ca7ul, 0x3feeb6daa2cf6642ul,
+    0x3feeb42b569d4f82ul, 0x3feeb1a4ca5d920ful, 0x3feeaf4736b527daul, 0x3feead12d497c7fdul,
+    0x3feeab07dd485429ul, 0x3feea9268a5946b7ul, 0x3feea76f15ad2148ul, 0x3feea5e1b976dc09ul,
+    0x3feea47eb03a5585ul, 0x3feea34634ccc320ul, 0x3feea23882552225ul, 0x3feea155d44ca973ul,
+    0x3feea09e667f3bcdul, 0x3feea012750bdabful, 0x3fee9fb23c651a2ful, 0x3fee9f7df9519484ul,
+    0x3fee9f75e8ec5f74ul, 0x3fee9f9a48a58174ul, 0x3fee9feb564267c9ul, 0x3feea0694fde5d3ful,
+    0x3feea11473eb0187ul, 0x3feea1ed0130c132ul, 0x3feea2f336cf4e62ul, 0x3feea427543e1a12ul,
+    0x3feea589994cce13ul, 0x3feea71a4623c7adul, 0x3feea8d99b4492edul, 0x3feeaac7d98a6699ul,
+    0x3feeace5422aa0dbul, 0x3feeaf3216b5448cul, 0x3feeb1ae99157736ul, 0x3feeb45b0b91ffc6ul,
+    0x3feeb737b0cdc5e5ul, 0x3feeba44cbc8520ful, 0x3feebd829fde4e50ul, 0x3feec0f170ca07baul,
+    0x3feec49182a3f090ul, 0x3feec86319e32323ul, 0x3feecc667b5de565ul, 0x3feed09bec4a2d33ul,
+    0x3feed503b23e255dul, 0x3feed99e1330b358ul, 0x3feede6b5579fdbful, 0x3feee36bbfd3f37aul,
+    0x3feee89f995ad3adul, 0x3feeee07298db666ul, 0x3feef3a2b84f15fbul, 0x3feef9728de5593aul,
+    0x3feeff76f2fb5e47ul, 0x3fef05b030a1064aul, 0x3fef0c1e904bc1d2ul, 0x3fef12c25bd71e09ul,
+    0x3fef199bdd85529cul, 0x3fef20ab5fffd07aul, 0x3fef27f12e57d14bul, 0x3fef2f6d9406e7b5ul,
+    0x3fef3720dcef9069ul, 0x3fef3f0b555dc3faul, 0x3fef472d4a07897cul, 0x3fef4f87080d89f2ul,
+    0x3fef5818dcfba487ul, 0x3fef60e316c98398ul, 0x3fef69e603db3285ul, 0x3fef7321f301b460ul,
+    0x3fef7c97337b9b5ful, 0x3fef864614f5a129ul, 0x3fef902ee78b3ff6ul, 0x3fef9a51fbc74c83ul,
+    0x3fefa4afa2a490daul, 0x3fefaf482d8e67f1ul, 0x3fefba1bee615a27ul, 0x3fefc52b376bba97ul,
+    0x3fefd0765b6e4540ul, 0x3fefdbfdad9cbe14ul, 0x3fefe7c1819e90d8ul, 0x3feff3c22b8f71f1ul,
+};
+
+static inline uint p3_reference_pow_bits(uint x, uint y) {
+    if (x < 0x00800000u || x >= 0x7f800000u
+            || (y & 0x7fffffffu) >= 0x7f800000u)
+        return soft_gfk_pow_bits(x,y);
+    if (x == 0x3f800000u || (y & 0x7fffffffu) == 0u) return 0x3f800000u;
+    if (y == 0x3f800000u) return x;
+    const uint reduced = x - 0x3f338000u;
+    const uint index = (reduced >> 16u) & 127u;
+    const uint exponent_bits = reduced & 0xff800000u;
+    const uint normalized = x - exponent_bits;
+    const int exponent = as_type<int>(exponent_bits) >> 16;
+    const ulong one = 0x3ff0000000000000ul;
+    const ulong r = soft64_fma(soft64_from_f32_bits(normalized),
+        p3_reference_log_table[2u*index],soft64_negate_bits(one));
+    const ulong base = soft64_add(p3_reference_log_table[2u*index+1u],
+        soft_gfk_i32_to_f64_bits(exponent));
+    const ulong r2 = soft64_mul(r,r);
+    const ulong a = soft64_fma(r,p3_reference_log_coeff[0],p3_reference_log_coeff[1]);
+    const ulong b = soft64_fma(r,p3_reference_log_coeff[2],p3_reference_log_coeff[3]);
+    const ulong log2x = soft64_fma(soft64_fma(a,r2,b),r,base);
+    ulong scaled = soft64_mul(soft64_from_f32_bits(y),log2x);
+    const ulong limit = 0x40e0000000000000ul; // 32768, before exp2 / 128
+    if (soft64_greater(scaled,limit)) scaled=limit;
+    if (soft64_less(scaled,soft64_negate_bits(limit))) scaled=soft64_negate_bits(limit);
+    // Round to nearest integer, ties away, as in the scalar range reduction.
+    const Soft64Decoded dec = soft64_decode(scaled);
+    const int shift = 52-dec.exponent;
+    ulong magnitude = shift > 63 ? 0ul : (dec.significand >> uint(shift));
+    if (shift > 0 && shift <= 63
+            && (dec.significand & ((1ul << uint(shift))-1ul)) >= (1ul << uint(shift-1)))
+        ++magnitude;
+    const int n = (scaled >> 63u) != 0ul ? -int(magnitude) : int(magnitude);
+    const ulong fraction = soft64_sub(scaled,soft_gfk_i32_to_f64_bits(n));
+    const ulong factor = p3_reference_exp_table[uint(n)&127u] + (ulong(long(n)) << 45u);
+    const ulong polynomial = soft64_fma(p3_reference_exp_coeff[0],fraction,
+        p3_reference_exp_coeff[1]);
+    return soft64_to_f32_bits(soft64_fma(soft64_mul(polynomial,fraction),factor,factor));
+}
+#endif

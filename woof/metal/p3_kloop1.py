@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from .p3_constants import P3_CONSTANT_NAMES
 from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
@@ -19,6 +20,7 @@ _SCRATCH_RESOURCES = (
 
 
 def submit_p3_kloop1(*, fields: dict, scratch: dict, flags,
+                     constants, xxlv, xxls, xlf,
                      log_predict_nc: bool = False) -> None:
     """Run one column-serial P3 k_loop_1 stage on Metal arrays.
 
@@ -28,14 +30,15 @@ def submit_p3_kloop1(*, fields: dict, scratch: dict, flags,
     ``(2,ny,nx)`` allocation. The first and second flag planes are accumulated
     in place for possible nucleation and retained hydrometeors.
 
-    MSL's native pow/log10 are ordinary-mode stand-ins for P3's pinned
-    ``r_pow`` and FP64 ``log10``. WRF-exact arithmetic is rejected, and this
-    stage does not by itself provide a complete P3 backend.
+    MSL's native pow is an ordinary-mode stand-in for P3's pinned ``r_pow``;
+    FP64 ``log10`` uses the shared soft64 implementation. WRF-exact
+    arithmetic is rejected, and this stage does not by itself provide a
+    complete P3 backend.
     """
     if WRF_EXACT:
         raise NotImplementedError(
             "P3 Metal k_loop_1 supports ordinary float32 only; source-pinned "
-            "r_pow and FP64 log10 are not implemented")
+            "r_pow is not implemented")
     missing_fields = [name for name in _FIELD_RESOURCES if name not in fields]
     missing_scratch = [name for name in _SCRATCH_RESOURCES if name not in scratch]
     if missing_fields or missing_scratch:
@@ -77,11 +80,26 @@ def submit_p3_kloop1(*, fields: dict, scratch: dict, flags,
     if flags.buffer.context is not context:
         raise ValueError("P3 Metal k_loop_1 flags belong to another context")
     arrays["flags"] = flags
+    if (not isinstance(constants, MetalArray)
+            or constants.shape != (len(P3_CONSTANT_NAMES),)
+            or constants.dtype != np.dtype(np.float32)
+            or not constants.flags.c_contiguous):
+        raise TypeError(
+            "P3 Metal k_loop_1 constants must be contiguous FP32 "
+            f"({len(P3_CONSTANT_NAMES)},)")
+    if constants.buffer.context is not context:
+        raise ValueError("P3 Metal k_loop_1 constants belong to another context")
+    arrays["constants"] = constants
+    latent = tuple(np.float32(value) for value in (xxlv, xxls, xlf))
+    if not all(np.isfinite(value) for value in latent):
+        raise ValueError("P3 Metal k_loop_1 latent heats must be finite FP32")
 
     context.submit_kernel(
         "p3_kloop1", arrays,
         {"nz": nz, "ny": ny, "nx": nx,
-         "log_predict_nc": int(bool(log_predict_nc))},
+         "log_predict_nc": int(bool(log_predict_nc)),
+         "xxlv": float(latent[0]), "xxls": float(latent[1]),
+         "xlf": float(latent[2])},
         exact_policy=False, grid_size=ny * nx)
 
 

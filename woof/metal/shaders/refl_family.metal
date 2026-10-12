@@ -4,6 +4,27 @@ using namespace metal;
 #include "refl_temperature_product_bindings.metalh"
 #include "soft_binary64.metalh"
 #include "soft_libm64.metalh"
+#include "da_observation_thermodynamics_bindings.metalh"
+#include "da_air_density_bindings.metalh"
+
+kernel void da_observation_thermodynamics(
+    constant DaObservationThermodynamicsResources& r [[buffer(0)]],
+    constant DaObservationThermodynamicsParams& p [[buffer(1)]],
+    uint idx [[thread_position_in_grid]]) {
+    if (idx >= uint(p.n)) return;
+    const uint k = idx / uint(p.ny * p.nx);
+    const float theta = r.thb[p.thb_3d ? idx : k] + r.thp[idx];
+    const float exner = pow(r.pressure[idx] / p.p0, p.rcp);
+    r.temperature[idx] = theta * exner;
+}
+
+kernel void da_air_density(
+    constant DaAirDensityResources& r [[buffer(0)]],
+    constant DaAirDensityParams& p [[buffer(1)]],
+    uint idx [[thread_position_in_grid]]) {
+    if (idx >= uint(p.n)) return;
+    r.air_density[idx] = 1.0f / r.alt[idx];
+}
 
 // Rain-only Smith (1975) REFL_10CM fallback used by the WOOF Kessler port.
 // Keep every intermediate that is binary64 in refl10cm_kessler_cell as a

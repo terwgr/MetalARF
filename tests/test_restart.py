@@ -37,9 +37,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from conftest import requires_cupy
+from tests.conftest import requires_cupy
 
-from conftest import requires_gpu
+from tests.conftest import requires_gpu
 from woof.core.model import (ADAPTIVE_TIMESTEP_RUN_FIELDS,
                               publish_declared_experiment)
 

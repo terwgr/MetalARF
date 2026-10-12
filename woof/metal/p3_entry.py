@@ -1,9 +1,8 @@
 """Typed Metal submission for P3's wrapper/entry initialization stage.
 
-This is a production slice, not an MP50 backend: it implements only the
-entry initialization preceding P3's prognostic process chain. The caller must
-not admit P3 until the remaining process, sedimentation, freezing, finish,
-table, and radiation-facing stages have complete Metal routes.
+This route implements only entry initialization before P3's prognostic
+process chain. WRF_EXACT remains unsupported until source-pinned math is
+proven, and this stage alone does not make P3 an admitted backend.
 """
 
 from __future__ import annotations
@@ -71,6 +70,15 @@ def submit_p3_entry_prepare(*, theta, pressure, qv, h_diabatic,
     parameters = {
         "nz": nz, "ny": ny, "nx": nx,
         "exponent": float(np.float32(exponent)),
+        "pressure_scale": float(np.float32(1.0e-5)),
+        "zdbz_default": float(np.float32(-99.0)),
+        "effc_default": float(np.float32(10.0e-6)),
+        "effi_default": float(np.float32(25.0e-6)),
+        "vmi_default": float(np.float32(0.0)),
+        "di_default": float(np.float32(0.0)),
+        "rhopo_default": float(np.float32(0.0)),
+        "prt_liq_default": float(np.float32(0.0)),
+        "prt_sol_default": float(np.float32(0.0)),
     }
     context.submit_kernel(
         "p3_entry_prepare", {**volumes, **surfaces, "flags": flags},

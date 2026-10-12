@@ -41,6 +41,59 @@ def _table_words(morr_rimed_ice: int) -> np.ndarray:
     return np.ascontiguousarray(values).view(np.uint64)
 
 
+def submit_da_observation_temperature(state, temperature):
+    """Prepare CUDA-path DA temperature without changing model state."""
+    arrays = {"thb": state.thb, "thp": state.thp, "pressure": state.p,
+              "temperature": temperature}
+    shape = tuple(state.p.shape)
+    if len(shape) != 3 or min(shape) < 1:
+        raise ValueError(
+            f"DA thermodynamics needs a nonempty 3-D state, got {shape}")
+    nz, ny, nx = shape
+    context = state.p.buffer.context
+    for name, value in arrays.items():
+        expected = ((nz,) if name == "thb" and value.ndim == 1 else shape)
+        if (not isinstance(value, MetalArray)
+                or value.dtype != np.dtype(np.float32)
+                or value.shape != expected
+                or not value.flags.c_contiguous
+                or value.buffer.context is not context):
+            raise TypeError(
+                f"DA thermodynamics {name} must be a matching same-context "
+                "FP32 MetalArray")
+    from woof.core import constants as c
+
+    return context.submit_kernel(
+        "da_observation_thermodynamics", arrays,
+        {"n": nz * ny * nx, "nz": nz, "ny": ny, "nx": nx,
+         "thb_3d": int(state.thb.ndim == 3),
+         "p0": float(np.float32(c.P0)),
+         "rcp": float(np.float32(c.RCP))},
+        exact_policy=False, grid_size=nz * ny * nx, threads_per_group=256)
+
+
+def submit_da_air_density(alt, air_density):
+    """Mirror the NSSL DA density preparation, ``rho = 1 / alt``."""
+    shape = tuple(air_density.shape)
+    if len(shape) != 3 or min(shape) < 1:
+        raise ValueError(f"DA density needs a nonempty 3-D field, got {shape}")
+    context = air_density.buffer.context
+    for name, value in (("alt", alt), ("air_density", air_density)):
+        if (not isinstance(value, MetalArray)
+                or value.dtype != np.dtype(np.float32)
+                or value.shape != shape
+                or not value.flags.c_contiguous
+                or value.buffer.context is not context):
+            raise TypeError(
+                f"DA density {name} must be same-context contiguous "
+                "FP32 Metal storage")
+    nz, ny, nx = map(int, shape)
+    return context.submit_kernel(
+        "da_air_density", {"alt": alt, "air_density": air_density},
+        {"n": nz * ny * nx, "nz": nz, "ny": ny, "nx": nx},
+        exact_policy=False, grid_size=nz * ny * nx, threads_per_group=256)
+
+
 def submit_refl10cm_morrison(qv, qr, nr, qs, ns, qg, ng, theta, pii,
                               pressure, refl, *, morr_rimed_ice: int = 1,
                               tables: MetalArray | None = None):

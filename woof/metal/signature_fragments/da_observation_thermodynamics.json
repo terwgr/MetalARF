@@ -1,0 +1,32 @@
+{
+  "kernels": [
+    {
+      "name": "da_observation_thermodynamics",
+      "module": "refl_family",
+      "source": "woof/metal/shaders/refl_family.metal",
+      "cuda_source": "woof/da/obsop.py",
+      "cuda_symbol": "_nssl_reflectivity",
+      "origin_kind": "python_fp32_expression",
+      "origin_expression": "(thb + thp) * power(pressure / P0, RCP)",
+      "resources": [
+        ["thb", "float", "read"], ["thp", "float", "read"],
+        ["pressure", "float", "read"],
+        ["temperature", "float", "read_write"]
+      ],
+      "shapes": {
+        "thb": [["nz"], ["nz", "ny", "nx"]],
+        "thp": [["nz", "ny", "nx"]],
+        "pressure": [["nz", "ny", "nx"]],
+        "temperature": [["nz", "ny", "nx"]]
+      },
+      "parameters": [
+        ["n", "int32"], ["nz", "int32"], ["ny", "int32"],
+        ["nx", "int32"], ["thb_3d", "int32"],
+        ["p0", "float32"], ["rcp", "float32"]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": ["fp32-output", "fp32-power"]
+    }
+  ]
+}

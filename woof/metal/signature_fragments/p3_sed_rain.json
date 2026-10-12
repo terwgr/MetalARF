@@ -13,7 +13,8 @@
         ["vq", "float", "read_write"], ["vn", "float", "read_write"],
         ["fq", "float", "read_write"], ["fn", "float", "read_write"],
         ["vm_table", "float", "read"], ["vn_table", "float", "read"],
-        ["prt_liq", "float", "read_write"], ["flags", "float", "read"]
+        ["prt_liq", "float", "read_write"], ["flags", "float", "read"],
+        ["constants", "float", "read"]
       ],
       "shapes": {
         "qr": [["nz", "ny", "nx"]], "nr": [["nz", "ny", "nx"]],
@@ -22,7 +23,8 @@
         "vq": [["nz", "ny", "nx"]], "vn": [["nz", "ny", "nx"]],
         "fq": [["nz", "ny", "nx"]], "fn": [["nz", "ny", "nx"]],
         "vm_table": [[3000]], "vn_table": [[3000]],
-        "prt_liq": [["ny", "nx"]], "flags": [[2, "ny", "nx"]]
+        "prt_liq": [["ny", "nx"]], "flags": [[2, "ny", "nx"]],
+        "constants": [[52]]
       },
       "parameters": [
         ["nz", "int32"], ["ny", "int32"], ["nx", "int32"],

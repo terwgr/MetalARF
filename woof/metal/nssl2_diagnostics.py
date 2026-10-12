@@ -58,7 +58,10 @@ def submit_nssl2_radardd02(
 
 def submit_nssl2_effective_radius_concentration(
         context, air_density, qc, cloud_number, qi, ice_number, qs,
-        snow_number, re_cloud, re_ice, re_snow):
+        snow_number, re_cloud, re_ice, re_snow, *,
+        registry_unit_numbers=False):
+    if type(registry_unit_numbers) is not bool:
+        raise TypeError("registry_unit_numbers must be bool")
     fields = {"air_density": air_density, "qc": qc,
               "cloud_number": cloud_number, "qi": qi,
               "ice_number": ice_number, "qs": qs,
@@ -68,11 +71,16 @@ def submit_nssl2_effective_radius_concentration(
     for name, output in (("re_cloud", re_cloud), ("re_ice", re_ice),
                          ("re_snow", re_snow)):
         _output(context, output, name, shape)
+    parameters = {"n": n, "nz": nz, "ny": ny, "nx": nx}
+    kernel_name = "nssl2_effective_radius_concentration"
+    if registry_unit_numbers:
+        kernel_name = "nssl2_effective_radius_registry_units"
+        parameters["registry_unit_numbers"] = 1
     return context.submit_kernel(
-        "nssl2_effective_radius_concentration",
+        kernel_name,
         {**fields, "re_cloud": re_cloud, "re_ice": re_ice,
          "re_snow": re_snow},
-        {"n": n, "nz": nz, "ny": ny, "nx": nx}, exact_policy=False,
+        parameters, exact_policy=False,
         grid_size=n, threads_per_group=_TPB)
 
 

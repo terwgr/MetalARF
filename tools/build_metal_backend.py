@@ -148,6 +148,8 @@ CUMULUS_CLOCK_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "cumulus_clo
 NOAH_FORCING_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "noah_forcing_family.metal"
 MILBRANDT2_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "milbrandt2_family.metal"
 MILBRANDT2_FIELDS_SHADER = ROOT / "woof" / "metal" / "shaders" / "milbrandt2_fields.metal"
+MILBRANDT2_ZET_SHADER = ROOT / "woof" / "metal" / "shaders" / "milbrandt2_zet.metal"
+WDM6_REFLECTIVITY_SHADER = ROOT / "woof" / "metal" / "shaders" / "wdm6_reflectivity.metal"
 NOAHMP_DRIVER_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "noahmp_driver_family.metal"
 NOAHMP_SFLX_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "noahmp_sflx_family.metal"
 NOAHMP_LEAVES_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "noahmp_leaves_family.metal"
@@ -775,6 +777,8 @@ def build(output: Path) -> dict:
                 ("noah_mosaic_family", NOAH_MOSAIC_SHADER),
                 ("milbrandt2_family", MILBRANDT2_FAMILY_SHADER),
                 ("milbrandt2_fields", MILBRANDT2_FIELDS_SHADER),
+                ("milbrandt2_zet", MILBRANDT2_ZET_SHADER),
+                ("wdm6_reflectivity", WDM6_REFLECTIVITY_SHADER),
                 ("noahmp_driver_family", NOAHMP_DRIVER_FAMILY_SHADER),
                 ("noahmp_sflx_family", NOAHMP_SFLX_FAMILY_SHADER),
                 ("noahmp_leaves_family", NOAHMP_LEAVES_FAMILY_SHADER),

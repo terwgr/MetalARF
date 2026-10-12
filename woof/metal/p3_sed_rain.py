@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .array import MetalArray
+from .p3_constants import P3_CONSTANT_NAMES
 from woof.wrf_exact import ENABLED as WRF_EXACT
 
 
@@ -13,7 +14,7 @@ _SCRATCH = ("rho", "inv_rho", "rhofacr", "vq", "vn", "fq", "fn")
 
 
 def submit_p3_sed_rain(*, fields: dict, scratch: dict, vm_table, vn_table,
-                       prt_liq, flags, dt: float) -> None:
+                       prt_liq, flags, constants, dt: float) -> None:
     """Run P3's rain sedimentation using caller-owned P3 velocity tables.
 
     Volume arrays are contiguous FP32 ``(nz,ny,nx)``; surface arrays are
@@ -48,6 +49,16 @@ def submit_p3_sed_rain(*, fields: dict, scratch: dict, vm_table, vn_table,
             raise ValueError(
                 f"P3 Metal rain sedimentation {name} belongs to another context")
         arrays[name] = value
+    if (not isinstance(constants, MetalArray)
+            or constants.shape != (len(P3_CONSTANT_NAMES),)
+            or constants.dtype != np.dtype(np.float32)
+            or not constants.flags.c_contiguous):
+        raise TypeError(
+            "P3 Metal rain sedimentation constants must be contiguous FP32 "
+            f"({len(P3_CONSTANT_NAMES)},)")
+    if constants.buffer.context is not context:
+        raise ValueError("P3 Metal rain sedimentation constants use another context")
+    arrays["constants"] = constants
     for name in _SCRATCH:
         value = scratch[name]
         if (not isinstance(value, MetalArray) or value.shape != (nz, ny, nx)

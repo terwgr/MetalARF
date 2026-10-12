@@ -111,7 +111,7 @@ inline void planck_cell(constant R &r, constant P &p, uint tid) {
                         < r.play[col * p.nlay + p.nlay - 1]
         ? p.nlay - 1 : 0;
     float pfrac[128];
-    const int band = r.gpoint_bands[gpt];
+    const int band = rrtm_i(r.gpoint_bands[gpt]);
     for (int lay = 0; lay < p.nlay; ++lay) {
         const int cell = col * p.nlay + lay;
         const float t = r.tlay[cell];

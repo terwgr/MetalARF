@@ -1449,7 +1449,7 @@ static inline void uw_caleddy(int pver, V sl, V qt, V ql, V slv, V u, V v, V pi,
             turbtype((pver + 1)) = 3; // F:2740 turbtype(i,pver+1) = 3
         }
         ipbl = uw_r8(0x3ff0000000000000ul); // F:2743 ipbl(i)  = 1._r8
-        kpblh = (ktopbl - uw_r8(0x3ff0000000000000ul)); // F:2744 kpblh(i) = ktopbl(i) - 1._r8
+        kpblh = (uw_real(ktopbl) - uw_r8(0x3ff0000000000000ul)); // F:2744 kpblh(i) = ktopbl(i) - 1._r8
     }
     belongst(1) = false; // F:2755 belongst(i,1) = .false.
     for (k = 2; k <= pver; k += 1) { // F:2756 do k = 2, pver
@@ -1485,7 +1485,7 @@ static inline void uw_caleddy(int pver, V sl, V qt, V ql, V slv, V u, V v, V pi,
         tpert = uw_max(((((shflx * rrho) / uw_cpair) * uw_r8(0x4021000000000000ul)) / ustar), uw_r8(0x0000000000000000ul)); // F:2835 tpert(i) = max(shflx(i)*rrho(i)/cpair*fak/ustar(i),0._r8)
         qpert = uw_max((((qflx * rrho) * uw_r8(0x4021000000000000ul)) / ustar), uw_r8(0x0000000000000000ul)); // F:2836 qpert(i) = max(qflx(i)*rrho(i)*fak/ustar(i),0._r8)
         ipbl = uw_r8(0x0000000000000000ul); // F:2838 ipbl(i)  = 0._r8
-        kpblh = ktopbl; // F:2839 kpblh(i) = ktopbl(i)
+        kpblh = uw_real(ktopbl); // F:2839 kpblh(i) = ktopbl(i)
     }
     for (k = 2; k <= pver; k += 1) { // F:2850 do k = 2, pver
         if (belongst(k)) { // F:2852 if( belongst(i,k) ) then
