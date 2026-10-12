@@ -1931,13 +1931,33 @@ def apply_reference(state, cfg, dt: float, *, refl_10cm_due: bool = False):
 def _p3_backend(state, cfg) -> str:
     """Which arm this call takes, and why.
 
-    ``run.p3_backend`` selects; ``cuda`` is the default and is what "fixed"
-    means here.  The reference path is taken WITHOUT being asked when the
-    state is not on a CuPy backend at all -- a host-array state has no
-    device to launch on, and refusing there would turn every CPU-side unit
-    test of the scheme into a GPU test.
+    ``run.p3_backend`` selects; ``cuda`` remains the default.  Metal arrays
+    use the Metal implementation for that default for compatibility.  An
+    explicit ``metal`` selection requires Metal arrays, and selectors for
+    other implementations refuse on Metal arrays instead of being ignored.
+    Host arrays with the default selector still use the CPU reference.
     """
     want = str(getattr(cfg, "p3_backend", "cuda"))
+    from woof.metal.array import MetalArray
+
+    is_metal = isinstance(state.qv, MetalArray)
+    if want == "metal":
+        if not is_metal:
+            raise ValueError("p3_backend='metal' requires Metal-backed P3 state")
+        return "metal"
+    if is_metal:
+        if want == "cuda":
+            return "metal"
+        if want == "reference":
+            raise ValueError(
+                "p3_backend='reference' requires host-array P3 state; "
+                "Metal-backed state cannot select the CPU reference"
+            )
+        if want == "fused":
+            raise ValueError(
+                "p3_backend='fused' is a CUDA implementation and cannot "
+                "run on Metal-backed P3 state"
+            )
     if want == "reference":
         return "reference"
     if not hasattr(state.qv, "get"):        # host arrays: no device to use
@@ -2064,15 +2084,14 @@ def apply(state, cfg, dt: float, *, refl_10cm_due: bool = False):
     of any prognostic field, no Python loop over columns.
 
     ``run.p3_backend = "reference"`` selects the CPU float32 transcription
-    (:func:`apply_reference`) instead, and a state whose arrays are not on
-    a CuPy backend takes that path automatically.
+    (:func:`apply_reference`). Host arrays with the default ``cuda`` selector
+    also use that path; Metal arrays use Metal for the default selector.
     """
-    from woof.metal.array import MetalArray
-    if isinstance(state.qv, MetalArray):
+    backend = _p3_backend(state, cfg)
+    if backend == "metal":
         return _apply_metal(state, cfg, dt,
                             refl_10cm_due=refl_10cm_due)
 
-    backend = _p3_backend(state, cfg)
     if backend == "reference":
         return apply_reference(state, cfg, dt, refl_10cm_due=refl_10cm_due)
 
