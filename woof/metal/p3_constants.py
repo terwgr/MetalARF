@@ -69,6 +69,14 @@ P3_CONSTANT_INDEX = MappingProxyType({
 })
 
 
+def p3_latent_heat_values() -> tuple[np.float32, np.float32, np.float32]:
+    """Return xxlv, xxls, and xlf using the CPU wrapper's float32 order."""
+    xxlv = np.float32(3.1484e6) - np.float32(2370.0) * np.float32(273.15)
+    xxls = xxlv + np.float32(0.3337e6)
+    xlf = xxls - xxlv
+    return xxlv, xxls, xlf
+
+
 def p3_constant_values(core_module: Any | None = None) -> np.ndarray:
     """Return canonical P3 module constants in the stable Metal ABI order."""
     if core_module is None:
