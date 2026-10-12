@@ -35,6 +35,8 @@ shaders after changing them, not to use the prebuilt bundle. The PyPI package
 currently keeps that distribution name and upstream version, so package
 metadata alone does not identify the fork. Record the clone's commit
 (`git rev-parse HEAD`) with the run; an editable install points to that clone.
+The [installation-origin checks](issues/5-metal-install-origin.md) explain
+how to distinguish that checkout from an upstream or borrowed environment.
 
 Choose the backend on the public forecast command:
 
