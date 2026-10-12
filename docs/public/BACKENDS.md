@@ -77,7 +77,7 @@ Important restrictions from `METAL_KNOWN_CONFLICTS` and the dynamics gate:
 | Option or coupling | Metal requirement or limitation |
 |---|---|
 | WRF-exact mode | No Metal physics callers; dynamics also refuses WRF-exact arithmetic. |
-| TKE budget | No implementation; use `tke_budget=0`. Initialization, direct stepping and admission inspection reject a nonzero budget. |
+| TKE budget | No implementation; use `tke_budget=0`. Initialization, direct stepping and admission inspection reject a nonzero budget; [reproduction and resolution](issues/2-metal-tke-budget.md). |
 | RUC | Nine soil levels. |
 | Lake model | Requires RUC (`sf_surface_physics=3`) on Metal; upstream's broader LSM allowance does not apply. |
 | MYNN GSD 4.1 | Requires PBL 5, mixlength 2 and the registered option set listed in `METAL_KNOWN_CONFLICTS`. |
