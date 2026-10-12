@@ -4671,7 +4671,7 @@ UWPBL_COLUMNS_SHAPES = (('cldfra', (('nk', 'ny', 'nx'),)), ('err', (('1',),)), (
 UWPBL_COLUMNS_PARAM_FIELDS = [('ncols', 'ctypes.c_int32'), ('col0', 'ctypes.c_int32'), ('nchunk', 'ctypes.c_int32'), ('pool_stride', 'ctypes.c_int32'), ('nk', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('r8size', 'ctypes.c_int32'), ('i4size', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('itimestep', 'ctypes.c_int32'), ('r8cap', 'ctypes.c_int32'), ('i4cap', 'ctypes.c_int32')]
 UWPBL_COLUMNS_THREADS_PER_GROUP = 64
 UWPBL_COLUMNS_LAYOUT_HASH = 'dfdf5a08c9c1cbd22998692fc67e3d1e1e3098d706826000e66226a939cc0838'
-UWPBL_COLUMNS_SHADER_HASH = 'bd44875d76b2a4d156655a277940d3c3423aa29a017b66544c4b72a686166a22'
+UWPBL_COLUMNS_SHADER_HASH = '25d9c5f7d90b3d1ded2cf2dbe280b5e972e4c9710b2210e24c90065dd54b3a9e'
 
 W_DAMP_RESOURCES = (('rw_t', 'float', 'read_write'), ('ww', 'float', 'read'), ('w', 'float', 'read'), ('mup', 'float', 'read'), ('mub2d', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('rdnw', 'float', 'read'))
 W_DAMP_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read')

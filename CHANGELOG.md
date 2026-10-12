@@ -39,6 +39,7 @@ Added:
 
 Fixed:
 
+- The Metal UW PBL converts its integer PBL-top index before writing `KPBL`.
 - The CLI reference (`docs/public/CLI-OPTIONS.md`) lists the Metal
   `--backend` and `--state-backend` options.
 
