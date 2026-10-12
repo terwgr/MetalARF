@@ -26,6 +26,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 MARKER = "WOOF_COMBO_RESULT="
+FAILED_STATUSES = frozenset(("crash", "NaN"))
 GF_PROFILE_ROW = (8, 5, 4, 3, 1, "periodic")
 RUC_PROFILE_ROW = (0, 0, 3, 0, 0, "periodic")
 
@@ -254,7 +255,7 @@ def run_single_context(rows, *, output=None, notes=()):
     if output is not None and not any(line.startswith("INCOMPLETE") for line in lines):
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(summary + "\n" + "\n".join(lines) + "\n")
-    return 0
+    return int(any(counts[status] for status in FAILED_STATUSES))
 
 
 def result(combo, only=False, *, urban=False, turbulence=None, sfclay_option=None,
@@ -469,7 +470,7 @@ def main():
                 combo, args.case_seconds, mp_zero_out=2,
                 mp_zero_out_all=1, steps=args.steps)
         print(f"MP ZERO-OUT | {status} | {detail[:180]}", flush=True)
-        return 0
+        return int(status in FAILED_STATUSES)
     if args.case:
         with contextlib.redirect_stdout(io.StringIO()):
             urban = args.urban_model if args.urban_model is not None else args.urban
@@ -489,7 +490,7 @@ def main():
                          bl_mynn_version=args.mynn_version or "wrf_461",
                          thompson_version=args.thompson_version or "wrf_461")
         print(MARKER + json.dumps(outcome))
-        return 0
+        return int(outcome[0] in FAILED_STATUSES)
     if args.jobs <= 0:
         parser.error("jobs must be positive")
     try:
@@ -537,7 +538,7 @@ def main():
                 sfclay_option=1, mp_zero_out=args.mp_zero_out,
                 mp_zero_out_all=args.mp_zero_out_all, steps=args.steps)
         print(f"URBAN {urban_option} | {status} | {detail[:180]}", flush=True)
-        return 0
+        return int(status in FAILED_STATUSES)
     try:
         axes = [[int(x) for x in getattr(args, key).split(",")]
                 for key in ("microphysics", "pbl", "land_surface", "cumulus", "radiation")]
@@ -613,14 +614,16 @@ def main():
             line = " | ".join(map(str, (*combo, status, detail[:180])))
         else:
             line = f"{label} | {status} | {detail[:180]}"
-        return line
+        return line, status
 
     # The worker pool limits simultaneous device contexts while removing the
     # former sweep-wide deadline. Results stay in matrix order for stable diffs.
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        for line in pool.map(run_row, rows):
+        failed = False
+        for line, status in pool.map(run_row, rows):
             print(line, flush=True)
-    return 0
+            failed |= status in FAILED_STATUSES
+    return int(failed)
 
 
 if __name__ == "__main__":
