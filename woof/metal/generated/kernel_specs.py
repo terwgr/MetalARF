@@ -1991,7 +1991,7 @@ NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_SHAPES = (('air_density', (('nz', 'ny', 'nx
 NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_THREADS_PER_GROUP = 256
 NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_LAYOUT_HASH = '0cf5633c2dd44c56590b0dd3f42d7c502f16ca747ae4ad6fb1e82c4fd47c6668'
-NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_SHADER_HASH = 'fb440af1e76f08173f3b4c45069e21373c0b5a9bb485440315e2ba42e3831595'
+NSSL2_EFFECTIVE_RADIUS_CONCENTRATION_SHADER_HASH = '9adc13ecd2d150db95526d5f52710ae024a0d473dafae2c715ea1c520f5eb65c'
 
 NSSL2_FUSED_GS_RESOURCES = (('state', 'float', 'read_write'), ('full_theta', 'float', 'read_write'), ('air_density', 'float', 'read'), ('pressure_pa', 'float', 'read'), ('exner', 'float', 'read'), ('temperature_k', 'float', 'read_write'), ('vertical_velocity', 'float', 'read'), ('primary_ice_target_m3', 'float', 'read'), ('dz', 'float', 'read'))
 NSSL2_FUSED_GS_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read_write', 'read', 'read', 'read')
@@ -2031,7 +2031,7 @@ NSSL2_RADARDD02_SHAPES = (('air_density', (('nz', 'ny', 'nx'),)), ('qg', (('nz',
 NSSL2_RADARDD02_PARAM_FIELDS = [('concentration_space', 'ctypes.c_int32'), ('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NSSL2_RADARDD02_THREADS_PER_GROUP = 256
 NSSL2_RADARDD02_LAYOUT_HASH = '5c491cf870243c8dc40e2048dcce1a032bd7122626dc3d1142cfe50b3b4ab8e0'
-NSSL2_RADARDD02_SHADER_HASH = 'fb440af1e76f08173f3b4c45069e21373c0b5a9bb485440315e2ba42e3831595'
+NSSL2_RADARDD02_SHADER_HASH = '9adc13ecd2d150db95526d5f52710ae024a0d473dafae2c715ea1c520f5eb65c'
 
 NSSL2_RADIUS_MICRONS_RESOURCES = (('cloud', 'float', 'read_write'), ('ice', 'float', 'read_write'), ('snow', 'float', 'read_write'))
 NSSL2_RADIUS_MICRONS_ACCESS = ('read_write', 'read_write', 'read_write')
@@ -6496,3 +6496,11 @@ HEX_SCALAR_RK_UPDATE_FRAGMENT_PARAM_FIELDS = [('ntracers', 'ctypes.c_int32'), ('
 HEX_SCALAR_RK_UPDATE_FRAGMENT_THREADS_PER_GROUP = 128
 HEX_SCALAR_RK_UPDATE_FRAGMENT_LAYOUT_HASH = '565736b2982d8f3de4840f343f1c28adc2c6a43fc65f50372eb9ade56a754c10'
 HEX_SCALAR_RK_UPDATE_FRAGMENT_SHADER_HASH = '24f288446296f3f96666088cb765950d68ec9ba85b87e40a4c19f8ccac438fd2'
+
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_RESOURCES = (('air_density', 'float', 'read'), ('qc', 'float', 'read'), ('cloud_number', 'float', 'read'), ('qi', 'float', 'read'), ('ice_number', 'float', 'read'), ('qs', 'float', 'read'), ('snow_number', 'float', 'read'), ('re_cloud', 'float', 'read_write'), ('re_ice', 'float', 'read_write'), ('re_snow', 'float', 'read_write'))
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_SHAPES = (('air_density', (('nz', 'ny', 'nx'),)), ('cloud_number', (('nz', 'ny', 'nx'),)), ('ice_number', (('nz', 'ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qs', (('nz', 'ny', 'nx'),)), ('re_cloud', (('nz', 'ny', 'nx'),)), ('re_ice', (('nz', 'ny', 'nx'),)), ('re_snow', (('nz', 'ny', 'nx'),)), ('snow_number', (('nz', 'ny', 'nx'),)))
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('registry_unit_numbers', 'ctypes.c_int32')]
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_THREADS_PER_GROUP = 256
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_LAYOUT_HASH = '286fc183c6ccab9ea25ac98284ae0dce9a1d730b745894b0d8f26b432049152b'
+NSSL2_EFFECTIVE_RADIUS_REGISTRY_UNITS_SHADER_HASH = '9adc13ecd2d150db95526d5f52710ae024a0d473dafae2c715ea1c520f5eb65c'

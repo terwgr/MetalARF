@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Metal NSSL radiation supports Registry-unit effective-radius diagnostics.
+
 ## MetalARF 1.0.2
 
 A cleanup release: a smaller repository and no change to forecasts. The

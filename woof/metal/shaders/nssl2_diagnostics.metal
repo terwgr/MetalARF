@@ -127,55 +127,73 @@ kernel void nssl2_radardd02(constant Nssl2Radardd02Resources &r [[buffer(0)]], c
         : 0.0f;
 }
 
-kernel void nssl2_effective_radius_concentration(constant Nssl2EffectiveRadiusConcentrationResources &r [[buffer(0)]], constant Nssl2EffectiveRadiusConcentrationParams &p [[buffer(1)]], uint thread_position_in_grid [[thread_position_in_grid]]) {
-    const int idx = thread_position_in_grid;
-    if (idx >= p.n) return;
+struct Nssl2EffectiveRadii {
+    float cloud;
+    float ice;
+    float snow;
+};
 
-    float cloud_radius = 2.51e-6f;
-    float ice_radius = 10.01e-6f;
-    float snow_radius = 25.0e-6f;
-
-    const float rho = r.air_density[idx];
+inline Nssl2EffectiveRadii nssl2_effective_radii(
+        float rho, float qc, float cloud_number, float qi, float ice_number,
+        float qs, float snow_number, bool registry_unit_numbers) {
+    Nssl2EffectiveRadii radii = {2.51e-6f, 10.01e-6f, 25.0e-6f};
+    const float number_scale = registry_unit_numbers ? rho : 1.0f;
     const float pi_over_six = 3.14159265358979323846f / 6.0f;
     const float one_third = 1.0f / 3.0f;
     const float cxmin = 1.0e-8f;
     const float qxmin = 1.0e-13f;
 
-    const float cloud_mass = fmax(r.qc[idx], 0.0f);
-    const float nc = fmax(r.cloud_number[idx], 0.0f);
+    const float cloud_mass = fmax(qc, 0.0f);
+    const float nc = fmax(cloud_number * number_scale, 0.0f);
     if (cloud_mass > qxmin && nc > cxmin) {
         const float lambda = pow(
-            (nc * pi_over_six * 1000.0f) / (cloud_mass * rho),
-            one_third);
+            (nc * pi_over_six * 1000.0f) / (cloud_mass * rho), one_third);
         const float raw = 0.5f * 1.1077321767807007f / lambda;
-        cloud_radius = fmax(2.51e-6f, fmin(raw, 50.0e-6f));
+        radii.cloud = fmax(2.51e-6f, fmin(raw, 50.0e-6f));
     }
 
-    const float ice_mass = fmax(r.qi[idx], 0.0f);
-    const float ni = fmax(r.ice_number[idx], 0.0f);
+    const float ice_mass = fmax(qi, 0.0f);
+    const float ni = fmax(ice_number * number_scale, 0.0f);
     if (ice_mass > qxmin && ni > cxmin) {
         const float lambda = pow(
-            (ni * pi_over_six * 900.0f) / (ice_mass * rho),
-            one_third);
+            (ni * pi_over_six * 900.0f) / (ice_mass * rho), one_third);
         const float raw = 0.5f * 1.1077321767807007f / lambda;
-        ice_radius = fmax(10.01e-6f, fmin(raw, 125.0e-6f));
+        radii.ice = fmax(10.01e-6f, fmin(raw, 125.0e-6f));
     }
 
-    const float snow_mass = fmax(r.qs[idx], 0.0f);
-    const float ns = fmax(r.snow_number[idx], 0.0f);
+    const float snow_mass = fmax(qs, 0.0f);
+    const float ns = fmax(snow_number * number_scale, 0.0f);
     if (snow_mass > qxmin && ns > cxmin) {
         const float gamma_mass = 0.91816872358322144f;
         const float gamma_number = 4.5908436775207520f;
         const float radius_factor = 0.83693999052047729f;
         const float lambda = pow(
             (ns * pi_over_six * 100.0f * gamma_mass)
-                / (snow_mass * rho * gamma_number),
-            one_third);
+                / (snow_mass * rho * gamma_number), one_third);
         const float raw = 0.5f * radius_factor / lambda;
-        snow_radius = fmax(25.0e-6f, fmin(raw, 999.0e-6f));
+        radii.snow = fmax(25.0e-6f, fmin(raw, 999.0e-6f));
     }
+    return radii;
+}
 
-    r.re_cloud[idx] = cloud_radius;
-    r.re_ice[idx] = ice_radius;
-    r.re_snow[idx] = snow_radius;
+kernel void nssl2_effective_radius_concentration(constant Nssl2EffectiveRadiusConcentrationResources &r [[buffer(0)]], constant Nssl2EffectiveRadiusConcentrationParams &p [[buffer(1)]], uint thread_position_in_grid [[thread_position_in_grid]]) {
+    const int idx = thread_position_in_grid;
+    if (idx >= p.n) return;
+    const Nssl2EffectiveRadii radii = nssl2_effective_radii(
+        r.air_density[idx], r.qc[idx], r.cloud_number[idx], r.qi[idx],
+        r.ice_number[idx], r.qs[idx], r.snow_number[idx], false);
+    r.re_cloud[idx] = radii.cloud;
+    r.re_ice[idx] = radii.ice;
+    r.re_snow[idx] = radii.snow;
+}
+kernel void nssl2_effective_radius_registry_units(constant Nssl2EffectiveRadiusRegistryUnitsResources &r [[buffer(0)]], constant Nssl2EffectiveRadiusRegistryUnitsParams &p [[buffer(1)]], uint thread_position_in_grid [[thread_position_in_grid]]) {
+    const int idx = thread_position_in_grid;
+    if (idx >= p.n) return;
+    const Nssl2EffectiveRadii radii = nssl2_effective_radii(
+        r.air_density[idx], r.qc[idx], r.cloud_number[idx], r.qi[idx],
+        r.ice_number[idx], r.qs[idx], r.snow_number[idx],
+        p.registry_unit_numbers != 0);
+    r.re_cloud[idx] = radii.cloud;
+    r.re_ice[idx] = radii.ice;
+    r.re_snow[idx] = radii.snow;
 }
