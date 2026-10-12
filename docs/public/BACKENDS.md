@@ -93,6 +93,9 @@ The runtime checks in [physics](../../woof/core/physics.py) and
 options. A selector appearing in this table does not mean every coupling
 or public command can execute it.
 
+The [smoke exit-status contract](issues/3-metal-smoke-exits.md) records how
+failures and timeouts reach automation.
+
 `tools/metal_combo_smoke.py` labels finite executed rows `ok`; preflight
 `ok` means initialization gates resolved without device execution. Neither
 result measures numerical agreement. The [software binary64 contract](../../woof/metal/soft_binary64_contract.json)
