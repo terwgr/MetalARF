@@ -163,3 +163,15 @@ At +15 minutes U/V RMS is .00905/.02367 m/s. U error is concentrated in the surf
 U/V/Qv are initially identical, then all differ in the first +15-minute history while cloud, ice and snow remain zero in both. Thus winds precede saved condensate differences; the cadence cannot order wind versus Qv. The upper V structure cannot be explained solely by the later low-level cloud/PBL chain. Its first within-step source remains unresolved.
 
 No forecast or numerical edit followed this audit. `tools/dump_backend_step1.py` supplies exact before/after points on either backend, all three RK stages and all seven acoustic substeps, then stops before a second outer step. Invocation, boundary list and validation limits are in `tools/metal_hrrr_shared_case/STEP1_DUMP_POINTS.md`. Only syntax/help/list-point execution was checked; the script has not been GPU-executed on either backend. The requested investigation stops here.
+
+## Actual first-step capture: V-advection extent
+
+The next task ran one actual Metal15s outer step, all3RK stages and7acoustic substeps, retaining468before/after snapshots. Seven initial prognostic fields, expressed in history conventions (T=thp+thb−300), match the CUDA t0 history byte-for-byte. The CUDA machine was inaccessible by user confirmation, so no executed CUDA dump or globally first-divergence claim is made.
+
+An identical-input replay found that `_launch_metal_advection` requested78,400V threads instead of80,360: it used mass-grid ny40, while the V shader decodes41staggered rows. The entire top V layer and part of the preceding layer received no advection increment. CUDA's launcher uses ny+1. The fix uses `q.size`; U/W extents are preserved and no shader/ABI rebuild is needed.
+
+For the captured order5 call, float64-reference RMS/max error falls from2.7354/79.4507 to0.00018238/0.002453 in coupled-tendency units, approximately15,000×RMS reduction. All1,560eligible top-level V points now receive their increments. Order3 also passes the bounded reference replay. The older diff6 mirror needed the directional map multiplier already present in both backends; it was corrected only in the local replay adapter, not the model.
+
+One model defect was fixed and verified, then the investigation stopped. No full forecast ran, so the preceding forecast table is unchanged and the forecast impact remains unmeasured. Reproduce with `tools/metal_v_advection_extent_experiment.py` and the retained local FP32 capture. Compact evidence is in `tools/metal_hrrr_shared_case/step1_v_extent.json`. The dump wrapper also now records scalar/config metadata and accepts its intentional CLI stop only with a valid completion receipt and final event.
+
+The rain investigation independently found and committed the same launch correction in [PR26](https://github.com/terwgr/MetalARF/pull/26), stacked on this PR. Numerical-fix ownership stays there; this PR adds only the independent dry replay tool/receipt and dump-wrapper corrections. The temporary local launch edit used for the passing dry replay is not duplicated in this PR.

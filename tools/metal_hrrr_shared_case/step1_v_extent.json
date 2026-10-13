@@ -1,0 +1,136 @@
+{
+  "method": "One actual Metal15s production step; CUDA machine inaccessible by user confirmation. No executed CUDA step1 or globally-first-backend-divergence claim. The first large discrepancy among covered float64 transcriptions is V advection; CUDA launch/source verifies the missing staggered extent. Earlier physics/Smag/PGF producers are not all replayed.",
+  "capture": {
+    "status": "CAPTURE_COMPLETE",
+    "backend": "metal",
+    "outer_steps": 1,
+    "rk_stages": 3,
+    "events": 468,
+    "model_seconds": 15.0,
+    "source_inputs_unmodified": true,
+    "execution_change": "synchronous readbacks and ordered singleton Metal batches; no arithmetic/selector override",
+    "interpretation": "Compare common state/scratch arrays at common points, not positional raw ABI names. Stage0 includes initial physics and held diffusion. All3RK stages and all7acoustic substeps captured. A missing point is not a zero; compare manifests and stop at first large operator delta."
+  },
+  "initial_history_identity": {
+    "U": {
+      "bitwise_equal": true,
+      "shape": [
+        49,
+        40,
+        41
+      ],
+      "representation": "direct"
+    },
+    "V": {
+      "bitwise_equal": true,
+      "shape": [
+        49,
+        41,
+        40
+      ],
+      "representation": "direct"
+    },
+    "W": {
+      "bitwise_equal": true,
+      "shape": [
+        50,
+        40,
+        40
+      ],
+      "representation": "direct"
+    },
+    "T": {
+      "bitwise_equal": true,
+      "shape": [
+        49,
+        40,
+        40
+      ],
+      "representation": "thp+thb-300, the history convention"
+    },
+    "PH": {
+      "bitwise_equal": true,
+      "shape": [
+        50,
+        40,
+        40
+      ],
+      "representation": "direct"
+    },
+    "MU": {
+      "bitwise_equal": true,
+      "shape": [
+        40,
+        40
+      ],
+      "representation": "direct"
+    },
+    "QVAPOR": {
+      "bitwise_equal": true,
+      "shape": [
+        49,
+        40,
+        40
+      ],
+      "representation": "direct"
+    }
+  },
+  "input_sha256": {
+    "experiment.toml": "69592ac5af06ec68de7854ae98b126b2fb76749c46632eaf8f17714aabe33deb",
+    "namelist.input": "e4225b80550821fef7abb38a7311ad9f1cc2c10c1c75cc32cef27ef96281e589",
+    "namelist.wps": "fb8c206a0d1565df0303d5379b398754b0bbc02f3cf1656bc5aea4cff72cbfa3"
+  },
+  "input_capture_sha256": "b72b2646392f0534ca75608eeb06ecc0c864f9ac57f2f71cf1f34c9f5ae9dfe1",
+  "original_requested_grid_size": 78400,
+  "correct_required_grid_size": 80360,
+  "original_top_level_nonzero": 0,
+  "fixed_top_level_nonzero": 1560,
+  "defect": "_launch_metal_advection used mass-grid ny for V; shader decodes ny+1 rows. Whole top V layer and preceding-layer tail are not dispatched. Native group rounding does not reach the top.",
+  "fix": "grid_size=q.size; U/W extents unchanged. Shared numerical fix independently committed by rain thread at3ca580521; no duplicate numerical patch submitted here.",
+  "verification": {
+    "status": "PASS",
+    "reference": "Existing float64 np_flux_div_v CUDA source transcription; actual CUDA execution unavailable",
+    "same_FP32_inputs": true,
+    "cases": [
+      {
+        "vorder": 5,
+        "shape": [
+          49,
+          41,
+          40
+        ],
+        "grid_size_requested": 80360,
+        "max_abs": 0.0024529595287106076,
+        "rmse": 0.00018237942710090175,
+        "fp32_parent_bound": 0.5573772192001343,
+        "top_level_max_abs": 0.0002170239797543161,
+        "top_level_rmse": 5.0432669621388416e-05,
+        "top_level_nonzero": 1560,
+        "baseline_max_abs": 79.45073582929756,
+        "baseline_rmse": 2.735401797783329,
+        "baseline_top_level_nonzero": 0,
+        "rms_reduction_factor": 14998.412053734346
+      },
+      {
+        "vorder": 3,
+        "shape": [
+          49,
+          41,
+          40
+        ],
+        "grid_size_requested": 80360,
+        "max_abs": 0.002447323538206092,
+        "rmse": 0.00018229465197225456,
+        "fp32_parent_bound": 0.5573772192001343,
+        "top_level_max_abs": 0.0002170239797543161,
+        "top_level_rmse": 5.0432669621388416e-05,
+        "top_level_nonzero": 1560
+      }
+    ],
+    "full_forecasts": 0
+  },
+  "covered_reference_comparisons": 63,
+  "reference_diff6_caveat": "Older np_diff6 omits map multiplier present in BOTH CUDA and Metal. Local replay restores this source-verified factor; all diffusion cases are within FP32 bound. No diffusion model edit.",
+  "full_forecasts_this_task": 0,
+  "stop": "Model defect fixed in the rain branch and independently verified on dry inputs; stop here."
+}

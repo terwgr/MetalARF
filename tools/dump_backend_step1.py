@@ -8,6 +8,7 @@ Use --list-points without GPU access to inspect exact hooks and common names.
 """
 from __future__ import annotations
 import argparse
+from dataclasses import asdict
 from functools import wraps
 import hashlib
 import json
@@ -136,7 +137,8 @@ def main(argv=None):
    arrays[n]={'blob':'arrays/'+path.name,'shape':list(h.shape),'dtype':h.dtype.str}
   event={'index':len(owner['events']),'point':point,'side':side,'rk_stage':owner['stage'],
    'acoustic_substep':owner['substep'],'elapsed_seconds':float(owner['state'].elapsed_seconds),
-   'dt':float(owner['cfg'].dt),'arrays':arrays,'parameters':parameters}
+   'dt':float(owner['cfg'].dt),'arrays':arrays,'parameters':parameters,
+   'state_scalars':{n:float(getattr(owner['state'],n)) for n in ['cf1','cf2','cf3','cfn','cfn1','p_top'] if getattr(owner['state'],n,None) is not None}}
   owner['events'].append(event)
   with (a.outdir/'events.jsonl').open('a') as f:f.write(json.dumps(event,default=str)+'\n')
  def replace_aliases(original,replacement):
@@ -162,6 +164,7 @@ def main(argv=None):
    for i,x in enumerate(args):add_extra(f'arg{i}',x)
    for k,v in kwargs.items():add_extra(k,v)
    parameters={k:v for k,v in kwargs.items() if isinstance(v,(bool,int,float,str,np.generic))}
+   parameters.update({f'arg{i}':x.item() if isinstance(x,np.generic) else x for i,x in enumerate(args) if isinstance(x,(bool,int,float,str,np.generic))})
    dump(point,'before',extra,parameters)
    result=original(*args,**kwargs)
    # Tuples of stage mass fluxes and coefficient arrays are actual outputs.
@@ -222,6 +225,7 @@ def main(argv=None):
   if owner['active']:raise RuntimeError('nested step capture unsupported')
   if int(cfg.grid_id)!=1:raise RuntimeError('dump script requires one root domain')
   owner.update(state=state,cfg=cfg,active=True,stage=0,substep=0)
+  (a.outdir/'run_config.json').write_text(json.dumps(asdict(cfg),indent=2,default=str)+'\n')
   if a.backend=='metal':state._array_module.context.batch_kernel_calls=True
   dump('initial_restored_state','before')
   original_step(state,cfg,*args,**kwargs)
@@ -236,7 +240,18 @@ def main(argv=None):
  cli_args=['go',str(a.experiment),'--prepared-root',str(a.prepared_root),'--wps-namelist',str(a.wps_namelist),
   '--backend',a.backend,'--outdir',str(a.outdir/'cli-initialization'),'--run-stamp','off','--products','none']
  try:code=cli_main(cli_args)
- except DumpComplete:print('Captured first step; no second step or full forecast.');return 0
+ except DumpComplete:code=0
+ # The public go wrapper may convert BaseException into a failure return.
+ # Accept our intentional stop only with the completed-step receipt AND
+ # matching final event, never merely because some dump files exist.
+ receipt_path=a.outdir/'capture.json'
+ if receipt_path.exists():
+  receipt=json.loads(receipt_path.read_text())
+  last=owner['events'][-1] if owner['events'] else {}
+  if (receipt.get('status')=='CAPTURE_COMPLETE'
+      and receipt.get('outer_steps')==1 and receipt.get('rk_stages')==3
+      and last.get('point')=='completed_first_step' and last.get('side')=='after'):
+   print('Captured first step; no second step or full forecast.');return 0
  raise RuntimeError(f'Production CLI returned {code} before a complete step capture')
 
 if __name__=='__main__':raise SystemExit(main())
