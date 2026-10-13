@@ -215,7 +215,7 @@ CORIOLIS_CURVATURE_SHAPES = (('c1f', (('nz+1',),)), ('c2f', (('nz+1',),)), ('cos
 CORIOLIS_CURVATURE_PARAM_FIELDS = [('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('reradius', 'ctypes.c_float'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 CORIOLIS_CURVATURE_THREADS_PER_GROUP = 128
 CORIOLIS_CURVATURE_LAYOUT_HASH = 'ab87fc77bf54fcada44c42549b739545a1441bbccdfa5bf8d0a2062d75c44d16'
-CORIOLIS_CURVATURE_SHADER_HASH = '566c9cb486146bddd2a3fe92cf7aa5e295814564410d58c9f1136e1cf668539e'
+CORIOLIS_CURVATURE_SHADER_HASH = '2669eec78104b57c97ea796fc8269eed1de70706a0fc0cde4d42cd6dfb8629a1'
 
 COUPLE_FACES_RESOURCES = (('mass_u', 'float', 'read'), ('mass_v', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('ru', 'float', 'read_write'), ('rv', 'float', 'read_write'))
 COUPLE_FACES_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write')
