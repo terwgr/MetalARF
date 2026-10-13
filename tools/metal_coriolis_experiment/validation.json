@@ -1,0 +1,340 @@
+{
+  "schema": "metalarf-coriolis-experiment-v1",
+  "baseline_source_commit": "cacc3962d12b9bfe74541993c74a3d608270dcab",
+  "verified_source_commit": "395d137fc7157cac7f7a212d400525973ae5cefd",
+  "baseline": {
+    "device": "Apple M2",
+    "synchronous": true,
+    "mode": "measure_only",
+    "grid": [
+      3,
+      4,
+      5
+    ],
+    "stencil_cases": [
+      {
+        "case": "uniform_north",
+        "max_abs_error": {
+          "ru_t": 130.55869202315807,
+          "rv_t": 2.3283064365386963e-08,
+          "rw_t": 3.560437544791739e-08
+        },
+        "ru_t_mean": 0.25130560994148254,
+        "rv_sha256": "474c2c664870f5b7bc2b52857f9b7bef816c3abd6f440e63b29479b4b4500d8a",
+        "rw_sha256": "d447e19308ee0fcabb8910aac65bca8469ca922807df042642826de00bbbcce0"
+      },
+      {
+        "case": "hybrid_periodic",
+        "max_abs_error": {
+          "ru_t": 121.76605024956777,
+          "rv_t": 4.899520341439256e-06,
+          "rw_t": 3.799028687190287e-07
+        },
+        "ru_t_mean": 0.2512151300907135,
+        "rv_sha256": "f65fb865697a9dad0ddcfe7adb8943609ee0332062acacadc46d7fb83bf2e4a9",
+        "rw_sha256": "296793c29d21535afd4c0e4900847ec2c57ffbf829bfb9784fef6ae0fa27ef20"
+      },
+      {
+        "case": "hybrid_bounded",
+        "max_abs_error": {
+          "ru_t": 121.76605024956777,
+          "rv_t": 4.802276826865182e-06,
+          "rw_t": 3.799028687190287e-07
+        },
+        "ru_t_mean": 0.25081008672714233,
+        "rv_sha256": "d625b4f7140d89c29a0a3ae713b33291d7647fc63bd626a485765e0bd22f3c04",
+        "rw_sha256": "296793c29d21535afd4c0e4900847ec2c57ffbf829bfb9784fef6ae0fa27ef20"
+      },
+      {
+        "case": "curvature_only",
+        "max_abs_error": {
+          "ru_t": 21.41795764769451,
+          "rv_t": 1.927151344283118e-06,
+          "rw_t": 3.799028687190287e-07
+        },
+        "ru_t_mean": 0.24987848103046417,
+        "rv_sha256": "cd35ab4fa2f109b9001f33363be0f7c826d0622a88b9322732c3adc5aa38f5c6",
+        "rw_sha256": "296793c29d21535afd4c0e4900847ec2c57ffbf829bfb9784fef6ae0fa27ef20"
+      },
+      {
+        "case": "southern",
+        "max_abs_error": {
+          "ru_t": 130.55869203805923,
+          "rv_t": 2.3283064365386963e-08,
+          "rw_t": 3.560437544791739e-08
+        },
+        "ru_t_mean": 0.24869439005851746,
+        "rv_sha256": "a1717440a9224bc481e34abc670bae7901620d1e516fce67adb98ea95aa4bd9d",
+        "rw_sha256": "d447e19308ee0fcabb8910aac65bca8469ca922807df042642826de00bbbcce0"
+      }
+    ],
+    "rotation": {
+      "seconds": 900,
+      "dt": 10.0,
+      "method": "explicit_midpoint",
+      "initial_du_dt": 1.3055999297648669e-08,
+      "expected_initial_du_dt": 0.0013055999957859513,
+      "final_uv": [
+        1.1750399309676122e-05,
+        12.799999651391545
+      ],
+      "analytical_uv": [
+        1.1733903008632711,
+        12.746103721712473
+      ]
+    }
+  },
+  "fixed": {
+    "device": "Apple M2",
+    "synchronous": true,
+    "mode": "verified",
+    "grid": [
+      3,
+      4,
+      5
+    ],
+    "stencil_cases": [
+      {
+        "case": "uniform_north",
+        "max_abs_error": {
+          "ru_t": 7.450580596923828e-08,
+          "rv_t": 2.3283064365386963e-08,
+          "rw_t": 3.560437544791739e-08
+        },
+        "ru_t_mean": 130.80999755859375,
+        "rv_sha256": "474c2c664870f5b7bc2b52857f9b7bef816c3abd6f440e63b29479b4b4500d8a",
+        "rw_sha256": "d447e19308ee0fcabb8910aac65bca8469ca922807df042642826de00bbbcce0"
+      },
+      {
+        "case": "hybrid_periodic",
+        "max_abs_error": {
+          "ru_t": 1.354735198333401e-05,
+          "rv_t": 4.899520341439256e-06,
+          "rw_t": 3.799028687190287e-07
+        },
+        "ru_t_mean": 110.25428771972656,
+        "rv_sha256": "f65fb865697a9dad0ddcfe7adb8943609ee0332062acacadc46d7fb83bf2e4a9",
+        "rw_sha256": "296793c29d21535afd4c0e4900847ec2c57ffbf829bfb9784fef6ae0fa27ef20"
+      },
+      {
+        "case": "hybrid_bounded",
+        "max_abs_error": {
+          "ru_t": 1.354735198333401e-05,
+          "rv_t": 4.802276826865182e-06,
+          "rw_t": 3.799028687190287e-07
+        },
+        "ru_t_mean": 73.5870361328125,
+        "rv_sha256": "d625b4f7140d89c29a0a3ae713b33291d7647fc63bd626a485765e0bd22f3c04",
+        "rw_sha256": "296793c29d21535afd4c0e4900847ec2c57ffbf829bfb9784fef6ae0fa27ef20"
+      },
+      {
+        "case": "curvature_only",
+        "max_abs_error": {
+          "ru_t": 4.82159941128657e-06,
+          "rv_t": 1.927151344283118e-06,
+          "rw_t": 3.799028687190287e-07
+        },
+        "ru_t_mean": -10.839662551879883,
+        "rv_sha256": "cd35ab4fa2f109b9001f33363be0f7c826d0622a88b9322732c3adc5aa38f5c6",
+        "rw_sha256": "296793c29d21535afd4c0e4900847ec2c57ffbf829bfb9784fef6ae0fa27ef20"
+      },
+      {
+        "case": "southern",
+        "max_abs_error": {
+          "ru_t": 7.450580596923828e-08,
+          "rv_t": 2.3283064365386963e-08,
+          "rw_t": 3.560437544791739e-08
+        },
+        "ru_t_mean": -130.30999755859375,
+        "rv_sha256": "a1717440a9224bc481e34abc670bae7901620d1e516fce67adb98ea95aa4bd9d",
+        "rw_sha256": "d447e19308ee0fcabb8910aac65bca8469ca922807df042642826de00bbbcce0"
+      }
+    ],
+    "rotation": {
+      "seconds": 900,
+      "dt": 10.0,
+      "method": "explicit_midpoint",
+      "initial_du_dt": 0.0013055999755859375,
+      "expected_initial_du_dt": 0.0013055999957859513,
+      "final_uv": [
+        1.173390512084961,
+        12.746103702704609
+      ],
+      "analytical_uv": [
+        1.1733903008632711,
+        12.746103721712473
+      ]
+    }
+  },
+  "adjacent_v_w_tendencies_bitwise_unchanged": true,
+  "bundle": {
+    "abi_version": 65543,
+    "files": {
+      "libwoof_metal.dylib": {
+        "sha256": "e015f7fdd0db60fbbbafbac3fd9fbeca849ad70f74e5c1f6951d5f4c1f8a153c",
+        "size": 187856
+      },
+      "woof_default.metallib": {
+        "sha256": "2c4e595104c5404d63a2dbdd8c52b1ef72a7ee421d6b9a97a1626b42106cc51a",
+        "size": 10876819
+      },
+      "woof_exact.metallib": {
+        "sha256": "1b76fb2b2a405ac5e6475ef0cb9a1b94bf6dbad235a5892e8ec5b8edf7277bad",
+        "size": 6855605
+      }
+    },
+    "implementation_file_count": 1839,
+    "implementation_sha256": "3c2589a65d43c36c7549e32c56af57c32c00c933a0f26ba398e37aaa84ae9bea",
+    "metal_inputs_sha256": "3463817d8d64e75fa45fc0c0dce8473a49cc7ac61cdca8c6e05c211cca193f21",
+    "minimum_os": "14.0",
+    "platform": "darwin-arm64",
+    "schema": "woof-metal-bundle-v1",
+    "source_commit": "12af678aea3a202fb35aac10579e3b996d66168b"
+  },
+  "public_cli": {
+    "repeat_count": 3,
+    "repeat_final_state_bitwise": true,
+    "runs": [
+      {
+        "run": 1,
+        "history_frames": 11,
+        "finite_all_history_fields": true,
+        "steps": 10,
+        "run_seconds": 600.0,
+        "final_state_digest": {
+          "sha256": "ae561226bab9304515458faad3a8e1c0e2554cf56a168ba3a143b55211b3d600",
+          "array_count": 157
+        },
+        "metadata_is_borrowed": true,
+        "executing_source_verified": true,
+        "evolution": {
+          "U": {
+            "max_abs_change": 3.369626998901367,
+            "final_min": -12.755682945251465,
+            "final_max": 34.86030197143555
+          },
+          "V": {
+            "max_abs_change": 2.4058375358581543,
+            "final_min": -11.365355491638184,
+            "final_max": 20.25422477722168
+          },
+          "W": {
+            "max_abs_change": 0.768304705619812,
+            "final_min": -0.24997587502002716,
+            "final_max": 0.768304705619812
+          },
+          "T": {
+            "max_abs_change": 1.330474853515625,
+            "final_min": -10.58648681640625,
+            "final_max": 95.12796020507812
+          },
+          "QVAPOR": {
+            "max_abs_change": 0.00037171225994825363,
+            "final_min": 7.114856703793748e-09,
+            "final_max": 0.015358644537627697
+          }
+        },
+        "source_commit": "395d137fc7157cac7f7a212d400525973ae5cefd"
+      },
+      {
+        "run": 2,
+        "history_frames": 11,
+        "finite_all_history_fields": true,
+        "steps": 10,
+        "run_seconds": 600.0,
+        "final_state_digest": {
+          "sha256": "ae561226bab9304515458faad3a8e1c0e2554cf56a168ba3a143b55211b3d600",
+          "array_count": 157
+        },
+        "metadata_is_borrowed": true,
+        "executing_source_verified": true,
+        "evolution": {
+          "U": {
+            "max_abs_change": 3.369626998901367,
+            "final_min": -12.755682945251465,
+            "final_max": 34.86030197143555
+          },
+          "V": {
+            "max_abs_change": 2.4058375358581543,
+            "final_min": -11.365355491638184,
+            "final_max": 20.25422477722168
+          },
+          "W": {
+            "max_abs_change": 0.768304705619812,
+            "final_min": -0.24997587502002716,
+            "final_max": 0.768304705619812
+          },
+          "T": {
+            "max_abs_change": 1.330474853515625,
+            "final_min": -10.58648681640625,
+            "final_max": 95.12796020507812
+          },
+          "QVAPOR": {
+            "max_abs_change": 0.00037171225994825363,
+            "final_min": 7.114856703793748e-09,
+            "final_max": 0.015358644537627697
+          }
+        },
+        "source_commit": "395d137fc7157cac7f7a212d400525973ae5cefd"
+      },
+      {
+        "run": 3,
+        "history_frames": 11,
+        "finite_all_history_fields": true,
+        "steps": 10,
+        "run_seconds": 600.0,
+        "final_state_digest": {
+          "sha256": "ae561226bab9304515458faad3a8e1c0e2554cf56a168ba3a143b55211b3d600",
+          "array_count": 157
+        },
+        "metadata_is_borrowed": true,
+        "executing_source_verified": true,
+        "evolution": {
+          "U": {
+            "max_abs_change": 3.369626998901367,
+            "final_min": -12.755682945251465,
+            "final_max": 34.86030197143555
+          },
+          "V": {
+            "max_abs_change": 2.4058375358581543,
+            "final_min": -11.365355491638184,
+            "final_max": 20.25422477722168
+          },
+          "W": {
+            "max_abs_change": 0.768304705619812,
+            "final_min": -0.24997587502002716,
+            "final_max": 0.768304705619812
+          },
+          "T": {
+            "max_abs_change": 1.330474853515625,
+            "final_min": -10.58648681640625,
+            "final_max": 95.12796020507812
+          },
+          "QVAPOR": {
+            "max_abs_change": 0.00037171225994825363,
+            "final_min": 7.114856703793748e-09,
+            "final_max": 0.015358644537627697
+          }
+        },
+        "source_commit": "395d137fc7157cac7f7a212d400525973ae5cefd"
+      }
+    ],
+    "inputs": {
+      "acquisition": "cached public GFS; not Vermont inputs",
+      "cycle": "2026-10-04T06:00:00Z",
+      "grid": [
+        49,
+        48,
+        60
+      ],
+      "dx_m": 12000,
+      "config_sha256": "d206f6b5db9b00715df1471d5164148e5b93a4a2d81663c06bdad79bd36b53d0",
+      "prepared_proof_sha256": "b9d42a22373bed5493b79db97661fbd1f1d7443544d6f5c49c82dae30f823b82"
+    }
+  },
+  "notes": [
+    "The rotation experiment isolates horizontal f-plane terms; it is not a full forecast.",
+    "CLI runs used the shared Python dependency environment. Its editable distribution metadata belongs to another checkout; executing source path and clean Git commit were checked explicitly.",
+    "Exact Vermont inputs and CUDA forecast comparison remain unavailable."
+  ]
+}
