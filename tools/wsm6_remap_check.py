@@ -218,6 +218,7 @@ def cpu_stress(shader, count=96, failure_path=None):
             dt = float((.01, 1., 30., 120.)[index % 4])
             if index % 8 < 3:
                 # Fall distances neighboring actual regular-cell interfaces.
+                dt = 30. if index % 2 == 0 else 120.
                 dz[:] = 150
                 center = np.float32(150/dt)
                 velocity[:] = (np.nextafter(center, np.float32(0)), center,
