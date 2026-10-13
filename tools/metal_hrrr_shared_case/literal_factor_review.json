@@ -1,0 +1,402 @@
+{
+  "source_snapshot": "fix commit cfca154b0; source locations relative to repository",
+  "scope": "All and only the 23 kind=factor_of_ten entries in literal-audit/flags.json; reviewed against actual expressions and active mp8/YSU1/sfclay91/Noah2/RTE-RRTMGP4/noaa_wrf39/diff6 case selection.",
+  "counts": {
+    "confirmed": 0,
+    "dismissed": 23,
+    "unresolved": 0
+  },
+  "review": [
+    {
+      "flag_id": 1,
+      "classification": "dismissed",
+      "disposition": "CUDA 0.25 is the MYNN stability-function exponent in pmz; Metal 2.5e6 is xlv (latent heat) in a MYNN driver prologue. Different constants/expressions; MYNN is not enabled in this case.",
+      "cuda": {
+        "file": "woof/core/kernels/mynn_pbl.cu",
+        "function": "mynn_driver_surface_columns",
+        "line": 4517,
+        "literal": "0.25f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/mynn_pbl_family.metal",
+        "function": "mynn_driver_surface_columns",
+        "line": 358,
+        "literal": "2500000.0f"
+      }
+    },
+    {
+      "flag_id": 2,
+      "classification": "dismissed",
+      "disposition": "CUDA 0.25 is alp1 in the GSD41 MYM length formula; Metal 25 is the lower clamp on tau_cloud in another routine section. Different quantities; neither is a counterpart factor.",
+      "cuda": {
+        "file": "woof/core/kernels/mynn_pbl.cu",
+        "function": "mynn_mym_length_gsd41_column",
+        "line": 2519,
+        "literal": "0.25f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/mynn_pbl_family.metal",
+        "function": "mynn_mym_length_gsd41",
+        "line": 2131,
+        "literal": "25.0f"
+      }
+    },
+    {
+      "flag_id": 3,
+      "classification": "dismissed",
+      "disposition": "CUDA 30 is the qtke cap inside elb; the paired Metal line is the unrelated vsc cube-root expression. Different operations and quantities; MYNN is not enabled.",
+      "cuda": {
+        "file": "woof/core/kernels/mynn_pbl.cu",
+        "function": "mynn_mym_length_gsd41_column",
+        "line": 2574,
+        "literal": "30.0f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/mynn_pbl_family.metal",
+        "function": "mynn_mym_length_gsd41",
+        "line": 2099,
+        "literal": "3.0f"
+      }
+    },
+    {
+      "flag_id": 4,
+      "classification": "dismissed",
+      "disposition": "CUDA hex table entry decodes to about -0.49999975 in the software log polynomial; Metal B_P50=50 is a Noah-MP log/clamp constant, not that polynomial coefficient.",
+      "cuda": {
+        "file": "woof/core/kernels/noahmp_bareflux.cu",
+        "function": "<file_scope>",
+        "line": 97,
+        "literal": "0xBFDFFFFEF20A4123ULL"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/noahmp_bareflux_family.metal",
+        "function": "<file_scope>",
+        "line": 18,
+        "literal": "50.0f"
+      }
+    },
+    {
+      "flag_id": 5,
+      "classification": "dismissed",
+      "disposition": "Same CUDA software-log coefficient as #4 versus Metal B_N5=-5 clamp constant; no corresponding expression. Noah-MP bareflux is outside the configured Noah path.",
+      "cuda": {
+        "file": "woof/core/kernels/noahmp_bareflux.cu",
+        "function": "<file_scope>",
+        "line": 97,
+        "literal": "0xBFDFFFFEF20A4123ULL"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/noahmp_bareflux_family.metal",
+        "function": "<file_scope>",
+        "line": 18,
+        "literal": "5.0f"
+      }
+    },
+    {
+      "flag_id": 6,
+      "classification": "dismissed",
+      "disposition": "CUDA is a warm-process dt>120 safeguard; Metal 1.2e-5 is part of cold-phase viscosity. The heuristic paired different scheme stages, not counterparts.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_warm.cu",
+        "function": "thompson_aa_warm_source_network",
+        "line": 1526,
+        "literal": "120.0f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+        "function": "cold_prepare_entry",
+        "line": 514,
+        "literal": "1.2e-5f"
+      }
+    },
+    {
+      "flag_id": 7,
+      "classification": "dismissed",
+      "disposition": "CUDA 2.5 is a warm snow-temperature-bin offset; Metal 0.25 is an ice supersaturation threshold in cold preparation. Different formulas and stages.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_warm.cu",
+        "function": "thompson_aa_warm_source_network",
+        "line": 1213,
+        "literal": "2.5f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+        "function": "cold_prepare_entry",
+        "line": 499,
+        "literal": "0.25f"
+      }
+    },
+    {
+      "flag_id": 8,
+      "classification": "dismissed",
+      "disposition": "CUDA 2.5e6 is latent heat in the warm snow-melt term; Metal 0.25 is cold-phase supersaturation threshold. Different physical quantities/stages.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_warm.cu",
+        "function": "thompson_aa_warm_source_network",
+        "line": 1354,
+        "literal": "2.5e6f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+        "function": "cold_prepare_entry",
+        "line": 499,
+        "literal": "0.25f"
+      }
+    },
+    {
+      "flag_id": 9,
+      "classification": "dismissed",
+      "disposition": "CUDA 1e-10 is a vapor-mixing-ratio floor for density; Metal 1e-6 is a graupel-mass activation threshold. Different quantities and routines.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson.cu",
+        "function": "thompson_classic_graupel_number",
+        "line": 2065,
+        "literal": "1.0e-10f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+        "function": "cold_prepare_graupel",
+        "line": 655,
+        "literal": "1.0e-6f"
+      }
+    },
+    {
+      "flag_id": 10,
+      "classification": "dismissed",
+      "disposition": "CUDA macro is the state fill-test EPS threshold; Metal 1.0 is an entry in the CCG1 gamma table. Global-scope proximity is not a matched coefficient.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_state.cu",
+        "function": "<file_scope>",
+        "line": 88,
+        "literal": "1.0e-15f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+        "function": "<file_scope>",
+        "line": 155,
+        "literal": "1.0f"
+      }
+    },
+    {
+      "flag_id": 11,
+      "classification": "dismissed",
+      "disposition": "CUDA state EPS threshold versus Metal CCE2 table entry 10; these serve unrelated threshold/table roles.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_state.cu",
+        "function": "<file_scope>",
+        "line": 88,
+        "literal": "1.0e-15f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+        "function": "<file_scope>",
+        "line": 179,
+        "literal": "10.0f"
+      }
+    },
+    {
+      "flag_id": 12,
+      "classification": "dismissed",
+      "disposition": "Both expressions compute the same cloud xdc floor: CUDA D0C*1e6 and Metal max(1.0, computed_xdc); D0C is 1e-6, so the apparent 1e6 ratio is unit conversion/folding, not a defect.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_warm.cu",
+        "function": "thompson_aa_warm_rain_rates",
+        "line": 431,
+        "literal": "1.0e6f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_warm_family.metal",
+        "function": "thompson_aa_warm_rates",
+        "line": 395,
+        "literal": "1.0f"
+      }
+    },
+    {
+      "flag_id": 13,
+      "classification": "dismissed",
+      "disposition": "CUDA last snow-bin endpoint is exp((99.5/100)*log_ratio); Metal uses exp(0.995*log_ratio). This is the same coefficient after division by 100.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_warm.cu",
+        "function": "thompson_aa_frozen_collect_rates",
+        "line": 924,
+        "literal": "99.5"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_warm_family.metal",
+        "function": "thompson_aa_frozen_rates",
+        "line": 535,
+        "literal": "0.995f"
+      }
+    },
+    {
+      "flag_id": 14,
+      "classification": "dismissed",
+      "disposition": "Same 99.5/100 snow-bin endpoint as #13; Metal hex 0x3fefd70a3d70a3d7 encodes the binary64 approximation to 0.995.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_warm.cu",
+        "function": "thompson_aa_frozen_collect_rates",
+        "line": 924,
+        "literal": "99.5"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_warm_family.metal",
+        "function": "thompson_aa_frozen_rates",
+        "line": 542,
+        "literal": "0x3fefd70a3d70a3d7ul"
+      }
+    },
+    {
+      "flag_id": 15,
+      "classification": "dismissed",
+      "disposition": "CUDA line is a bottom-level graupel sediment-export threshold; Metal line defines am_r from rain density/diameter in a rain-speed routine. Different expressions and species.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_sed.cu",
+        "function": "thompson_aa_wrf39_graupel_sediment_impl",
+        "line": 1216,
+        "literal": "1.0e-11f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+        "function": "wrf39_rain_speed",
+        "line": 25,
+        "literal": "1000.0f"
+      }
+    },
+    {
+      "flag_id": 16,
+      "classification": "dismissed",
+      "disposition": "CUDA 1e-10 is a vapor floor in graupel sediment thermodynamics; Metal am_r=pi*1000/6 is a rain mass-diameter coefficient. Different quantities and code paths.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_sed.cu",
+        "function": "thompson_aa_wrf39_graupel_sediment_impl",
+        "line": 1125,
+        "literal": "1.0e-10f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+        "function": "wrf39_rain_speed",
+        "line": 25,
+        "literal": "1000.0f"
+      }
+    },
+    {
+      "flag_id": 17,
+      "classification": "dismissed",
+      "disposition": "CUDA 1e-3 tests sediment velocity to select active levels; Metal am_r is a rain mass-diameter coefficient. Different dimensions and purposes.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson_aerosol_sed.cu",
+        "function": "thompson_aa_wrf39_graupel_sediment_impl",
+        "line": 1183,
+        "literal": "1.0e-3f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+        "function": "wrf39_rain_speed",
+        "line": 25,
+        "literal": "1000.0f"
+      }
+    },
+    {
+      "flag_id": 18,
+      "classification": "dismissed",
+      "disposition": "CUDA computes cloud effective radius as 0.5*15/lambda (=7.5/lambda); Metal 1.5/lambda is the ice-branch radius (0.5*3). Different hydrometeor branches, not a cloud coefficient discrepancy.",
+      "cuda": {
+        "file": "woof/core/kernels/thompson.cu",
+        "function": "thompson_effective_radius",
+        "line": 418,
+        "literal": "15.0"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/thompson_effective_radius.metal",
+        "function": "thompson_effective_radius",
+        "line": 67,
+        "literal": "1.5f"
+      }
+    },
+    {
+      "flag_id": 19,
+      "classification": "dismissed",
+      "disposition": "CUDA .001 is the BEP/BEM iteration tolerance; Metal 10.0 is the base of the saturation-vapor-pressure power law. Different functions/quantities; urban physics is not enabled.",
+      "cuda": {
+        "file": "woof/core/kernels/urban_bep_bem.cu",
+        "function": "bb_flux_flat",
+        "line": 3547,
+        "literal": ".001f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/urban_bem_flat_flux_fragment.metal",
+        "function": "urban_bem_flat_flux_fragment",
+        "line": 70,
+        "literal": "10.0f"
+      }
+    },
+    {
+      "flag_id": 20,
+      "classification": "dismissed",
+      "disposition": "CUDA 1e5 is the pressure normalization in pr/1e5; Metal 10.0 is the vapor-pressure exponential base. Pressure scaling and logarithmic base are distinct.",
+      "cuda": {
+        "file": "woof/core/kernels/urban_bep_bem.cu",
+        "function": "bb_flux_flat",
+        "line": 3559,
+        "literal": "1.e+5f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/urban_bem_flat_flux_fragment.metal",
+        "function": "urban_bem_flat_flux_fragment",
+        "line": 70,
+        "literal": "10.0f"
+      }
+    },
+    {
+      "flag_id": 21,
+      "classification": "dismissed",
+      "disposition": "CUDA 40/100 folds exactly to 0.4, which Metal uses in the same hf=2.5*sqrt(0.4*uroof) expression. No defect.",
+      "cuda": {
+        "file": "woof/core/kernels/urban_bem.cuh",
+        "function": "bem_hsfluxpv",
+        "line": 1058,
+        "literal": "40.f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/urban_bep_bem_pv_solve_fragment.metal",
+        "function": "urban_bep_bem_pv_solve_fragment",
+        "line": 100,
+        "literal": "0.4f"
+      }
+    },
+    {
+      "flag_id": 22,
+      "classification": "dismissed",
+      "disposition": "CUDA .001 is a BEP convergence tolerance; Metal 1.0 is a numerator in a stability correction in a helper, not a matching expression. Urban physics is not enabled.",
+      "cuda": {
+        "file": "woof/core/kernels/urban_bep.cu",
+        "function": "bep_flux_flat",
+        "line": 1604,
+        "literal": ".001f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/urban_bep_family.metal",
+        "function": "urban_bep_flux_flat",
+        "line": 1064,
+        "literal": "1.0f"
+      }
+    },
+    {
+      "flag_id": 23,
+      "classification": "dismissed",
+      "disposition": "Same BEP .001 iteration tolerance as #22 paired with a different stability-correction helper; Metal 1.0 is not the tolerance counterpart. Urban physics is not enabled.",
+      "cuda": {
+        "file": "woof/core/kernels/urban_bep.cu",
+        "function": "bep_flux_flat",
+        "line": 1604,
+        "literal": ".001f"
+      },
+      "metal": {
+        "file": "woof/metal/shaders/urban_bep_flux_helpers_fragment.metal",
+        "function": "urban_bep_flux_flat",
+        "line": 53,
+        "literal": "1.0f"
+      }
+    }
+  ]
+}

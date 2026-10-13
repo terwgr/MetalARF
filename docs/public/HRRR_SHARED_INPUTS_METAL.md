@@ -1,4 +1,4 @@
-# Metal HRRR/Noah shared-input execution and Thompson coefficients
+# Metal HRRR/Noah execution, Thompson coefficients and scalar order
 
 The transferred CUDA consistency case selects Thompson mp8, YSU, MM5 surface
 layer, Noah, RTE-RRTMGP, `alb_sol=1`, `diff_6th_form="noaa_wrf39"`, and the
@@ -86,7 +86,7 @@ exact FP32 input columns against the existing float64 NumPy mirror. Maximum
 vapour-tendency difference is 1.38e-10 kg/kg/s, PBLH differs by at most 9 mm,
 and kpbl agrees. This exposes no large first-call YSU error on common inputs;
 it does not establish CUDA bitwise parity or clear later thresholds, transport
-and producer/input coupling. No subsequent full forecast was launched.
+and producer/input coupling. The next bounded investigation and its single corrected forecast are recorded below.
 
 ## Numeric-literal census
 
@@ -113,9 +113,42 @@ a flag is not a proven defect. In particular the MYNN mixing-length variants
 need configuration-specific mapping/replay, not silent acceptance of their
 coefficient differences. This case uses YSU.
 
-The census/flags are complete, but semantic validation of every flagged value
-and unmatched scope is not. It does not evaluate every expression or macro,
+All 23 factor-of-ten flags were subsequently reviewed against their actual expressions: 0 confirmed defects, 23 dismissed, 0 unresolved factor-of-ten pairings. Each dismissal is recorded in `tools/metal_hrrr_shared_case/LITERAL_FACTOR_REVIEW.md`. One-sided values and unmatched scopes were not reviewed. The census does not establish semantic equivalence of every flagged value or unmatched scope. It does not evaluate every expression or macro,
 preprocess every configuration, validate operators/control flow, or establish
 that every pairing represents identical physics. No further coefficient was
 changed solely because of a heuristic flag. Compact receipts and all paired
 flags are in `tools/metal_hrrr_shared_case/`.
+
+## First remaining Qv operator defect: vertical order
+
+The +15-minute Qv error occupies interior patches from the surface through the PBL top, strongest around levels 18–19. The trim5 core holds 88.2% of squared error in 56.25% of horizontal cells; core/rim RMSE is 1.03149e-5/4.27061e-6 kg/kg. Gradient correlations are modest and terrain correlation weak; the map suggests transport rather than a narrow edge strip but does not uniquely identify an operator.
+
+This case requests `v_sca_adv_order=5`. In `_advance_scalars_stage_metal`, both provisional unlimited and final PD calls omitted the selector and used the launcher default 3. The shared PD dispatcher also dropped the selector, and the Metal PD shader lacked the fifth-order path. The fix forwards the configured order through every layer, adds the CUDA vertical stencil/degradation ladder, and adds the order5 semi-Lagrangian low flux for signed Courant magnitudes above one. The typed ABI and rebuilt bundle are included; the donor-budget limiter remains unchanged.
+
+The first actual Qv advection call was captured before completing step 1 on unchanged prepared inputs. On identical full-domain inputs, original production versus the requested float64 order5 mirror has tendency RMSE 9.22465e-4 and maximum 1.59007e-2. Production versus the order3 mirror instead has RMSE 6.83837e-8. After repair, production actually passes order5 and RMSE is 6.76095e-8, maximum 1.01605e-6. The wrong-order error is roughly 13,600 times this float32 scale. These are dry-mass-coupled tendencies, not kg/kg increments.
+
+Eight bounded checks cover unlimited and PD/limiter at orders3/5 on the captured domain, plus signed vertical Courant controls ±2.25/±3.75, against existing float64 mirrors. All pass epsilon-scaled bounds. Reproduce with `python tools/metal_scalar_order_experiment.py --inputs scalar-step1-inputs.npz --out scalar-order-verification.json` using the retained local capture. No broader test suite was run. The operator search stopped on this defect; scalar diffusion and Noah flux were not replayed afterward.
+
+Exactly one subsequent full 12-hour forecast ran at `cfca154b06b9283fe8769a9ec9dd09e3954def4e`: 1827 steps, 49 histories, health PASS, and 3,919 finite matching numeric field/time checks. Input identity equals the previous run. Forecast plus I/O took 878.36 s. No new noise-floor forecast ran.
+
+Pooled RMSE over all 49 times and all grid cells:
+
+| Field | Previous c7-corrected | Scalar-order corrected | Recorded original-build perturbation |
+|---|---:|---:|---:|
+| PSFC | 0.441809 | 0.448684 | 0.34045 |
+| U | 0.0672561 | 0.0678365 | 0.00274668 |
+| V | 0.0845924 | 0.0847601 | 0.00298216 |
+| U10 | 0.0792542 | 0.0802005 | 0.00170286 |
+| V10 | 0.0895839 | 0.0892339 | 0.00188512 |
+| T2 | 0.0589461 | 0.0572595 | 0.00389278 |
+| T | 0.0274978 | 0.0273408 | 0.00375904 |
+| W | 0.0152933 | 0.015462 | 0.00206457 |
+| QVAPOR | 4.15226e-05 | 3.9791e-05 | 1.00618e-06 |
+| QCLOUD | 4.4719e-07 | 6.02648e-07 | 3.68883e-09 |
+| QICE | 0 | 0 | 3.89586e-08 |
+| QSNOW | 1.55741e-11 | 8.63799e-12 | 2.05244e-08 |
+| PBLH | 41.8677 | 42.2362 | 5.20838 |
+| SWDOWN | 6.31529 | 7.22196 | 0.635553 |
+| TSK | 0.0935666 | 0.101527 | 0.0108409 |
+
+Units are Pa for PSFC, m/s for winds, K for temperatures, kg/kg for mixing ratios, m for PBLH and W/m² for SWDOWN. T is stored potential-temperature perturbation. The remaining forecast errors still substantially exceed the recorded perturbation spread; parity is not established. The early-cloud chain persists, and some fields worsen after restoring the requested order. A confirmed selector defect is therefore fixed without claiming that it accounts for all remaining Qv drift. The search stops here as requested. Full comparison and bounded receipts are in `tools/metal_hrrr_shared_case/scalar_order_fix.json`; the local report retains per-level maps, peak locations and masked metrics.
