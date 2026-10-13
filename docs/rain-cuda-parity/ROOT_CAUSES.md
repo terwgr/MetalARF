@@ -1,6 +1,6 @@
 # Rainy CUDA parity root causes
 
-The unchanged Flint rainy case exposes five confirmed Metal defects. The fixes are stacked on the complete dry-case compatibility work in PR 25. They affect staggered V dispatch, the surface/PBL gas ratio, snow riming, warm-source latent heating and the Smagorinsky mixing pipeline.
+The unchanged Flint rainy case exposes six confirmed Metal defects. The fixes are stacked on the complete dry-case compatibility work in PR 25. They affect staggered V dispatch, the surface/PBL gas ratio, snow riming, warm-source latent heating, the Smagorinsky mixing pipeline and precipitation delivery to Noah.
 
 ## Missing V advection points
 
@@ -71,7 +71,7 @@ Parity is still not established. Pooled V10 RMSE remains 0.452496 m/s, Qv RMSE 5
 
 The Metal `launch_wrf_smag2d_km` branch allocated three reused deformation-buffer prefixes, then launched the coefficient consumer without launching `wrf_smag_deform`. CUDA explicitly launches deformation first, coefficients second and the physical-boundary coefficient reset third. The Metal branch also omitted that final reset.
 
-At the captured first dry production call, every Metal deformation and K coefficient was zero. The identical-input CUDA-source host calculation has K_m maximum 401.946411 m²/s and K_h maximum 1205.839233 m²/s. On later steps the borrowed tensor storage contains carrying tendencies from the previous step, so omission can also feed stale non-deformation data into the closure. This affects the same active km_opt=4/diff_opt=2 pipeline used by the rainy case.
+At the captured first dry production call, every Metal deformation and K coefficient was zero. The identical-input CUDA-source host calculation has K_m maximum 401.946411 m²/s and K_h maximum 1205.839233 m²/s. The normal caller zeroes the carrying buffers before computing the time-t mixing tendencies, so the omitted deformation launch suppresses mixing. The earlier explanation about stale carrying tendencies was incorrect for this production route. This affects the same active km_opt=4/diff_opt=2 pipeline used by the rainy case.
 
 Submit deformation before its coefficient consumer and restore the same boundary reset as CUDA and the other admitted Metal closures. The corrected native replay fills 70,756 nonzero coefficients. K_m RMSE falls from 74.91297 to 2.99481e-6 m²/s and K_h from 224.73891 to 9.52379e-6 m²/s. Deformation maximum errors are below 4.4e-10 s⁻¹. Three native repetitions are byte-identical; all physical boundary coefficient rows are exactly zero.
 
@@ -89,4 +89,12 @@ The transferred CUDA certification capsule verifies that the local CUDA-source t
 
 Additional coverage: first-call YSU mass winds, theta and qv/qc/qi inputs match the initial CUDA history exactly; the first-call and three-hour YSU host replays have exact PBL height and level indices. At three hours the recorded timestep is 24 seconds (the forecast's unchanged adaptive clock), and the sampled dv/dtheta outputs match the source host byte-for-byte. The dry capture's PBL face coupling and its three RK momentum additions are also byte-identical to the FP32 source expressions. Remaining boundary/coupling diagnosis continues; no numerical-parity claim is made.
 
-The first six rainy lateral-boundary relaxation calls (u, v, theta, geopotential, mass and qv) are byte-identical to the recorded CUDA-source host calculation on the same inputs. The remaining trajectory gap needs paired actual CUDA/Metal intermediate states to establish the first backend divergence; a one-step CUDA handoff and matching Metal capture are prepared.
+The first six rainy lateral-boundary relaxation calls (u, v, theta, geopotential, mass and qv) are byte-identical to the recorded CUDA-source host calculation on the same inputs. A one-step CUDA handoff and matching Metal capture are prepared for further diagnosis when that machine is available. The skipped rain handoff below is independently reproducible locally.
+
+## MP8 rainfall skipped at the Noah handoff
+
+At revision 0f909c47, the no-CuPy Metal `accept_microphysics` branch validates the canonical Thompson diagnostics, but adds `RAINNCV` to `_pending_rainbl` only inside `_metal_gfs_profile`. The MP8/YSU/MM5/Noah configuration has that flag false, so the branch returns without recording any Thompson precipitation for the land surface. Its published cumulative RAINNC can still be nonzero while Noah receives no microphysics rainfall.
+
+`MicrophysicsDiagnostics.rainncv` is the per-call increment in mm (kg m⁻²). Each post-RK acceptance must add that increment once to `_pending_rainbl`, independently of the GFS-specific Morrison validation. At the next due `_run_noah`, the native forcing kernel adds the pending total to `fields['rainbl']`, preserving externally supplied rainfall. Noah consumes that amount (its column kernel computes precipitation rate as `rainbl / dt`). After Noah and any urban coupling return, the native clearing kernel zeros both RAINBL and the pending accumulator. The canonical microphysics increment is not cleared by this handoff.
+
+Move accumulation outside the GFS guard. `tests/test_metal_noah_rain_handoff.py` exercises real native Metal accumulation, Noah forcing and clearing with `cp=None`, MP8 and `_metal_gfs_profile=False`; only the Noah column integration is replaced by a probe at its real entrypoint. It verifies two accepted increments accumulate, the next Noah call receives their sum plus external rainfall exactly once, both carriers clear, a second Noah call receives zero despite unchanged canonical RAINNCV, and a later new increment is delivered once. Three independent cycles use the usual batched runtime. Before the repair it fails with all six pending cells zero instead of the expected total.

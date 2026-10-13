@@ -3276,7 +3276,7 @@ class PhysicsDriver:
         if not isinstance(result, MicrophysicsDiagnostics):
             raise TypeError("microphysics must return MicrophysicsDiagnostics")
         if getattr(self.state, "_metal_setup_state", False) and cp is None:
-            # The narrow Metal Kessler lane produces the state's canonical
+            # The Metal schemes produce the state's canonical
             # surface accumulators directly. Validate that ownership and
             # layout here without routing live Metal arrays through CuPy's
             # native-kernel validators or an implicit host conversion.
@@ -3357,11 +3357,15 @@ class PhysicsDriver:
                     raise ValueError(
                         "microphysics SR is outside its validated range: "
                         f"allowed=[0, {float(self._sr_roundoff_upper):.9g}]")
-                from woof.metal.bandwidth_family import add_array
-                if not add_array(result.rainncv, self._pending_rainbl):
-                    raise NotImplementedError(
-                        "Metal Noah rain accumulation has no supported "
-                        "FP32 layout")
+            # Every accepted scheme contributes its per-call precipitation
+            # (mm) to the next surface call, including non-GFS Thompson.
+            # Noah adds the pending total to RAINBL and clears both carriers
+            # after consuming it; canonical RAINNCV remains scheme-owned.
+            from woof.metal.bandwidth_family import add_array
+            if not add_array(result.rainncv, self._pending_rainbl):
+                raise NotImplementedError(
+                    "Metal Noah rain accumulation has no supported "
+                    "FP32 layout")
             self.microphysics_updates += 1
             return
         if (dt is not None
