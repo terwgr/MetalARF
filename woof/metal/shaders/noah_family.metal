@@ -14,6 +14,10 @@ static inline real __fdiv_rn(real a, real b) { return a / b; }
 static inline real __fmul_rn(real a, real b) { return a * b; }
 static inline real __fadd_rn(real a, real b) { return a + b; }
 static inline real __fsub_rn(real a, real b) { return a - b; }
+// Explicit CUDA RN operations above retain separate rounding. Ordinary
+// Noah expressions below permit contraction, matching the recorded CUDA
+// kernel's default NVRTC fmad=true policy.
+#pragma clang fp contract(fast)
 #define NSOIL 4
 
 #define NRD      287.04f      // noahlsm module RD

@@ -85,3 +85,9 @@ def test_thompson_rain_delivered_once_then_cleared(monkeypatch):
             for carrier in (driver.fields["rainbl"], driver._pending_rainbl):
                 np.testing.assert_array_equal(carrier.to_numpy(), np.zeros(shape))
             assert len(delivered) == (repeat + 1) * 3
+            # The admitted MP-only driver has no land-surface consumer.
+            driver.surface_enabled = False
+            driver._pending_rainbl = None
+            driver.accept_microphysics(result, dt=15.0)
+            assert driver.microphysics_updates == 4
+            np.testing.assert_array_equal(result.rainncv.to_numpy(), first)

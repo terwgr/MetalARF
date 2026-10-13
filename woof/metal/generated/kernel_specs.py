@@ -1775,7 +1775,7 @@ NOAH_CHECK_SOIL_CATEGORIES_SHAPES = (('isltyp', (('ny', 'nx'),)), ('status', ((1
 NOAH_CHECK_SOIL_CATEGORIES_PARAM_FIELDS = [('slcats', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NOAH_CHECK_SOIL_CATEGORIES_THREADS_PER_GROUP = 64
 NOAH_CHECK_SOIL_CATEGORIES_LAYOUT_HASH = '7df709187712fdb59f12ab8221d7fa3db03d75969455593c7e437d550f95c606'
-NOAH_CHECK_SOIL_CATEGORIES_SHADER_HASH = 'f8e243afc4d00a092556595f2360e3dd8c19bfa51c665b0c9ee8126b8c2912b7'
+NOAH_CHECK_SOIL_CATEGORIES_SHADER_HASH = 'edf763ab2903a670524121546de5e71dc4319a4e3fea17dffde197f44fe8845d'
 
 NOAH_COLUMN_RESOURCES = (('ivgtyp', 'int32', 'read'), ('isltyp', 'int32', 'read'), ('psfc', 'float', 'read'), ('sfcprs', 'float', 'read'), ('sfctmp', 'float', 'read'), ('qv1', 'float', 'read'), ('qgh', 'float', 'read'), ('dz8w1', 'float', 'read'), ('glw', 'float', 'read'), ('swdown', 'float', 'read'), ('rainbl', 'float', 'read'), ('sr', 'float', 'read'), ('chs', 'float', 'read'), ('cqs2', 'float', 'read'), ('chs2', 'float', 'read_write'), ('rib', 'float', 'read'), ('vegfra', 'float', 'read'), ('shdmin', 'float', 'read'), ('shdmax', 'float', 'read'), ('tmn', 'float', 'read'), ('xland', 'float', 'read'), ('xice', 'float', 'read'), ('snoalb', 'float', 'read'), ('embck', 'float', 'read'), ('tsk', 'float', 'read_write'), ('hfx', 'float', 'read_write'), ('qfx', 'float', 'read_write'), ('lh', 'float', 'read_write'), ('grdflx', 'float', 'read_write'), ('qsfc', 'float', 'read_write'), ('canwat', 'float', 'read_write'), ('snow', 'float', 'read_write'), ('snowc', 'float', 'read_write'), ('snowh', 'float', 'read_write'), ('albedo', 'float', 'read_write'), ('albbck', 'float', 'read_write'), ('emiss', 'float', 'read_write'), ('znt', 'float', 'read_write'), ('z0', 'float', 'read_write'), ('snotime', 'float', 'read_write'), ('lai', 'float', 'read_write'), ('smstav', 'float', 'read_write'), ('smstot', 'float', 'read_write'), ('sfcrunoff', 'float', 'read_write'), ('udrunoff', 'float', 'read_write'), ('acsnow', 'float', 'read_write'), ('acsnom', 'float', 'read_write'), ('snopcx', 'float', 'read_write'), ('potevp', 'float', 'read_write'), ('noahres', 'float', 'read_write'), ('reslin', 'float', 'read_write'), ('chklowq', 'float', 'read_write'), ('smois', 'float', 'read_write'), ('tslb', 'float', 'read_write'), ('sh2o', 'float', 'read_write'), ('smcrel', 'float', 'read_write'), ('ebal', 'int32', 'read_write'), ('vegtbl', 'float', 'read'), ('soiltbl', 'float', 'read'), ('genp', 'float', 'read'), ('dzs', 'float', 'read'))
 NOAH_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read')
@@ -1783,7 +1783,7 @@ NOAH_COLUMN_SHAPES = (('acsnom', (('ny', 'nx'),)), ('acsnow', (('ny', 'nx'),)), 
 NOAH_COLUMN_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('lucats', 'ctypes.c_int32'), ('slcats', 'ctypes.c_int32'), ('isurban', 'ctypes.c_int32'), ('isice', 'ctypes.c_int32'), ('xice_threshold', 'ctypes.c_float'), ('itimestep', 'ctypes.c_int32'), ('frpcpn', 'ctypes.c_int32'), ('usemonalb', 'ctypes.c_int32'), ('rdlai2d', 'ctypes.c_int32'), ('opt_thcnd', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NOAH_COLUMN_THREADS_PER_GROUP = 64
 NOAH_COLUMN_LAYOUT_HASH = 'bf302af5b3bd42d8a4ab4246d7af214d5dbc3b4c127a01dac46b90eb789797c4'
-NOAH_COLUMN_SHADER_HASH = 'f8e243afc4d00a092556595f2360e3dd8c19bfa51c665b0c9ee8126b8c2912b7'
+NOAH_COLUMN_SHADER_HASH = 'edf763ab2903a670524121546de5e71dc4319a4e3fea17dffde197f44fe8845d'
 
 NOAH_FORCING_RESOURCES = (('p_if0_a', 'float', 'read'), ('p_if1_a', 'float', 'read'), ('temperature0_a', 'float', 'read'), ('qv0_a', 'float', 'read'), ('dz0_a', 'float', 'read'), ('br_a', 'float', 'read'), ('sr_scheme_a', 'float', 'read'), ('pending_a', 'float', 'read'), ('sfcprs_a', 'float', 'read_write'), ('sfctmp_a', 'float', 'read_write'), ('qv1_a', 'float', 'read_write'), ('dz8w1_a', 'float', 'read_write'), ('rib_a', 'float', 'read_write'), ('sr_a', 'float', 'read_write'), ('rainbl_a', 'float', 'read_write'))
 NOAH_FORCING_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1799,7 +1799,7 @@ NOAH_INITIALIZE_SH2O_SHAPES = (('isltyp', (('ny', 'nx'),)), ('sh2o', ((4, 'ny', 
 NOAH_INITIALIZE_SH2O_PARAM_FIELDS = [('slcats', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NOAH_INITIALIZE_SH2O_THREADS_PER_GROUP = 64
 NOAH_INITIALIZE_SH2O_LAYOUT_HASH = '7375dc237156607c5bf51d22bf4d116ca21360a70166320dcb181848d3c3a4f2'
-NOAH_INITIALIZE_SH2O_SHADER_HASH = 'f8e243afc4d00a092556595f2360e3dd8c19bfa51c665b0c9ee8126b8c2912b7'
+NOAH_INITIALIZE_SH2O_SHADER_HASH = 'edf763ab2903a670524121546de5e71dc4319a4e3fea17dffde197f44fe8845d'
 
 NOAH_RAIN_ADD_RESOURCES = (('rainbl_a', 'float', 'read_write'), ('pending_a', 'float', 'read'))
 NOAH_RAIN_ADD_ACCESS = ('read_write', 'read')
@@ -3335,7 +3335,7 @@ SFCLAY_COLUMN_SHAPES = (('br', (('ny', 'nx'),)), ('cd', (('ny', 'nx'),)), ('cda'
 SFCLAY_COLUMN_PARAM_FIELDS = [('dx', 'ctypes.c_float'), ('option', 'ctypes.c_int32'), ('isfflx', 'ctypes.c_int32'), ('isftcflx', 'ctypes.c_int32'), ('iz0tlnd', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 SFCLAY_COLUMN_THREADS_PER_GROUP = 128
 SFCLAY_COLUMN_LAYOUT_HASH = 'aa1707b8a5b13c08c66639ce37e395410cc39a323780f7324d494c68cb0a72d0'
-SFCLAY_COLUMN_SHADER_HASH = '4496d3cff3323401547d5b5974b68eb3e8bbf25d339505b20559d0fa557d619f'
+SFCLAY_COLUMN_SHADER_HASH = '0664799a513ea0959868b29d94338054befbaff34d54e1075827d0ce6f73335a'
 
 SHINHONG_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('p', 'float', 'read'), ('p_interface', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('tke', 'float', 'read'), ('psfc', 'float', 'read'), ('znt', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('wspd', 'float', 'read'), ('br', 'float', 'read'), ('psim', 'float', 'read'), ('psih', 'float', 'read'), ('xland', 'float', 'read'), ('u10', 'float', 'read'), ('v10', 'float', 'read'), ('corf', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dtheta', 'float', 'read_write'), ('dqv', 'float', 'read_write'), ('dqc', 'float', 'read_write'), ('dqi', 'float', 'read_write'), ('exch_h', 'float', 'read_write'), ('tke_out', 'float', 'read_write'), ('el', 'float', 'read_write'), ('hpbl', 'float', 'read_write'), ('wstar', 'float', 'read_write'), ('delta', 'float', 'read_write'), ('kpbl', 'int32', 'read_write'), ('ws', 'float', 'read_write'))
 SHINHONG_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4927,7 +4927,7 @@ YSU_COLUMN_SHAPES = (('br', (('ny', 'nx'),)), ('cloudflg', (('ny', 'nx'),)), ('c
 YSU_COLUMN_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('wskp', 'ctypes.c_int32'), ('col0', 'ctypes.c_int32'), ('tilecol', 'ctypes.c_int32'), ('ws_count', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('ysu_topdown_pblmix', 'ctypes.c_int32'), ('topo', 'ctypes.c_int32')]
 YSU_COLUMN_THREADS_PER_GROUP = 32
 YSU_COLUMN_LAYOUT_HASH = '6f6123b947f737c71fd394d9babdec1584b71e6ff3a847abfd90dbad40d240c3'
-YSU_COLUMN_SHADER_HASH = '7b41ea5b61cadf0f026e50534f45ace6b18b9e700869665e6d7c225a4fbe89a0'
+YSU_COLUMN_SHADER_HASH = '51f028353998d9f9dd62a2917a9abae87246f4d804b5ff39b62d91d787b6215c'
 
 YSU_VALIDATE_OUTPUTS_RESOURCES = (('du', 'float', 'read'), ('dv', 'float', 'read'), ('dtheta', 'float', 'read'), ('dqv', 'float', 'read'), ('dqc', 'float', 'read'), ('dqi', 'float', 'read'), ('exch_h', 'float', 'read'), ('exch_m', 'float', 'read'), ('hpbl', 'float', 'read'), ('wstar', 'float', 'read'), ('delta', 'float', 'read'), ('topdown_radsum', 'float', 'read'), ('wstar3_2', 'float', 'read'), ('status', 'uint32', 'read_write'))
 YSU_VALIDATE_OUTPUTS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -4935,7 +4935,7 @@ YSU_VALIDATE_OUTPUTS_SHAPES = (('delta', (('ny', 'nx'),)), ('dqc', (('nz', 'ny',
 YSU_VALIDATE_OUTPUTS_PARAM_FIELDS = [('nfloat', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32')]
 YSU_VALIDATE_OUTPUTS_THREADS_PER_GROUP = 128
 YSU_VALIDATE_OUTPUTS_LAYOUT_HASH = '1d9fa1c67f18ae94a1e44c0744d10b8993d66f3e98540af4e9aec0b379755482'
-YSU_VALIDATE_OUTPUTS_SHADER_HASH = '7b41ea5b61cadf0f026e50534f45ace6b18b9e700869665e6d7c225a4fbe89a0'
+YSU_VALIDATE_OUTPUTS_SHADER_HASH = '51f028353998d9f9dd62a2917a9abae87246f4d804b5ff39b62d91d787b6215c'
 
 ZERO_SUMFLUX_RESOURCES = (('ru_m', 'float', 'read_write'), ('rv_m', 'float', 'read_write'), ('ww_m', 'float', 'read_write'))
 ZERO_SUMFLUX_ACCESS = ('read_write', 'read_write', 'read_write')

@@ -4,7 +4,10 @@
 #include "soft_gfk_log.metalh"
 #include "soft_libm64.metalh"
 using namespace metal;
-#pragma clang fp contract(off)
+// Ordinary CUDA SFCLAY is compiled with NVRTC's default fmad=true.
+// Match that contraction policy within this numerical kernel; driver-level
+// CuPy operator boundaries remain separate in their own Metal kernels.
+#pragma clang fp contract(fast)
 // FP32 logf follows the in-tree pinned glibc gfk_log bit implementation.
 // The CUDA-defined zero/subnormal-z0 rescue widens exact FP32 bits and uses
 // the shared software binary64 log. These helpers remain uncompiled and

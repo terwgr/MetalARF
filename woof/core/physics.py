@@ -3361,11 +3361,13 @@ class PhysicsDriver:
             # (mm) to the next surface call, including non-GFS Thompson.
             # Noah adds the pending total to RAINBL and clears both carriers
             # after consuming it; canonical RAINNCV remains scheme-owned.
-            from woof.metal.bandwidth_family import add_array
-            if not add_array(result.rainncv, self._pending_rainbl):
-                raise NotImplementedError(
-                    "Metal Noah rain accumulation has no supported "
-                    "FP32 layout")
+            # MP-only configurations have no surface consumer or carrier.
+            if self._pending_rainbl is not None:
+                from woof.metal.bandwidth_family import add_array
+                if not add_array(result.rainncv, self._pending_rainbl):
+                    raise NotImplementedError(
+                        "Metal Noah rain accumulation has no supported "
+                        "FP32 layout")
             self.microphysics_updates += 1
             return
         if (dt is not None

@@ -9,7 +9,9 @@ using namespace metal;
 // ysu_topo.cuh / bl_ysu.F90:1254-1314 and :1402-1408). The BEP variant is
 // absent from this entry point and is rejected by the Python dispatcher.
 // Source operation order follows woof/core/kernels/ysu.cu / bl_ysu.F90.
-#pragma clang fp contract(off)
+// The ordinary CUDA YSU kernel permits multiply-add contraction (the
+// recorded NVRTC options do not disable fmad). Preserve that policy here.
+#pragma clang fp contract(fast)
 
 constant float YSU_G=9.81f, YSU_RD=287.0f, YSU_RV=461.6f;
 constant float YSU_CP=1004.5f, YSU_XLV=2.5e6f;
