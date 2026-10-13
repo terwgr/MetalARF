@@ -432,7 +432,7 @@ def _metal_pin_record(manifest_path: Path, source_rev: str) -> dict:
     if not isinstance(document, dict):
         raise SystemExit(
             f"build_bridge_bundle: {manifest_path} must contain an object")
-    if document.get("schema") != "woof-metal-bundle-v1":
+    if document.get("schema") != "woof-metal-bundle-v2":
         raise SystemExit(
             f"build_bridge_bundle: {manifest_path} has an unsupported schema")
     if document.get("platform") != bridge_assets.DARWIN_PLATFORM:
@@ -450,12 +450,12 @@ def _metal_pin_record(manifest_path: Path, source_rev: str) -> dict:
         raise SystemExit(
             "build_bridge_bundle: Darwin Metal ABI is incompatible with "
             "the packaged runtime")
-    source_commit = document.get("source_commit")
-    if source_commit != source_rev:
-        raise SystemExit(
-            "build_bridge_bundle: Metal implementation provenance "
-            f"{source_commit!r} does not match release source {source_rev}; "
-            "rebuild Metal from the release checkout")
+    from woof.metal.bundle_integrity import metal_source_provenance
+    expected_source = metal_source_provenance(REPO_ROOT)
+    source_inputs = document.get("metal_inputs_sha256")
+    if (source_inputs != expected_source["sha256"]
+            or document.get("source_provenance") != expected_source):
+        raise SystemExit("build_bridge_bundle: Metal build inputs do not match the public source tree")
     implementation_sha256 = document.get("implementation_sha256")
     implementation_file_count = document.get("implementation_file_count")
     if (not isinstance(implementation_sha256, str)
@@ -506,7 +506,7 @@ def _metal_pin_record(manifest_path: Path, source_rev: str) -> dict:
         "platform": bridge_assets.DARWIN_PLATFORM,
         "minimum_os": "14.0",
         "abi_version": abi,
-        "source_commit": source_commit,
+        "source_inputs_sha256": source_inputs,
         "implementation_sha256": implementation_sha256,
         "implementation_file_count": implementation_file_count,
     }

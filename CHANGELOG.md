@@ -4,6 +4,9 @@
 
 - Preserve separate binary64 rounding in Metal glibc exp/log/pow helpers;
   retain a synchronous FP32 and binary64-core comparison tool.
+- Check actual loaded Metal artifact sizes and SHA-256 hashes before native
+  loading; bind native sources and build/generator inputs to a public-tree
+  content inventory instead of an unpublished build commit.
 
 ## MetalARF 1.0.3
 

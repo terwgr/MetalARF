@@ -21,7 +21,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from woof import bridge_assets  # noqa: E402
-from tools.metal_abi import canonical_metal_abi_version  # noqa: E402
+from tools.metal_abi import canonical_metal_abi_version
+from woof.metal.bundle_integrity import metal_source_provenance  # noqa: E402
 
 
 PACKAGE_DESTINATION = ROOT / "woof" / "libexec" / "metal"
@@ -46,21 +47,23 @@ def stage(bundle: Path, destination: Path) -> dict:
     expected_abi = canonical_metal_abi_version()
     abi = manifest.get("abi_version") if isinstance(manifest, dict) else None
     if (not isinstance(manifest, dict)
-            or manifest.get("schema") != "woof-metal-bundle-v1"
+            or manifest.get("schema") != "woof-metal-bundle-v2"
             or not isinstance(abi, int)
             or isinstance(abi, bool)
             or abi != expected_abi
             or manifest.get("platform") != "darwin-arm64"
             or manifest.get("minimum_os") != "14.0"):
         raise SystemExit(
-            "Metal bundle must declare schema woof-metal-bundle-v1 with the "
+            "Metal bundle must declare schema woof-metal-bundle-v2 with the "
             f"canonical header ABI 0x{expected_abi:08x}, platform "
             "darwin-arm64, and minimum_os 14.0")
-    source_commit = manifest.get("source_commit")
+    source_inputs = manifest.get("metal_inputs_sha256")
     implementation_sha256 = manifest.get("implementation_sha256")
     implementation_file_count = manifest.get("implementation_file_count")
-    if (not isinstance(source_commit, str) or len(source_commit) != 40
-            or any(c not in "0123456789abcdef" for c in source_commit)
+    if (not isinstance(source_inputs, str) or len(source_inputs) != 64
+            or any(c not in "0123456789abcdef" for c in source_inputs)
+            or manifest.get("source_provenance") != metal_source_provenance(ROOT)
+            or manifest["source_provenance"]["sha256"] != source_inputs
             or not isinstance(implementation_sha256, str)
             or len(implementation_sha256) != 64
             or any(c not in "0123456789abcdef"
@@ -69,7 +72,7 @@ def stage(bundle: Path, destination: Path) -> dict:
             or isinstance(implementation_file_count, bool)
             or implementation_file_count <= 0):
         raise SystemExit(
-            "Metal bundle manifest must record a full source commit and a "
+            "Metal bundle manifest must record matching build-input content bindings and a "
             "non-empty implementation source fingerprint")
     records = manifest.get("files")
     if not isinstance(records, dict) or set(records) != set(EXPECTED):

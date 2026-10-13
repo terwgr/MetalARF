@@ -891,12 +891,19 @@ def parse_pins(payload: object, *, origin: str = "pins") -> BridgePins:
                              for c in manifest_digest),
                      f"{key}: Metal manifest_sha256 must be 64 lowercase "
                      "hex characters")
-            source_commit = metal.get("source_commit")
-            _require(isinstance(source_commit, str)
-                     and len(source_commit) == _SOURCE_REV_LENGTH
-                     and _is_source_revision(source_commit),
-                     f"{key}: Metal source_commit must be a full 40-hex "
-                     "commit")
+            source_inputs = metal.get("source_inputs_sha256")
+            if source_inputs is not None:
+                _require(isinstance(source_inputs, str) and len(source_inputs) == 64
+                         and all(c in "0123456789abcdef" for c in source_inputs),
+                         f"{key}: Metal source_inputs_sha256 must be 64 lowercase hex characters")
+            else:
+                # Retain decoding of legacy transport pins; the active v2
+                # runtime independently requires content-bound artifacts.
+                source_commit = metal.get("source_commit")
+                _require(isinstance(source_commit, str)
+                         and len(source_commit) == _SOURCE_REV_LENGTH
+                         and _is_source_revision(source_commit),
+                         f"{key}: Metal source_commit must be a full 40-hex commit")
             implementation_digest = metal.get("implementation_sha256")
             _require(isinstance(implementation_digest, str)
                      and len(implementation_digest) == 64
