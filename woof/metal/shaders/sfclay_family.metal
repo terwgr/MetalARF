@@ -12,7 +12,8 @@ using namespace metal;
 constant float G=9.81f, RD=287.0f, RV=461.6f, CP=1004.5f;
 constant float P0=100000.0f, RCP=0.2857142984867096f;
 constant float SVP1=0.6112f, SVP2=17.67f, SVPT0=273.15f, SVP3=29.65f;
-constant float EP2=0.6217157244682312f, XLV=2.5e6f;
+// Derive the vapor/dry-air gas ratio from the same constants as CUDA EP2.
+constant float EP2=RD/RV, XLV=2.5e6f;
 
 // gpuwm/core/kernels/sfclay.cu
 //

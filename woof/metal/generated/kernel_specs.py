@@ -3335,7 +3335,7 @@ SFCLAY_COLUMN_SHAPES = (('br', (('ny', 'nx'),)), ('cd', (('ny', 'nx'),)), ('cda'
 SFCLAY_COLUMN_PARAM_FIELDS = [('dx', 'ctypes.c_float'), ('option', 'ctypes.c_int32'), ('isfflx', 'ctypes.c_int32'), ('isftcflx', 'ctypes.c_int32'), ('iz0tlnd', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 SFCLAY_COLUMN_THREADS_PER_GROUP = 128
 SFCLAY_COLUMN_LAYOUT_HASH = 'aa1707b8a5b13c08c66639ce37e395410cc39a323780f7324d494c68cb0a72d0'
-SFCLAY_COLUMN_SHADER_HASH = 'ec1c5bfeebdbc98aa950d1b01b2bac0c5142e26992976bb521c6d9c4788c8296'
+SFCLAY_COLUMN_SHADER_HASH = '4496d3cff3323401547d5b5974b68eb3e8bbf25d339505b20559d0fa557d619f'
 
 SHINHONG_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('p', 'float', 'read'), ('p_interface', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('tke', 'float', 'read'), ('psfc', 'float', 'read'), ('znt', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('wspd', 'float', 'read'), ('br', 'float', 'read'), ('psim', 'float', 'read'), ('psih', 'float', 'read'), ('xland', 'float', 'read'), ('u10', 'float', 'read'), ('v10', 'float', 'read'), ('corf', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dtheta', 'float', 'read_write'), ('dqv', 'float', 'read_write'), ('dqc', 'float', 'read_write'), ('dqi', 'float', 'read_write'), ('exch_h', 'float', 'read_write'), ('tke_out', 'float', 'read_write'), ('el', 'float', 'read_write'), ('hpbl', 'float', 'read_write'), ('wstar', 'float', 'read_write'), ('delta', 'float', 'read_write'), ('kpbl', 'int32', 'read_write'), ('ws', 'float', 'read_write'))
 SHINHONG_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4927,7 +4927,7 @@ YSU_COLUMN_SHAPES = (('br', (('ny', 'nx'),)), ('cloudflg', (('ny', 'nx'),)), ('c
 YSU_COLUMN_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('wskp', 'ctypes.c_int32'), ('col0', 'ctypes.c_int32'), ('tilecol', 'ctypes.c_int32'), ('ws_count', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('ysu_topdown_pblmix', 'ctypes.c_int32'), ('topo', 'ctypes.c_int32')]
 YSU_COLUMN_THREADS_PER_GROUP = 32
 YSU_COLUMN_LAYOUT_HASH = '6f6123b947f737c71fd394d9babdec1584b71e6ff3a847abfd90dbad40d240c3'
-YSU_COLUMN_SHADER_HASH = 'd0951b036697e8b17de9f2c00ed70b6846e60a2e4631a48bdf1b525211060eeb'
+YSU_COLUMN_SHADER_HASH = '7b41ea5b61cadf0f026e50534f45ace6b18b9e700869665e6d7c225a4fbe89a0'
 
 YSU_VALIDATE_OUTPUTS_RESOURCES = (('du', 'float', 'read'), ('dv', 'float', 'read'), ('dtheta', 'float', 'read'), ('dqv', 'float', 'read'), ('dqc', 'float', 'read'), ('dqi', 'float', 'read'), ('exch_h', 'float', 'read'), ('exch_m', 'float', 'read'), ('hpbl', 'float', 'read'), ('wstar', 'float', 'read'), ('delta', 'float', 'read'), ('topdown_radsum', 'float', 'read'), ('wstar3_2', 'float', 'read'), ('status', 'uint32', 'read_write'))
 YSU_VALIDATE_OUTPUTS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -4935,7 +4935,7 @@ YSU_VALIDATE_OUTPUTS_SHAPES = (('delta', (('ny', 'nx'),)), ('dqc', (('nz', 'ny',
 YSU_VALIDATE_OUTPUTS_PARAM_FIELDS = [('nfloat', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32')]
 YSU_VALIDATE_OUTPUTS_THREADS_PER_GROUP = 128
 YSU_VALIDATE_OUTPUTS_LAYOUT_HASH = '1d9fa1c67f18ae94a1e44c0744d10b8993d66f3e98540af4e9aec0b379755482'
-YSU_VALIDATE_OUTPUTS_SHADER_HASH = 'd0951b036697e8b17de9f2c00ed70b6846e60a2e4631a48bdf1b525211060eeb'
+YSU_VALIDATE_OUTPUTS_SHADER_HASH = '7b41ea5b61cadf0f026e50534f45ace6b18b9e700869665e6d7c225a4fbe89a0'
 
 ZERO_SUMFLUX_RESOURCES = (('ru_m', 'float', 'read_write'), ('rv_m', 'float', 'read_write'), ('ww_m', 'float', 'read_write'))
 ZERO_SUMFLUX_ACCESS = ('read_write', 'read_write', 'read_write')

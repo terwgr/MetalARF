@@ -1,0 +1,56 @@
+[
+  {
+    "capture": "03-v-stage1.npz",
+    "order": 3,
+    "old_order5_rmse": 2.257556491823207,
+    "new_rmse": 0.0014950827075012713,
+    "max_abs": 0.018619655917390787,
+    "top_level_rmse": 1.4976930515018105e-05,
+    "repeat_identical": true
+  },
+  {
+    "capture": "03-v-stage1.npz",
+    "order": 5,
+    "old_order5_rmse": 2.257556491823207,
+    "new_rmse": 0.0014952677255885068,
+    "max_abs": 0.018562742675300115,
+    "top_level_rmse": 1.4976930515018105e-05,
+    "repeat_identical": true
+  },
+  {
+    "capture": "11-v-stage2.npz",
+    "order": 3,
+    "old_order5_rmse": 2.2641336195221196,
+    "new_rmse": 0.001578173893935876,
+    "max_abs": 0.017529696320266908,
+    "top_level_rmse": 1.4908854172145125e-05,
+    "repeat_identical": true
+  },
+  {
+    "capture": "11-v-stage2.npz",
+    "order": 5,
+    "old_order5_rmse": 2.2641336195221196,
+    "new_rmse": 0.0015784943061344545,
+    "max_abs": 0.017670201635262117,
+    "top_level_rmse": 1.4908854172145125e-05,
+    "repeat_identical": true
+  },
+  {
+    "capture": "19-v-stage3.npz",
+    "order": 3,
+    "old_order5_rmse": 2.190507358708645,
+    "new_rmse": 0.0015585972088725877,
+    "max_abs": 0.017307439216892817,
+    "top_level_rmse": 1.5343825650424934e-05,
+    "repeat_identical": true
+  },
+  {
+    "capture": "19-v-stage3.npz",
+    "order": 5,
+    "old_order5_rmse": 2.190507358708645,
+    "new_rmse": 0.0015586321875129385,
+    "max_abs": 0.017318000667927436,
+    "top_level_rmse": 1.5343825650424934e-05,
+    "repeat_identical": true
+  }
+]

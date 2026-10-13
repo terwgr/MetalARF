@@ -1,0 +1,404 @@
+[
+  {
+    "operator": "sfclay",
+    "metrics": [
+      {
+        "field": "znt",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "ust",
+        "old_rmse": 1.2082236711730109e-06,
+        "new_rmse": 2.678363768384747e-07,
+        "old_max_abs": 3.443934299129925e-06,
+        "new_max_abs": 1.2425194378939963e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "ustm",
+        "old_rmse": 1.2152244489781932e-06,
+        "new_rmse": 2.660943753480649e-07,
+        "old_max_abs": 3.5118371735642917e-06,
+        "new_max_abs": 1.2508176675529725e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "mol",
+        "old_rmse": 2.3708653370729956e-06,
+        "new_rmse": 2.3618126789988014e-06,
+        "old_max_abs": 9.945548018057936e-06,
+        "new_max_abs": 9.960914840539091e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "hfx",
+        "old_rmse": 0.001177099547450549,
+        "new_rmse": 0.0011671399520639162,
+        "old_max_abs": 0.00713717060350727,
+        "new_max_abs": 0.007153740694754829,
+        "repeat_identical": true
+      },
+      {
+        "field": "qfx",
+        "old_rmse": 4.839005454580357e-09,
+        "new_rmse": 3.210233549408902e-11,
+        "old_max_abs": 9.062285762447318e-09,
+        "new_max_abs": 8.975565626631187e-11,
+        "repeat_identical": true
+      },
+      {
+        "field": "qsfc",
+        "old_rmse": 7.575220478464579e-07,
+        "new_rmse": 4.641808057779916e-09,
+        "old_max_abs": 8.830248806289409e-07,
+        "new_max_abs": 8.656099979159615e-09,
+        "repeat_identical": true
+      },
+      {
+        "field": "zol",
+        "old_rmse": 3.370785205731243e-06,
+        "new_rmse": 7.304738100176185e-07,
+        "old_max_abs": 9.836361141782324e-06,
+        "new_max_abs": 3.802701318503937e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "regime",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "psim",
+        "old_rmse": 1.3123099872344923e-05,
+        "new_rmse": 2.8591483332763358e-06,
+        "old_max_abs": 4.414591370272003e-05,
+        "new_max_abs": 1.7197942473512473e-05,
+        "repeat_identical": true
+      },
+      {
+        "field": "psih",
+        "old_rmse": 2.3080883935274432e-05,
+        "new_rmse": 5.0299579804950016e-06,
+        "old_max_abs": 7.42878430982502e-05,
+        "new_max_abs": 2.7523386441012654e-05,
+        "repeat_identical": true
+      },
+      {
+        "field": "fm",
+        "old_rmse": 1.3129910597680251e-05,
+        "new_rmse": 2.8590883472718875e-06,
+        "old_max_abs": 4.454016783483894e-05,
+        "new_max_abs": 1.6927246532461027e-05,
+        "repeat_identical": true
+      },
+      {
+        "field": "fh",
+        "old_rmse": 2.3081832839446325e-05,
+        "new_rmse": 5.028025997142318e-06,
+        "old_max_abs": 7.42332078340624e-05,
+        "new_max_abs": 2.7410247642301044e-05,
+        "repeat_identical": true
+      },
+      {
+        "field": "lh",
+        "old_rmse": 0.012097513183494885,
+        "new_rmse": 8.027511759280618e-05,
+        "old_max_abs": 0.022657127804542654,
+        "new_max_abs": 0.00022418180498107176,
+        "repeat_identical": true
+      },
+      {
+        "field": "u10",
+        "old_rmse": 3.9955207130649124e-07,
+        "new_rmse": 1.420315410122942e-07,
+        "old_max_abs": 1.509526457166288e-06,
+        "new_max_abs": 7.879587839987323e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "v10",
+        "old_rmse": 2.1492607326753785e-06,
+        "new_rmse": 7.397515891268617e-07,
+        "old_max_abs": 4.7537714014112e-06,
+        "new_max_abs": 2.966154250216846e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "th2",
+        "old_rmse": 2.155494229722653e-05,
+        "new_rmse": 2.1556980798312573e-05,
+        "old_max_abs": 5.8122860309595126e-05,
+        "new_max_abs": 5.8122860309595126e-05,
+        "repeat_identical": true
+      },
+      {
+        "field": "t2",
+        "old_rmse": 3.5075114535394155e-05,
+        "new_rmse": 3.5085524195332906e-05,
+        "old_max_abs": 9.041758397643207e-05,
+        "new_max_abs": 9.041758397643207e-05,
+        "repeat_identical": true
+      },
+      {
+        "field": "q2",
+        "old_rmse": 1.6255912706661695e-07,
+        "new_rmse": 1.2051390483329316e-09,
+        "old_max_abs": 1.8416658548701947e-07,
+        "new_max_abs": 4.165427601801608e-09,
+        "repeat_identical": true
+      },
+      {
+        "field": "chs",
+        "old_rmse": 1.3957425364231492e-07,
+        "new_rmse": 3.065956887700753e-08,
+        "old_max_abs": 3.000254053323048e-07,
+        "new_max_abs": 1.170521438179084e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "chs2",
+        "old_rmse": 6.158299529547637e-07,
+        "new_rmse": 1.424326093574842e-07,
+        "old_max_abs": 3.007312147390584e-06,
+        "new_max_abs": 1.0993126965397337e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "cqs2",
+        "old_rmse": 1.1481936695635313e-07,
+        "new_rmse": 2.5722753341326387e-08,
+        "old_max_abs": 2.822886552081294e-07,
+        "new_max_abs": 1.0003877918413062e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "flhc",
+        "old_rmse": 0.00047625443034412867,
+        "new_rmse": 0.00010830343811289989,
+        "old_max_abs": 0.0017976620832484969,
+        "new_max_abs": 0.0007074462596818876,
+        "repeat_identical": true
+      },
+      {
+        "field": "flqc",
+        "old_rmse": 3.966633227281975e-08,
+        "new_rmse": 8.553390400481317e-09,
+        "old_max_abs": 9.318434171512457e-08,
+        "new_max_abs": 3.344916043365037e-08,
+        "repeat_identical": true
+      },
+      {
+        "field": "qgh",
+        "old_rmse": 7.559382291117499e-07,
+        "new_rmse": 4.682115246490833e-09,
+        "old_max_abs": 8.698914301108474e-07,
+        "new_max_abs": 8.199620501678218e-09,
+        "repeat_identical": true
+      },
+      {
+        "field": "rmol",
+        "old_rmse": 3.729149051867793e-07,
+        "new_rmse": 8.082677212711243e-08,
+        "old_max_abs": 1.089358658630372e-06,
+        "new_max_abs": 4.178656879709128e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "wspd",
+        "old_rmse": 3.186167110728759e-07,
+        "new_rmse": 3.186167110728759e-07,
+        "old_max_abs": 1.1277943663401402e-06,
+        "new_max_abs": 1.1277943663401402e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "br",
+        "old_rmse": 8.437797722970965e-07,
+        "new_rmse": 1.83206149060384e-07,
+        "old_max_abs": 2.3607650002374983e-06,
+        "new_max_abs": 8.73308465096324e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "gz1oz0",
+        "old_rmse": 1.3541278594182293e-07,
+        "new_rmse": 1.3541278594182293e-07,
+        "old_max_abs": 2.9346568108934434e-07,
+        "new_max_abs": 2.9346568108934434e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "cpm",
+        "old_rmse": 3.901629162162425e-05,
+        "new_rmse": 3.901629162162425e-05,
+        "old_max_abs": 8.785389366039453e-05,
+        "new_max_abs": 8.785389366039453e-05,
+        "repeat_identical": true
+      },
+      {
+        "field": "ck",
+        "old_rmse": 4.2171968530467325e-08,
+        "new_rmse": 9.202981969337338e-09,
+        "old_max_abs": 1.2143810180706427e-07,
+        "new_max_abs": 4.363817027175365e-08,
+        "repeat_identical": true
+      },
+      {
+        "field": "cka",
+        "old_rmse": 4.05878957718597e-08,
+        "new_rmse": 8.902385969218371e-09,
+        "old_max_abs": 1.1445153503403249e-07,
+        "new_max_abs": 4.2203369410298563e-08,
+        "repeat_identical": true
+      },
+      {
+        "field": "cd",
+        "old_rmse": 8.549090083340962e-08,
+        "new_rmse": 1.8823053214721584e-08,
+        "old_max_abs": 3.933632973830703e-07,
+        "new_max_abs": 1.1752562040917569e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "cda",
+        "old_rmse": 8.462946224280627e-08,
+        "new_rmse": 1.8853334240587335e-08,
+        "old_max_abs": 4.0198173935357406e-07,
+        "new_max_abs": 1.1884231710529436e-07,
+        "repeat_identical": true
+      }
+    ]
+  },
+  {
+    "operator": "ysu",
+    "metrics": [
+      {
+        "field": "du",
+        "old_rmse": 3.842402807237826e-08,
+        "new_rmse": 3.8415978980921206e-08,
+        "old_max_abs": 3.7482491945054494e-07,
+        "new_max_abs": 3.7482491945054494e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "dv",
+        "old_rmse": 1.208167354929536e-07,
+        "new_rmse": 1.2081827085902446e-07,
+        "old_max_abs": 1.9165395444293437e-06,
+        "new_max_abs": 1.9165395444293437e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "dtheta",
+        "old_rmse": 2.8632452062903597e-07,
+        "new_rmse": 2.8632452062903597e-07,
+        "old_max_abs": 1.0633500854358621e-06,
+        "new_max_abs": 1.0633500854358621e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "dqv",
+        "old_rmse": 2.4230729476993035e-11,
+        "new_rmse": 2.4203408218316797e-11,
+        "old_max_abs": 2.5252537329728627e-10,
+        "new_max_abs": 2.5252537329728627e-10,
+        "repeat_identical": true
+      },
+      {
+        "field": "dqc",
+        "old_rmse": 3.5538796613663857e-12,
+        "new_rmse": 3.5538796613663857e-12,
+        "old_max_abs": 7.290242880404231e-11,
+        "new_max_abs": 7.290242880404231e-11,
+        "repeat_identical": true
+      },
+      {
+        "field": "dqi",
+        "old_rmse": 1.1805484650855356e-16,
+        "new_rmse": 1.1805484650855356e-16,
+        "old_max_abs": 2.7636905664437413e-15,
+        "new_max_abs": 2.7636905664437413e-15,
+        "repeat_identical": true
+      },
+      {
+        "field": "exch_h",
+        "old_rmse": 0.0005552918242796108,
+        "new_rmse": 0.0005552918242796108,
+        "old_max_abs": 0.009110225236369729,
+        "new_max_abs": 0.009110225236369729,
+        "repeat_identical": true
+      },
+      {
+        "field": "exch_m",
+        "old_rmse": 0.0004556190021683177,
+        "new_rmse": 0.0004556190021683177,
+        "old_max_abs": 0.00701152639778968,
+        "new_max_abs": 0.00701152639778968,
+        "repeat_identical": true
+      },
+      {
+        "field": "hpbl",
+        "old_rmse": 0.005645929442468566,
+        "new_rmse": 0.005645929442468566,
+        "old_max_abs": 0.015771637255625137,
+        "new_max_abs": 0.015771637255625137,
+        "repeat_identical": true
+      },
+      {
+        "field": "kpbl",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "wstar",
+        "old_rmse": 4.052243358218432e-06,
+        "new_rmse": 4.052243358218432e-06,
+        "old_max_abs": 1.5744812161266886e-05,
+        "new_max_abs": 1.5744812161266886e-05,
+        "repeat_identical": true
+      },
+      {
+        "field": "delta",
+        "old_rmse": 7.077724326251921e-05,
+        "new_rmse": 7.077724326251921e-05,
+        "old_max_abs": 0.00023527132493228464,
+        "new_max_abs": 0.00023527132493228464,
+        "repeat_identical": true
+      },
+      {
+        "field": "topdown_radsum",
+        "old_rmse": 4.4921574307949337e-08,
+        "new_rmse": 4.4921574307949337e-08,
+        "old_max_abs": 2.073597500373836e-07,
+        "new_max_abs": 2.073597500373836e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "wstar3_2",
+        "old_rmse": 6.798400294924819e-08,
+        "new_rmse": 6.798400294924819e-08,
+        "old_max_abs": 2.7652190973288804e-07,
+        "new_max_abs": 2.7652190973288804e-07,
+        "repeat_identical": true
+      },
+      {
+        "field": "cloudflg",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      }
+    ]
+  }
+]

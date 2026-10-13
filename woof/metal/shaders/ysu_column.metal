@@ -14,7 +14,8 @@ using namespace metal;
 constant float YSU_G=9.81f, YSU_RD=287.0f, YSU_RV=461.6f;
 constant float YSU_CP=1004.5f, YSU_XLV=2.5e6f;
 constant float YSU_RCP=0.2857142984867096f;
-constant float YSU_EP2=0.6217157244682312f;
+// Match CUDA EP2 (RD/RV), including cloudy top-down mixing.
+constant float YSU_EP2=YSU_RD/YSU_RV;
 constant uint YSU_SLOTS=18u, YSU_LANES=32u;
 
 struct YsuCol { device float *p; };
