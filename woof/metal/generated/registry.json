@@ -183,7 +183,7 @@
       "name": "advance_w_phi",
       "parameter_size": 76,
       "resource_count": 36,
-      "shader_hash": "4471092aba8735e2c05b9fa887a3a938c922a4eb4412746262af5c04676ff744",
+      "shader_hash": "0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f",
       "threads_per_group": 128
     },
     {
@@ -13318,6 +13318,23 @@
       "parameter_size": 12,
       "resource_count": 2,
       "shader_hash": "68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/upper_wind_limiter.cu",
+      "cuda_symbol": "upper_wind_limiter",
+      "layout_hash": "e94e018a2f2137a1df78d722eaf12f8cfeb2533ce858ceab40d3912690b40566",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/acoustic_advance_w_phi.metal",
+      "module": "acoustic_advance_w_phi",
+      "name": "upper_wind_limiter",
+      "parameter_size": 28,
+      "resource_count": 4,
+      "shader_hash": "0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f",
       "threads_per_group": 128
     }
   ],

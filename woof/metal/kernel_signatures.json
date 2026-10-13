@@ -133588,6 +133588,104 @@
       "arithmetic_policies": [
         "default"
       ]
+    },
+    {
+      "name": "upper_wind_limiter",
+      "module": "acoustic_advance_w_phi",
+      "source": "woof/metal/shaders/acoustic_advance_w_phi.metal",
+      "cuda_source": "woof/core/kernels/upper_wind_limiter.cu",
+      "cuda_symbol": "upper_wind_limiter",
+      "resources": [
+        [
+          "u",
+          "float32",
+          "read_write"
+        ],
+        [
+          "v",
+          "float32",
+          "read_write"
+        ],
+        [
+          "php",
+          "float32",
+          "read"
+        ],
+        [
+          "phb",
+          "float32",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "hdepth",
+          "float32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "zone",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default",
+        "wrf-exact"
+      ]
     }
   ],
   "schema": "woof-metal-kernel-signatures-v1"

@@ -87,7 +87,7 @@ ADVANCE_W_PHI_SHAPES = (('a', (('nz+1', 'ny', 'nx'),)), ('al_pp', (('nz', 'ny', 
 ADVANCE_W_PHI_PARAM_FIELDS = [('moist_cq', 'ctypes.c_int32'), ('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dtau', 'ctypes.c_float'), ('epssm', 'ctypes.c_float'), ('dampmag', 'ctypes.c_float'), ('zdamp', 'ctypes.c_float'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32'), ('spec_zone', 'ctypes.c_int32'), ('base3d', 'ctypes.c_int32'), ('top_lid', 'ctypes.c_int32'), ('mapped', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 ADVANCE_W_PHI_THREADS_PER_GROUP = 128
 ADVANCE_W_PHI_LAYOUT_HASH = '3fc28bed1b5f6310fb8cc51d1b1bc0a23c3f3a50a15cd32655fe2a0346758194'
-ADVANCE_W_PHI_SHADER_HASH = '4471092aba8735e2c05b9fa887a3a938c922a4eb4412746262af5c04676ff744'
+ADVANCE_W_PHI_SHADER_HASH = '0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f'
 
 APPLY_EMDIV_RESOURCES = (('u_pp', 'float', 'read_write'), ('v_pp', 'float', 'read_write'), ('mudf', 'float', 'read'), ('mu_pp', 'float', 'read'), ('mu_prev', 'float', 'read_write'), ('c1h', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'))
 APPLY_EMDIV_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read', 'read')
@@ -6552,3 +6552,11 @@ DIFF6_EDGE_CROP_ADD_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c
 DIFF6_EDGE_CROP_ADD_THREADS_PER_GROUP = 128
 DIFF6_EDGE_CROP_ADD_LAYOUT_HASH = '6a3c3c8ae62eda49f28fdd55266fc0dccdc41d507e04245b85830b3b527125d1'
 DIFF6_EDGE_CROP_ADD_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
+
+UPPER_WIND_LIMITER_RESOURCES = (('u', 'float32', 'read_write'), ('v', 'float32', 'read_write'), ('php', 'float32', 'read'), ('phb', 'float32', 'read'))
+UPPER_WIND_LIMITER_ACCESS = ('read_write', 'read_write', 'read', 'read')
+UPPER_WIND_LIMITER_SHAPES = (('u', (('nz', 'ny', 'nx+1'),)), ('v', (('nz', 'ny+1', 'nx'),)), ('php', (('nz+1', 'ny', 'nx'),)), ('phb', (('nz+1',), ('nz+1', 'ny', 'nx'))))
+UPPER_WIND_LIMITER_PARAM_FIELDS = [('dts', 'ctypes.c_float'), ('hdepth', 'ctypes.c_float'), ('base3d', 'ctypes.c_int32'), ('zone', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+UPPER_WIND_LIMITER_THREADS_PER_GROUP = 128
+UPPER_WIND_LIMITER_LAYOUT_HASH = 'e94e018a2f2137a1df78d722eaf12f8cfeb2533ce858ceab40d3912690b40566'
+UPPER_WIND_LIMITER_SHADER_HASH = '0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f'
