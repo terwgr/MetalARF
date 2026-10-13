@@ -152,3 +152,14 @@ Pooled RMSE over all 49 times and all grid cells:
 | TSK | 0.0935666 | 0.101527 | 0.0108409 |
 
 Units are Pa for PSFC, m/s for winds, K for temperatures, kg/kg for mixing ratios, m for PBLH and W/m² for SWDOWN. T is stored potential-temperature perturbation. The remaining forecast errors still substantially exceed the recorded perturbation spread; parity is not established. The early-cloud chain persists, and some fields worsen after restoring the requested order. A confirmed selector defect is therefore fixed without claiming that it accounts for all remaining Qv drift. The search stops here as requested. Full comparison and bounded receipts are in `tools/metal_hrrr_shared_case/scalar_order_fix.json`; the local report retains per-level maps, peak locations and masked metrics.
+
+
+## Subsequent wind/config investigation (no forecast)
+
+A source-reviewed audit enumerates every option in the sealed experiment and namelist plus the omitted horizontal momentum-order default: 226 rows, 220 honored (including preparation, pinned and inactive controls) and 6 stock-WRF I/O declarations ignored on both backends. No additional active Metal selector defect was confirmed. See `tools/metal_hrrr_shared_case/CONFIG_HONORING_AUDIT.md` for the full value/path/honored table and JSON for resolved runtime values. This is configuration-flow evidence, not numerical kernel equivalence.
+
+At +15 minutes U/V RMS is .00905/.02367 m/s. U error is concentrated in the surface/PBL (77.1% of squared error in levels0–19); V is dominated by upper levels35–48 (84.9%). V's maximum .47461 m/s is at native staggered (3,16,48) in the relaxation zone, but its broad model-top error survives trim5: k48 RMSE .15022→.14262 m/s. U's maximum .16217 is at (15,15,0), interior. The divergence-proxy correlations are modest and do not identify an operator.
+
+U/V/Qv are initially identical, then all differ in the first +15-minute history while cloud, ice and snow remain zero in both. Thus winds precede saved condensate differences; the cadence cannot order wind versus Qv. The upper V structure cannot be explained solely by the later low-level cloud/PBL chain. Its first within-step source remains unresolved.
+
+No forecast or numerical edit followed this audit. `tools/dump_backend_step1.py` supplies exact before/after points on either backend, all three RK stages and all seven acoustic substeps, then stops before a second outer step. Invocation, boundary list and validation limits are in `tools/metal_hrrr_shared_case/STEP1_DUMP_POINTS.md`. Only syntax/help/list-point execution was checked; the script has not been GPU-executed on either backend. The requested investigation stops here.

@@ -1,0 +1,2142 @@
+{
+  "method": "Source-reviewed static dispatch trace at 37ca81d89; resolved TOML loaded through production load_experiment; namelist is sealed preparation authority, not reparsed to override runtime TOML. Yes includes explicit inactive/pinned/prepared options with reasons. No denotes documented stock I/O metadata ignored on BOTH backends. No numerical equivalence claim from config audit.",
+  "confirmed_backend_defects": [],
+  "rows": [
+    {
+      "option": "experiment.name",
+      "value": "hrrr-metal-cuda-12h",
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "experiment.start_time",
+      "value": "2024-07-10 18:00:00",
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "experiment.run_seconds",
+      "value": 43200.0,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": 43200.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "experiment.feedback",
+      "value": 0,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "experiment.smooth_option",
+      "value": 0,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "experiment.blend_width",
+      "value": 5,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "experiment.spec_bdy_width",
+      "value": 5,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": 5,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "experiment.restart_interval_s",
+      "value": 3600.0,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": 3600.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "projection.map_proj",
+      "value": "lambert",
+      "metal_path": "prepared projection/geo restore \u2192 state.msft/msfu/msfv/f/e/sina/cosa \u2192 coriolis_curvature + mapped dynamics",
+      "honored": "yes",
+      "note": "Projection metadata not reprojected during forecast; sealed geo maps supply kernel resources.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "projection.ref_lat",
+      "value": 35.30404923695053,
+      "metal_path": "prepared projection/geo restore \u2192 state.msft/msfu/msfv/f/e/sina/cosa \u2192 coriolis_curvature + mapped dynamics",
+      "honored": "yes",
+      "note": "Projection metadata not reprojected during forecast; sealed geo maps supply kernel resources.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "projection.ref_lon",
+      "value": -97.51650693799445,
+      "metal_path": "prepared projection/geo restore \u2192 state.msft/msfu/msfv/f/e/sina/cosa \u2192 coriolis_curvature + mapped dynamics",
+      "honored": "yes",
+      "note": "Projection metadata not reprojected during forecast; sealed geo maps supply kernel resources.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "projection.truelat1",
+      "value": 38.5,
+      "metal_path": "prepared projection/geo restore \u2192 state.msft/msfu/msfv/f/e/sina/cosa \u2192 coriolis_curvature + mapped dynamics",
+      "honored": "yes",
+      "note": "Projection metadata not reprojected during forecast; sealed geo maps supply kernel resources.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "projection.truelat2",
+      "value": 38.5,
+      "metal_path": "prepared projection/geo restore \u2192 state.msft/msfu/msfv/f/e/sina/cosa \u2192 coriolis_curvature + mapped dynamics",
+      "honored": "yes",
+      "note": "Projection metadata not reprojected during forecast; sealed geo maps supply kernel resources.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "projection.stand_lon",
+      "value": -97.5,
+      "metal_path": "prepared projection/geo restore \u2192 state.msft/msfu/msfv/f/e/sina/cosa \u2192 coriolis_curvature + mapped dynamics",
+      "honored": "yes",
+      "note": "Projection metadata not reprojected during forecast; sealed geo maps supply kernel resources.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.nz",
+      "value": 49,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 49,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ztop",
+      "value": 20000.0,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 20000.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.p_top",
+      "value": 5000.0,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.eta_levels",
+      "value": [
+        1.0,
+        0.9978,
+        0.99519,
+        0.99212,
+        0.98849,
+        0.98422,
+        0.97918,
+        0.97325,
+        0.96627,
+        0.95808,
+        0.94846,
+        0.93719,
+        0.92402,
+        0.90866,
+        0.89079,
+        0.87006,
+        0.84612,
+        0.81857,
+        0.78706,
+        0.75124,
+        0.7108,
+        0.66556,
+        0.61547,
+        0.56067,
+        0.50519,
+        0.45474,
+        0.40886,
+        0.36713,
+        0.32918,
+        0.29466,
+        0.26328,
+        0.23473,
+        0.20877,
+        0.18516,
+        0.16369,
+        0.14417,
+        0.12641,
+        0.11026,
+        0.09557,
+        0.08222,
+        0.07007,
+        0.05902,
+        0.04898,
+        0.03984,
+        0.03153,
+        0.02398,
+        0.0171,
+        0.01085,
+        0.00517,
+        0.0
+      ],
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.hybrid_opt",
+      "value": 2,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 2,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.etac",
+      "value": 0.2,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 0.2,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.base_temp",
+      "value": 290.0,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 290.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.time_step_sound",
+      "value": 4,
+      "metal_path": "dycore.step stages \u2192 acoustic.prepare_acoustic_substep_launch",
+      "honored": "yes",
+      "note": "4 \u2192 three RK stages with 1/2/4 acoustic substeps; dt/3 then dt/4 then dt/4. Not a two-stage integrator.",
+      "resolved_run_value": 4,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.emdiv",
+      "value": 0.01,
+      "metal_path": "dycore._prepare_emdiv_filter_launch \u2192 apply_emdiv; acoustic.advance_mu_th",
+      "honored": "yes",
+      "note": "0.01 active; MUDF zero only RK1 then retained; filter precedes acoustic UV on each substep.",
+      "resolved_run_value": 0.01,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.hypsometric_opt",
+      "value": 2,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 2,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.h_sca_adv_order",
+      "value": 5,
+      "metal_path": "dycore._add_slow_tendencies/moist.advance_scalars_stage \u2192 flux_div_scalar_vorder/pd_fluxes; dycore.slow_geopotential",
+      "honored": "yes",
+      "note": "Transport horizontal flux5 is fixed; configured 5 agrees. Geopotential receives order=5.",
+      "resolved_run_value": 5,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.smdiv",
+      "value": 0.1,
+      "metal_path": "acoustic.prepare_acoustic_substep_launch \u2192 submit_metal_acoustic_advance_uv \u2192 advance_uv",
+      "honored": "yes",
+      "note": "0 on first acoustic substep of each RK stage, configured0.1 on later substeps; same CUDA behavior.",
+      "resolved_run_value": 0.1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.moist_adv_opt",
+      "value": 1,
+      "metal_path": "moist.advance_scalars_stage \u2192 provisional unlimited / final pd_fluxes + pd_renorm_apply",
+      "honored": "yes",
+      "note": "Option1 selects final positive-definite donor budget; scalar_adv_opt=1 is an importer pin, not separate RunConfig member.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.w_damping",
+      "value": 1,
+      "metal_path": "dycore.apply_w_damping \u2192 w_damp",
+      "honored": "yes",
+      "note": "1 launches at every RK stage; onset1 and w_crit_cfl1 default are explicit parameters.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.damp_opt",
+      "value": 3,
+      "metal_path": "acoustic.submit_metal_acoustic_advance_w_phi \u2192 advance_w_phi; prepare_upper_wind_limiter \u2192 upper_wind_limiter",
+      "honored": "yes",
+      "note": "damp_opt3 gives dampmag=dtau*0.2, zdamp5000; NOAA saved-wind limiter after solve, before frame; saved ru/rv refresh after acoustic loop.",
+      "resolved_run_value": 3,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.zdamp",
+      "value": 5000.0,
+      "metal_path": "acoustic.submit_metal_acoustic_advance_w_phi \u2192 advance_w_phi; prepare_upper_wind_limiter \u2192 upper_wind_limiter",
+      "honored": "yes",
+      "note": "damp_opt3 gives dampmag=dtau*0.2, zdamp5000; NOAA saved-wind limiter after solve, before frame; saved ru/rv refresh after acoustic loop.",
+      "resolved_run_value": 5000.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.dampcoef",
+      "value": 0.2,
+      "metal_path": "acoustic.submit_metal_acoustic_advance_w_phi \u2192 advance_w_phi; prepare_upper_wind_limiter \u2192 upper_wind_limiter",
+      "honored": "yes",
+      "note": "damp_opt3 gives dampmag=dtau*0.2, zdamp5000; NOAA saved-wind limiter after solve, before frame; saved ru/rv refresh after acoustic loop.",
+      "resolved_run_value": 0.2,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.khdif",
+      "value": 0.0,
+      "metal_path": "dycore.step km_opt guard \u2192 diffusion.add_diffusion_tendencies",
+      "honored": "yes",
+      "note": "Both zero: constant-K branch disabled identically.",
+      "resolved_run_value": 0.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.kvdif",
+      "value": 0.0,
+      "metal_path": "dycore.step km_opt guard \u2192 diffusion.add_diffusion_tendencies",
+      "honored": "yes",
+      "note": "Both zero: constant-K branch disabled identically.",
+      "resolved_run_value": 0.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.spec_zone",
+      "value": 1,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.relax_zone",
+      "value": 4,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": 4,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.bldt",
+      "value": 0.0,
+      "metal_path": "physics scheme dispatch/_surface_pbl_step_due/_run_ysu \u2192 ysu_column + couple_ysu_tendencies",
+      "honored": "yes",
+      "note": "YSU1 every step because bldt0; current dt propagated to first-call physics. Held tendencies feed all RK stages.",
+      "resolved_run_value": 0.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.nwp_diagnostics",
+      "value": 1,
+      "metal_path": "dycore.update_up_heli_max \u2192 uh_* diagnostic kernels",
+      "honored": "yes",
+      "note": "1 writes diagnostic scratch only; does not feed prognostic winds.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.bl_pbl_physics",
+      "value": 1,
+      "metal_path": "physics scheme dispatch/_surface_pbl_step_due/_run_ysu \u2192 ysu_column + couple_ysu_tendencies",
+      "honored": "yes",
+      "note": "YSU1 every step because bldt0; current dt propagated to first-call physics. Held tendencies feed all RK stages.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.diff_6th_opt",
+      "value": 2,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": 2,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.diff_6th_slopeopt",
+      "value": 1,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.epssm",
+      "value": 0.5,
+      "metal_path": "acoustic.prepare_acoustic_coefficients \u2192 calc_coef_w; submit_metal_acoustic_advance_w_phi \u2192 advance_w_phi",
+      "honored": "yes",
+      "note": "0.5 passed to both coefficient and solve paths.",
+      "resolved_run_value": 0.5,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.km_opt",
+      "value": 4,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 launch_wrf_smag2d_km \u2192 wrf_smag_deform/wrf_smag2d_km/wrf_smag_km_bc \u2192 wrf_smag_hd_*",
+      "honored": "yes",
+      "note": "diff_opt=2/km_opt=4 closure; c_s=0.25 reaches coefficient parameters. Held tendencies consumed all RK stages.",
+      "resolved_run_value": 4,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.moist",
+      "value": true,
+      "metal_path": "physics.initialize_physics + microphysics.apply \u2192 thompson_*; acoustic.prepare_moist_cq \u2192 calc_cq",
+      "honored": "yes",
+      "note": "mp8 classic Thompson; all moisture fields restored; moist acoustic coefficient resources are active.",
+      "resolved_run_value": true,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.moist_cq",
+      "value": true,
+      "metal_path": "physics.initialize_physics + microphysics.apply \u2192 thompson_*; acoustic.prepare_moist_cq \u2192 calc_cq",
+      "honored": "yes",
+      "note": "mp8 classic Thompson; all moisture fields restored; moist acoustic coefficient resources are active.",
+      "resolved_run_value": true,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.morr_rimed_ice",
+      "value": 1,
+      "metal_path": "physics scheme-specific initialization",
+      "honored": "yes",
+      "note": "Dormant because mp8; not Morrison or WSM6.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.mp_physics",
+      "value": 8,
+      "metal_path": "physics.initialize_physics + microphysics.apply \u2192 thompson_*; acoustic.prepare_moist_cq \u2192 calc_cq",
+      "honored": "yes",
+      "note": "mp8 classic Thompson; all moisture fields restored; moist acoustic coefficient resources are active.",
+      "resolved_run_value": 8,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.num_soil_layers",
+      "value": 4,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": 4,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ra_lw_physics",
+      "value": 4,
+      "metal_path": "physics.initialize_physics/_run_radiation \u2192 core.rrtmgp \u2192 rrtmgp_prepare/gas/cloud/mcica/rte kernel families",
+      "honored": "yes",
+      "note": "ra_physics0 is legacy aggregate; explicit LW4/SW4 choose RTE-RRTMGP adapter. Compatibility marker records intentional stock-WRF translation shared by both backends.",
+      "resolved_run_value": 4,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ra_physics",
+      "value": 0,
+      "metal_path": "physics.initialize_physics/_run_radiation \u2192 core.rrtmgp \u2192 rrtmgp_prepare/gas/cloud/mcica/rte kernel families",
+      "honored": "yes",
+      "note": "ra_physics0 is legacy aggregate; explicit LW4/SW4 choose RTE-RRTMGP adapter. Compatibility marker records intentional stock-WRF translation shared by both backends.",
+      "resolved_run_value": 0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ra_rrtmg_variant",
+      "value": "rte-rrtmgp",
+      "metal_path": "physics.initialize_physics/_run_radiation \u2192 core.rrtmgp \u2192 rrtmgp_prepare/gas/cloud/mcica/rte kernel families",
+      "honored": "yes",
+      "note": "ra_physics0 is legacy aggregate; explicit LW4/SW4 choose RTE-RRTMGP adapter. Compatibility marker records intentional stock-WRF translation shared by both backends.",
+      "resolved_run_value": "rte-rrtmgp",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ra_sw_physics",
+      "value": 4,
+      "metal_path": "physics.initialize_physics/_run_radiation \u2192 core.rrtmgp \u2192 rrtmgp_prepare/gas/cloud/mcica/rte kernel families",
+      "honored": "yes",
+      "note": "ra_physics0 is legacy aggregate; explicit LW4/SW4 choose RTE-RRTMGP adapter. Compatibility marker records intentional stock-WRF translation shared by both backends.",
+      "resolved_run_value": 4,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.sf_sfclay_physics",
+      "value": 91,
+      "metal_path": "physics._run_sfclay \u2192 sfclay_family.sfclay_column; core.ysu/Noah atmosphere flux coupling",
+      "honored": "yes",
+      "note": "91 selects MM5 rev0 rather than revised1; isfflx1 enables surface fluxes.",
+      "resolved_run_value": 91,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.sf_surface_physics",
+      "value": 2,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": 2,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.sf_urban_physics",
+      "value": 0,
+      "metal_path": "physics.initialize_physics/_attach_urban",
+      "honored": "yes",
+      "note": "0: no urban kernels.",
+      "resolved_run_value": 0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.terrain_opt",
+      "value": 1,
+      "metal_path": "prepared terrain/map restore \u2192 state.init_terrain/set_map_coriolis \u2192 slow_pgf/slow_buoyancy/slow_geopotential + wrf_smag_deform + acoustic + set_w_surface",
+      "honored": "yes",
+      "note": "1 uses full 3D base fields/terrain, coupled metrics. Rotation gate uses restored f/e/sina/cosa; coriolis_curvature launched for rotational state.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.top_lid",
+      "value": false,
+      "metal_path": "acoustic.calc_coef_w/advance_uv/advance_w_phi; metal.dycore.slow_pgf",
+      "honored": "yes",
+      "note": "false passes to top-boundary operators.",
+      "resolved_run_value": false,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.wrf_rrtmg_compatibility",
+      "value": "wrf-rrtmg-4-4-to-rte-rrtmgp-v2",
+      "metal_path": "physics.initialize_physics/_run_radiation \u2192 core.rrtmgp \u2192 rrtmgp_prepare/gas/cloud/mcica/rte kernel families",
+      "honored": "yes",
+      "note": "ra_physics0 is legacy aggregate; explicit LW4/SW4 choose RTE-RRTMGP adapter. Compatibility marker records intentional stock-WRF translation shared by both backends.",
+      "resolved_run_value": "wrf-rrtmg-4-4-to-rte-rrtmgp-v2",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.wsm6_hail_opt",
+      "value": 0,
+      "metal_path": "physics scheme-specific initialization",
+      "honored": "yes",
+      "note": "Dormant because mp8; not Morrison or WSM6.",
+      "resolved_run_value": 0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.mynn_sfclay_variant",
+      "value": "gsl_wrf39",
+      "metal_path": "scheme initialization identity only",
+      "honored": "yes",
+      "note": "Dormant: MM5/Noah selected, not MYNN surface/RUC.",
+      "resolved_run_value": "gsl_wrf39",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.terrain_clock",
+      "value": "pinned",
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": "pinned",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.diff_6th_form",
+      "value": "noaa_wrf39",
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": "noaa_wrf39",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.diff_6th_factor2",
+      "value": 0.04,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": 0.04,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.mp_zero_out",
+      "value": 2,
+      "metal_path": "microphysics.apply \u2192 microphysics_zero_out \u2192 mp_zero_out",
+      "honored": "yes",
+      "note": "Mode2 floors vapor too; threshold1e-12; all1 includes number fields. Shared dispatcher forwards values.",
+      "resolved_run_value": 2,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.mp_zero_out_thresh",
+      "value": 1e-12,
+      "metal_path": "microphysics.apply \u2192 microphysics_zero_out \u2192 mp_zero_out",
+      "honored": "yes",
+      "note": "Mode2 floors vapor too; threshold1e-12; all1 includes number fields. Shared dispatcher forwards values.",
+      "resolved_run_value": 1e-12,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.mp_zero_out_all",
+      "value": 1,
+      "metal_path": "microphysics.apply \u2192 microphysics_zero_out \u2192 mp_zero_out",
+      "honored": "yes",
+      "note": "Mode2 floors vapor too; threshold1e-12; all1 includes number fields. Shared dispatcher forwards values.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.upper_wind_limiter_form",
+      "value": "noaa_wrf39",
+      "metal_path": "acoustic.submit_metal_acoustic_advance_w_phi \u2192 advance_w_phi; prepare_upper_wind_limiter \u2192 upper_wind_limiter",
+      "honored": "yes",
+      "note": "damp_opt3 gives dampmag=dtau*0.2, zdamp5000; NOAA saved-wind limiter after solve, before frame; saved ru/rv refresh after acoustic loop.",
+      "resolved_run_value": "noaa_wrf39",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.alb_sol",
+      "value": 1,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.mix_full_fields",
+      "value": false,
+      "metal_path": "config.validate_run_config \u2192 dycore._compute_wrf_smag_tendencies \u2192 wrf_smag_deform/hd_*",
+      "honored": "yes",
+      "note": "false is equivalent to full fields for this real-data case because reference wind profiles are zero; shared CUDA/Metal reduction, not dropped active selector.",
+      "resolved_run_value": false,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ruc_soilprop",
+      "value": "wrf_45",
+      "metal_path": "scheme initialization identity only",
+      "honored": "yes",
+      "note": "Dormant: MM5/Noah selected, not MYNN surface/RUC.",
+      "resolved_run_value": "wrf_45",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ruc_irrigation",
+      "value": "wrf_45",
+      "metal_path": "scheme initialization identity only",
+      "honored": "yes",
+      "note": "Dormant: MM5/Noah selected, not MYNN surface/RUC.",
+      "resolved_run_value": "wrf_45",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ruc_snow",
+      "value": "wrf_45",
+      "metal_path": "scheme initialization identity only",
+      "honored": "yes",
+      "note": "Dormant: MM5/Noah selected, not MYNN surface/RUC.",
+      "resolved_run_value": "wrf_45",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ruc_qvg_cold_start",
+      "value": "air",
+      "metal_path": "scheme initialization identity only",
+      "honored": "yes",
+      "note": "Dormant: MM5/Noah selected, not MYNN surface/RUC.",
+      "resolved_run_value": "air",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.ruc_2m_diagnostic",
+      "value": "log_profile",
+      "metal_path": "scheme initialization identity only",
+      "honored": "yes",
+      "note": "Dormant: MM5/Noah selected, not MYNN surface/RUC.",
+      "resolved_run_value": "log_profile",
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.rdlai2d",
+      "value": true,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": true,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.usemonalb",
+      "value": true,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": true,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.map_proj",
+      "value": 1,
+      "metal_path": "prepared projection/geo restore \u2192 state.msft/msfu/msfv/f/e/sina/cosa \u2192 coriolis_curvature + mapped dynamics",
+      "honored": "yes",
+      "note": "Projection metadata not reprojected during forecast; sealed geo maps supply kernel resources.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "shared.use_adaptive_time_step",
+      "value": true,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": true,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "static.source",
+      "value": "hrrr-conus-v4",
+      "metal_path": "prepared_single_domain_forecast proof/restore",
+      "honored": "yes",
+      "note": "hrrr-conus-v4 static identity is retained in sealed cache; no new ingest in forecast.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].grid_id",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": 1,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].parent_id",
+      "value": 0,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].i_parent_start",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].j_parent_start",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].parent_grid_ratio",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].parent_time_step_ratio",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].nx",
+      "value": 40,
+      "metal_path": "experiment/grid + sealed staggered state \u2192 all typed kernel dimensions/spacings",
+      "honored": "yes",
+      "note": "40x40 mass,49 levels; e_we/e_sn41 and e_vert50 are WRF staggered declarations. dx=dy3000.",
+      "resolved_run_value": 40,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].ny",
+      "value": 40,
+      "metal_path": "experiment/grid + sealed staggered state \u2192 all typed kernel dimensions/spacings",
+      "honored": "yes",
+      "note": "40x40 mass,49 levels; e_we/e_sn41 and e_vert50 are WRF staggered declarations. dx=dy3000.",
+      "resolved_run_value": 40,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].time_step",
+      "value": 15,
+      "metal_path": "experiment.DomainConfig/clock \u2192 dycore.step and all dtau/flux/diffusion parameters",
+      "honored": "yes",
+      "note": "Initial15s; common adaptive clock can vary it. Current-run duration1827steps matches CUDA.",
+      "resolved_run_value": 15.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].dx",
+      "value": 3000.0,
+      "metal_path": "experiment/grid + sealed staggered state \u2192 all typed kernel dimensions/spacings",
+      "honored": "yes",
+      "note": "40x40 mass,49 levels; e_we/e_sn41 and e_vert50 are WRF staggered declarations. dx=dy3000.",
+      "resolved_run_value": 3000.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].specified",
+      "value": true,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": true,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].nested",
+      "value": false,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": false,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].history_interval_s",
+      "value": 900.0,
+      "metal_path": "prepared_single_domain_forecast history_handler \u2192 NetCDF writer",
+      "honored": "yes",
+      "note": "900s, one frame/file, NetCDF format2; output policy rather than Metal kernel.",
+      "resolved_run_value": null,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].radt",
+      "value": 12.0,
+      "metal_path": "physics.PhysicsDriver + adaptive_clock radiation deadline \u2192 _run_radiation",
+      "honored": "yes",
+      "note": "12 minutes; initial call mandatory, then common adaptive deadline.",
+      "resolved_run_value": 12.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].cu_physics",
+      "value": 0,
+      "metal_path": "physics scheme dispatch/cumulus cadence",
+      "honored": "yes",
+      "note": "cu0 disables cumulus; cadence0 consequently dormant.",
+      "resolved_run_value": 0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].cudt_minutes",
+      "value": 0.0,
+      "metal_path": "physics scheme dispatch/cumulus cadence",
+      "honored": "yes",
+      "note": "cu0 disables cumulus; cadence0 consequently dormant.",
+      "resolved_run_value": 0.0,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].diff_6th_factor",
+      "value": 0.12,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": 0.12,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].v_sca_adv_order",
+      "value": 5,
+      "metal_path": "dycore._add_slow_tendencies + moist._advance_scalars_stage_metal \u2192 flux_div_scalar/w_vorder + pd_fluxes",
+      "honored": "yes",
+      "note": "5 reaches both stage calls and PD ABI after cfca154b0.",
+      "resolved_run_value": 5,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "domain[1].v_mom_adv_order",
+      "value": 5,
+      "metal_path": "dycore._add_slow_tendencies \u2192 launch_flux_div_u/v(vorder=vmom) \u2192 flux_div_u/v_vorder \u2192 zhalf(vorder)",
+      "honored": "yes",
+      "note": "5 reaches stencil selector, including eta-boundary degradation.",
+      "resolved_run_value": 5,
+      "origin": "experiment.toml"
+    },
+    {
+      "option": "&time_control.run_days",
+      "value": 0,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.run_hours",
+      "value": 12,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.run_minutes",
+      "value": 0,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.run_seconds",
+      "value": 0,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": 43200.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.start_year",
+      "value": 2024,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.start_month",
+      "value": 7,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.start_day",
+      "value": 10,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.start_hour",
+      "value": 18,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.start_minute",
+      "value": 0,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.start_second",
+      "value": 0,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.end_year",
+      "value": 2024,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.end_month",
+      "value": 7,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.end_day",
+      "value": 11,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.end_hour",
+      "value": 6,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.end_minute",
+      "value": 0,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.end_second",
+      "value": 0,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.interval_seconds",
+      "value": 3600,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.input_from_file",
+      "value": true,
+      "metal_path": "experiment + sealed boundary clock + prepared_single_domain_forecast schedule",
+      "honored": "yes",
+      "note": "18Z start,12h forecast,1h forcing/restart cadence; source timing metadata checked at preparation/restore.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.history_interval_s",
+      "value": 900,
+      "metal_path": "prepared_single_domain_forecast history_handler \u2192 NetCDF writer",
+      "honored": "yes",
+      "note": "900s, one frame/file, NetCDF format2; output policy rather than Metal kernel.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.frames_per_outfile",
+      "value": 1,
+      "metal_path": "prepared_single_domain_forecast history_handler \u2192 NetCDF writer",
+      "honored": "yes",
+      "note": "900s, one frame/file, NetCDF format2; output policy rather than Metal kernel.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.restart",
+      "value": false,
+      "metal_path": "namelist_import ignored_time_control_reason/MPI quilt metadata; woof prepared restore/checkpoint writer",
+      "honored": "no",
+      "note": "Stock-WRF I/O routing declaration is not an active Metal selector; woof uses its prepared/checkpoint/native NetCDF route on both backends. No backend asymmetry.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.io_form_history",
+      "value": 2,
+      "metal_path": "prepared_single_domain_forecast history_handler \u2192 NetCDF writer",
+      "honored": "yes",
+      "note": "900s, one frame/file, NetCDF format2; output policy rather than Metal kernel.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.io_form_restart",
+      "value": 2,
+      "metal_path": "namelist_import ignored_time_control_reason/MPI quilt metadata; woof prepared restore/checkpoint writer",
+      "honored": "no",
+      "note": "Stock-WRF I/O routing declaration is not an active Metal selector; woof uses its prepared/checkpoint/native NetCDF route on both backends. No backend asymmetry.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.io_form_input",
+      "value": 2,
+      "metal_path": "namelist_import ignored_time_control_reason/MPI quilt metadata; woof prepared restore/checkpoint writer",
+      "honored": "no",
+      "note": "Stock-WRF I/O routing declaration is not an active Metal selector; woof uses its prepared/checkpoint/native NetCDF route on both backends. No backend asymmetry.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&time_control.io_form_boundary",
+      "value": 2,
+      "metal_path": "namelist_import ignored_time_control_reason/MPI quilt metadata; woof prepared restore/checkpoint writer",
+      "honored": "no",
+      "note": "Stock-WRF I/O routing declaration is not an active Metal selector; woof uses its prepared/checkpoint/native NetCDF route on both backends. No backend asymmetry.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.time_step",
+      "value": 15,
+      "metal_path": "experiment.DomainConfig/clock \u2192 dycore.step and all dtau/flux/diffusion parameters",
+      "honored": "yes",
+      "note": "Initial15s; common adaptive clock can vary it. Current-run duration1827steps matches CUDA.",
+      "resolved_run_value": 15.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.max_dom",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.e_we",
+      "value": 41,
+      "metal_path": "experiment/grid + sealed staggered state \u2192 all typed kernel dimensions/spacings",
+      "honored": "yes",
+      "note": "40x40 mass,49 levels; e_we/e_sn41 and e_vert50 are WRF staggered declarations. dx=dy3000.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.e_sn",
+      "value": 41,
+      "metal_path": "experiment/grid + sealed staggered state \u2192 all typed kernel dimensions/spacings",
+      "honored": "yes",
+      "note": "40x40 mass,49 levels; e_we/e_sn41 and e_vert50 are WRF staggered declarations. dx=dy3000.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.e_vert",
+      "value": 50,
+      "metal_path": "experiment/grid + sealed staggered state \u2192 all typed kernel dimensions/spacings",
+      "honored": "yes",
+      "note": "40x40 mass,49 levels; e_we/e_sn41 and e_vert50 are WRF staggered declarations. dx=dy3000.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.eta_levels",
+      "value": [
+        1.0,
+        0.9978,
+        0.99519,
+        0.99212,
+        0.98849,
+        0.98422,
+        0.97918,
+        0.97325,
+        0.96627,
+        0.95808,
+        0.94846,
+        0.93719,
+        0.92402,
+        0.90866,
+        0.89079,
+        0.87006,
+        0.84612,
+        0.81857,
+        0.78706,
+        0.75124,
+        0.7108,
+        0.66556,
+        0.61547,
+        0.56067,
+        0.50519,
+        0.45474,
+        0.40886,
+        0.36713,
+        0.32918,
+        0.29466,
+        0.26328,
+        0.23473,
+        0.20877,
+        0.18516,
+        0.16369,
+        0.14417,
+        0.12641,
+        0.11026,
+        0.09557,
+        0.08222,
+        0.07007,
+        0.05902,
+        0.04898,
+        0.03984,
+        0.03153,
+        0.02398,
+        0.0171,
+        0.01085,
+        0.00517,
+        0.0
+      ],
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.p_top_requested",
+      "value": 5000.0,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.hypsometric_opt",
+      "value": 2,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 2,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.dx",
+      "value": 3000.0,
+      "metal_path": "experiment/grid + sealed staggered state \u2192 all typed kernel dimensions/spacings",
+      "honored": "yes",
+      "note": "40x40 mass,49 levels; e_we/e_sn41 and e_vert50 are WRF staggered declarations. dx=dy3000.",
+      "resolved_run_value": 3000.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.dy",
+      "value": 3000.0,
+      "metal_path": "experiment/grid + sealed staggered state \u2192 all typed kernel dimensions/spacings",
+      "honored": "yes",
+      "note": "40x40 mass,49 levels; e_we/e_sn41 and e_vert50 are WRF staggered declarations. dx=dy3000.",
+      "resolved_run_value": 3000.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.grid_id",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.parent_id",
+      "value": 0,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.i_parent_start",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.j_parent_start",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.parent_grid_ratio",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.parent_time_step_ratio",
+      "value": 1,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.feedback",
+      "value": 0,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.smooth_option",
+      "value": 0,
+      "metal_path": "experiment hierarchy/clock/admission",
+      "honored": "yes",
+      "note": "Single root grid1, parent0, ratio1; no feedback/nest smoothing/regrid operations. Dormant knobs do not force kernels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.use_adaptive_time_step",
+      "value": true,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": true,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.step_to_output_time",
+      "value": true,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": true,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.adaptation_domain",
+      "value": 1,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.target_cfl",
+      "value": 1.2,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": 1.2,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.target_hcfl",
+      "value": 0.84,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": 0.84,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.max_step_increase_pct",
+      "value": 5,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": 5,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.starting_time_step",
+      "value": -1,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": -1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.starting_time_step_den",
+      "value": 0,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": 0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.max_time_step",
+      "value": -1,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": -1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.max_time_step_den",
+      "value": 0,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": 0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.min_time_step",
+      "value": -1,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": -1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.min_time_step_den",
+      "value": 0,
+      "metal_path": "core.clock/adaptive_clock/AdaptiveTimestepState + dycore.record_wrf_vertical_cfl \u2192 wrf_vertical_cfl",
+      "honored": "yes",
+      "note": "Shared clock enabled; target1.2/0.84, increase5%; sentinels -1/0 derive bounds. Pinned terrain clock constrains common initial time authority; output times are hit.",
+      "resolved_run_value": 0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.num_metgrid_levels",
+      "value": 51,
+      "metal_path": "namelist_import \u2192 ingest HRRR preparation and sealed soil/static/state restore",
+      "honored": "yes",
+      "note": "Preparation controls/pins: snow1, surface source1,21 categories,no SST cycling; 51/9 ingest level counts do not set runtime49/4 levels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.num_metgrid_soil_levels",
+      "value": 9,
+      "metal_path": "namelist_import \u2192 ingest HRRR preparation and sealed soil/static/state restore",
+      "honored": "yes",
+      "note": "Preparation controls/pins: snow1, surface source1,21 categories,no SST cycling; 51/9 ingest level counts do not set runtime49/4 levels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&domains.sfcp_to_sfcp",
+      "value": true,
+      "metal_path": "namelist_import \u2192 ingest HRRR preparation and sealed soil/static/state restore",
+      "honored": "yes",
+      "note": "Preparation controls/pins: snow1, surface source1,21 categories,no SST cycling; 51/9 ingest level counts do not set runtime49/4 levels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.rdlai2d",
+      "value": true,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": true,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.usemonalb",
+      "value": true,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": true,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.mp_physics",
+      "value": 8,
+      "metal_path": "physics.initialize_physics + microphysics.apply \u2192 thompson_*; acoustic.prepare_moist_cq \u2192 calc_cq",
+      "honored": "yes",
+      "note": "mp8 classic Thompson; all moisture fields restored; moist acoustic coefficient resources are active.",
+      "resolved_run_value": 8,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.ra_lw_physics",
+      "value": 4,
+      "metal_path": "physics.initialize_physics/_run_radiation \u2192 core.rrtmgp \u2192 rrtmgp_prepare/gas/cloud/mcica/rte kernel families",
+      "honored": "yes",
+      "note": "ra_physics0 is legacy aggregate; explicit LW4/SW4 choose RTE-RRTMGP adapter. Compatibility marker records intentional stock-WRF translation shared by both backends.",
+      "resolved_run_value": 4,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.ra_sw_physics",
+      "value": 4,
+      "metal_path": "physics.initialize_physics/_run_radiation \u2192 core.rrtmgp \u2192 rrtmgp_prepare/gas/cloud/mcica/rte kernel families",
+      "honored": "yes",
+      "note": "ra_physics0 is legacy aggregate; explicit LW4/SW4 choose RTE-RRTMGP adapter. Compatibility marker records intentional stock-WRF translation shared by both backends.",
+      "resolved_run_value": 4,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.radt",
+      "value": 12.0,
+      "metal_path": "physics.PhysicsDriver + adaptive_clock radiation deadline \u2192 _run_radiation",
+      "honored": "yes",
+      "note": "12 minutes; initial call mandatory, then common adaptive deadline.",
+      "resolved_run_value": 12.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.icloud",
+      "value": 1,
+      "metal_path": "namelist_import radiation pins \u2192 RTE-RRTMGP cloud optics/shortwave",
+      "honored": "yes",
+      "note": "icloud1 uses cloud optics; swrad_scat1 matches implemented unscaled scattering. Not variable RRTMG legacy control.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.swrad_scat",
+      "value": 1.0,
+      "metal_path": "namelist_import radiation pins \u2192 RTE-RRTMGP cloud optics/shortwave",
+      "honored": "yes",
+      "note": "icloud1 uses cloud optics; swrad_scat1 matches implemented unscaled scattering. Not variable RRTMG legacy control.",
+      "resolved_run_value": 1.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.sf_sfclay_physics",
+      "value": 91,
+      "metal_path": "physics._run_sfclay \u2192 sfclay_family.sfclay_column; core.ysu/Noah atmosphere flux coupling",
+      "honored": "yes",
+      "note": "91 selects MM5 rev0 rather than revised1; isfflx1 enables surface fluxes.",
+      "resolved_run_value": 91,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.sf_surface_physics",
+      "value": 2,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": 2,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.bl_pbl_physics",
+      "value": 1,
+      "metal_path": "physics scheme dispatch/_surface_pbl_step_due/_run_ysu \u2192 ysu_column + couple_ysu_tendencies",
+      "honored": "yes",
+      "note": "YSU1 every step because bldt0; current dt propagated to first-call physics. Held tendencies feed all RK stages.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.bldt",
+      "value": 0.0,
+      "metal_path": "physics scheme dispatch/_surface_pbl_step_due/_run_ysu \u2192 ysu_column + couple_ysu_tendencies",
+      "honored": "yes",
+      "note": "YSU1 every step because bldt0; current dt propagated to first-call physics. Held tendencies feed all RK stages.",
+      "resolved_run_value": 0.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.cu_physics",
+      "value": 0,
+      "metal_path": "physics scheme dispatch/cumulus cadence",
+      "honored": "yes",
+      "note": "cu0 disables cumulus; cadence0 consequently dormant.",
+      "resolved_run_value": 0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.cudt",
+      "value": 0.0,
+      "metal_path": "physics scheme dispatch/cumulus cadence",
+      "honored": "yes",
+      "note": "cu0 disables cumulus; cadence0 consequently dormant.",
+      "resolved_run_value": 0.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.isfflx",
+      "value": 1,
+      "metal_path": "physics._run_sfclay \u2192 sfclay_family.sfclay_column; core.ysu/Noah atmosphere flux coupling",
+      "honored": "yes",
+      "note": "91 selects MM5 rev0 rather than revised1; isfflx1 enables surface fluxes.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.ifsnow",
+      "value": 1,
+      "metal_path": "namelist_import \u2192 ingest HRRR preparation and sealed soil/static/state restore",
+      "honored": "yes",
+      "note": "Preparation controls/pins: snow1, surface source1,21 categories,no SST cycling; 51/9 ingest level counts do not set runtime49/4 levels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.surface_input_source",
+      "value": 1,
+      "metal_path": "namelist_import \u2192 ingest HRRR preparation and sealed soil/static/state restore",
+      "honored": "yes",
+      "note": "Preparation controls/pins: snow1, surface source1,21 categories,no SST cycling; 51/9 ingest level counts do not set runtime49/4 levels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.num_soil_layers",
+      "value": 4,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": 4,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.mp_zero_out",
+      "value": 2,
+      "metal_path": "microphysics.apply \u2192 microphysics_zero_out \u2192 mp_zero_out",
+      "honored": "yes",
+      "note": "Mode2 floors vapor too; threshold1e-12; all1 includes number fields. Shared dispatcher forwards values.",
+      "resolved_run_value": 2,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.mp_zero_out_thresh",
+      "value": 1e-12,
+      "metal_path": "microphysics.apply \u2192 microphysics_zero_out \u2192 mp_zero_out",
+      "honored": "yes",
+      "note": "Mode2 floors vapor too; threshold1e-12; all1 includes number fields. Shared dispatcher forwards values.",
+      "resolved_run_value": 1e-12,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.mp_zero_out_all",
+      "value": 1,
+      "metal_path": "microphysics.apply \u2192 microphysics_zero_out \u2192 mp_zero_out",
+      "honored": "yes",
+      "note": "Mode2 floors vapor too; threshold1e-12; all1 includes number fields. Shared dispatcher forwards values.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.num_land_cat",
+      "value": 21,
+      "metal_path": "namelist_import \u2192 ingest HRRR preparation and sealed soil/static/state restore",
+      "honored": "yes",
+      "note": "Preparation controls/pins: snow1, surface source1,21 categories,no SST cycling; 51/9 ingest level counts do not set runtime49/4 levels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.sf_urban_physics",
+      "value": 0,
+      "metal_path": "physics.initialize_physics/_attach_urban",
+      "honored": "yes",
+      "note": "0: no urban kernels.",
+      "resolved_run_value": 0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.sst_update",
+      "value": 0,
+      "metal_path": "namelist_import \u2192 ingest HRRR preparation and sealed soil/static/state restore",
+      "honored": "yes",
+      "note": "Preparation controls/pins: snow1, surface source1,21 categories,no SST cycling; 51/9 ingest level counts do not set runtime49/4 levels.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&physics.alb_sol",
+      "value": 1,
+      "metal_path": "physics._run_noah \u2192 noah_family/noah_forcing_family/noah_sfcdiags_family",
+      "honored": "yes",
+      "note": "Noah2, four layers; alb_sol1 forwards sun-angle albedo arrays allocated in prior fix; monthly LAI/albedo options passed to noah call.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.use_theta_m",
+      "value": 0,
+      "metal_path": "namelist_import DYNAMICS_REQUIRED_VALUES/use_theta_m contract \u2192 dycore/acoustic",
+      "honored": "yes",
+      "note": "Nonhydrostatic=true and dry theta use_theta_m=0 are fixed admitted equations; both backends.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.hybrid_opt",
+      "value": 2,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 2,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.etac",
+      "value": 0.2,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 0.2,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.top_lid",
+      "value": false,
+      "metal_path": "acoustic.calc_coef_w/advance_uv/advance_w_phi; metal.dycore.slow_pgf",
+      "honored": "yes",
+      "note": "false passes to top-boundary operators.",
+      "resolved_run_value": false,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.w_damping",
+      "value": 1,
+      "metal_path": "dycore.apply_w_damping \u2192 w_damp",
+      "honored": "yes",
+      "note": "1 launches at every RK stage; onset1 and w_crit_cfl1 default are explicit parameters.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.epssm",
+      "value": 0.5,
+      "metal_path": "acoustic.prepare_acoustic_coefficients \u2192 calc_coef_w; submit_metal_acoustic_advance_w_phi \u2192 advance_w_phi",
+      "honored": "yes",
+      "note": "0.5 passed to both coefficient and solve paths.",
+      "resolved_run_value": 0.5,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.diff_opt",
+      "value": 2,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 launch_wrf_smag2d_km \u2192 wrf_smag_deform/wrf_smag2d_km/wrf_smag_km_bc \u2192 wrf_smag_hd_*",
+      "honored": "yes",
+      "note": "diff_opt=2/km_opt=4 closure; c_s=0.25 reaches coefficient parameters. Held tendencies consumed all RK stages.",
+      "resolved_run_value": 2,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.km_opt",
+      "value": 4,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 launch_wrf_smag2d_km \u2192 wrf_smag_deform/wrf_smag2d_km/wrf_smag_km_bc \u2192 wrf_smag_hd_*",
+      "honored": "yes",
+      "note": "diff_opt=2/km_opt=4 closure; c_s=0.25 reaches coefficient parameters. Held tendencies consumed all RK stages.",
+      "resolved_run_value": 4,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.mix_full_fields",
+      "value": false,
+      "metal_path": "config.validate_run_config \u2192 dycore._compute_wrf_smag_tendencies \u2192 wrf_smag_deform/hd_*",
+      "honored": "yes",
+      "note": "false is equivalent to full fields for this real-data case because reference wind profiles are zero; shared CUDA/Metal reduction, not dropped active selector.",
+      "resolved_run_value": false,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.diff_6th_opt",
+      "value": 2,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": 2,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.diff_6th_factor",
+      "value": 0.12,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": 0.12,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.diff_6th_factor2",
+      "value": 0.04,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": 0.04,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.diff_6th_slopeopt",
+      "value": 1,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.moist_mix6_off",
+      "value": false,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": false,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.c_s",
+      "value": 0.25,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 launch_wrf_smag2d_km \u2192 wrf_smag_deform/wrf_smag2d_km/wrf_smag_km_bc \u2192 wrf_smag_hd_*",
+      "honored": "yes",
+      "note": "diff_opt=2/km_opt=4 closure; c_s=0.25 reaches coefficient parameters. Held tendencies consumed all RK stages.",
+      "resolved_run_value": 0.25,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.c_k",
+      "value": 0.15,
+      "metal_path": "dycore.launch_wrf_tke_km/launch_wrf_smag3d_km/launch_wrf_smag2d_vertical",
+      "honored": "yes",
+      "note": "Dormant at km_opt4 and YSU1; no TKE or PBL-off vertical closure launched.",
+      "resolved_run_value": 0.15,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.mix_isotropic",
+      "value": 0,
+      "metal_path": "dycore.launch_wrf_tke_km/launch_wrf_smag3d_km/launch_wrf_smag2d_vertical",
+      "honored": "yes",
+      "note": "Dormant at km_opt4 and YSU1; no TKE or PBL-off vertical closure launched.",
+      "resolved_run_value": 0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.mix_upper_bound",
+      "value": 0.1,
+      "metal_path": "dycore.launch_wrf_tke_km/launch_wrf_smag3d_km/launch_wrf_smag2d_vertical",
+      "honored": "yes",
+      "note": "Dormant at km_opt4 and YSU1; no TKE or PBL-off vertical closure launched.",
+      "resolved_run_value": 0.1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.tke_upper_bound",
+      "value": 1000.0,
+      "metal_path": "dycore.launch_wrf_tke_km/launch_wrf_smag3d_km/launch_wrf_smag2d_vertical",
+      "honored": "yes",
+      "note": "Dormant at km_opt4 and YSU1; no TKE or PBL-off vertical closure launched.",
+      "resolved_run_value": 1000.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.tke_heat_flux",
+      "value": 0.0,
+      "metal_path": "dycore.launch_wrf_tke_km/launch_wrf_smag3d_km/launch_wrf_smag2d_vertical",
+      "honored": "yes",
+      "note": "Dormant at km_opt4 and YSU1; no TKE or PBL-off vertical closure launched.",
+      "resolved_run_value": 0.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.tke_drag_coefficient",
+      "value": 0.0,
+      "metal_path": "dycore.launch_wrf_tke_km/launch_wrf_smag3d_km/launch_wrf_smag2d_vertical",
+      "honored": "yes",
+      "note": "Dormant at km_opt4 and YSU1; no TKE or PBL-off vertical closure launched.",
+      "resolved_run_value": 0.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.diff_6th_thresh",
+      "value": 0.1,
+      "metal_path": "dycore.prepare_fixed_tendencies \u2192 diff6_to_edge/_diff6_factor/_diff6_dt \u2192 launch_diff6_to_edge \u2192 diff6_edge_pad/diff6/diff6_edge_crop_add",
+      "honored": "yes",
+      "note": "NOAA opt2 monotonic edge path; dry0.12, moisture0.04; slopeopt1 and threshold0.1 reach typed diff6. moist_mix6_off=false includes moisture.",
+      "resolved_run_value": 0.1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.base_temp",
+      "value": 290.0,
+      "metal_path": "experiment.vertical \u2192 sealed coordinate restore (c1h/c2h/c1f/c2f/dnw/fnm/fnp/thb/pb/phb) \u2192 diagnostics + advection/acoustic/PGF",
+      "honored": "yes",
+      "note": "Requested geometry was materialized before transfer and verified by sealed input hashes. hypsometric2 selects diagnostics.",
+      "resolved_run_value": 290.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.damp_opt",
+      "value": 3,
+      "metal_path": "acoustic.submit_metal_acoustic_advance_w_phi \u2192 advance_w_phi; prepare_upper_wind_limiter \u2192 upper_wind_limiter",
+      "honored": "yes",
+      "note": "damp_opt3 gives dampmag=dtau*0.2, zdamp5000; NOAA saved-wind limiter after solve, before frame; saved ru/rv refresh after acoustic loop.",
+      "resolved_run_value": 3,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.zdamp",
+      "value": 5000.0,
+      "metal_path": "acoustic.submit_metal_acoustic_advance_w_phi \u2192 advance_w_phi; prepare_upper_wind_limiter \u2192 upper_wind_limiter",
+      "honored": "yes",
+      "note": "damp_opt3 gives dampmag=dtau*0.2, zdamp5000; NOAA saved-wind limiter after solve, before frame; saved ru/rv refresh after acoustic loop.",
+      "resolved_run_value": 5000.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.dampcoef",
+      "value": 0.2,
+      "metal_path": "acoustic.submit_metal_acoustic_advance_w_phi \u2192 advance_w_phi; prepare_upper_wind_limiter \u2192 upper_wind_limiter",
+      "honored": "yes",
+      "note": "damp_opt3 gives dampmag=dtau*0.2, zdamp5000; NOAA saved-wind limiter after solve, before frame; saved ru/rv refresh after acoustic loop.",
+      "resolved_run_value": 0.2,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.khdif",
+      "value": 0.0,
+      "metal_path": "dycore.step km_opt guard \u2192 diffusion.add_diffusion_tendencies",
+      "honored": "yes",
+      "note": "Both zero: constant-K branch disabled identically.",
+      "resolved_run_value": 0.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.kvdif",
+      "value": 0.0,
+      "metal_path": "dycore.step km_opt guard \u2192 diffusion.add_diffusion_tendencies",
+      "honored": "yes",
+      "note": "Both zero: constant-K branch disabled identically.",
+      "resolved_run_value": 0.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.non_hydrostatic",
+      "value": true,
+      "metal_path": "namelist_import DYNAMICS_REQUIRED_VALUES/use_theta_m contract \u2192 dycore/acoustic",
+      "honored": "yes",
+      "note": "Nonhydrostatic=true and dry theta use_theta_m=0 are fixed admitted equations; both backends.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.moist_adv_opt",
+      "value": 1,
+      "metal_path": "moist.advance_scalars_stage \u2192 provisional unlimited / final pd_fluxes + pd_renorm_apply",
+      "honored": "yes",
+      "note": "Option1 selects final positive-definite donor budget; scalar_adv_opt=1 is an importer pin, not separate RunConfig member.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.scalar_adv_opt",
+      "value": 1,
+      "metal_path": "moist.advance_scalars_stage \u2192 provisional unlimited / final pd_fluxes + pd_renorm_apply",
+      "honored": "yes",
+      "note": "Option1 selects final positive-definite donor budget; scalar_adv_opt=1 is an importer pin, not separate RunConfig member.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.time_step_sound",
+      "value": 4,
+      "metal_path": "dycore.step stages \u2192 acoustic.prepare_acoustic_substep_launch",
+      "honored": "yes",
+      "note": "4 \u2192 three RK stages with 1/2/4 acoustic substeps; dt/3 then dt/4 then dt/4. Not a two-stage integrator.",
+      "resolved_run_value": 4,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.smdiv",
+      "value": 0.1,
+      "metal_path": "acoustic.prepare_acoustic_substep_launch \u2192 submit_metal_acoustic_advance_uv \u2192 advance_uv",
+      "honored": "yes",
+      "note": "0 on first acoustic substep of each RK stage, configured0.1 on later substeps; same CUDA behavior.",
+      "resolved_run_value": 0.1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.emdiv",
+      "value": 0.01,
+      "metal_path": "dycore._prepare_emdiv_filter_launch \u2192 apply_emdiv; acoustic.advance_mu_th",
+      "honored": "yes",
+      "note": "0.01 active; MUDF zero only RK1 then retained; filter precedes acoustic UV on each substep.",
+      "resolved_run_value": 0.01,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.h_sca_adv_order",
+      "value": 5,
+      "metal_path": "dycore._add_slow_tendencies/moist.advance_scalars_stage \u2192 flux_div_scalar_vorder/pd_fluxes; dycore.slow_geopotential",
+      "honored": "yes",
+      "note": "Transport horizontal flux5 is fixed; configured 5 agrees. Geopotential receives order=5.",
+      "resolved_run_value": 5,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.v_mom_adv_order",
+      "value": 5,
+      "metal_path": "dycore._add_slow_tendencies \u2192 launch_flux_div_u/v(vorder=vmom) \u2192 flux_div_u/v_vorder \u2192 zhalf(vorder)",
+      "honored": "yes",
+      "note": "5 reaches stencil selector, including eta-boundary degradation.",
+      "resolved_run_value": 5,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&dynamics.v_sca_adv_order",
+      "value": 5,
+      "metal_path": "dycore._add_slow_tendencies + moist._advance_scalars_stage_metal \u2192 flux_div_scalar/w_vorder + pd_fluxes",
+      "honored": "yes",
+      "note": "5 reaches both stage calls and PD ABI after cfca154b0.",
+      "resolved_run_value": 5,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&bdy_control.spec_bdy_width",
+      "value": 5,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": 5,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&bdy_control.spec_zone",
+      "value": 1,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": 1,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&bdy_control.relax_zone",
+      "value": 4,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": 4,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&bdy_control.spec_exp",
+      "value": 0.0,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": 0.0,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&bdy_control.specified",
+      "value": true,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": true,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&bdy_control.nested",
+      "value": false,
+      "metal_path": "ingest.lateral_bc.apply_state_lateral_boundaries \u2192 _resident_weights/_launch_state_relaxation \u2192 coupled_boundary_field + acoustic_boundary_frame",
+      "honored": "yes",
+      "note": "Specified d01: width5, spec1, relax4, exponent0. Relaxation weights include common timestep; RK1 applies relax, later stages retain specified tendency.",
+      "resolved_run_value": false,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&namelist_quilt.nio_tasks_per_group",
+      "value": 0,
+      "metal_path": "namelist_import ignored_time_control_reason/MPI quilt metadata; woof prepared restore/checkpoint writer",
+      "honored": "no",
+      "note": "Stock-WRF I/O routing declaration is not an active Metal selector; woof uses its prepared/checkpoint/native NetCDF route on both backends. No backend asymmetry.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "&namelist_quilt.nio_groups",
+      "value": 1,
+      "metal_path": "namelist_import ignored_time_control_reason/MPI quilt metadata; woof prepared restore/checkpoint writer",
+      "honored": "no",
+      "note": "Stock-WRF I/O routing declaration is not an active Metal selector; woof uses its prepared/checkpoint/native NetCDF route on both backends. No backend asymmetry.",
+      "resolved_run_value": null,
+      "origin": "namelist.input"
+    },
+    {
+      "option": "(default).h_mom_adv_order",
+      "value": 5,
+      "metal_path": "config.validate_run_config \u2192 dycore._add_slow_tendencies \u2192 advection.flux_div_u/v/w(_vorder)",
+      "honored": "yes",
+      "note": "Only 5 admitted; horizontal flux5 plus boundary degradation; inferred default 5.",
+      "resolved_run_value": 5,
+      "origin": "resolved default; omitted both files"
+    }
+  ]
+}
