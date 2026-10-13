@@ -1,6 +1,6 @@
 # Rainy CUDA parity root causes
 
-The unchanged Flint rainy case exposes four confirmed Metal defects. The fixes are stacked on the complete dry-case compatibility work in PR 25. They affect staggered V dispatch, the surface/PBL gas ratio, snow riming and warm-source latent heating.
+The unchanged Flint rainy case exposes five confirmed Metal defects. The fixes are stacked on the complete dry-case compatibility work in PR 25. They affect staggered V dispatch, the surface/PBL gas ratio, snow riming, warm-source latent heating and the Smagorinsky mixing pipeline.
 
 ## Missing V advection points
 
@@ -66,3 +66,15 @@ The second unchanged-input forecast completed all 1,827 steps and 49 matching hi
 Final rain mean improves from 3.510141 to 3.423540 mm versus CUDA 3.382034 mm: the excess falls from 3.79% to 1.23%. Final rain RMSE falls from 0.273736 to 0.136745 mm, and pooled rain RMSE from 0.216966 to 0.110635 mm. Maximum T2 error falls from 2.625 to 1.032 K. Final U/V RMSE falls to 0.00910/0.01110 m/s.
 
 Parity is still not established. Pooled V10 RMSE remains 0.452496 m/s, Qv RMSE 5.19385e-5 kg/kg and T2 RMSE 0.272551 K. These transient gaps motivate later-call surface/PBL replay and a rainy-case perturbation control; the small dry-case perturbation spread cannot establish a rainy numerical tolerance. `forecast-iteration-2.json` retains the trajectory metrics.
+
+## Missing Smagorinsky deformation and boundary stages
+
+The Metal `launch_wrf_smag2d_km` branch allocated three reused deformation-buffer prefixes, then launched the coefficient consumer without launching `wrf_smag_deform`. CUDA explicitly launches deformation first, coefficients second and the physical-boundary coefficient reset third. The Metal branch also omitted that final reset.
+
+At the captured first dry production call, every Metal deformation and K coefficient was zero. The identical-input CUDA-source host calculation has K_m maximum 401.946411 m²/s and K_h maximum 1205.839233 m²/s. On later steps the borrowed tensor storage contains carrying tendencies from the previous step, so omission can also feed stale non-deformation data into the closure. This affects the same active km_opt=4/diff_opt=2 pipeline used by the rainy case.
+
+Submit deformation before its coefficient consumer and restore the same boundary reset as CUDA and the other admitted Metal closures. The corrected native replay fills 70,756 nonzero coefficients. K_m RMSE falls from 74.91297 to 2.99481e-6 m²/s and K_h from 224.73891 to 9.52379e-6 m²/s. Deformation maximum errors are below 4.4e-10 s⁻¹. Three native repetitions are byte-identical; all physical boundary coefficient rows are exactly zero.
+
+The source host harness requires launcher-only renaming of its tx/ty thread loops because those names shadow pointer parameters in this module; no model source is changed by that diagnostic adaptation. `tools/rain_smag_replay.py --capture-root DIR --config CONFIG --output OUT --backend host|metal` reproduces the coefficient comparison from `tools/dump_backend_step1.py` captures; Metal additionally takes `--reference-root` for the host outputs. The host result remains a CPU CUDA-source transcription, not executed NVIDIA output.
+
+The rainy perturbation control was stopped before completion after this deterministic defect was found. Its partial history is not used to establish a tolerance. A third unchanged-input full rainy forecast follows the repaired mixing pipeline.

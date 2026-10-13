@@ -1325,7 +1325,10 @@ def launch_wrf_smag2d_km(state: DomainState, cfg: RunConfig,
     """
     nz, ny, nx = xkmh.shape
     if getattr(state, "_metal_setup_state", False):
-        from woof.metal.smag2d_family import submit_wrf_smag2d_km
+        from woof.metal.smag2d_family import (
+            submit_wrf_smag_deform, submit_wrf_smag2d_km,
+            submit_wrf_smag_km_bc,
+        )
         n_mass = nz * ny * nx
         # Match CUDA's carrying-buffer reuse: these deformation fields live
         # through the u/v stress launches and are overwritten afterward.
@@ -1336,9 +1339,14 @@ def launch_wrf_smag2d_km(state: DomainState, cfg: RunConfig,
             state, (nz, ny, nx + 1), mass_shape, "smag_ru")
         d12 = _wrf_smag_prefix_view(
             state, (nz, ny + 1, nx), mass_shape, "smag_rv")
+        submit_wrf_smag_deform(state, cfg, d11, d22, d12, time_t=time_t)
         submit_wrf_smag2d_km(
             state, cfg, d11, d22, d12, xkmh, xkhh,
             c_s=cfg.c_s, prandtl=_PRANDTL, time_t=time_t)
+        if _boundary_x(cfg) or _boundary_y(cfg):
+            submit_wrf_smag_km_bc(
+                xkmh, xkhh, boundary_x=_boundary_x(cfg),
+                boundary_y=_boundary_y(cfg))
         return d11, d22, d12
     n_mass = nz * ny * nx
     # WRF deformation tensors are live only through the u/v stress launches.
