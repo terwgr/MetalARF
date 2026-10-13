@@ -11,6 +11,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--capture-root',type=Path,required=True)
 p.add_argument('--points',default='',help='Optional i,j pairs separated by semicolons')
+p.add_argument('--at-seconds',type=float,default=0.,help='First due surface call at or after this model time')
 a,cli=p.parse_known_args();a.capture_root.mkdir(parents=True,exist_ok=True)
 from woof.core import physics,sfclay,noah,ysu
 from tests.physics_reference.npref import np_sfclay,np_noah_column,np_ysu_column
@@ -39,6 +40,7 @@ def replace(fn,new):
 orig_sf=sfclay.launch_sfclay
 sig_sf=inspect.signature(orig_sf)
 def capture_sf(*args,**kw):
+ if elapsed<a.at_seconds:return orig_sf(*args,**kw)
  b=sig_sf.bind(*args,**kw);b.apply_defaults();d=b.arguments;r=d['result']
  inputs={n:host(d[n]).copy() for n in ['u','v','t','qv','p','dz8w','psfc','tsk','pblh','mavail','xland','lakemask']}
  inputs.update({n:host(getattr(r,n)).copy() for n in ['znt','ust','ustm','mol','hfx','qfx','qsfc','zol']})
@@ -49,6 +51,7 @@ def capture_sf(*args,**kw):
 replace(orig_sf,capture_sf)
 orig_no=noah.launch_noah;sig_no=inspect.signature(orig_no)
 def capture_no(*args,**kw):
+ if elapsed<a.at_seconds:return orig_no(*args,**kw)
  b=sig_no.bind(*args,**kw);b.apply_defaults();d=b.arguments;f=args[0];params=args[1];dt=args[2];dzs=args[3]
  fields={n:host(f[n]).copy() for n in list(noah._F2D)+list(noah._F3D)+['ivgtyp','isltyp','ebal']};points=selected(fields['tsk'].shape)
  np.savez(a.capture_root/'noah-inputs.npz',**fields,points=np.asarray(points),veg=params.veg,soil=params.soil,gen=params.gen,dzs=dzs)
@@ -65,6 +68,7 @@ def capture_no(*args,**kw):
 replace(orig_no,capture_no)
 orig_ys=ysu.launch_ysu;sig_ys=inspect.signature(orig_ys)
 def capture_ys(*args,**kw):
+ if elapsed<a.at_seconds:return orig_ys(*args,**kw)
  b=sig_ys.bind(*args,**kw);b.apply_defaults();d=b.arguments;names=['u','v','theta','qv','qc','qi','p','p_interface','exner','dz','rthraten','psfc','znt','ust','hfx','qfx','wspd','br','psim','psih','xland','u10','v10']
  inputs={n:host(d[n]).copy() for n in names};points=selected(inputs['psfc'].shape)
  np.savez(a.capture_root/'ysu-inputs.npz',**inputs,points=np.asarray(points))

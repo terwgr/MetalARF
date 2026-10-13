@@ -58,3 +58,11 @@ The split warm network saves the admitted vapor rate in slot 63. Its graupel dia
 On the captured identical warm inputs, the pre-fix maximum temperature error is 0.00115967 K. After correction, every sampled temperature is byte-identical to the CUDA-source host result in all three repetitions. The mass fields retain their previous close agreement.
 
 `tools/rain_microphysics_capture.py --capture-root DIR go ...` captures these per-component inputs through the public forecast entrypoint. `tools/rain_thompson_replay.py` takes `--capture-root`, `--tables`, `--output` and `--backend host|metal`; run host first, then Metal with `--reference-root` pointing to the host output. `thompson-component-replay.json` records the before/after errors and repeated-run agreement.
+
+## Full forecast reassessment after the Thompson fixes
+
+The second unchanged-input forecast completed all 1,827 steps and 49 matching history frames. All 3,919 numeric field/time checks are finite with matching schemas, dtypes, dimensions and units. Prepared-input/configuration identities match the transferred CUDA run.
+
+Final rain mean improves from 3.510141 to 3.423540 mm versus CUDA 3.382034 mm: the excess falls from 3.79% to 1.23%. Final rain RMSE falls from 0.273736 to 0.136745 mm, and pooled rain RMSE from 0.216966 to 0.110635 mm. Maximum T2 error falls from 2.625 to 1.032 K. Final U/V RMSE falls to 0.00910/0.01110 m/s.
+
+Parity is still not established. Pooled V10 RMSE remains 0.452496 m/s, Qv RMSE 5.19385e-5 kg/kg and T2 RMSE 0.272551 K. These transient gaps motivate later-call surface/PBL replay and a rainy-case perturbation control; the small dry-case perturbation spread cannot establish a rainy numerical tolerance. `forecast-iteration-2.json` retains the trajectory metrics.
