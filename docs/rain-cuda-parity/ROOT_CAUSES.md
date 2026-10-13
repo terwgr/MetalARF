@@ -1,6 +1,6 @@
 # Rainy CUDA parity root causes
 
-The unchanged Flint rainy case exposes seven confirmed Metal discrepancies. The fixes are stacked on the complete dry-case compatibility work in PR 25. They affect staggered V dispatch, the surface/PBL gas ratio, snow riming, warm-source latent heating, the Smagorinsky mixing pipeline, precipitation delivery to Noah and the surface/PBL contraction policy. The trajectory effect of the last correction is assessed separately below.
+The unchanged Flint rainy case exposes six source/coupling defects and two arithmetic discrepancies. The fixes are stacked on the complete dry-case compatibility work in PR 25. They affect staggered V dispatch, the surface/PBL gas ratio, snow riming, warm-source latent heating, the Smagorinsky mixing pipeline, precipitation delivery to Noah, the surface/PBL contraction policy and pressure-power accuracy. The two original peak events are substantially reduced, but global stability switches and large transient peaks remain. Full trajectory parity is not established.
 
 ## Missing V advection points
 
@@ -143,3 +143,32 @@ The two existing Metal Exner paths are mutually consistent, but both have a syst
 Use `pressure_power.metalh` for the sensitive pressure-to-temperature powers in physics preparation, microphysics preparation, SFCLAY, Noah, YSU cloudy-top temperature and Noah SFCDIAGS. The normalization and returned field remain FP32; only the transcendental evaluation uses the existing GPU software binary64 implementation. No host numerical fallback, physical constant, threshold, configuration or new floating-point field is introduced. This corrects mathematical accuracy; it is not a claim of bit-identical NVIDIA powf implementation.
 
 The production forward Exner replay now has zero differing words against the rounded reference on all 78,400 inputs, with physics and microphysics still byte-identical in three runs. `tools/rain_pressure_power_replay.py` reproduces the full forward check and sampled forward/inverse comparison through the real production helper. It uses an unused context-required calc_coefs placeholder only in the temporary primitive library, never as a forecast operator. The selected real SFCLAY HFX mean RMSE against the contracted CPU-source replay falls from 0.00186646 to 0.000160109 W/m²; Noah HFX from 0.000762654 to 0.000158722 W/m². All three native repetitions agree. `pressure-power-replay.json` retains the measured accuracy and source-operator evidence. A sixth unchanged-input full run assesses whether this thermodynamic correction contains the near-neutral trajectory discrepancies.
+
+## Sixth forecast: original peak events reduced, global stability switches remain
+
+The unchanged public-CLI forecast at 4f79ff61a8328887dfe126e84b19546bdcb5c5c3 completes all 1,827 steps and 12 model hours in 11.26 wall minutes. All 49 paired histories and 3,919 numeric field/time checks pass, with all nine input/configuration identities matching CUDA. The launch/end runtime source checks resolve the same clean numerical source. No additional broad test suite was run. `forecast-iteration-6.json` retains the results and native-grid peak coordinates.
+
+| Original event | Run 4 error | Run 5 error | Run 6 error |
+|---|---:|---:|---:|
+| PBLH at (7,5) | 1102.4557 m | 1087.6827 m | 0.41040039 m |
+| V10 at (26,19) | 1.522428 m/s | 0.84632492 m/s | 0.047427654 m/s |
+
+These are the specific originally reported events (+1.5 h PBLH and +2.5 h V10), not maxima over the entire forecast. The original PBL event now uses the stable branch in both histories: Metal 1,111.375610 m versus CUDA 1,111.786011 m. The original V10 event is -7.581230 versus -7.628658 m/s.
+
+| Field | After rain handoff (run 4) | After contraction (run 5) | Latest (run 6) |
+|---|---:|---:|---:|
+| RAINNC pooled RMSE | 0.0051418246 | 0.0041853263 | 0.0048025018 |
+| T2 pooled RMSE | 0.017114086 | 0.017695529 | 0.017104035 |
+| V10 pooled RMSE | 0.031090037 | 0.028759119 | 0.03240542 |
+| QVAPOR pooled RMSE | 1.4718446e-06 | 1.477768e-06 | 1.5158687e-06 |
+| PBLH pooled RMSE | 31.541783 | 31.773999 | 33.452171 |
+| V10 maximum absolute error | 1.522428 | 1.7217956 | 1.702775 |
+| PBLH maximum absolute error | 1102.4557 | 1087.6827 | 1078.2477 |
+
+Units are mm for rain, K for T2, m/s for V10, kg/kg for QVAPOR and m for PBLH. Pooled metrics equally weight every saved native-grid value, including initialization. Relative to run 4, global PBLH and V10 pooled RMSE are slightly worse; the original events improved without global containment.
+
+The new PBLH maximum is 1,078.247679 m at +1.75 h, (i=10,j=3): Metal 9.254396 m versus CUDA 1,087.502075 m. Its PSIM is zero versus CUDA -0.00260991. The V10 maximum is 1.702775 m/s at +2.5 h, (i=24,j=33): Metal -7.939955 versus CUDA -6.237180. At that wind peak, PBLH is 1,026.824341 versus 28.387823 m and PSIM is -0.01155817 versus zero. These histories corroborate opposite surface-stability regimes at the remaining peaks, including an interior wind peak, rather than merely a lateral-boundary artifact. They do not identify the first differing upstream NVIDIA operation.
+
+Final rain mean is 3.382020966 mm versus CUDA 3.382034306 (-0.0003944%); maxima are 17.331266403 versus 17.329736710 mm. Final rain RMSE is 0.0062815342 mm, maximum pointwise difference 0.075500488 mm and correlation 0.9999979391. This is close rainfall agreement, but the latest final rain RMSE is higher than run 5's 0.00533919 mm. Small final errors and improved selected events do not establish trajectory parity.
+
+PR 26 remains a draft. Six source/coupling defects and two arithmetic discrepancies have local reproduction evidence; the arithmetic changes are not proven to implement NVIDIA's exact transcendental rounding. With CUDA unavailable, the globally first residual divergence remains unlocalized. The coordinated CPU audit confirmed the repaired MP-only acceptance guard; its separately reported SWINT1 admission issue is inactive for this unchanged `swint_opt=0` case.

@@ -1,0 +1,381 @@
+{
+  "status": "PASS",
+  "source_commit": "4f79ff61a8328887dfe126e84b19546bdcb5c5c3",
+  "input_identities_match": {
+    "experiment_config_sha256": true,
+    "geometry_receipt_sha256": true,
+    "prepared_content_sha256": true,
+    "prepared_header_sha256": true,
+    "proof_sha256": true,
+    "source_manifest_sha256": true,
+    "static_cache_sha256": true,
+    "wps_namelist_sha256": true,
+    "wrf_direct_contract_sha256": true
+  },
+  "validation": {
+    "frames": 49,
+    "numeric_field_time_checks": 3919,
+    "all_finite": true,
+    "time_schema_shape_dtype_units_match": true,
+    "exact_checks": 1998
+  },
+  "rain": {
+    "metal": {
+      "mean": 3.3820209663547574,
+      "max": 17.331266403198242
+    },
+    "cuda": {
+      "mean": 3.3820343064144254,
+      "max": 17.329736709594727
+    },
+    "mean_excess_pct": -0.00039443892223545163,
+    "final_rmse": 0.006281534226305281,
+    "final_max_abs": 0.07550048828125,
+    "correlation": 0.9999979391086975
+  },
+  "metrics": [
+    {
+      "field": "RAINNC",
+      "units": "mm",
+      "before": 0.21696622216015313,
+      "after": 0.004802501757827114,
+      "change_pct": -97.78652100312547,
+      "new_max_abs": 0.07694244384765625,
+      "final_rmse": 0.006281534226305281
+    },
+    {
+      "field": "T2",
+      "units": "K",
+      "before": 0.28239402599323166,
+      "after": 0.01710403469433024,
+      "change_pct": -93.94320236266607,
+      "new_max_abs": 0.593597412109375,
+      "final_rmse": 0.003623405895670038
+    },
+    {
+      "field": "U10",
+      "units": "m s-1",
+      "before": 0.1272293956939667,
+      "after": 0.00894639494833792,
+      "change_pct": -92.96829565247855,
+      "new_max_abs": 0.6809079647064209,
+      "final_rmse": 0.0007456374594573969
+    },
+    {
+      "field": "V10",
+      "units": "m s-1",
+      "before": 0.46146673348860484,
+      "after": 0.032405419806677056,
+      "change_pct": -92.97773437281211,
+      "new_max_abs": 1.702775001525879,
+      "final_rmse": 0.0009063645051062689
+    },
+    {
+      "field": "U",
+      "units": "m s-1",
+      "before": 0.1290279442861828,
+      "after": 0.004749848353854281,
+      "change_pct": -96.31874445482975,
+      "new_max_abs": 0.7601356506347656,
+      "final_rmse": 0.0005406914545777622
+    },
+    {
+      "field": "V",
+      "units": "m s-1",
+      "before": 0.20108336401620686,
+      "after": 0.010062028733802571,
+      "change_pct": -94.99609090835004,
+      "new_max_abs": 1.9277005195617676,
+      "final_rmse": 0.0007071209988441927
+    },
+    {
+      "field": "QVAPOR",
+      "units": "kg kg-1",
+      "before": 5.189764859732603e-05,
+      "after": 1.5158686886539851e-06,
+      "change_pct": -97.07911874694823,
+      "new_max_abs": 0.00022890884429216385,
+      "final_rmse": 3.3122283328590504e-07
+    },
+    {
+      "field": "QCLOUD",
+      "units": "kg kg-1",
+      "before": 1.3141903236906162e-05,
+      "after": 8.307096923486373e-07,
+      "change_pct": -93.67892399317192,
+      "new_max_abs": 0.000162298179930076,
+      "final_rmse": 1.0612869589818816e-09
+    },
+    {
+      "field": "QRAIN",
+      "units": "kg kg-1",
+      "before": 2.4215726482115623e-06,
+      "after": 9.577190331406814e-08,
+      "change_pct": -96.04505347445182,
+      "new_max_abs": 1.0686955647543073e-05,
+      "final_rmse": 1.904526118775347e-12
+    },
+    {
+      "field": "QICE",
+      "units": "kg kg-1",
+      "before": 4.1920729653453286e-08,
+      "after": 2.0702527324660666e-08,
+      "change_pct": -50.61505967142615,
+      "new_max_abs": 1.5008392438176088e-05,
+      "final_rmse": 0.0
+    },
+    {
+      "field": "QSNOW",
+      "units": "kg kg-1",
+      "before": 2.7018431848179484e-06,
+      "after": 7.136346989866161e-08,
+      "change_pct": -97.35871162694922,
+      "new_max_abs": 1.909460115712136e-05,
+      "final_rmse": 2.4260803655385633e-11
+    },
+    {
+      "field": "SWDOWN",
+      "units": "W m-2",
+      "before": 7.415899119162309,
+      "after": 1.211601968215195,
+      "change_pct": -83.66210288534701,
+      "new_max_abs": 75.36846923828125,
+      "final_rmse": 0.0
+    },
+    {
+      "field": "PBLH",
+      "units": "m",
+      "before": 275.2187897286049,
+      "after": 33.45217113945186,
+      "change_pct": -87.84524444263442,
+      "new_max_abs": 1078.2476787567139,
+      "final_rmse": 0.14660587619951573
+    }
+  ],
+  "verdict": "The two original peak events are substantially reduced, but full-forecast stability switches persist elsewhere. Global PBLH/V10 peak errors remain 1078.25 m/1.70278 m/s; trajectory parity and complete containment are not established.",
+  "run": {
+    "run_seconds": 43200.0,
+    "executor": {
+      "feedback_calls": 0,
+      "forces": 0,
+      "steps": 1827
+    },
+    "wall_seconds": 675.3031986250426,
+    "runtime_source_identity_recheck": {
+      "git_compared": true,
+      "git_resolved_at_end": true,
+      "git_resolved_at_launch": true,
+      "identity_source_at_end": "git",
+      "identity_source_at_launch": "git"
+    }
+  },
+  "runtime_source_commit": "4f79ff61a8328887dfe126e84b19546bdcb5c5c3",
+  "global_peaks": {
+    "PBLH": {
+      "max_abs": 1078.2476787567139,
+      "delta_metal_minus_cuda": -1078.2476787567139,
+      "metal": 9.254396438598633,
+      "cuda": 1087.5020751953125,
+      "time_utc": "2024-07-10_19:45:00",
+      "lead_hours": 1.75,
+      "i": 10,
+      "j": 3,
+      "k": null,
+      "indices": "zero-based native staggered grid; k=null for surface",
+      "vertical_dimension": null,
+      "distance_to_edge_cells": 3,
+      "zone": "active-relaxation",
+      "latitude": 42.623878479003906,
+      "longitude": -84.12126159667969,
+      "mask": "trim0"
+    },
+    "V10": {
+      "max_abs": 1.702775001525879,
+      "delta_metal_minus_cuda": -1.702775001525879,
+      "metal": -7.93995475769043,
+      "cuda": -6.237179756164551,
+      "time_utc": "2024-07-10_20:30:00",
+      "lead_hours": 2.5,
+      "i": 24,
+      "j": 33,
+      "k": null,
+      "indices": "zero-based native staggered grid; k=null for surface",
+      "vertical_dimension": null,
+      "distance_to_edge_cells": 6,
+      "zone": "interior",
+      "latitude": 43.365997314453125,
+      "longitude": -83.44828796386719,
+      "mask": "trim0"
+    },
+    "T2": {
+      "max_abs": 0.593597412109375,
+      "delta_metal_minus_cuda": 0.593597412109375,
+      "metal": 291.1435241699219,
+      "cuda": 290.5499267578125,
+      "time_utc": "2024-07-11_02:45:00",
+      "lead_hours": 8.75,
+      "i": 2,
+      "j": 26,
+      "k": null,
+      "indices": "zero-based native staggered grid; k=null for surface",
+      "vertical_dimension": null,
+      "distance_to_edge_cells": 2,
+      "zone": "active-relaxation",
+      "latitude": 43.267127990722656,
+      "longitude": -84.29053497314453,
+      "mask": "trim0"
+    },
+    "QVAPOR": {
+      "max_abs": 0.00022890884429216385,
+      "delta_metal_minus_cuda": 0.00022890884429216385,
+      "metal": 0.012367374263703823,
+      "cuda": 0.01213846541941166,
+      "time_utc": "2024-07-11_00:00:00",
+      "lead_hours": 6.0,
+      "i": 4,
+      "j": 30,
+      "k": 2,
+      "indices": "zero-based native staggered grid; k=null for surface",
+      "vertical_dimension": "bottom_top",
+      "distance_to_edge_cells": 4,
+      "zone": "boundary-storage-ring",
+      "latitude": 43.3658447265625,
+      "longitude": -84.19617462158203,
+      "mask": "trim0",
+      "height_m_msl_nearest_mass_column": 241.96177972566096,
+      "height_m_agl_nearest_mass_column": 52.73582757722346
+    },
+    "SWDOWN": {
+      "max_abs": 75.36846923828125,
+      "delta_metal_minus_cuda": 75.36846923828125,
+      "metal": 484.2193908691406,
+      "cuda": 408.8509216308594,
+      "time_utc": "2024-07-10_19:30:00",
+      "lead_hours": 1.5,
+      "i": 29,
+      "j": 24,
+      "k": null,
+      "indices": "zero-based native staggered grid; k=null for surface",
+      "vertical_dimension": null,
+      "distance_to_edge_cells": 10,
+      "zone": "interior",
+      "latitude": 43.10628890991211,
+      "longitude": -83.31665802001953,
+      "mask": "trim0"
+    }
+  },
+  "original_peak_events": [
+    {
+      "field": "PBLH",
+      "time_utc": "2024-07-10_19_30_00",
+      "i": 7,
+      "j": 5,
+      "cuda": 1111.7860107421875,
+      "iterations": {
+        "4": {
+          "metal": 9.330354690551758,
+          "delta": -1102.4556560516357,
+          "abs_error": 1102.4556560516357
+        },
+        "5": {
+          "metal": 24.103315353393555,
+          "delta": -1087.682695388794,
+          "abs_error": 1087.682695388794
+        },
+        "6": {
+          "metal": 1111.3756103515625,
+          "delta": -0.410400390625,
+          "abs_error": 0.410400390625
+        }
+      }
+    },
+    {
+      "field": "V10",
+      "time_utc": "2024-07-10_20_30_00",
+      "i": 26,
+      "j": 19,
+      "cuda": -7.628657817840576,
+      "iterations": {
+        "4": {
+          "metal": -6.106229782104492,
+          "delta": 1.522428035736084,
+          "abs_error": 1.522428035736084
+        },
+        "5": {
+          "metal": -6.782332897186279,
+          "delta": 0.8463249206542969,
+          "abs_error": 0.8463249206542969
+        },
+        "6": {
+          "metal": -7.581230163574219,
+          "delta": 0.04742765426635742,
+          "abs_error": 0.04742765426635742
+        }
+      }
+    }
+  ],
+  "remaining_branch_events": [
+    {
+      "time_utc": "2024-07-10_20_30_00",
+      "i": 24,
+      "j": 33,
+      "values": {
+        "PBLH": {
+          "metal": 1026.8243408203125,
+          "cuda": 28.3878231048584
+        },
+        "V10": {
+          "metal": -7.93995475769043,
+          "cuda": -6.237179756164551
+        },
+        "PSIM": {
+          "metal": -0.011558170430362225,
+          "cuda": 0.0
+        },
+        "TSK": {
+          "metal": 291.35858154296875,
+          "cuda": 291.5020446777344
+        },
+        "HFX": {
+          "metal": -7.927162170410156,
+          "cuda": -2.8518009185791016
+        },
+        "UST": {
+          "metal": 0.7403759956359863,
+          "cuda": 0.5841665267944336
+        }
+      }
+    },
+    {
+      "time_utc": "2024-07-10_19_45_00",
+      "i": 10,
+      "j": 3,
+      "values": {
+        "PBLH": {
+          "metal": 9.254396438598633,
+          "cuda": 1087.5020751953125
+        },
+        "V10": {
+          "metal": -6.648547172546387,
+          "cuda": -7.010382175445557
+        },
+        "PSIM": {
+          "metal": 0.0,
+          "cuda": -0.002609910909086466
+        },
+        "TSK": {
+          "metal": 291.9034729003906,
+          "cuda": 291.8970642089844
+        },
+        "HFX": {
+          "metal": -2.2751598358154297,
+          "cuda": -3.1629910469055176
+        },
+        "UST": {
+          "metal": 0.6570021510124207,
+          "cuda": 0.6863129138946533
+        }
+      }
+    }
+  ]
+}
