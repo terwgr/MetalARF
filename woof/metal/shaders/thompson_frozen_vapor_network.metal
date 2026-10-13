@@ -36,7 +36,7 @@ static inline float te(float a) { return precise::exp(a); }
 static inline float tl10(float a) { return precise::log10(a); }
 static inline float trslf(float p,float t) {
  const float x=max(-80.f,t-273.16f);
- float e=611.583699f+x*(44.4606896f+x*(1.43177157f+x*(.0264224321f+x*(.000299291081f+x*(.00000203154182f+x*(.00000000702620698f+x*(.0000000000379534310f+x*(-.0000000000000321582393f))))))));
+ float e=611.583699f+x*(44.4606896f+x*(1.43177157f+x*(.0264224321f+x*(.000299291081f+x*(.00000203154182f+x*(.00000000702620698f+x*(0.379534310e-11f+x*(-.0000000000000321582393f))))))));
  e=min(e,p*.15f); return .622f*e/(p-e);
 }
 static inline float trsif(float p,float t) {

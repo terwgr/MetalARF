@@ -57,7 +57,7 @@ kernel void thompson_warm_source_wet_bulb(
     r.wet_bulb[idx] = twet(r.pressure[idx], r.temperature[idx], qv0);
 }
 
-static inline float trslf(float p,float t){const float x=max(-80.f,t-273.16f);float e=611.583699f+x*(44.4606896f+x*(1.43177157f+x*(.0264224321f+x*(.000299291081f+x*(.00000203154182f+x*(.00000000702620698f+x*(.0000000000379534310f+x*(-.0000000000000321582393f))))))));e=min(e,p*.15f);return .622f*e/(p-e);}
+static inline float trslf(float p,float t){const float x=max(-80.f,t-273.16f);float e=611.583699f+x*(44.4606896f+x*(1.43177157f+x*(.0264224321f+x*(.000299291081f+x*(.00000203154182f+x*(.00000000702620698f+x*(0.379534310e-11f+x*(-.0000000000000321582393f))))))));e=min(e,p*.15f);return .622f*e/(p-e);}
 static inline float tfield_a(float tc,float m){const float tc2=tc*tc,m2=m*m;return tp(10.f,5.065339f-.062659f*tc-3.032362f*m+.029469f*tc*m-.000285f*tc2+.31255f*m2+.000204f*tc2*m+.003199f*tc*m2-.015952f*m2*m);}
 static inline float tfield_b(float tc,float m){const float tc2=tc*tc,m2=m*m;return .476221f-.015896f*tc+.165977f*m+.007468f*tc*m-.000141f*tc2+.060366f*m2+.000079f*tc2*m+.000594f*tc*m2-.003577f*m2*m;}
 static inline int tindex(float value,int first,int n){int c=int(precise::round(precise::log10(value))),e=c;for(int q=c-1;q<=c+1;++q){float scale=tp(10.f,float(q)),mant=value/scale;if(mant>=1.f&&mant<10.f){e=q;break;}}float scale=tp(10.f,float(e));return clamp(int(value/scale)+9*(e-first)-1,0,n-1);}

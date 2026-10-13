@@ -1,0 +1,2586 @@
+{
+  "status": "component_defect_confirmed_and_fixed; corrected_full_forecast_not_run",
+  "noise_floor": {
+    "requested_initial_theta_delta_k": 1e-06,
+    "actual_delta_min_k": 9.5367431640625e-07,
+    "actual_delta_max_k": 1.9073486328125e-06,
+    "actual_delta_rms_k": 1.3783785661366804e-06,
+    "cells_changed": 78400,
+    "frames": 49,
+    "model_seconds": 43200,
+    "outer_steps": 1827,
+    "health": "PASS",
+    "all_numeric_field_time_checks_finite": true,
+    "metrics": [
+      {
+        "comparison": "metal_cuda",
+        "field": "PSFC",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 11.2890625,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "PSFC",
+          "lead_hours": 6.0,
+          "trim": 0,
+          "rmse": 1.51285773216163,
+          "max_abs": 11.2890625,
+          "i": 15,
+          "j": 23,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "PSFC",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.4527275499647336,
+          "max_abs": 2.140625,
+          "i": 19,
+          "j": 1,
+          "k": null
+        },
+        "rmse": 0.9614768908898759
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "PSFC",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 11.2890625,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "PSFC",
+          "lead_hours": 6.0,
+          "trim": 5,
+          "rmse": 1.9275053556757902,
+          "max_abs": 11.2890625,
+          "i": 15,
+          "j": 23,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "PSFC",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.4298656511999967,
+          "max_abs": 1.65625,
+          "i": 5,
+          "j": 23,
+          "k": null
+        },
+        "rmse": 1.1556489457246903
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "PSFC",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 9.1953125,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "PSFC",
+          "lead_hours": 2.0,
+          "trim": 0,
+          "rmse": 0.4660069889314002,
+          "max_abs": 9.1953125,
+          "i": 36,
+          "j": 19,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "PSFC",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.3734180908266773,
+          "max_abs": 4.8359375,
+          "i": 38,
+          "j": 35,
+          "k": null
+        },
+        "rmse": 0.34045049142916134
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "PSFC",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 6.8671875,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "PSFC",
+          "lead_hours": 9.0,
+          "trim": 5,
+          "rmse": 0.5968521619758183,
+          "max_abs": 6.8671875,
+          "i": 9,
+          "j": 30,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "PSFC",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.20972484505580297,
+          "max_abs": 1.53125,
+          "i": 14,
+          "j": 5,
+          "k": null
+        },
+        "rmse": 0.3273854356599136
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "U",
+        "trim": 0,
+        "count": 3937640,
+        "max_abs": 2.7219148874282837,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "U",
+          "lead_hours": 7.5,
+          "trim": 0,
+          "rmse": 0.19068415769586505,
+          "max_abs": 2.7219148874282837,
+          "i": 31,
+          "j": 29,
+          "k": 4
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "U",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.10125278152708236,
+          "max_abs": 0.9577183723449707,
+          "i": 5,
+          "j": 20,
+          "k": 30
+        },
+        "rmse": 0.11740852527939194
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "U",
+        "trim": 5,
+        "count": 2232930,
+        "max_abs": 2.7219148874282837,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "U",
+          "lead_hours": 7.5,
+          "trim": 5,
+          "rmse": 0.24136402837775886,
+          "max_abs": 2.7219148874282837,
+          "i": 31,
+          "j": 29,
+          "k": 4
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "U",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.12284687013957833,
+          "max_abs": 0.9577183723449707,
+          "i": 5,
+          "j": 20,
+          "k": 30
+        },
+        "rmse": 0.1449937219674702
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "U",
+        "trim": 0,
+        "count": 3937640,
+        "max_abs": 0.1801910400390625,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "U",
+          "lead_hours": 2.25,
+          "trim": 0,
+          "rmse": 0.005088736015248968,
+          "max_abs": 0.1801910400390625,
+          "i": 24,
+          "j": 15,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "U",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0021295025068497576,
+          "max_abs": 0.12433433532714844,
+          "i": 38,
+          "j": 33,
+          "k": 32
+        },
+        "rmse": 0.0027466766171062753
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "U",
+        "trim": 5,
+        "count": 2232930,
+        "max_abs": 0.1801910400390625,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "U",
+          "lead_hours": 2.25,
+          "trim": 5,
+          "rmse": 0.006046426508571097,
+          "max_abs": 0.1801910400390625,
+          "i": 24,
+          "j": 15,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "U",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0015029791786852268,
+          "max_abs": 0.025331497192382812,
+          "i": 25,
+          "j": 5,
+          "k": 31
+        },
+        "rmse": 0.0032387508320747597
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "V",
+        "trim": 0,
+        "count": 3937640,
+        "max_abs": 2.3706818222999573,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "V",
+          "lead_hours": 8.0,
+          "trim": 0,
+          "rmse": 0.17313234274223832,
+          "max_abs": 2.3706818222999573,
+          "i": 27,
+          "j": 32,
+          "k": 16
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "V",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.12598947969761223,
+          "max_abs": 1.2353240251541138,
+          "i": 33,
+          "j": 28,
+          "k": 48
+        },
+        "rmse": 0.13587375131664922
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "V",
+        "trim": 5,
+        "count": 2232930,
+        "max_abs": 2.3706818222999573,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "V",
+          "lead_hours": 8.0,
+          "trim": 5,
+          "rmse": 0.21023980657167232,
+          "max_abs": 2.3706818222999573,
+          "i": 27,
+          "j": 32,
+          "k": 16
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "V",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.14957925874626726,
+          "max_abs": 1.2353240251541138,
+          "i": 33,
+          "j": 28,
+          "k": 48
+        },
+        "rmse": 0.16666982407792294
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "V",
+        "trim": 0,
+        "count": 3937640,
+        "max_abs": 0.2440967559814453,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "V",
+          "lead_hours": 9.0,
+          "trim": 0,
+          "rmse": 0.004357897698267982,
+          "max_abs": 0.2440967559814453,
+          "i": 7,
+          "j": 27,
+          "k": 33
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "V",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.002397716850275051,
+          "max_abs": 0.1304912567138672,
+          "i": 38,
+          "j": 33,
+          "k": 32
+        },
+        "rmse": 0.0029821635043237272
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "V",
+        "trim": 5,
+        "count": 2232930,
+        "max_abs": 0.2440967559814453,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "V",
+          "lead_hours": 9.0,
+          "trim": 5,
+          "rmse": 0.005423782358497046,
+          "max_abs": 0.2440967559814453,
+          "i": 7,
+          "j": 27,
+          "k": 33
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "V",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0020431062428529463,
+          "max_abs": 0.04340791702270508,
+          "i": 14,
+          "j": 5,
+          "k": 3
+        },
+        "rmse": 0.00356494965283721
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "U10",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 1.4486541748046875,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "U10",
+          "lead_hours": 7.75,
+          "trim": 0,
+          "rmse": 0.20758708046088675,
+          "max_abs": 1.4486541748046875,
+          "i": 32,
+          "j": 28,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "U10",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.04317265071059082,
+          "max_abs": 0.23665064573287964,
+          "i": 11,
+          "j": 22,
+          "k": null
+        },
+        "rmse": 0.11733713814708947
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "U10",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 1.4486541748046875,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "U10",
+          "lead_hours": 7.75,
+          "trim": 5,
+          "rmse": 0.2664068779030563,
+          "max_abs": 1.4486541748046875,
+          "i": 32,
+          "j": 28,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "U10",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.05255201914532969,
+          "max_abs": 0.23665064573287964,
+          "i": 11,
+          "j": 22,
+          "k": null
+        },
+        "rmse": 0.147972484705837
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "U10",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 0.09179830551147461,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "U10",
+          "lead_hours": 9.75,
+          "trim": 0,
+          "rmse": 0.0025874429183900885,
+          "max_abs": 0.09179830551147461,
+          "i": 35,
+          "j": 36,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "U10",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0008110358791799662,
+          "max_abs": 0.0054215192794799805,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.0017028556700096793
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "U10",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 0.06323361396789551,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "U10",
+          "lead_hours": 7.0,
+          "trim": 5,
+          "rmse": 0.003604688346828727,
+          "max_abs": 0.06323361396789551,
+          "i": 26,
+          "j": 34,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "U10",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.000996932884575375,
+          "max_abs": 0.0054215192794799805,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.0019749767093687164
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "V10",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 1.0784605145454407,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "V10",
+          "lead_hours": 6.5,
+          "trim": 0,
+          "rmse": 0.18426692635577382,
+          "max_abs": 1.0784605145454407,
+          "i": 30,
+          "j": 27,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "V10",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.06557771298656928,
+          "max_abs": 0.569216251373291,
+          "i": 15,
+          "j": 26,
+          "k": null
+        },
+        "rmse": 0.1188990956386765
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "V10",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 1.0784605145454407,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "V10",
+          "lead_hours": 6.5,
+          "trim": 5,
+          "rmse": 0.2373396739700903,
+          "max_abs": 1.0784605145454407,
+          "i": 30,
+          "j": 27,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "V10",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.08324755093792996,
+          "max_abs": 0.569216251373291,
+          "i": 15,
+          "j": 26,
+          "k": null
+        },
+        "rmse": 0.15228451120251218
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "V10",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 0.10188531875610352,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "V10",
+          "lead_hours": 9.75,
+          "trim": 0,
+          "rmse": 0.0028918625673300664,
+          "max_abs": 0.10188531875610352,
+          "i": 35,
+          "j": 36,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "V10",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0012698798689290693,
+          "max_abs": 0.0199185311794281,
+          "i": 24,
+          "j": 34,
+          "k": null
+        },
+        "rmse": 0.001885115185768659
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "V10",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 0.09831523895263672,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "V10",
+          "lead_hours": 10.5,
+          "trim": 5,
+          "rmse": 0.0042100731418811205,
+          "max_abs": 0.09831523895263672,
+          "i": 16,
+          "j": 26,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "V10",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0015503181326708645,
+          "max_abs": 0.0199185311794281,
+          "i": 24,
+          "j": 34,
+          "k": null
+        },
+        "rmse": 0.0023110229272757785
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "T2",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 1.184478759765625,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "T2",
+          "lead_hours": 8.0,
+          "trim": 0,
+          "rmse": 0.12493962161940238,
+          "max_abs": 1.184478759765625,
+          "i": 32,
+          "j": 30,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "T2",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.09151041133140908,
+          "max_abs": 0.54742431640625,
+          "i": 11,
+          "j": 20,
+          "k": null
+        },
+        "rmse": 0.08891505852772924
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "T2",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 1.184478759765625,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "T2",
+          "lead_hours": 8.0,
+          "trim": 5,
+          "rmse": 0.16135783993020675,
+          "max_abs": 1.184478759765625,
+          "i": 32,
+          "j": 30,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "T2",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.1153413413922708,
+          "max_abs": 0.54742431640625,
+          "i": 11,
+          "j": 20,
+          "k": null
+        },
+        "rmse": 0.11325011019434394
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "T2",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 0.269561767578125,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "T2",
+          "lead_hours": 6.75,
+          "trim": 0,
+          "rmse": 0.012426852711163434,
+          "max_abs": 0.269561767578125,
+          "i": 13,
+          "j": 21,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "T2",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0018588408771871578,
+          "max_abs": 0.054351806640625,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.0038927784295970384
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "T2",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 0.269561767578125,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "T2",
+          "lead_hours": 6.75,
+          "trim": 5,
+          "rmse": 0.015983226876381654,
+          "max_abs": 0.269561767578125,
+          "i": 13,
+          "j": 21,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "T2",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.002389892056456941,
+          "max_abs": 0.054351806640625,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.004014905670931125
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "T",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 1.406982421875,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "T",
+          "lead_hours": 9.25,
+          "trim": 0,
+          "rmse": 0.1435829047804533,
+          "max_abs": 1.406982421875,
+          "i": 5,
+          "j": 22,
+          "k": 31
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "T",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.10673443810348096,
+          "max_abs": 1.07073974609375,
+          "i": 5,
+          "j": 21,
+          "k": 31
+        },
+        "rmse": 0.11455504460117373
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "T",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 1.406982421875,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "T",
+          "lead_hours": 9.25,
+          "trim": 5,
+          "rmse": 0.163697028175851,
+          "max_abs": 1.406982421875,
+          "i": 5,
+          "j": 22,
+          "k": 31
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "T",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.12228669968015808,
+          "max_abs": 1.07073974609375,
+          "i": 5,
+          "j": 21,
+          "k": 31
+        },
+        "rmse": 0.12887521138139701
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "T",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 0.864410400390625,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "T",
+          "lead_hours": 2.25,
+          "trim": 0,
+          "rmse": 0.008488843996031548,
+          "max_abs": 0.864410400390625,
+          "i": 22,
+          "j": 26,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "T",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0038807261027033577,
+          "max_abs": 0.337432861328125,
+          "i": 11,
+          "j": 1,
+          "k": 32
+        },
+        "rmse": 0.0037590368832808186
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "T",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 0.864410400390625,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "T",
+          "lead_hours": 2.25,
+          "trim": 5,
+          "rmse": 0.00833297277698635,
+          "max_abs": 0.864410400390625,
+          "i": 22,
+          "j": 26,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "T",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0012765613977307655,
+          "max_abs": 0.03717041015625,
+          "i": 14,
+          "j": 5,
+          "k": 3
+        },
+        "rmse": 0.0038184655369546327
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "W",
+        "trim": 0,
+        "count": 3920000,
+        "max_abs": 0.4752657413482666,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "W",
+          "lead_hours": 7.0,
+          "trim": 0,
+          "rmse": 0.035686982183943936,
+          "max_abs": 0.4752657413482666,
+          "i": 30,
+          "j": 27,
+          "k": 16
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "W",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.014680430543326987,
+          "max_abs": 0.18603629618883133,
+          "i": 38,
+          "j": 34,
+          "k": 32
+        },
+        "rmse": 0.024949208632930913
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "W",
+        "trim": 5,
+        "count": 2205000,
+        "max_abs": 0.4752657413482666,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "W",
+          "lead_hours": 7.0,
+          "trim": 5,
+          "rmse": 0.03832492922541732,
+          "max_abs": 0.4752657413482666,
+          "i": 30,
+          "j": 27,
+          "k": 16
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "W",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.009159742786001807,
+          "max_abs": 0.13394618779420853,
+          "i": 28,
+          "j": 18,
+          "k": 32
+        },
+        "rmse": 0.02521111100160645
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "W",
+        "trim": 0,
+        "count": 3920000,
+        "max_abs": 0.19226789847016335,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "W",
+          "lead_hours": 9.0,
+          "trim": 0,
+          "rmse": 0.00391133991833139,
+          "max_abs": 0.19226789847016335,
+          "i": 7,
+          "j": 26,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "W",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0021978424519503758,
+          "max_abs": 0.07773873209953308,
+          "i": 38,
+          "j": 35,
+          "k": 33
+        },
+        "rmse": 0.0020645689421974847
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "W",
+        "trim": 5,
+        "count": 2205000,
+        "max_abs": 0.19226789847016335,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "W",
+          "lead_hours": 9.0,
+          "trim": 5,
+          "rmse": 0.004904859511720279,
+          "max_abs": 0.19226789847016335,
+          "i": 7,
+          "j": 26,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "W",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.000963017060473543,
+          "max_abs": 0.022078683599829674,
+          "i": 27,
+          "j": 6,
+          "k": 40
+        },
+        "rmse": 0.002285124567805695
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "QVAPOR",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 0.0018788641318678856,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "QVAPOR",
+          "lead_hours": 7.75,
+          "trim": 0,
+          "rmse": 8.100866713686289e-05,
+          "max_abs": 0.0018788641318678856,
+          "i": 27,
+          "j": 31,
+          "k": 0
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "QVAPOR",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 3.3768854793393395e-05,
+          "max_abs": 0.00045689288526773453,
+          "i": 4,
+          "j": 15,
+          "k": 1
+        },
+        "rmse": 5.547127546547351e-05
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "QVAPOR",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 0.0018788641318678856,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "QVAPOR",
+          "lead_hours": 7.75,
+          "trim": 5,
+          "rmse": 0.00010218428321127894,
+          "max_abs": 0.0018788641318678856,
+          "i": 27,
+          "j": 31,
+          "k": 0
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "QVAPOR",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 3.935087817187889e-05,
+          "max_abs": 0.0003646779805421829,
+          "i": 20,
+          "j": 23,
+          "k": 5
+        },
+        "rmse": 6.78562699120611e-05
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "QVAPOR",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 0.00019999633575906728,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "QVAPOR",
+          "lead_hours": 9.25,
+          "trim": 0,
+          "rmse": 1.2982863287315219e-06,
+          "max_abs": 0.00019999633575906728,
+          "i": 6,
+          "j": 30,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "QVAPOR",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 9.419254483834486e-07,
+          "max_abs": 7.774191908538342e-05,
+          "i": 11,
+          "j": 1,
+          "k": 32
+        },
+        "rmse": 1.0061767622401035e-06
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "QVAPOR",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 0.00019999633575906728,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "QVAPOR",
+          "lead_hours": 9.25,
+          "trim": 5,
+          "rmse": 1.6579864470274605e-06,
+          "max_abs": 0.00019999633575906728,
+          "i": 6,
+          "j": 30,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "QVAPOR",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 4.837856429954624e-07,
+          "max_abs": 2.8182752430438995e-05,
+          "i": 14,
+          "j": 5,
+          "k": 3
+        },
+        "rmse": 1.077997982383394e-06
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "QCLOUD",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 0.00041172077180817723,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "QCLOUD",
+          "lead_hours": 1.0,
+          "trim": 0,
+          "rmse": 1.767721336240191e-06,
+          "max_abs": 0.00041172077180817723,
+          "i": 28,
+          "j": 14,
+          "k": 19
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "QCLOUD",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 1.0799146546806127e-07,
+          "max_abs": 1.1643831385299563e-05,
+          "i": 2,
+          "j": 34,
+          "k": 21
+        },
+        "rmse": 4.4060238337308797e-07
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "QCLOUD",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 0.00041172077180817723,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "QCLOUD",
+          "lead_hours": 1.0,
+          "trim": 5,
+          "rmse": 2.356961781653588e-06,
+          "max_abs": 0.00041172077180817723,
+          "i": 28,
+          "j": 14,
+          "k": 19
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "QCLOUD",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": 0
+        },
+        "rmse": 5.871096161711281e-07
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "QCLOUD",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 4.438768883119337e-06,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "QCLOUD",
+          "lead_hours": 2.75,
+          "trim": 0,
+          "rmse": 1.7119930528796175e-08,
+          "max_abs": 4.438768883119337e-06,
+          "i": 28,
+          "j": 12,
+          "k": 19
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "QCLOUD",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 1.4736390716338615e-09,
+          "max_abs": 2.9891998565290123e-07,
+          "i": 4,
+          "j": 30,
+          "k": 21
+        },
+        "rmse": 3.688830920359065e-09
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "QCLOUD",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 4.438768883119337e-06,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "QCLOUD",
+          "lead_hours": 2.75,
+          "trim": 5,
+          "rmse": 2.2826574038394898e-08,
+          "max_abs": 4.438768883119337e-06,
+          "i": 28,
+          "j": 12,
+          "k": 19
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "QCLOUD",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": 0
+        },
+        "rmse": 4.91042518085458e-09
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "QICE",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 4.8888075980357826e-05,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "QICE",
+          "lead_hours": 7.75,
+          "trim": 0,
+          "rmse": 1.6178328761479453e-06,
+          "max_abs": 4.8888075980357826e-05,
+          "i": 25,
+          "j": 22,
+          "k": 31
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "QICE",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 1.004526380334377e-06,
+          "max_abs": 3.683419345179573e-05,
+          "i": 8,
+          "j": 20,
+          "k": 31
+        },
+        "rmse": 1.2846557011777188e-06
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "QICE",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 4.8888075980357826e-05,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "QICE",
+          "lead_hours": 7.75,
+          "trim": 5,
+          "rmse": 2.0820670902882476e-06,
+          "max_abs": 4.8888075980357826e-05,
+          "i": 25,
+          "j": 22,
+          "k": 31
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "QICE",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 1.3309426947645202e-06,
+          "max_abs": 3.683419345179573e-05,
+          "i": 8,
+          "j": 20,
+          "k": 31
+        },
+        "rmse": 1.664178027481318e-06
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "QICE",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 1.0171327885955157e-05,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "QICE",
+          "lead_hours": 10.75,
+          "trim": 0,
+          "rmse": 7.129007694541639e-08,
+          "max_abs": 1.0171327885955157e-05,
+          "i": 36,
+          "j": 27,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "QICE",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 1.0610185664566898e-08,
+          "max_abs": 1.9520775822456926e-06,
+          "i": 29,
+          "j": 21,
+          "k": 31
+        },
+        "rmse": 3.8958609392405896e-08
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "QICE",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 9.271975159208523e-06,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "QICE",
+          "lead_hours": 11.0,
+          "trim": 5,
+          "rmse": 9.437129016292544e-08,
+          "max_abs": 9.271975159208523e-06,
+          "i": 11,
+          "j": 21,
+          "k": 31
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "QICE",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 1.413288323168754e-08,
+          "max_abs": 1.9520775822456926e-06,
+          "i": 29,
+          "j": 21,
+          "k": 31
+        },
+        "rmse": 4.883780452359399e-08
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "QSNOW",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 3.5950073652202263e-05,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "QSNOW",
+          "lead_hours": 8.0,
+          "trim": 0,
+          "rmse": 6.708795394273254e-07,
+          "max_abs": 3.5950073652202263e-05,
+          "i": 30,
+          "j": 24,
+          "k": 31
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "QSNOW",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 2.8451166365950197e-07,
+          "max_abs": 1.5903629901004024e-05,
+          "i": 21,
+          "j": 21,
+          "k": 31
+        },
+        "rmse": 4.474938700734317e-07
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "QSNOW",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 3.5950073652202263e-05,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "QSNOW",
+          "lead_hours": 8.0,
+          "trim": 5,
+          "rmse": 8.393402499108483e-07,
+          "max_abs": 3.5950073652202263e-05,
+          "i": 30,
+          "j": 24,
+          "k": 31
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "QSNOW",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 3.758465054454531e-07,
+          "max_abs": 1.5903629901004024e-05,
+          "i": 21,
+          "j": 21,
+          "k": 31
+        },
+        "rmse": 5.566702645738628e-07
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "QSNOW",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 8.662983418616932e-06,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "QSNOW",
+          "lead_hours": 11.0,
+          "trim": 0,
+          "rmse": 4.8650982065154996e-08,
+          "max_abs": 8.662983418616932e-06,
+          "i": 11,
+          "j": 21,
+          "k": 31
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "QSNOW",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 7.932186373144902e-09,
+          "max_abs": 1.6657259038765915e-06,
+          "i": 29,
+          "j": 21,
+          "k": 31
+        },
+        "rmse": 2.0524442345039997e-08
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "QSNOW",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 8.662983418616932e-06,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "QSNOW",
+          "lead_hours": 11.0,
+          "trim": 5,
+          "rmse": 6.266666622973992e-08,
+          "max_abs": 8.662983418616932e-06,
+          "i": 11,
+          "j": 21,
+          "k": 31
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "QSNOW",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 1.0568384528769665e-08,
+          "max_abs": 1.6657259038765915e-06,
+          "i": 29,
+          "j": 21,
+          "k": 31
+        },
+        "rmse": 2.6592136219763536e-08
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "PBLH",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 2160.311290740967,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "PBLH",
+          "lead_hours": 6.5,
+          "trim": 0,
+          "rmse": 276.07009395499836,
+          "max_abs": 2160.311290740967,
+          "i": 31,
+          "j": 27,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "PBLH",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 9.333899124921828,
+          "max_abs": 261.9449977874756,
+          "i": 20,
+          "j": 23,
+          "k": null
+        },
+        "rmse": 73.16232814661227
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "PBLH",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 2160.311290740967,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "PBLH",
+          "lead_hours": 6.5,
+          "trim": 5,
+          "rmse": 352.02577990671875,
+          "max_abs": 2160.311290740967,
+          "i": 31,
+          "j": 27,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "PBLH",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 12.315904931734957,
+          "max_abs": 261.9449977874756,
+          "i": 20,
+          "j": 23,
+          "k": null
+        },
+        "rmse": 94.2725641403189
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "PBLH",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 1134.2120380401611,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "PBLH",
+          "lead_hours": 6.5,
+          "trim": 0,
+          "rmse": 33.236392304752364,
+          "max_abs": 1134.2120380401611,
+          "i": 8,
+          "j": 20,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "PBLH",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.5191357772112762,
+          "max_abs": 19.53339385986328,
+          "i": 17,
+          "j": 35,
+          "k": null
+        },
+        "rmse": 5.208384340274981
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "PBLH",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 1134.2120380401611,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "PBLH",
+          "lead_hours": 6.5,
+          "trim": 5,
+          "rmse": 41.412076168883225,
+          "max_abs": 1134.2120380401611,
+          "i": 8,
+          "j": 20,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "PBLH",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.20705677525203622,
+          "max_abs": 5.406169891357422,
+          "i": 14,
+          "j": 5,
+          "k": null
+        },
+        "rmse": 6.421060919841042
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "HFX",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 202.067626953125,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "HFX",
+          "lead_hours": 1.0,
+          "trim": 0,
+          "rmse": 5.848914083121501,
+          "max_abs": 202.067626953125,
+          "i": 28,
+          "j": 15,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "HFX",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.599845939422467,
+          "max_abs": 4.827183842658997,
+          "i": 20,
+          "j": 23,
+          "k": null
+        },
+        "rmse": 2.685865191784794
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "HFX",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 202.067626953125,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "HFX",
+          "lead_hours": 1.0,
+          "trim": 5,
+          "rmse": 7.794464873685449,
+          "max_abs": 202.067626953125,
+          "i": 28,
+          "j": 15,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "HFX",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.740167666960382,
+          "max_abs": 4.827183842658997,
+          "i": 20,
+          "j": 23,
+          "k": null
+        },
+        "rmse": 3.501461735422275
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "HFX",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 17.957901000976562,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "HFX",
+          "lead_hours": 3.0,
+          "trim": 0,
+          "rmse": 0.5569737864710896,
+          "max_abs": 17.957901000976562,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "HFX",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.012444844479126025,
+          "max_abs": 0.16022109985351562,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.19474359099055885
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "HFX",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 17.957901000976562,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "HFX",
+          "lead_hours": 3.0,
+          "trim": 5,
+          "rmse": 0.72664713724379,
+          "max_abs": 17.957901000976562,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "HFX",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.015683922904373402,
+          "max_abs": 0.16022109985351562,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.23069044854860768
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "LH",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 204.98580932617188,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "LH",
+          "lead_hours": 1.25,
+          "trim": 0,
+          "rmse": 5.802463997800495,
+          "max_abs": 204.98580932617188,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "LH",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.11189092599965814,
+          "max_abs": 0.853083610534668,
+          "i": 2,
+          "j": 34,
+          "k": null
+        },
+        "rmse": 2.794961473391301
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "LH",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 204.98580932617188,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "LH",
+          "lead_hours": 1.25,
+          "trim": 5,
+          "rmse": 7.73581356230621,
+          "max_abs": 204.98580932617188,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "LH",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.1324669967247254,
+          "max_abs": 0.757843017578125,
+          "i": 17,
+          "j": 29,
+          "k": null
+        },
+        "rmse": 3.6687702844561967
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "LH",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 24.00347900390625,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "LH",
+          "lead_hours": 3.0,
+          "trim": 0,
+          "rmse": 0.6516319344177991,
+          "max_abs": 24.00347900390625,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "LH",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.003989289167456159,
+          "max_abs": 0.0961761474609375,
+          "i": 17,
+          "j": 29,
+          "k": null
+        },
+        "rmse": 0.20077628662736252
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "LH",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 24.00347900390625,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "LH",
+          "lead_hours": 3.0,
+          "trim": 5,
+          "rmse": 0.8650894808229262,
+          "max_abs": 24.00347900390625,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "LH",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.005238641310431101,
+          "max_abs": 0.0961761474609375,
+          "i": 17,
+          "j": 29,
+          "k": null
+        },
+        "rmse": 0.24810414778528722
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "SWDOWN",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 589.7059631347656,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "SWDOWN",
+          "lead_hours": 1.25,
+          "trim": 0,
+          "rmse": 17.954283631269075,
+          "max_abs": 589.7059631347656,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "SWDOWN",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 0,
+          "j": 0,
+          "k": null
+        },
+        "rmse": 9.592385436225161
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "SWDOWN",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 589.7059631347656,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "SWDOWN",
+          "lead_hours": 1.25,
+          "trim": 5,
+          "rmse": 23.934266129799614,
+          "max_abs": 589.7059631347656,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "SWDOWN",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": null
+        },
+        "rmse": 12.577686989988464
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "SWDOWN",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 77.50555419921875,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "SWDOWN",
+          "lead_hours": 3.0,
+          "trim": 0,
+          "rmse": 2.1704244287246044,
+          "max_abs": 77.50555419921875,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "SWDOWN",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 0,
+          "j": 0,
+          "k": null
+        },
+        "rmse": 0.6355529638938937
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "SWDOWN",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 77.50555419921875,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "SWDOWN",
+          "lead_hours": 3.0,
+          "trim": 5,
+          "rmse": 2.869833551616009,
+          "max_abs": 77.50555419921875,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "SWDOWN",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": null
+        },
+        "rmse": 0.7764259926055657
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "GLW",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 46.350830078125,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "GLW",
+          "lead_hours": 1.0,
+          "trim": 0,
+          "rmse": 1.7068718895741406,
+          "max_abs": 46.350830078125,
+          "i": 28,
+          "j": 15,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "GLW",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 1.0947292346474033,
+          "max_abs": 13.811187744140625,
+          "i": 2,
+          "j": 34,
+          "k": null
+        },
+        "rmse": 1.4631962955801743
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "GLW",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 46.350830078125,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "GLW",
+          "lead_hours": 1.0,
+          "trim": 5,
+          "rmse": 2.2713909844669153,
+          "max_abs": 46.350830078125,
+          "i": 28,
+          "j": 15,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "GLW",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 1.2898476428826244,
+          "max_abs": 4.615386962890625,
+          "i": 29,
+          "j": 20,
+          "k": null
+        },
+        "rmse": 1.886861849207686
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "GLW",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 11.167816162109375,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "GLW",
+          "lead_hours": 3.0,
+          "trim": 0,
+          "rmse": 0.3182764846772558,
+          "max_abs": 11.167816162109375,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "GLW",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.03408784972082779,
+          "max_abs": 0.891510009765625,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.12350310946916082
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "GLW",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 11.167816162109375,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "GLW",
+          "lead_hours": 3.0,
+          "trim": 5,
+          "rmse": 0.4190812754881643,
+          "max_abs": 11.167816162109375,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "GLW",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.04272199608212893,
+          "max_abs": 0.891510009765625,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.14188621487012065
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "TSK",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 8.8251953125,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "TSK",
+          "lead_hours": 1.0,
+          "trim": 0,
+          "rmse": 0.25389535132387,
+          "max_abs": 8.8251953125,
+          "i": 28,
+          "j": 15,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "TSK",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.08835939987689881,
+          "max_abs": 0.6025390625,
+          "i": 11,
+          "j": 20,
+          "k": null
+        },
+        "rmse": 0.16586096540581424
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "TSK",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 8.8251953125,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "TSK",
+          "lead_hours": 1.0,
+          "trim": 5,
+          "rmse": 0.3381034081016082,
+          "max_abs": 8.8251953125,
+          "i": 28,
+          "j": 15,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "TSK",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.10995526067155889,
+          "max_abs": 0.6025390625,
+          "i": 11,
+          "j": 20,
+          "k": null
+        },
+        "rmse": 0.2154997464092113
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "TSK",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 0.782318115234375,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "TSK",
+          "lead_hours": 3.0,
+          "trim": 0,
+          "rmse": 0.023247446651753687,
+          "max_abs": 0.782318115234375,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "TSK",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.002608538301103644,
+          "max_abs": 0.077911376953125,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.010840947826804285
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "TSK",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 0.782318115234375,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "TSK",
+          "lead_hours": 3.0,
+          "trim": 5,
+          "rmse": 0.03046432244567222,
+          "max_abs": 0.782318115234375,
+          "i": 28,
+          "j": 13,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "TSK",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0033243331065208443,
+          "max_abs": 0.077911376953125,
+          "i": 26,
+          "j": 21,
+          "k": null
+        },
+        "rmse": 0.012078303045245342
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "RTHRATSW",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 0.00024178683452191763,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "RTHRATSW",
+          "lead_hours": 1.25,
+          "trim": 0,
+          "rmse": 3.2047438131360072e-06,
+          "max_abs": 0.00024178683452191763,
+          "i": 28,
+          "j": 13,
+          "k": 19
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "RTHRATSW",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 0,
+          "j": 0,
+          "k": 0
+        },
+        "rmse": 3.330373587245954e-06
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "RTHRATSW",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 0.00024178683452191763,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "RTHRATSW",
+          "lead_hours": 1.25,
+          "trim": 5,
+          "rmse": 3.869076649977162e-06,
+          "max_abs": 0.00024178683452191763,
+          "i": 28,
+          "j": 13,
+          "k": 19
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "RTHRATSW",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": 0
+        },
+        "rmse": 3.970673554810196e-06
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "RTHRATSW",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 3.3761176382540725e-05,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "RTHRATSW",
+          "lead_hours": 2.25,
+          "trim": 0,
+          "rmse": 3.677065605142251e-07,
+          "max_abs": 3.3761176382540725e-05,
+          "i": 24,
+          "j": 14,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "RTHRATSW",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 0,
+          "j": 0,
+          "k": 0
+        },
+        "rmse": 1.702658823099015e-07
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "RTHRATSW",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 3.3761176382540725e-05,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "RTHRATSW",
+          "lead_hours": 2.25,
+          "trim": 5,
+          "rmse": 4.5946835746424573e-07,
+          "max_abs": 3.3761176382540725e-05,
+          "i": 24,
+          "j": 14,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "RTHRATSW",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": 0
+        },
+        "rmse": 2.011280207910551e-07
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "RTHRATLW",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 0.0010399374295957386,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "RTHRATLW",
+          "lead_hours": 1.25,
+          "trim": 0,
+          "rmse": 5.940703937113789e-06,
+          "max_abs": 0.0010399374295957386,
+          "i": 28,
+          "j": 14,
+          "k": 0
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "RTHRATLW",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 6.930033193849863e-06,
+          "max_abs": 7.447250391123816e-05,
+          "i": 36,
+          "j": 5,
+          "k": 32
+        },
+        "rmse": 9.162323856925652e-06
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "RTHRATLW",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 0.0010399374295957386,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "RTHRATLW",
+          "lead_hours": 1.25,
+          "trim": 5,
+          "rmse": 7.254764424669287e-06,
+          "max_abs": 0.0010399374295957386,
+          "i": 28,
+          "j": 14,
+          "k": 0
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "RTHRATLW",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 7.183404477670177e-06,
+          "max_abs": 7.056763570290059e-05,
+          "i": 34,
+          "j": 5,
+          "k": 32
+        },
+        "rmse": 9.985918874348877e-06
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "RTHRATLW",
+        "trim": 0,
+        "count": 3841600,
+        "max_abs": 8.746072307985742e-05,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "RTHRATLW",
+          "lead_hours": 4.75,
+          "trim": 0,
+          "rmse": 7.195396943419439e-07,
+          "max_abs": 8.746072307985742e-05,
+          "i": 6,
+          "j": 19,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "RTHRATLW",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 2.578718950915239e-07,
+          "max_abs": 3.9147849747678265e-05,
+          "i": 38,
+          "j": 34,
+          "k": 32
+        },
+        "rmse": 5.02282833305509e-07
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "RTHRATLW",
+        "trim": 5,
+        "count": 2160900,
+        "max_abs": 8.746072307985742e-05,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "RTHRATLW",
+          "lead_hours": 4.75,
+          "trim": 5,
+          "rmse": 9.172201309394698e-07,
+          "max_abs": 8.746072307985742e-05,
+          "i": 6,
+          "j": 19,
+          "k": 32
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "RTHRATLW",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 1.4821665664162963e-07,
+          "max_abs": 1.1207694115000777e-05,
+          "i": 28,
+          "j": 22,
+          "k": 30
+        },
+        "rmse": 5.495185468379252e-07
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "RAINNC",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 0.0,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "RAINNC",
+          "lead_hours": 0.0,
+          "trim": 0,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 0,
+          "j": 0,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "RAINNC",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 0,
+          "j": 0,
+          "k": null
+        },
+        "rmse": 0.0
+      },
+      {
+        "comparison": "metal_cuda",
+        "field": "RAINNC",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 0.0,
+        "peak": {
+          "comparison": "metal_cuda",
+          "field": "RAINNC",
+          "lead_hours": 0.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": null
+        },
+        "latest": {
+          "comparison": "metal_cuda",
+          "field": "RAINNC",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": null
+        },
+        "rmse": 0.0
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "RAINNC",
+        "trim": 0,
+        "count": 78400,
+        "max_abs": 0.0,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "RAINNC",
+          "lead_hours": 0.0,
+          "trim": 0,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 0,
+          "j": 0,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "RAINNC",
+          "lead_hours": 12.0,
+          "trim": 0,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 0,
+          "j": 0,
+          "k": null
+        },
+        "rmse": 0.0
+      },
+      {
+        "comparison": "noise_metal",
+        "field": "RAINNC",
+        "trim": 5,
+        "count": 44100,
+        "max_abs": 0.0,
+        "peak": {
+          "comparison": "noise_metal",
+          "field": "RAINNC",
+          "lead_hours": 0.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": null
+        },
+        "latest": {
+          "comparison": "noise_metal",
+          "field": "RAINNC",
+          "lead_hours": 12.0,
+          "trim": 5,
+          "rmse": 0.0,
+          "max_abs": 0.0,
+          "i": 5,
+          "j": 5,
+          "k": null
+        },
+        "rmse": 0.0
+      }
+    ]
+  },
+  "coefficient": {
+    "cuda_c7": 3.7953431e-12,
+    "original_metal_c7": 3.7953431e-11,
+    "ratio": 10,
+    "correct_initial_nucleating_cells": 0,
+    "bad_initial_nucleating_cells": 143,
+    "initial_levels": [
+      31,
+      32
+    ]
+  },
+  "bounded_replay": {
+    "cases": 146,
+    "original_physical_output_changes": 144,
+    "fixed_physical_output_changes": 0,
+    "original_max_saved_initial_delta_temperature_k": 0.522796630859375,
+    "original_max_saved_initial_delta_qv": 0.00018521384481573477,
+    "reference": "Exact unchanged-input contract: correct CUDA predicate early-returns for every selected clear-air cell. Expected velocity boost reset excluded. No GPU forecast integration in replay.",
+    "fixed_bundle": {
+      "abi_version": 65543,
+      "files": {
+        "libwoof_metal.dylib": {
+          "sha256": "93c713d6d0fa43afc223df1ba7ea229784bd732ea503a0d3db6d917ae498f873",
+          "size": 187856
+        },
+        "woof_default.metallib": {
+          "sha256": "d54bc0e1d2dc03f9359a26a3c9a4a0191f5913d6060ce1ec97ee78efcd270f46",
+          "size": 10898424
+        },
+        "woof_exact.metallib": {
+          "sha256": "aad231aa7eaae40a4b91864f9d8e03c01b75903212f804131fbe2f5c99b1c233",
+          "size": 6869197
+        }
+      },
+      "implementation_file_count": 1844,
+      "implementation_sha256": "3a3e305b754eab8b81628fea76b115a590fb05af88580e642473686a2a3f905d",
+      "metal_inputs_sha256": "5d3bb78c8283404744c6805f8aaae09bf6ba1597b580c7f84b322da1dac7ac43",
+      "minimum_os": "14.0",
+      "platform": "darwin-arm64",
+      "schema": "woof-metal-bundle-v1",
+      "source_commit": "7854cd035a6766e2a38a1cee6571da8f5fa29683"
+    }
+  },
+  "limits": [
+    "Both full Metal trajectories use the original coefficient.",
+    "No corrected full forecast or general CUDA/WRF parity claim.",
+    "Selected initial profiles reconstructed from saved histories, not actual first-step entry dumps.",
+    "Classic cold-source replay validates this gate fix, not all aerosol/warm-source regimes."
+  ]
+}

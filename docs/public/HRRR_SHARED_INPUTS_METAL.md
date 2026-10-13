@@ -1,4 +1,4 @@
-# Metal HRRR/Noah shared-input execution
+# Metal HRRR/Noah shared-input execution and Thompson coefficients
 
 The transferred CUDA consistency case selects Thompson mp8, YSU, MM5 surface
 layer, Noah, RTE-RRTMGP, `alb_sol=1`, `diff_6th_form="noaa_wrf39"`, and the
@@ -21,6 +21,8 @@ preserve the prepared input bytes and every experiment selector:
 - Refresh the saved horizontal mass fluxes with existing Metal coupling kernels
   after limiting; do not recompute saved Omega or the acoustic mean fluxes.
 
+- Correct four classic/aerosol cold/warm liquid-saturation helpers whose seventh-order coefficient was transcribed ten times too large. In the classic cold source, the wrong coefficient opened the ice-nucleation gate in clear air.
+
 The shaders, typed ABI, generated registry and rebuilt default/exact libraries
 travel together. No CPU forecast fallback or memory-guard override is used.
 
@@ -31,6 +33,7 @@ After rebuilding the bundle, the bounded checks are reproducible with:
 ```bash
 python tools/metal_diff6_edge_experiment.py --out diff6-edge-check.json
 python tools/metal_upper_wind_experiment.py --out upper-wind-check.json
+python tools/metal_thompson_clear_air_experiment.py --table-root /path/to/tables --out thompson-clear-air-check.json
 ```
 
 The diffusion check covers mass, U, V and W with/without the terrain taper,
@@ -45,8 +48,10 @@ health checks passed. The paired histories share valid times, grids, shapes,
 units and inventories; all 3,919 numeric field/time comparisons are finite.
 Forecast plus I/O took 597.22 s on an M2 8-core GPU / 16 GB, versus the CUDA
 reference's 119.64 s on RTX 2000 Ada. These are observed machine timings,
-not a controlled benchmark. There was no additional full forecast for the
-subsequent diagnostic investigation.
+not a controlled benchmark. A later +1e-6 K initial-theta sensitivity run used
+the same original build, completed all 49 histories and passed health. It
+took 577.02 s for forecast plus I/O. No full forecast has used the coefficient
+correction; both existing Metal trajectories retain the original defect.
 
 Input hashes, bundle/source identities, bounded results, trajectory summaries,
 and peak locations are retained in
@@ -66,28 +71,28 @@ top-three-level speeds remain below 16.9 m/s, versus the limiter's 110 m/s
 activation threshold; 15-minute histories cannot prove every intermediate
 substep's activation status.
 
-The saved histories show differing cloud formation and radiative fluxes early
-in the run, followed by an offset in evening surface/PBL transitions. For
-example, at an interior column (i=31,j=27, zero-based), PBLH is 12.3 m on Metal
-and 2,172.6 m on CUDA at +6.5 h; CUDA's collapse follows in the next frame.
-This is a diagnostic lead, not proof of a remaining kernel defect. Initial
-perturbation growth, microphysics thresholds and radiation sampling must be
-separated by identical-input component replay before attributing the remaining
-trajectory differences to an implementation error.
+The +1e-6 K sensitivity run stays close to baseline Metal at the main error
+columns. Across all 49 times, pooled U/U10 RMSE is 0.00275/0.00170 m/s,
+versus Metal–CUDA 0.1174/0.1173 m/s; T2 RMSE is 0.00389 K versus 0.0889 K.
+Individual sensitivity maxima can still be large (PSFC 9.20 Pa, PBLH 1,134 m),
+so one perturbation is not a statistical noise envelope or parity criterion.
 
-## Reusing a transfer bundle
+At +15 minutes, Metal has cloud ice and snow while CUDA has neither; the
+liquid cloud appears later, at +45 minutes. Zero surface rain does not imply
+only condensation is active. Identical-input replay found a concrete upstream
+error: CUDA's RSLF c7 is `0.379534310e-11f`, while four Metal helpers expanded
+it to `0.0000000000379534310f`, ten times too large. The wrong saturation
+opens the classic cold-source nucleation gate in clear air. On 143 selected
+initial clear-air states, a single original kernel launch changes temperature
+and vapour (max 0.523 K / 1.85e-4 kg/kg); the correct CUDA predicate returns
+without changing them. An ice-supersaturated control also makes spurious ice.
+After fixing all four copies, all 146 replay cases keep their physical input
+words exactly; the expected snow-velocity boost reset is excluded.
 
-Treat its experiment, namelists, prepared bytes and Thompson tables as sealed.
-With an installed environment from this source:
-
-```bash
-export WOOF_THOMPSON_TABLE_ROOT="$CASE/tables"
-woof go "$CASE/prepared/experiment.toml" --prepared-root "$CASE/prepared" \
-  --wps-namelist "$CASE/prepared/namelist.wps" --backend metal \
-  --outdir "$OUTPUT" --run-stamp off --products none
-woof render --diff "$OUTPUT/chain/run/wrfout" "$CASE/cuda/chain/run/wrfout" \
-  --products t2,wind10,precip --out "$DIFF" --run-stamp off
-```
-
-The two `wrfout` directories avoid discovery of `ready/wrfout*.json` receipt
-files as histories. No change to forecast inputs is needed.
+This verifies the classic cold-source clear-air fix, not all aerosol or
+warm-source regimes. Fifteen-minute histories cannot identify every first
+within-step operation or establish that this defect accounts for every later
+peak. The corrected forecast has not been integrated, so CUDA forecast parity
+is still unmeasured. The initial P/TH2 ULP differences remain an earlier
+observed diagnostic rounding difference. Both original full trajectories and
+the sensitivity experiment are preserved as evidence of the pre-fix behavior.

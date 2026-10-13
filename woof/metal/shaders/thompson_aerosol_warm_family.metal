@@ -134,7 +134,7 @@ static inline float thompson_aa_sqrt(float a)
 { return as_type<float>(soft32_sqrt(as_type<uint>(a))); }
 static inline float thompson_aa_rslf(float p,float t) {
     const float x=max(-80.0f,t-273.16f);
-    float e=611.583699f+x*(44.4606896f+x*(1.43177157f+x*(0.0264224321f+x*(0.000299291081f+x*(0.00000203154182f+x*(0.00000000702620698f+x*(0.0000000000379534310f+x*(-0.0000000000000321582393f))))))));
+    float e=611.583699f+x*(44.4606896f+x*(1.43177157f+x*(0.0264224321f+x*(0.000299291081f+x*(0.00000203154182f+x*(0.00000000702620698f+x*(0.379534310e-11f+x*(-0.0000000000000321582393f))))))));
     e=min(e,p*0.15f);return 0.622f*e/(p-e);
 }
 static inline float thompson_aa_thetae(float p,float t,float w,float tl) {
