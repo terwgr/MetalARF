@@ -2,21 +2,21 @@
   "abi_version": 65543,
   "files": {
     "libwoof_metal.dylib": {
-      "sha256": "c70a6b603aa27cc564219cf844da531f40b47334143e12339b3f3f27ad076ea6",
+      "sha256": "9d661354985228603deaad15804baafbd5b1da3912dc1ded505a75d330b8d74b",
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "c6902fbc16edec0f066f32b7e94e5b5ffe9d7406c0e67e90b55e7d85e807988f",
-      "size": 10876771
+      "sha256": "6dc2faa1066918257b0df56ec834b2bcb31c194a8b3c284a33162b9be398b95a",
+      "size": 10905779
     },
     "woof_exact.metallib": {
-      "sha256": "30243450b3a7386b006ef78abcdcd05d0601d7d7cae6db3159295b1d6a6b69b7",
-      "size": 6855557
+      "sha256": "031d2fa81f1b3db063bbc9fd283f634fac86401c3d5867f45e67b4336c7cbfc4",
+      "size": 6867765
     }
   },
   "implementation_file_count": 1839,
-  "implementation_sha256": "b5dda02fe2c5d429420a2362b0a0a60759f9e9b16fa5e4cd4f1ec4b5cff9f7d8",
-  "metal_inputs_sha256": "d3a47ab47ae962c76e8b3b9468e126a1f0f0f85a90f76e3457610710c28970cd",
+  "implementation_sha256": "a0dfbf636e77605275ca8f43d9199877f35d9d58b1c3209b5f5552b91d9020f8",
+  "metal_inputs_sha256": "8f4db4445cfb85a3bc667f130cf6a36685aacf9de7c13177ae6b639cbad7740b",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -132,8 +132,8 @@
         "size": 2654
       },
       "woof/metal/shaders/coriolis_curvature.metal": {
-        "sha256": "566c9cb486146bddd2a3fe92cf7aa5e295814564410d58c9f1136e1cf668539e",
-        "size": 5590
+        "sha256": "2669eec78104b57c97ea796fc8269eed1de70706a0fc0cde4d42cd6dfb8629a1",
+        "size": 5664
       },
       "woof/metal/shaders/coupled_boundary_field.metal": {
         "sha256": "a273df909805d1ed8d6ac8af55dbd713c93660a489c83043b5b39d84495117e9",
@@ -1144,16 +1144,16 @@
         "size": 3917
       },
       "woof/metal/shaders/soft_gfk_exp.metalh": {
-        "sha256": "e174871f4ec0cdb81c5cfaafa99ceaee59513d740d8f1d6d281caebbb78325f6",
-        "size": 3660
+        "sha256": "5f35a2dc62a07ea3962d53b24ee16fa04af3afd25d4da18cdc7f25ed58024b8b",
+        "size": 3834
       },
       "woof/metal/shaders/soft_gfk_log.metalh": {
-        "sha256": "4eaee789a2df7cf5d2c65a8def2b2502f812bb5e92c37f22b2432e684ec38671",
-        "size": 5345
+        "sha256": "ba143b8b0cbe3a28cfe6d1f017e3b6c2550e791453898dbc5c0c65e2e07893f3",
+        "size": 5448
       },
       "woof/metal/shaders/soft_gfk_pow.metalh": {
-        "sha256": "e99160da8a2bceb7e06ce7317cfd8f2db0eca0d43c6cf1c015e2fac50dc17eee",
-        "size": 6248
+        "sha256": "7d3b9e97ecef445bfa4f6982b5ccb33b4b97ce458f7d940d0a4ecf65a3027d33",
+        "size": 6365
       },
       "woof/metal/shaders/soft_gfk_tgamma.metalh": {
         "sha256": "6e861c90f952246b3fb9efcd6563870b381d829f7764fbd15e68a7e4632428e0",
@@ -2916,6 +2916,6 @@
         "size": 296
       }
     },
-    "sha256": "d3a47ab47ae962c76e8b3b9468e126a1f0f0f85a90f76e3457610710c28970cd"
+    "sha256": "8f4db4445cfb85a3bc667f130cf6a36685aacf9de7c13177ae6b639cbad7740b"
   }
 }

@@ -458,7 +458,7 @@
       "name": "coriolis_curvature",
       "parameter_size": 32,
       "resource_count": 20,
-      "shader_hash": "566c9cb486146bddd2a3fe92cf7aa5e295814564410d58c9f1136e1cf668539e",
+      "shader_hash": "2669eec78104b57c97ea796fc8269eed1de70706a0fc0cde4d42cd6dfb8629a1",
       "threads_per_group": 128
     },
     {

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Use mass-coupled meridional momentum in the Metal zonal Coriolis and
+  curvature tendencies. The bounded rotation/stencil experiment verifies
+  this correction; the full Vermont/CUDA forecast comparison remains pending.
 - Preserve separate binary64 rounding in Metal glibc exp/log/pow helpers;
   retain a synchronous FP32 and binary64-core comparison tool.
 - Check actual loaded Metal artifact sizes and SHA-256 hashes before native
