@@ -48312,52 +48312,11 @@
       ]
     },
     {
-      "arithmetic_policies": [
-        "default"
-      ],
+      "name": "pd_fluxes",
+      "module": "moist_pd",
+      "source": "woof/metal/shaders/moist_pd.metal",
       "cuda_source": "woof/core/kernels/pd_advection.cu",
       "cuda_symbol": "pd_fluxes",
-      "layout_version": 1,
-      "module": "moist_pd",
-      "name": "pd_fluxes",
-      "parameters": [
-        [
-          "dx",
-          "float32"
-        ],
-        [
-          "dy",
-          "float32"
-        ],
-        [
-          "dt",
-          "float32"
-        ],
-        [
-          "has_msf",
-          "int32"
-        ],
-        [
-          "open_x",
-          "int32"
-        ],
-        [
-          "open_y",
-          "int32"
-        ],
-        [
-          "nz",
-          "int32"
-        ],
-        [
-          "ny",
-          "int32"
-        ],
-        [
-          "nx",
-          "int32"
-        ]
-      ],
       "resources": [
         [
           "q",
@@ -48451,80 +48410,6 @@
         ]
       ],
       "shapes": {
-        "c1h": [
-          [
-            "nz"
-          ]
-        ],
-        "c2h": [
-          [
-            "nz"
-          ]
-        ],
-        "fnm": [
-          [
-            "nz"
-          ]
-        ],
-        "fnp": [
-          [
-            "nz"
-          ]
-        ],
-        "fxc": [
-          [
-            "nz",
-            "ny",
-            "nx+1"
-          ]
-        ],
-        "fxl": [
-          [
-            "nz",
-            "ny",
-            "nx+1"
-          ]
-        ],
-        "fyc": [
-          [
-            "nz",
-            "ny+1",
-            "nx"
-          ]
-        ],
-        "fyl": [
-          [
-            "nz",
-            "ny+1",
-            "nx"
-          ]
-        ],
-        "fzc": [
-          [
-            "nz+1",
-            "ny",
-            "nx"
-          ]
-        ],
-        "fzl": [
-          [
-            "nz+1",
-            "ny",
-            "nx"
-          ]
-        ],
-        "msft": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "mut": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
         "q": [
           [
             "nz",
@@ -48537,11 +48422,6 @@
             "nz",
             "ny",
             "nx"
-          ]
-        ],
-        "rdnw": [
-          [
-            "nz"
           ]
         ],
         "ru": [
@@ -48564,10 +48444,134 @@
             "ny",
             "nx"
           ]
+        ],
+        "mut": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "fxl": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "fxc": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "fyl": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fyc": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fzl": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fzc": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
         ]
       },
-      "source": "woof/metal/shaders/moist_pd.metal",
-      "threads_per_group": 128
+      "parameters": [
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "vorder",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
     },
     {
       "arithmetic_policies": [
