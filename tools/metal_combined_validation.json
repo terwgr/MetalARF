@@ -1,0 +1,316 @@
+{
+  "schema": "metalarf-combined-validation-v1",
+  "date": "2026-10-13",
+  "base_commit": "cacc3962d12b9bfe74541993c74a3d608270dcab",
+  "verified_source_commit": "c6885a3b9b4a9bde37c34ef74ce3161180cf6626",
+  "integrated_prs": [
+    17,
+    21,
+    23
+  ],
+  "issues": {
+    "fixed": [
+      1,
+      4
+    ],
+    "source_defect_fixed_full_case_pending": [
+      7
+    ],
+    "already_addressed_in_1_0_3": [
+      2,
+      3,
+      5,
+      6
+    ]
+  },
+  "environment": {
+    "device": "Apple M2",
+    "macos": "27.0",
+    "python": "3.12.14",
+    "dependencies": "shared environment; actual executing checkout and clean commit verified"
+  },
+  "bundle": {
+    "schema": "woof-metal-bundle-v2",
+    "source_inputs_sha256": "8f4db4445cfb85a3bc667f130cf6a36685aacf9de7c13177ae6b639cbad7740b",
+    "artifacts": {
+      "libwoof_metal.dylib": {
+        "sha256": "9d661354985228603deaad15804baafbd5b1da3912dc1ded505a75d330b8d74b",
+        "size": 187856
+      },
+      "woof_default.metallib": {
+        "sha256": "6dc2faa1066918257b0df56ec834b2bcb31c194a8b3c284a33162b9be398b95a",
+        "size": 10905779
+      },
+      "woof_exact.metallib": {
+        "sha256": "031d2fa81f1b3db063bbc9fd283f634fac86401c3d5867f45e67b4336c7cbfc4",
+        "size": 6867765
+      }
+    }
+  },
+  "arithmetic": {
+    "rows": 25104,
+    "seed": 20261012,
+    "synchronous": true,
+    "mismatches": {
+      "logf_fp32": 0,
+      "expf_fp32": 0,
+      "powf_fp32": 0,
+      "pow_log2_binary64": 0,
+      "exp2_core_binary64": 0
+    },
+    "input_sha256": "4228cf9ef5c39de2e455e06f09d6a6930ad7fae7648ce2f15363cda08147ca93"
+  },
+  "bundle_refusal_cases": {
+    "changed-libwoof_metal.dylib": "refused",
+    "truncated-libwoof_metal.dylib": "refused",
+    "changed-woof_default.metallib": "refused",
+    "truncated-woof_default.metallib": "refused",
+    "changed-woof_exact.metallib": "refused",
+    "truncated-woof_exact.metallib": "refused",
+    "changed-woof/metal/native/woof_metal.mm": "refused",
+    "changed-woof/metal/native/woof_metal.h": "refused",
+    "changed-tools/build_metal_backend.py": "refused",
+    "changed-woof/metal/kernel_signatures.json": "refused",
+    "added-native-input": "refused",
+    "missing-runtime": "refused",
+    "legacy-manifest": "refused",
+    "missing-source-binding": "refused",
+    "extra-asset-path": "refused"
+  },
+  "overrides_refused_before_native_loading": 3,
+  "staging_and_release_pins": "passed",
+  "coriolis": {
+    "device": "Apple M2",
+    "synchronous": true,
+    "mode": "verified",
+    "grid": [
+      3,
+      4,
+      5
+    ],
+    "stencil_cases": [
+      {
+        "case": "uniform_north",
+        "max_abs_error": {
+          "ru_t": 7.450580596923828e-08,
+          "rv_t": 2.3283064365386963e-08,
+          "rw_t": 3.560437544791739e-08
+        },
+        "ru_t_mean": 130.80999755859375,
+        "rv_sha256": "474c2c664870f5b7bc2b52857f9b7bef816c3abd6f440e63b29479b4b4500d8a",
+        "rw_sha256": "d447e19308ee0fcabb8910aac65bca8469ca922807df042642826de00bbbcce0"
+      },
+      {
+        "case": "hybrid_periodic",
+        "max_abs_error": {
+          "ru_t": 1.354735198333401e-05,
+          "rv_t": 4.899520341439256e-06,
+          "rw_t": 3.799028687190287e-07
+        },
+        "ru_t_mean": 110.25428771972656,
+        "rv_sha256": "f65fb865697a9dad0ddcfe7adb8943609ee0332062acacadc46d7fb83bf2e4a9",
+        "rw_sha256": "296793c29d21535afd4c0e4900847ec2c57ffbf829bfb9784fef6ae0fa27ef20"
+      },
+      {
+        "case": "hybrid_bounded",
+        "max_abs_error": {
+          "ru_t": 1.354735198333401e-05,
+          "rv_t": 4.802276826865182e-06,
+          "rw_t": 3.799028687190287e-07
+        },
+        "ru_t_mean": 73.5870361328125,
+        "rv_sha256": "d625b4f7140d89c29a0a3ae713b33291d7647fc63bd626a485765e0bd22f3c04",
+        "rw_sha256": "296793c29d21535afd4c0e4900847ec2c57ffbf829bfb9784fef6ae0fa27ef20"
+      },
+      {
+        "case": "curvature_only",
+        "max_abs_error": {
+          "ru_t": 4.82159941128657e-06,
+          "rv_t": 1.927151344283118e-06,
+          "rw_t": 3.799028687190287e-07
+        },
+        "ru_t_mean": -10.839662551879883,
+        "rv_sha256": "cd35ab4fa2f109b9001f33363be0f7c826d0622a88b9322732c3adc5aa38f5c6",
+        "rw_sha256": "296793c29d21535afd4c0e4900847ec2c57ffbf829bfb9784fef6ae0fa27ef20"
+      },
+      {
+        "case": "southern",
+        "max_abs_error": {
+          "ru_t": 7.450580596923828e-08,
+          "rv_t": 2.3283064365386963e-08,
+          "rw_t": 3.560437544791739e-08
+        },
+        "ru_t_mean": -130.30999755859375,
+        "rv_sha256": "a1717440a9224bc481e34abc670bae7901620d1e516fce67adb98ea95aa4bd9d",
+        "rw_sha256": "d447e19308ee0fcabb8910aac65bca8469ca922807df042642826de00bbbcce0"
+      }
+    ],
+    "rotation": {
+      "seconds": 900,
+      "dt": 10.0,
+      "method": "explicit_midpoint",
+      "initial_du_dt": 0.0013055999755859375,
+      "expected_initial_du_dt": 0.0013055999957859513,
+      "final_uv": [
+        1.173390512084961,
+        12.746103702704609
+      ],
+      "analytical_uv": [
+        1.1733903008632711,
+        12.746103721712473
+      ]
+    }
+  },
+  "forecasts": {
+    "repeat_count": 3,
+    "repeat_final_state_bitwise": true,
+    "runs": [
+      {
+        "run": 1,
+        "history_frames": 11,
+        "finite_all_history_fields": true,
+        "steps": 10,
+        "run_seconds": 600.0,
+        "final_state_digest": {
+          "sha256": "ae561226bab9304515458faad3a8e1c0e2554cf56a168ba3a143b55211b3d600",
+          "array_count": 157
+        },
+        "metadata_is_borrowed": true,
+        "executing_source_verified": true,
+        "source_commit": "c6885a3b9b4a9bde37c34ef74ce3161180cf6626"
+      },
+      {
+        "run": 2,
+        "history_frames": 11,
+        "finite_all_history_fields": true,
+        "steps": 10,
+        "run_seconds": 600.0,
+        "final_state_digest": {
+          "sha256": "ae561226bab9304515458faad3a8e1c0e2554cf56a168ba3a143b55211b3d600",
+          "array_count": 157
+        },
+        "metadata_is_borrowed": true,
+        "executing_source_verified": true,
+        "source_commit": "c6885a3b9b4a9bde37c34ef74ce3161180cf6626"
+      },
+      {
+        "run": 3,
+        "history_frames": 11,
+        "finite_all_history_fields": true,
+        "steps": 10,
+        "run_seconds": 600.0,
+        "final_state_digest": {
+          "sha256": "ae561226bab9304515458faad3a8e1c0e2554cf56a168ba3a143b55211b3d600",
+          "array_count": 157
+        },
+        "metadata_is_borrowed": true,
+        "executing_source_verified": true,
+        "source_commit": "c6885a3b9b4a9bde37c34ef74ce3161180cf6626"
+      }
+    ],
+    "inputs": {
+      "acquisition": "cached public GFS; not Vermont inputs",
+      "cycle": "2026-10-04T06:00:00Z",
+      "grid": [
+        49,
+        48,
+        60
+      ],
+      "dx_m": 12000,
+      "config_sha256": "d206f6b5db9b00715df1471d5164148e5b93a4a2d81663c06bdad79bd36b53d0",
+      "prepared_proof_sha256": "b9d42a22373bed5493b79db97661fbd1f1d7443544d6f5c49c82dae30f823b82"
+    },
+    "field_evolution": {
+      "U": {
+        "max_abs_change": 3.369626998901367,
+        "final_min": -12.755682945251465,
+        "final_max": 34.86030197143555
+      },
+      "V": {
+        "max_abs_change": 2.4058375358581543,
+        "final_min": -11.365355491638184,
+        "final_max": 20.25422477722168
+      },
+      "W": {
+        "max_abs_change": 0.768304705619812,
+        "final_min": -0.24997587502002716,
+        "final_max": 0.768304705619812
+      },
+      "T": {
+        "max_abs_change": 1.330474853515625,
+        "final_min": -10.58648681640625,
+        "final_max": 95.12796020507812
+      },
+      "QVAPOR": {
+        "max_abs_change": 0.00037171225994825363,
+        "final_min": 7.114856703793748e-09,
+        "final_max": 0.015358644537627697
+      }
+    }
+  },
+  "selftests": [
+    {
+      "run": 1,
+      "exit_code": 0,
+      "seconds": 19.269417417002842,
+      "checks": [
+        "PASS  regional  Convection-permitting no-CU, 1 step  max wind 0.000 m/s  theta 300.97..337.46 K  5.4 s",
+        "PASS  hex       12-cell dry mesh, 1 step  max wind 6.563 m/s  theta 301.36..680.97 K  1.6 s",
+        "PASS  global    arwen_global_moist_smoke, 9 gates  max wind 1.847 m/s  T 220.00..286.00 K  8.4 s"
+      ]
+    },
+    {
+      "run": 2,
+      "exit_code": 0,
+      "seconds": 20.153425791999325,
+      "checks": [
+        "PASS  regional  Convection-permitting no-CU, 1 step  max wind 0.000 m/s  theta 300.97..337.46 K  3.6 s",
+        "PASS  hex       12-cell dry mesh, 1 step  max wind 6.563 m/s  theta 301.36..680.97 K  1.0 s",
+        "PASS  global    arwen_global_moist_smoke, 9 gates  max wind 1.847 m/s  T 220.00..286.00 K  12.8 s"
+      ]
+    },
+    {
+      "run": 3,
+      "exit_code": 0,
+      "seconds": 22.456042083969805,
+      "checks": [
+        "PASS  regional  Convection-permitting no-CU, 1 step  max wind 0.000 m/s  theta 300.97..337.46 K  3.6 s",
+        "PASS  hex       12-cell dry mesh, 1 step  max wind 6.563 m/s  theta 301.36..680.97 K  1.2 s",
+        "PASS  global    arwen_global_moist_smoke, 9 gates  max wind 1.847 m/s  T 220.00..286.00 K  8.1 s"
+      ]
+    }
+  ],
+  "initial_synchronous_selftest": {
+    "backend": "metal",
+    "checks": {
+      "hex": {
+        "detail": "exceeded 240 s",
+        "seconds": 12.4323871670058,
+        "status": "FAIL"
+      },
+      "regional": {
+        "detail": "Convection-permitting no-CU, 1 step",
+        "max_wind_m_s": 0.0,
+        "seconds": 228.6414984590374,
+        "status": "PASS",
+        "theta_max_k": 337.461514646573,
+        "theta_min_k": 300.971969227221
+      }
+    },
+    "passed": false
+  },
+  "limits": [
+    "The initial synchronous selftest exhausted its 240-second overall deadline: Regional passed after 228.6 seconds, then Hex timed out. A process sample observed Apple Metal pipeline compilation. Three subsequent unmodified public CLI runs passed all models.",
+    "The 600-second forecasts use cached 2026-10-04 GFS inputs, not the Vermont HRRR inputs. Full Vermont/CUDA parity remains pending.",
+    "The Coriolis rotation isolates horizontal f-plane terms. The math sample is bounded, not exhaustive arithmetic certification."
+  ],
+  "commands": [
+    "python tools/build_metal_backend.py --output woof/libexec/metal",
+    "python tools/metal_gfk_regression.py --output <scratch>/gfk",
+    "python tools/metal_bundle_regression.py",
+    "python tools/metal_coriolis_experiment.py",
+    "python tools/metal_admission_check.py",
+    "python -m woof.cli go <cached>/mp8.toml --backend metal --prepared-root <cached>/mp8-prepared --wps-namelist <cached>/namelist.wps --outdir <scratch>/forecast-N --products none --run-stamp off (three serial runs)",
+    "python -m woof.cli selftest --backend metal (three serial runs)"
+  ]
+}
