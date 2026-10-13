@@ -1,0 +1,525 @@
+[
+  {
+    "operator": "cold",
+    "metrics": [
+      {
+        "field": "qi",
+        "old_rmse": 4.003977022386497e-17,
+        "new_rmse": 3.3910825811197383e-17,
+        "old_max_abs": 1.7763568394002505e-15,
+        "new_max_abs": 1.7763568394002505e-15,
+        "repeat_identical": true
+      },
+      {
+        "field": "ni",
+        "old_rmse": 2.2383119886736442e-05,
+        "new_rmse": 4.171456171415837e-08,
+        "old_max_abs": 0.0007419586181640625,
+        "new_max_abs": 1.9073486328125e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "qs",
+        "old_rmse": 4.230392742788039e-07,
+        "new_rmse": 4.818844559603192e-11,
+        "old_max_abs": 8.061295375227928e-06,
+        "new_max_abs": 2.5174813345074654e-09,
+        "repeat_identical": true
+      },
+      {
+        "field": "qg",
+        "old_rmse": 9.037011967806594e-07,
+        "new_rmse": 4.195797728227788e-13,
+        "old_max_abs": 2.684340870473534e-05,
+        "new_max_abs": 1.4551915228366852e-11,
+        "repeat_identical": true
+      },
+      {
+        "field": "qr",
+        "old_rmse": 3.472466907265755e-14,
+        "new_rmse": 3.472466907265755e-14,
+        "old_max_abs": 1.8189894035458565e-12,
+        "new_max_abs": 1.8189894035458565e-12,
+        "repeat_identical": true
+      },
+      {
+        "field": "nr",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "temperature",
+        "old_rmse": 0.00035523537611107026,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.009490966796875,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "pressure",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "qv",
+        "old_rmse": 3.5919476988953645e-13,
+        "new_rmse": 3.5919476988953645e-13,
+        "old_max_abs": 1.4551915228366852e-11,
+        "new_max_abs": 1.4551915228366852e-11,
+        "repeat_identical": true
+      },
+      {
+        "field": "qc",
+        "old_rmse": 1.0842327280999087e-06,
+        "new_rmse": 4.820158381180007e-11,
+        "old_max_abs": 2.8740265406668186e-05,
+        "new_max_abs": 2.520209818612784e-09,
+        "repeat_identical": true
+      },
+      {
+        "field": "graupel_number_shadow",
+        "old_rmse": 22.752504497107797,
+        "new_rmse": 1.2427779401091138e-05,
+        "old_max_abs": 568.801025390625,
+        "new_max_abs": 0.0003662109375,
+        "repeat_identical": true
+      },
+      {
+        "field": "snow_velocity_boost",
+        "old_rmse": 0.01275843570029075,
+        "new_rmse": 5.088655477482905e-09,
+        "old_max_abs": 0.23870551586151123,
+        "new_max_abs": 1.1920928955078125e-07,
+        "repeat_identical": true
+      }
+    ]
+  },
+  {
+    "operator": "sources",
+    "metrics": [
+      {
+        "field": "qc",
+        "old_rmse": 8.812133121897294e-13,
+        "new_rmse": 8.812133121897294e-13,
+        "old_max_abs": 2.9103830456733704e-11,
+        "new_max_abs": 2.9103830456733704e-11,
+        "repeat_identical": true
+      },
+      {
+        "field": "qr",
+        "old_rmse": 1.1168776328512349e-12,
+        "new_rmse": 1.1168776328512349e-12,
+        "old_max_abs": 2.9103830456733704e-11,
+        "new_max_abs": 2.9103830456733704e-11,
+        "repeat_identical": true
+      },
+      {
+        "field": "nr",
+        "old_rmse": 0.00021244840788283236,
+        "new_rmse": 0.00021244840788283236,
+        "old_max_abs": 0.006591796875,
+        "new_max_abs": 0.006591796875,
+        "repeat_identical": true
+      },
+      {
+        "field": "qs",
+        "old_rmse": 9.322484963364935e-13,
+        "new_rmse": 9.322484963364935e-13,
+        "old_max_abs": 2.9103830456733704e-11,
+        "new_max_abs": 2.9103830456733704e-11,
+        "repeat_identical": true
+      },
+      {
+        "field": "qg",
+        "old_rmse": 1.0632215089376865e-14,
+        "new_rmse": 1.0632215089376865e-14,
+        "old_max_abs": 4.547473508864641e-13,
+        "new_max_abs": 4.547473508864641e-13,
+        "repeat_identical": true
+      },
+      {
+        "field": "graupel_number_shadow",
+        "old_rmse": 1.2808864536176588e-07,
+        "new_rmse": 1.2808864536176588e-07,
+        "old_max_abs": 5.9604644775390625e-06,
+        "new_max_abs": 5.9604644775390625e-06,
+        "repeat_identical": true
+      },
+      {
+        "field": "graupel_melt_marker",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "snow_melt_marker",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "temperature",
+        "old_rmse": 2.4084023532434927e-05,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.00115966796875,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "pressure",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "qv",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      }
+    ]
+  },
+  {
+    "operator": "condensation",
+    "metrics": [
+      {
+        "field": "temperature",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "pressure",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "qv",
+        "old_rmse": 6.999611333134335e-11,
+        "new_rmse": 6.999611333134335e-11,
+        "old_max_abs": 9.313225746154785e-10,
+        "new_max_abs": 9.313225746154785e-10,
+        "repeat_identical": true
+      },
+      {
+        "field": "qc",
+        "old_rmse": 4.5052734825522927e-11,
+        "new_rmse": 4.5052734825522927e-11,
+        "old_max_abs": 6.984919309616089e-10,
+        "new_max_abs": 6.984919309616089e-10,
+        "repeat_identical": true
+      },
+      {
+        "field": "reference_density",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "reference_temperature",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "condensation_marker",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "cloud_presence",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      }
+    ]
+  },
+  {
+    "operator": "rain_evaporation",
+    "metrics": [
+      {
+        "field": "qr",
+        "old_rmse": 1.608546985986224e-13,
+        "new_rmse": 1.608546985986224e-13,
+        "old_max_abs": 7.275957614183426e-12,
+        "new_max_abs": 7.275957614183426e-12,
+        "repeat_identical": true
+      },
+      {
+        "field": "nr",
+        "old_rmse": 2.0816721217339392e-05,
+        "new_rmse": 2.0816721217339392e-05,
+        "old_max_abs": 0.0009765625,
+        "new_max_abs": 0.0009765625,
+        "repeat_identical": true
+      },
+      {
+        "field": "temperature",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "pressure",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "qv",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "reference_density",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "graupel_melt_marker",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "source_density",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "condensation_marker",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      }
+    ]
+  },
+  {
+    "operator": "sedimentation",
+    "metrics": [
+      {
+        "field": "qr",
+        "old_rmse": 4.49604553441805e-12,
+        "new_rmse": 4.49604553441805e-12,
+        "old_max_abs": 1.1641532182693481e-10,
+        "new_max_abs": 1.1641532182693481e-10,
+        "repeat_identical": true
+      },
+      {
+        "field": "nr",
+        "old_rmse": 0.0002278218289155494,
+        "new_rmse": 0.0002278218289155494,
+        "old_max_abs": 0.005859375,
+        "new_max_abs": 0.005859375,
+        "repeat_identical": true
+      },
+      {
+        "field": "temperature",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "pressure",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "qv",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "dz",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "rainnc",
+        "old_rmse": 6.844859481048065e-11,
+        "new_rmse": 6.844859481048065e-11,
+        "old_max_abs": 2.3283064365386963e-10,
+        "new_max_abs": 2.3283064365386963e-10,
+        "repeat_identical": true
+      },
+      {
+        "field": "rainncv",
+        "old_rmse": 6.844859481048065e-11,
+        "new_rmse": 6.844859481048065e-11,
+        "old_max_abs": 2.3283064365386963e-10,
+        "new_max_abs": 2.3283064365386963e-10,
+        "repeat_identical": true
+      },
+      {
+        "field": "reference_density",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      }
+    ]
+  },
+  {
+    "operator": "cleanup",
+    "metrics": [
+      {
+        "field": "qc",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "qi",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "ni",
+        "old_rmse": 4.505471208216464e-05,
+        "new_rmse": 4.505471208216464e-05,
+        "old_max_abs": 0.0015525422058999538,
+        "new_max_abs": 0.0015525422058999538,
+        "repeat_identical": true
+      },
+      {
+        "field": "temperature",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "pressure",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "qv",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "micro_columns",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      }
+    ]
+  },
+  {
+    "operator": "finalize",
+    "metrics": [
+      {
+        "field": "qg",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "temperature",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "pressure",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "qv",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      },
+      {
+        "field": "graupel_number_shadow",
+        "old_rmse": 0.0,
+        "new_rmse": 0.0,
+        "old_max_abs": 0.0,
+        "new_max_abs": 0.0,
+        "repeat_identical": true
+      }
+    ]
+  }
+]

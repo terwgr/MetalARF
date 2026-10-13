@@ -233,12 +233,14 @@ kernel void thompson_frozen_vapor_cloud_network(
      ulong cv=tmul(0x40c73e0000000000ul,tmul(tmul(tmul(0x40c3880000000000ul,tcd),tcd),0x3fd0000000000000ul));
      ulong sv=tsub(tmul(t64(40.),tmul(soft64_plm_pow(tsd,0x3fe199999999999aul),soft64_plm_exp(tneg(tmul(t64(100.),tsd))))),cv);
      ulong pi64=0x400921fb54442d18ul;
-     ulong am64=tdiv(tmul(pi64,0x408f400000000000ul),0x4018000000000000ul);
+     ulong am64=tdiv(tmul(t64(pi),0x408f400000000000ul),0x4018000000000000ul);
      ulong meltarg=tdiv(tmul(tmul(0x3fb1a9fbe76c8b44ul,tsd),tsd),am64);
      ulong melt=soft64_plm_pow(meltarg,0x3fd5555555555555ul);
      ulong frac=tdiv(tcd,melt);float eff=0.f;
      if(!soft64_greater(frac,0x3fd0000000000000ul)&&!soft64_less(tcd,0x3ed92a737110e454ul)&&!soft64_less(sv,0x3f50624dd2f1a9fcul)){
-       ulong stokes=tdiv(tmul(tmul(tmul(tcd,tcd),sv),0x408f400000000000ul),tmul(0x3ef203b89c3e39a2ul,melt));
+       // CUDA/WRF divide by 9 * viscosity * diameter. Omitting 9 raises
+       // the snow/cloud collision Stokes number and overstates riming.
+       ulong stokes=tdiv(tmul(tmul(tmul(tcd,tcd),sv),0x408f400000000000ul),tmul(tmul(t64(9.f),0x3ef203b89c3e39a2ul),melt));
        ulong re=tdiv(tmul(t64(9.),stokes),tmul(tmul(frac,frac),t64(1000.)));
        ulong lr=soft64_plm_log(re),k0=soft64_plm_exp(tadd(tadd(0xbfb9c779a6b50b0ful,tneg(tmul(0x3fd6e978d4fdf3b6ul,lr))),tmul(0x3f9ab9f559b3d07dul,tmul(lr,lr))));
        ulong z=soft64_plm_log(tdiv(stokes,tadd(k0,0x3cd203af9ee75616ul)));
@@ -248,7 +250,7 @@ kernel void thompson_frozen_vapor_cloud_network(
        eff=max(0.f,min(t32(y),.95f));
      }
      float df=precise::sqrt((101325.f/(287.05f*298.f))/rho),pre=pi*.25f*40.f;
-     snowRime=tmin(t64(df*pre*eff*cloudMass*rimingMoment),t64(cloudMass/dt));
+     snowRime=tmin(t64(df*pre*eff*cloudMass*rimingMoment),tdiv(t64(cloudMass),t64(dt)));
    }
  }
  float cloudGraupel=max(0.f,r.qg[idx]*rho);
@@ -265,7 +267,7 @@ kernel void thompson_frozen_vapor_cloud_network(
    graupRime=tmul(t64(df*pre*eff*cloudMass),tmul(inter,soft64_plm_pow(ilambda,0x400f1eb851eb851ful)));
  }
  if(soft64_greater(graupRime,0x3cd203af9ee75616ul)&&tempc> -8.f){float f=0.f;if(tempc>=-5.f&&tempc< -3.f)f=.5f*(-3.f-tempc);else if(tempc> -8.f&&tempc< -5.f)f=.33333333f*(8.f+tempc);
-   hmN=tmul(tmul(0x41b4dcd650000000ul,t64(f)),graupRime);hmM=tmul(0x3d719799812dea11ul,hmN);ulong sum=tadd(snowRime,graupRime);
+   hmN=tmul(tmul(0x41b4dc9380000000ul,t64(f)),graupRime);hmM=tmul(0x3d719799812dea11ul,hmN);ulong sum=tadd(snowRime,graupRime);
    if(tpos(sum)){snowHm=tmul(tdiv(snowRime,sum),hmM);graupHm=tmul(tdiv(graupRime,sum),hmM);}
  }
  if((p.include_cold_rain!=0||p.include_cold_cloud!=0)&&nuc){float existing=iceNumber;

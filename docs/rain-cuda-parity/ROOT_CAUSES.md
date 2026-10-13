@@ -1,6 +1,6 @@
 # Rainy CUDA parity root causes
 
-The unchanged Flint rainy case exposes two confirmed Metal defects. The fixes are stacked on the complete dry-case compatibility work in PR 25. The larger defect is an incomplete dispatch of V momentum advection. The second is an incorrect surface/PBL gas ratio.
+The unchanged Flint rainy case exposes four confirmed Metal defects. The fixes are stacked on the complete dry-case compatibility work in PR 25. They affect staggered V dispatch, the surface/PBL gas ratio, snow riming and warm-source latent heating.
 
 ## Missing V advection points
 
@@ -40,5 +40,21 @@ woof go "$CASE/prepared/experiment.toml" --prepared-root "$CASE/prepared" \
   --outdir "$RESULT" --run-stamp off --products none
 ```
 
-The Metal shaders, generated registry hashes and prebuilt bundle were rebuilt together. A full rainy rerun and trajectory reassessment follow the confirmed operator repairs.
+The Metal shaders, generated registry hashes and prebuilt bundle were rebuilt together. The first full rerun after the dispatch and EP2 corrections completed all 1,827 steps with finite output. It reduced pooled U/V error by 5.7%/4.5%, but rain error by only 0.45%; those repairs did not contain the rainy trajectory discrepancy. This motivated the identical-input Thompson component investigation below.
 
+
+## Snow/cloud collision Stokes number
+
+The cold-cloud Metal shader divided the collision Stokes numerator by viscosity times melted snow diameter. CUDA divides by **9 times** viscosity times diameter. The missing factor made the Stokes number nine times too large, increasing collision efficiency, cloud-water riming and its graupel conversion. Restore the denominator, preserving CUDA's widened FP32 pi and double division for the snow riming cap. The same audit corrected the H-M coefficient word from 350,017,104 to the source's 350,000,000.
+
+Capture the actual first-call FP32 fields and scratch inputs for 56 production columns, including the strongest initial hydrometeors. Replay each component independently against the unchanged CUDA source compiled with the existing CPU host shim. This oracle uses host libm and disables floating-point contraction, so it establishes translation defects rather than exact NVIDIA arithmetic parity.
+
+With identical cold inputs, cloud-water maximum error falls from 2.87403e-5 to 2.52021e-9 kg/kg; graupel maximum error falls from 2.68434e-5 to 1.45519e-11 kg/kg. Temperature maximum error falls from 0.00949097 K to zero. Three Metal repetitions are byte-identical. Condensation and subsequent stages already agree closely on their own identical inputs; their larger whole-adapter discrepancies were inherited from the cold stage.
+
+## Warm-source vapor heating scratch lifetime
+
+The split warm network saves the admitted vapor rate in slot 63. Its graupel diameter power passes reuse slot 45, which the final temperature update incorrectly read. The water species update correctly read slot 63, so vapor changed without its matching latent heating/cooling. Read the preserved slot in the final heat update. This affects snow/graupel sublimation and deposition above freezing, including columns with no entry graupel.
+
+On the captured identical warm inputs, the pre-fix maximum temperature error is 0.00115967 K. After correction, every sampled temperature is byte-identical to the CUDA-source host result in all three repetitions. The mass fields retain their previous close agreement.
+
+`tools/rain_microphysics_capture.py --capture-root DIR go ...` captures these per-component inputs through the public forecast entrypoint. `tools/rain_thompson_replay.py` takes `--capture-root`, `--tables`, `--output` and `--backend host|metal`; run host first, then Metal with `--reference-root` pointing to the host output. `thompson-component-replay.json` records the before/after errors and repeated-run agreement.

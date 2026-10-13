@@ -3847,7 +3847,7 @@ THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_SHAPES = (('cloud_to_ice_mass', ((9157500,),
 THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('track_graupel_number', 'ctypes.c_int32'), ('include_snow_rime_conversion', 'ctypes.c_int32'), ('include_cold_rain', 'ctypes.c_int32'), ('include_cold_cloud', 'ctypes.c_int32')]
 THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_THREADS_PER_GROUP = 64
 THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_LAYOUT_HASH = 'e65a900820538b8613619d50047b131feb4b0d41d8c3d9c3fd57d0cf001fe6f5'
-THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_SHADER_HASH = 'c6f4d51ae9e5c5f30d48f8ba126eb3cd4825de2d9df32ae05532a317dadd881e'
+THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_SHADER_HASH = '9c7b3420bff1ce618d79ac21c7cb27d4e66f6ab01abd43e641893a79f0cdcd24'
 
 THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_RESOURCES = (('entry_active', 'float', 'read'), ('qg', 'float', 'read'), ('active_columns', 'float', 'read_write'))
 THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_ACCESS = ('read', 'read', 'read_write')
@@ -3951,7 +3951,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_SHAPES = (('cloud_state', (('any_1d',),)), (
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LAYOUT_HASH = '22f9d5e8b94d8e36c2021153b87848e1859661ffda8e6e8bb4690c73d5d00030'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3959,7 +3959,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_LAYOUT_HASH = '0d5f794ad442257243d3efe6dfc17a69c7e2ee0fe215a38a41eb1e0bdab5dc6f'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3967,7 +3967,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_SHAPES = (('cloud_state', (('any_1d
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_LAYOUT_HASH = 'b94339b4bb322d59f51cac19247e33e00208c39fb7410d23e349e4451d469d01'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3975,7 +3975,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_SHAPES = (('cloud_state', (('any_1d',
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_LAYOUT_HASH = '20e7fcb1aff9dc0bdb4baedb6d3e85ac41d1b4f8cdc1a6c09aa19ffe0a77d722'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3983,7 +3983,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_SHAPES = (('cloud_state', (('any_1d',),
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_LAYOUT_HASH = '40d1f238b4d916c2ad52b42c8fa4079306ea3e41e12eeaee9d4f9b8b4f137c08'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3991,7 +3991,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_LAYOUT_HASH = 'a6514abac743c41a450a89e845f517b794f842f356684056367f29f5ca3fbe36'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SATURATION_ADJUST_RESOURCES = (('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'))
 THOMPSON_WARM_SATURATION_ADJUST_ACCESS = ('read_write', 'read', 'read_write', 'read_write')
@@ -4007,7 +4007,7 @@ THOMPSON_WARM_SOURCE_CLOUD_RATES_SHAPES = (('cloud_state', (('any_1d',),)), ('gr
 THOMPSON_WARM_SOURCE_CLOUD_RATES_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_CLOUD_RATES_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_CLOUD_RATES_LAYOUT_HASH = '5a7eaaf9280a8f7df9977b225a48764a186f27a19cc32e550cc45c6f8dd89ec5'
-THOMPSON_WARM_SOURCE_CLOUD_RATES_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_CLOUD_RATES_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_COLLISION_RATES_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('graupel_number_per_kg', 'float', 'read'), ('graupel_melt_marker', 'float', 'read'), ('wet_bulb', 'float', 'read'), ('tcs_racs1', 'float64_bits', 'read'), ('tmr_racs1', 'float64_bits', 'read'), ('tcs_racs2', 'float64_bits', 'read'), ('tmr_racs2', 'float64_bits', 'read'), ('tcr_sacr1', 'float64_bits', 'read'), ('tms_sacr1', 'float64_bits', 'read'), ('tcr_sacr2', 'float64_bits', 'read'), ('tms_sacr2', 'float64_bits', 'read'), ('tnr_racs1', 'float64_bits', 'read'), ('tnr_racs2', 'float64_bits', 'read'), ('tnr_sacr1', 'float64_bits', 'read'), ('tnr_sacr2', 'float64_bits', 'read'), ('tcg_racg', 'float64_bits', 'read'), ('tmr_racg', 'float64_bits', 'read'), ('tcr_gacr', 'float64_bits', 'read'), ('tnr_racg', 'float64_bits', 'read'), ('tnr_gacr', 'float64_bits', 'read'), ('collision_rates', 'float64_bits', 'read_write'))
 THOMPSON_WARM_SOURCE_COLLISION_RATES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -4015,7 +4015,7 @@ THOMPSON_WARM_SOURCE_COLLISION_RATES_SHAPES = (('collision_rates', (('any_1d',),
 THOMPSON_WARM_SOURCE_COLLISION_RATES_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_COLLISION_RATES_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_COLLISION_RATES_LAYOUT_HASH = 'f02991e6cd3d31b318d06240cf07480a704d15c5bd970fad13feb4ae6221169c'
-THOMPSON_WARM_SOURCE_COLLISION_RATES_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_COLLISION_RATES_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_ACCESS = ('read_write',)
@@ -4023,7 +4023,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_SHAPES = (('cloud_state', (('any_1d
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_LAYOUT_HASH = '7650ff64dd4c125d816e6b33db588f7a9f84b3f1b75cafeb2a5335c0ea76b4c4'
-THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_ACCESS = ('read_write',)
@@ -4031,7 +4031,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_LAYOUT_HASH = '666d56ee3aebf3708b5fc5db050f43da0f715765be7bbd8081359654ee7cc1bb'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_ACCESS = ('read_write',)
@@ -4039,7 +4039,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_SHAPES = (('cloud_state', (('any_1
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_LAYOUT_HASH = 'b7eb8b98fededb289d5830e8803f32cfb18ba35f0a87dc11172ce13327da3354'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_ACCESS = ('read_write',)
@@ -4047,7 +4047,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_SHAPES = (('cloud_state', (('any_1d',
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_LAYOUT_HASH = '4040788e120340cc8c6a3fe66e20ffe592d2166c43ed542e72f242a1790dcf4b'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_ACCESS = ('read_write',)
@@ -4055,7 +4055,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_LAYOUT_HASH = 'c89c82963d66607fb8d08fb1084b87c66af2fc9d1599773e7c7edacca5973d56'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_ACCESS = ('read_write',)
@@ -4063,7 +4063,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_LAYOUT_HASH = '253ea2a1307889be69d7882cb902c1750bdd675fcd745393a129dec0adae6ffb'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_ACCESS = ('read_write',)
@@ -4071,7 +4071,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_LAYOUT_HASH = '07b38340ff967cc652ec4dc9fd2a70ebc3868ff296514cc7b11f2ed19e9f0898'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_ACCESS = ('read_write',)
@@ -4079,7 +4079,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_LAYOUT_HASH = 'df9e9c8a290275c81198f418d5121e9c3925bff7b0def9018dd52deee0d9d6e6'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_ACCESS = ('read_write',)
@@ -4087,7 +4087,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_LAYOUT_HASH = 'fc19a02c8bc69366f67719d3aa3dfcba4f46f5ffeb3e00b2cfee47ac08cbe357'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_ACCESS = ('read_write',)
@@ -4095,7 +4095,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_SHAPES = (('cloud_state'
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_LAYOUT_HASH = 'aca9c58cc7338532da3c852d1105bb045487aee11af55dc642f877a8e2d2d46f'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_ACCESS = ('read_write',)
@@ -4103,7 +4103,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_SHAPES = (('cloud_state', ((
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_LAYOUT_HASH = '53a9c56e35f235c3c92f3b257cef7bcea46cbeaaa81cb47a1953cac1c728df1a'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_ACCESS = ('read_write',)
@@ -4111,7 +4111,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_LAYOUT_HASH = '8c7958954bbc4413b960935a0e6fe0c048cc5917631533aef6a23be77ca0b4d0'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_ACCESS = ('read_write',)
@@ -4119,7 +4119,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_SHAPES = (('cloud_state', (('any_1d'
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_LAYOUT_HASH = '93dcf3e051f9c26c17531fd991379f77fa45b61b2e5ca8e1f34442bbd0319926'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_ACCESS = ('read_write',)
@@ -4127,7 +4127,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_LAYOUT_HASH = 'b45480347791a659210621742e0809147a3040f9f84a46c7e3a65219df23fa95'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_ACCESS = ('read_write',)
@@ -4135,7 +4135,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_SHAPES = (('cloud_state', (('any_1d',),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_LAYOUT_HASH = 'f76d27b528885100ba90789e6ce559f405e32a2744d41ee9d2186decebd07942'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_RESOURCES = (('snow_cloud_efficiency', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_ACCESS = ('read', 'read_write')
@@ -4143,7 +4143,7 @@ THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_SHAPES = (('cloud_state', (('any_1d',),)), 
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_LAYOUT_HASH = 'c535cf1288dec625eba3ca5134a70021f982061d195f51689a8c5b7b0c690d22'
-THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_WET_BULB_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('graupel_melt_marker', 'float', 'read'), ('wet_bulb', 'float', 'read_write'))
 THOMPSON_WARM_SOURCE_WET_BULB_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -4151,7 +4151,7 @@ THOMPSON_WARM_SOURCE_WET_BULB_SHAPES = (('graupel_melt_marker', (('any_1d',),)),
 THOMPSON_WARM_SOURCE_WET_BULB_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_WET_BULB_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_WET_BULB_LAYOUT_HASH = 'ba892523a2246a0a84137f198f07710aea3c6efdd4aef2c9153b2654a107c02a'
-THOMPSON_WARM_SOURCE_WET_BULB_SHADER_HASH = 'cabb0f2e3c99cee4a27b9d3d7177d239c7fefeb52ed230ce932c6fdee2a8b62a'
+THOMPSON_WARM_SOURCE_WET_BULB_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 TOTAL_THETA_RESOURCES = (('thp', 'float', 'read'), ('thb', 'float', 'read'), ('theta', 'float', 'read_write'))
 TOTAL_THETA_ACCESS = ('read', 'read', 'read_write')

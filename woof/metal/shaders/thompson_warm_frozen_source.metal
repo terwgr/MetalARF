@@ -1312,7 +1312,9 @@ kernel void thompson_warm_frozen_source_network_finalize(
     const D64 rain_graupel_rain_rate = D64::fromBits(state[62 * n + idx]);
     const D64 fusion_rate = -snow_melt_rate - graupel_melt_rate
         - rain_snow_rain_rate - rain_graupel_rain_rate;
-    const D64 vapor_rate = D64::fromBits(state[45 * n + idx]);
+    // The intervening graupel diameter power passes reuse slot 45.
+    // Limits holds the vapor tendency in slot 63 for the final heat update.
+    const D64 vapor_rate = D64::fromBits(state[63 * n + idx]);
     r.temperature[idx] = temp0 + (float)(
         ((D64::fromBits(0x411462c000000000ul) * fusion_rate)
          + (D64::fromBits(0x41459f2800000000ul) * vapor_rate))
