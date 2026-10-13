@@ -237,6 +237,13 @@ def main(argv=None):
   '--backend',a.backend,'--outdir',str(a.outdir/'cli-initialization'),'--run-stamp','off','--products','none']
  try:code=cli_main(cli_args)
  except DumpComplete:print('Captured first step; no second step or full forecast.');return 0
+ # Some runner versions record the deliberate stop and return a CLI error.
+ # Only the completed receipt proves all three stages were captured.
+ receipt_path=a.outdir/'capture.json'
+ if receipt_path.exists():
+  receipt=json.loads(receipt_path.read_text())
+  if receipt.get('status')=='CAPTURE_COMPLETE' and receipt.get('outer_steps')==1 and receipt.get('rk_stages')==3:
+   print('Captured first step; runner recorded the deliberate diagnostic stop.');return 0
  raise RuntimeError(f'Production CLI returned {code} before a complete step capture')
 
 if __name__=='__main__':raise SystemExit(main())

@@ -1,0 +1,182 @@
+[
+  {
+    "module": "acoustic",
+    "same_source": true,
+    "local": "3c71e027c197a6d4d7a2b96f6b1ae828cc249bc6312f1ff39c1325fa08bf2f1c",
+    "cuda": "3c71e027c197a6d4d7a2b96f6b1ae828cc249bc6312f1ff39c1325fa08bf2f1c"
+  },
+  {
+    "module": "advection",
+    "same_source": true,
+    "local": "ba500e338d41859b88351ca8014921381c2a33a78b9d56ec66d351a3ccdc073c",
+    "cuda": "ba500e338d41859b88351ca8014921381c2a33a78b9d56ec66d351a3ccdc073c"
+  },
+  {
+    "module": "bandwidth_glue",
+    "same_source": true,
+    "local": "85d3fa5d2d00f36c7201a71a7c18b9abff9cf53cae65cc82ca97492be50053f8",
+    "cuda": "85d3fa5d2d00f36c7201a71a7c18b9abff9cf53cae65cc82ca97492be50053f8"
+  },
+  {
+    "module": "coriolis_map",
+    "same_source": true,
+    "local": "30a7c0778f9df73efee7e8014d9fdce650bd7e4c3b955ef70ccbd0b9b53d5b1b",
+    "cuda": "30a7c0778f9df73efee7e8014d9fdce650bd7e4c3b955ef70ccbd0b9b53d5b1b"
+  },
+  {
+    "module": "diagnostics",
+    "same_source": true,
+    "local": "f3da804ee5d4e686e044433a4366b3a4f2ed92f1421105dee1a98905818611ea",
+    "cuda": "f3da804ee5d4e686e044433a4366b3a4f2ed92f1421105dee1a98905818611ea"
+  },
+  {
+    "module": "diff6",
+    "same_source": true,
+    "local": "7db172b01a10c9613b1475947c21703d0161844aed348cf029dcbb1199993148",
+    "cuda": "7db172b01a10c9613b1475947c21703d0161844aed348cf029dcbb1199993148"
+  },
+  {
+    "module": "dycore",
+    "same_source": true,
+    "local": "433ab4ba2ae49a20dc1c3abcf83753fd6d831f6267639bc1c9bbf812977fbdaf",
+    "cuda": "433ab4ba2ae49a20dc1c3abcf83753fd6d831f6267639bc1c9bbf812977fbdaf"
+  },
+  {
+    "module": "face_mass",
+    "same_source": true,
+    "local": "506efbce8528e1c4a3fd5022fe9b831d78d66abc9a28ca9d7a6bd0af9dcd229a",
+    "cuda": "506efbce8528e1c4a3fd5022fe9b831d78d66abc9a28ca9d7a6bd0af9dcd229a"
+  },
+  {
+    "module": "health",
+    "same_source": true,
+    "local": "5f01ec47943352f0239f690945ec20924a23a70bbba6b5ca2437724871314b0c",
+    "cuda": "5f01ec47943352f0239f690945ec20924a23a70bbba6b5ca2437724871314b0c"
+  },
+  {
+    "module": "held_heating",
+    "same_source": true,
+    "local": "0e51ecf64dc477bd9f7b5b97502824d4452d4f2832dfafc1d90fc75e26e18a7a",
+    "cuda": "0e51ecf64dc477bd9f7b5b97502824d4452d4f2832dfafc1d90fc75e26e18a7a"
+  },
+  {
+    "module": "lbc_state",
+    "same_source": true,
+    "local": "e2e4f809c366e020eac3f1a05fd0577ff17e75c6a15852e74eb4cd7b61e274dd",
+    "cuda": "e2e4f809c366e020eac3f1a05fd0577ff17e75c6a15852e74eb4cd7b61e274dd"
+  },
+  {
+    "module": "microphysics_validation",
+    "same_source": true,
+    "local": "0371f3ca3ec55157d7d65d4f980d5478564eedbe83a25ea4f16087569a74b3eb",
+    "cuda": "0371f3ca3ec55157d7d65d4f980d5478564eedbe83a25ea4f16087569a74b3eb"
+  },
+  {
+    "module": "noah",
+    "same_source": true,
+    "local": "d4dca1d07ce274991184b6f2f6cd48c1f04c84856950f5b4e08a208ffafc46ff",
+    "cuda": "d4dca1d07ce274991184b6f2f6cd48c1f04c84856950f5b4e08a208ffafc46ff"
+  },
+  {
+    "module": "openbc",
+    "same_source": false,
+    "local": "daaa1543c9d5ebdbe3073bbe86d42961bee18d402cb76261584e084a89a111a7",
+    "cuda": "5bf7babe4a953b1a12f8ddca403f04d86fa0aed0f7684992b5eabb5d82cbca57"
+  },
+  {
+    "module": "pd_advection",
+    "same_source": true,
+    "local": "9011930b5b510770f81e11c56a7fd6764233e1592127edc05c1d9c20f7e5142b",
+    "cuda": "9011930b5b510770f81e11c56a7fd6764233e1592127edc05c1d9c20f7e5142b"
+  },
+  {
+    "module": "pd_vertical_sl",
+    "same_source": true,
+    "local": "929291a52c94c01fc7a3c648d867e26f0339b84865a24445911d8f7b2f862222",
+    "cuda": "929291a52c94c01fc7a3c648d867e26f0339b84865a24445911d8f7b2f862222"
+  },
+  {
+    "module": "rk_bookkeeping",
+    "same_source": true,
+    "local": "858de9601fec0b82edb34c4e094247c813a8cb5a4c7457cf917a2c7bfe440e77",
+    "cuda": "858de9601fec0b82edb34c4e094247c813a8cb5a4c7457cf917a2c7bfe440e77"
+  },
+  {
+    "module": "rrtmgp_cloud",
+    "same_source": true,
+    "local": "4ee90af7209167d012e195c011752f84e08d6ea741350977b1a735ac8ee444d4",
+    "cuda": "4ee90af7209167d012e195c011752f84e08d6ea741350977b1a735ac8ee444d4"
+  },
+  {
+    "module": "rrtmgp_gas",
+    "same_source": true,
+    "local": "3c85ba59159dadd97d6e5215cc0b552c4a017539d9c23b99bb77e1a788dee964",
+    "cuda": "3c85ba59159dadd97d6e5215cc0b552c4a017539d9c23b99bb77e1a788dee964"
+  },
+  {
+    "module": "rrtmgp_mcica",
+    "same_source": true,
+    "local": "4747b7e9cb34990a0650f7a654163f0c8ca2979afe38840e0613164b789520f0",
+    "cuda": "4747b7e9cb34990a0650f7a654163f0c8ca2979afe38840e0613164b789520f0"
+  },
+  {
+    "module": "rrtmgp_validation",
+    "same_source": true,
+    "local": "36f7a4dccc8c66be225e16fdd6088f0fafa7a357ac1aba9b4a99f98af297c370",
+    "cuda": "36f7a4dccc8c66be225e16fdd6088f0fafa7a357ac1aba9b4a99f98af297c370"
+  },
+  {
+    "module": "sfclay",
+    "same_source": true,
+    "local": "64893145b9bb557e1c30b32b323cf8118c91f903893c4a5ba7668b4e04a5ee9e",
+    "cuda": "64893145b9bb557e1c30b32b323cf8118c91f903893c4a5ba7668b4e04a5ee9e"
+  },
+  {
+    "module": "smag2d",
+    "same_source": true,
+    "local": "400d89d032c13c4ed64be6cfd96e72483dc176fc83a933098b8cde85ac2a34a9",
+    "cuda": "400d89d032c13c4ed64be6cfd96e72483dc176fc83a933098b8cde85ac2a34a9"
+  },
+  {
+    "module": "solar_albedo",
+    "same_source": true,
+    "local": "ef358038ad24967ccfab48a8ef022fab368626d65627722d43769165999f5b6f",
+    "cuda": "ef358038ad24967ccfab48a8ef022fab368626d65627722d43769165999f5b6f"
+  },
+  {
+    "module": "surface_w",
+    "same_source": true,
+    "local": "483f6d3e72865340880738e1b92f661528d24050532630e771bb81ad191315d1",
+    "cuda": "483f6d3e72865340880738e1b92f661528d24050532630e771bb81ad191315d1"
+  },
+  {
+    "module": "thompson",
+    "same_source": true,
+    "local": "b3bbf88b6231433036a8449593ff497e46909b145c7556579568a4d3dc64fbf2",
+    "cuda": "b3bbf88b6231433036a8449593ff497e46909b145c7556579568a4d3dc64fbf2"
+  },
+  {
+    "module": "uh_diag",
+    "same_source": true,
+    "local": "9dc88c6e14b2aaaa4249a9f844dc231f105431623375c988a2894e322de2f3ea",
+    "cuda": "9dc88c6e14b2aaaa4249a9f844dc231f105431623375c988a2894e322de2f3ea"
+  },
+  {
+    "module": "upper_wind_limiter",
+    "same_source": true,
+    "local": "3a30c8efa58c4d28b37a7dac81129235639fc32af578b49510856372faeb6386",
+    "cuda": "3a30c8efa58c4d28b37a7dac81129235639fc32af578b49510856372faeb6386"
+  },
+  {
+    "module": "ysu",
+    "same_source": true,
+    "local": "01cd5d4c3967a5af0e38a5b7554a909dc4012a07ef7b3b8410a03825f95c8d29",
+    "cuda": "01cd5d4c3967a5af0e38a5b7554a909dc4012a07ef7b3b8410a03825f95c8d29"
+  },
+  {
+    "module": "ysu_validation",
+    "same_source": true,
+    "local": "09a8565214c8550d78b4d3eb0ff3009aeafc1cc8fb9fceaa5b007883370928cb",
+    "cuda": "09a8565214c8550d78b4d3eb0ff3009aeafc1cc8fb9fceaa5b007883370928cb"
+  }
+]

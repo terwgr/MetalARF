@@ -1,0 +1,156 @@
+{
+  "status": "PASS",
+  "source_commit": "0f909c471 (see runtime source identity in retained report)",
+  "input_identities_match": {
+    "experiment_config_sha256": true,
+    "geometry_receipt_sha256": true,
+    "prepared_content_sha256": true,
+    "prepared_header_sha256": true,
+    "proof_sha256": true,
+    "source_manifest_sha256": true,
+    "static_cache_sha256": true,
+    "wps_namelist_sha256": true,
+    "wrf_direct_contract_sha256": true
+  },
+  "validation": {
+    "frames": 49,
+    "numeric_field_time_checks": 3919,
+    "all_finite": true,
+    "time_schema_shape_dtype_units_match": true,
+    "exact_checks": 1998
+  },
+  "rain": {
+    "metal": {
+      "mean": 3.3887791311368347,
+      "max": 17.322385787963867
+    },
+    "cuda": {
+      "mean": 3.3820343064144254,
+      "max": 17.329736709594727
+    },
+    "mean_excess_pct": 0.19943099659329722,
+    "final_rmse": 0.08735689369384238,
+    "final_max_abs": 0.48003721237182617,
+    "correlation": 0.9995978140675541
+  },
+  "metrics": [
+    {
+      "field": "RAINNC",
+      "units": "mm",
+      "before": 0.21696622216015313,
+      "after": 0.06835939030938296,
+      "change_pct": -68.493072502814,
+      "new_max_abs": 0.48450279235839844,
+      "final_rmse": 0.08735689369384238
+    },
+    {
+      "field": "T2",
+      "units": "K",
+      "before": 0.28239402599323166,
+      "after": 0.2717405233705291,
+      "change_pct": -3.7725665708515654,
+      "new_max_abs": 1.044097900390625,
+      "final_rmse": 0.05213887008245097
+    },
+    {
+      "field": "U10",
+      "units": "m s-1",
+      "before": 0.1272293956939667,
+      "after": 0.12342976803877437,
+      "change_pct": -2.986438499112143,
+      "new_max_abs": 1.6756446361541748,
+      "final_rmse": 0.012689470739918576
+    },
+    {
+      "field": "V10",
+      "units": "m s-1",
+      "before": 0.46146673348860484,
+      "after": 0.4519104048259167,
+      "change_pct": -2.0708597108276994,
+      "new_max_abs": 2.514671802520752,
+      "final_rmse": 0.01211551881306598
+    },
+    {
+      "field": "U",
+      "units": "m s-1",
+      "before": 0.1290279442861828,
+      "after": 0.11281996426050618,
+      "change_pct": -12.561604476722865,
+      "new_max_abs": 2.4739487171173096,
+      "final_rmse": 0.0061892633138479385
+    },
+    {
+      "field": "V",
+      "units": "m s-1",
+      "before": 0.20108336401620686,
+      "after": 0.18343778165694,
+      "change_pct": -8.775257190268936,
+      "new_max_abs": 2.9469823837280273,
+      "final_rmse": 0.008546681941213791
+    },
+    {
+      "field": "QVAPOR",
+      "units": "kg kg-1",
+      "before": 5.189764859732603e-05,
+      "after": 5.143067143240544e-05,
+      "change_pct": -0.8998040904393712,
+      "new_max_abs": 0.0007428070530295372,
+      "final_rmse": 4.506831622538254e-06
+    },
+    {
+      "field": "QCLOUD",
+      "units": "kg kg-1",
+      "before": 1.3141903236906162e-05,
+      "after": 1.0904056893039543e-05,
+      "change_pct": -17.028327659437615,
+      "new_max_abs": 0.0004553499716166698,
+      "final_rmse": 1.4504764148874598e-09
+    },
+    {
+      "field": "QRAIN",
+      "units": "kg kg-1",
+      "before": 2.4215726482115623e-06,
+      "after": 1.0158474778360897e-06,
+      "change_pct": -58.05009283589582,
+      "new_max_abs": 3.583998477552086e-05,
+      "final_rmse": 2.706747298498615e-11
+    },
+    {
+      "field": "QICE",
+      "units": "kg kg-1",
+      "before": 4.1920729653453286e-08,
+      "after": 3.100940599260497e-08,
+      "change_pct": -26.02846789893476,
+      "new_max_abs": 1.9479031834634952e-05,
+      "final_rmse": 0.0
+    },
+    {
+      "field": "QSNOW",
+      "units": "kg kg-1",
+      "before": 2.7018431848179484e-06,
+      "after": 1.8283980990045416e-07,
+      "change_pct": -93.23277490981499,
+      "new_max_abs": 2.4114211555570364e-05,
+      "final_rmse": 1.0202640332190559e-10
+    },
+    {
+      "field": "SWDOWN",
+      "units": "W m-2",
+      "before": 7.415899119162309,
+      "after": 3.8688617813899904,
+      "change_pct": -47.830172454840344,
+      "new_max_abs": 116.39971923828125,
+      "final_rmse": 0.0
+    },
+    {
+      "field": "PBLH",
+      "units": "m",
+      "before": 275.2187897286049,
+      "after": 268.3517140621803,
+      "change_pct": -2.4951332985645003,
+      "new_max_abs": 1107.2910232543945,
+      "final_rmse": 4.434055953670894
+    }
+  ],
+  "verdict": "Improved substantially for rainfall and final winds; parity not established. Early humidity and surface wind drift remains systematic enough to investigate."
+}

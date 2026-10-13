@@ -78,3 +78,15 @@ Submit deformation before its coefficient consumer and restore the same boundary
 The source host harness requires launcher-only renaming of its tx/ty thread loops because those names shadow pointer parameters in this module; no model source is changed by that diagnostic adaptation. `tools/rain_smag_replay.py --capture-root DIR --config CONFIG --output OUT --backend host|metal` reproduces the coefficient comparison from `tools/dump_backend_step1.py` captures; Metal additionally takes `--reference-root` for the host outputs. The host result remains a CPU CUDA-source transcription, not executed NVIDIA output.
 
 The rainy perturbation control was stopped before completion after this deterministic defect was found. Its partial history is not used to establish a tolerance. A third unchanged-input full rainy forecast follows the repaired mixing pipeline.
+
+## Third full forecast: mixing pipeline repaired
+
+All 49 paired histories and 3,919 numeric checks pass finiteness/schema/time verification again, on commit 0f909c471. Final rain mean is 3.388779 mm versus CUDA 3.382034 mm (+0.1994%); maxima are 17.322386 versus 17.329737 mm. Final rain RMSE is 0.087357 mm (original 0.273736), maximum final difference 0.480037 mm and correlation 0.999598. Pooled rain RMSE is 0.068359 mm; pooled snow RMSE falls to 1.82840e-7 kg/kg (original 2.70184e-6).
+
+Transient gaps remain: pooled T2 0.271741 K, V10 0.451910 m/s, Qv 5.14307e-5 kg/kg; maxima 1.04410 K, 2.51467 m/s and 0.000742807 kg/kg respectively. Final U/V RMSE is 0.00619/0.00855 m/s. Rainfall bias is now small, but this does not establish full trajectory parity.
+
+The transferred CUDA certification capsule verifies that the local CUDA-source text hashes match 29 of 30 examined numerical modules. The openbc difference is confined to removal of the CFL histogram diagnostic; its damping and boundary numerical formulas are unchanged. The module authority comes from the actual run's recorded source hashes, with its release commit ea80021978f86287acb8cdaf21063076d3bf3be0 available locally.
+
+Additional coverage: first-call YSU mass winds, theta and qv/qc/qi inputs match the initial CUDA history exactly; the first-call and three-hour YSU host replays have exact PBL height and level indices. At three hours the recorded timestep is 24 seconds (the forecast's unchanged adaptive clock), and the sampled dv/dtheta outputs match the source host byte-for-byte. The dry capture's PBL face coupling and its three RK momentum additions are also byte-identical to the FP32 source expressions. Remaining boundary/coupling diagnosis continues; no numerical-parity claim is made.
+
+The first six rainy lateral-boundary relaxation calls (u, v, theta, geopotential, mass and qv) are byte-identical to the recorded CUDA-source host calculation on the same inputs. The remaining trajectory gap needs paired actual CUDA/Metal intermediate states to establish the first backend divergence; a one-step CUDA handoff and matching Metal capture are prepared.
