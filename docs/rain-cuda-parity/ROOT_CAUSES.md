@@ -95,6 +95,23 @@ The first six rainy lateral-boundary relaxation calls (u, v, theta, geopotential
 
 At revision 0f909c47, the no-CuPy Metal `accept_microphysics` branch validates the canonical Thompson diagnostics, but adds `RAINNCV` to `_pending_rainbl` only inside `_metal_gfs_profile`. The MP8/YSU/MM5/Noah configuration has that flag false, so the branch returns without recording any Thompson precipitation for the land surface. Its published cumulative RAINNC can still be nonzero while Noah receives no microphysics rainfall.
 
-`MicrophysicsDiagnostics.rainncv` is the per-call increment in mm (kg m⁻²). Each post-RK acceptance must add that increment once to `_pending_rainbl`, independently of the GFS-specific Morrison validation. At the next due `_run_noah`, the native forcing kernel adds the pending total to `fields['rainbl']`, preserving externally supplied rainfall. Noah consumes that amount (its column kernel computes precipitation rate as `rainbl / dt`). After Noah and any urban coupling return, the native clearing kernel zeros both RAINBL and the pending accumulator. The canonical microphysics increment is not cleared by this handoff.
+`MicrophysicsDiagnostics.rainncv` aliases the canonical `mp_rainncv` scratch buffer, the per-call increment in mm (kg m⁻²). `dycore.step` calls `apply_microphysics` after RK3, then calls `state.physics.accept_microphysics` exactly once with that result and the actual step dt. The driver initializes `_pending_rainbl` to zero. Each post-RK acceptance must add that increment once to `_pending_rainbl`, independently of the GFS-specific Morrison validation. At the next due `_run_noah`, the native forcing kernel adds the pending total to `fields['rainbl']`, preserving externally supplied rainfall. Noah consumes that amount (its column kernel computes precipitation rate as `rainbl / dt`). After Noah and any urban coupling return, the native clearing kernel zeros both RAINBL and the pending accumulator. The canonical microphysics increment is not cleared by this handoff.
 
-Move accumulation outside the GFS guard. `tests/test_metal_noah_rain_handoff.py` exercises real native Metal accumulation, Noah forcing and clearing with `cp=None`, MP8 and `_metal_gfs_profile=False`; only the Noah column integration is replaced by a probe at its real entrypoint. It verifies two accepted increments accumulate, the next Noah call receives their sum plus external rainfall exactly once, both carriers clear, a second Noah call receives zero despite unchanged canonical RAINNCV, and a later new increment is delivered once. Three independent cycles use the usual batched runtime. Before the repair it fails with all six pending cells zero instead of the expected total.
+Move accumulation outside the GFS guard. `tests/test_metal_noah_rain_handoff.py` exercises real native Metal accumulation, Noah forcing and clearing with `cp=None`, MP8 and `_metal_gfs_profile=False`; only the Noah column integration is replaced by a probe at its real entrypoint. It verifies two accepted increments accumulate, the next Noah call receives their sum plus external rainfall exactly once, both carriers clear, a second Noah call receives zero despite unchanged canonical RAINNCV, and a later new increment is delivered once. Three independent cycles use the usual batched runtime. Before the repair it fails with all six pending cells zero instead of the expected total; after the repair it passes all three cycles.
+
+## Fourth full forecast: rainfall reaches Noah
+
+The unchanged 12-hour run at bfbd69ecdda5d408f91bc6bd441e1684ddc9dd76 passes all 1,827 steps, 49 paired history times and 3,919 finite/schema/dimensions/dtype/units checks. All nine recorded input/configuration SHA256 identities match CUDA. `forecast-iteration-4.json` retains the measured results.
+
+| Metric | Before rain handoff fix | After rain handoff fix |
+|---|---:|---:|
+| Final RAINNC RMSE (mm) | 0.0873569 | 0.00661366 |
+| Pooled RAINNC RMSE (mm) | 0.0683594 | 0.00514182 |
+| Pooled T2 RMSE (K) | 0.271741 | 0.0171141 |
+| Pooled V10 RMSE (m/s) | 0.451910 | 0.0310900 |
+| Pooled QVAPOR RMSE (kg/kg) | 5.14307e-5 | 1.47184e-6 |
+| Pooled PBLH RMSE (m) | 268.352 | 31.5418 |
+
+Metal final rainfall mean is 3.381841878 mm versus CUDA 3.382034306 mm (-0.005690%); maxima are 17.339205 versus 17.329737 mm. Final rain correlation is 0.999997662 and maximum pointwise difference 0.073783 mm. Restoring rainfall delivery explains most of the previous broad surface wind, temperature and humidity drift.
+
+Full trajectory parity remains unestablished. Local peak differences include T2 0.605957 K, V10 1.52243 m/s, Qv 0.000203218 kg/kg and SWDOWN 84.0853 W/m². PBL height differs by 1,102.46 m at +1.5 h, (i=7,j=5): Metal 9.330 m versus CUDA 1,111.786 m. V10 peaks at +2.5 h, (i=26,j=19). These residual roots are not established, and the unavailable CUDA machine prevents a new paired intermediate-state capture at present. No tolerance or exact-parity claim is inferred from the small final errors. Pooled metrics equally weight all saved native-grid values, including initialization.

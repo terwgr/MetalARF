@@ -1,0 +1,156 @@
+{
+  "status": "PASS",
+  "source_commit": "bfbd69ecdda5d408f91bc6bd441e1684ddc9dd76",
+  "input_identities_match": {
+    "experiment_config_sha256": true,
+    "geometry_receipt_sha256": true,
+    "prepared_content_sha256": true,
+    "prepared_header_sha256": true,
+    "proof_sha256": true,
+    "source_manifest_sha256": true,
+    "static_cache_sha256": true,
+    "wps_namelist_sha256": true,
+    "wrf_direct_contract_sha256": true
+  },
+  "validation": {
+    "frames": 49,
+    "numeric_field_time_checks": 3919,
+    "all_finite": true,
+    "time_schema_shape_dtype_units_match": true,
+    "exact_checks": 1998
+  },
+  "rain": {
+    "metal": {
+      "mean": 3.3818418777734043,
+      "max": 17.339204788208008
+    },
+    "cuda": {
+      "mean": 3.3820343064144254,
+      "max": 17.329736709594727
+    },
+    "mean_excess_pct": -0.00568973060551814,
+    "final_rmse": 0.006613659501588943,
+    "final_max_abs": 0.07378292083740234,
+    "correlation": 0.9999976618936876
+  },
+  "metrics": [
+    {
+      "field": "RAINNC",
+      "units": "mm",
+      "before": 0.21696622216015313,
+      "after": 0.005141824590044298,
+      "change_pct": -97.63012669029703,
+      "new_max_abs": 0.07475757598876953,
+      "final_rmse": 0.006613659501588943
+    },
+    {
+      "field": "T2",
+      "units": "K",
+      "before": 0.28239402599323166,
+      "after": 0.01711408626742845,
+      "change_pct": -93.93964294845294,
+      "new_max_abs": 0.60595703125,
+      "final_rmse": 0.003193942575978985
+    },
+    {
+      "field": "U10",
+      "units": "m s-1",
+      "before": 0.1272293956939667,
+      "after": 0.008307338716374145,
+      "change_pct": -93.47058227301784,
+      "new_max_abs": 0.34345459938049316,
+      "final_rmse": 0.0007167947782393328
+    },
+    {
+      "field": "V10",
+      "units": "m s-1",
+      "before": 0.46146673348860484,
+      "after": 0.031090036634959007,
+      "change_pct": -93.2627783589244,
+      "new_max_abs": 1.522428035736084,
+      "final_rmse": 0.0009096056420181855
+    },
+    {
+      "field": "U",
+      "units": "m s-1",
+      "before": 0.1290279442861828,
+      "after": 0.004763015930631715,
+      "change_pct": -96.30853924164879,
+      "new_max_abs": 0.4221177101135254,
+      "final_rmse": 0.000597462235276355
+    },
+    {
+      "field": "V",
+      "units": "m s-1",
+      "before": 0.20108336401620686,
+      "after": 0.010024369688033179,
+      "change_pct": -95.01481898461513,
+      "new_max_abs": 1.7055187225341797,
+      "final_rmse": 0.0007688305841893684
+    },
+    {
+      "field": "QVAPOR",
+      "units": "kg kg-1",
+      "before": 5.189764859732603e-05,
+      "after": 1.471844585218248e-06,
+      "change_pct": -97.16394745234356,
+      "new_max_abs": 0.00020321831107139587,
+      "final_rmse": 3.7367196993610194e-07
+    },
+    {
+      "field": "QCLOUD",
+      "units": "kg kg-1",
+      "before": 1.3141903236906162e-05,
+      "after": 8.802576649784636e-07,
+      "change_pct": -93.3019011850091,
+      "new_max_abs": 0.00016310373757733032,
+      "final_rmse": 3.853540835906672e-09
+    },
+    {
+      "field": "QRAIN",
+      "units": "kg kg-1",
+      "before": 2.4215726482115623e-06,
+      "after": 1.1303322298818767e-07,
+      "change_pct": -95.33223902773813,
+      "new_max_abs": 1.0290095815435052e-05,
+      "final_rmse": 2.9035268222017765e-12
+    },
+    {
+      "field": "QICE",
+      "units": "kg kg-1",
+      "before": 4.1920729653453286e-08,
+      "after": 1.689271958173464e-08,
+      "change_pct": -59.70318331436037,
+      "new_max_abs": 1.4440685845329426e-05,
+      "final_rmse": 0.0
+    },
+    {
+      "field": "QSNOW",
+      "units": "kg kg-1",
+      "before": 2.7018431848179484e-06,
+      "after": 6.50317737956924e-08,
+      "change_pct": -97.59305891026113,
+      "new_max_abs": 1.261490979231894e-05,
+      "final_rmse": 2.2609778388841855e-11
+    },
+    {
+      "field": "SWDOWN",
+      "units": "W m-2",
+      "before": 7.415899119162309,
+      "after": 1.2803323641520878,
+      "change_pct": -82.73530500376181,
+      "new_max_abs": 84.08529663085938,
+      "final_rmse": 0.0
+    },
+    {
+      "field": "PBLH",
+      "units": "m",
+      "before": 275.2187897286049,
+      "after": 31.541782897125664,
+      "change_pct": -88.53937882357916,
+      "new_max_abs": 1102.4556560516357,
+      "final_rmse": 0.13721207936560972
+    }
+  ],
+  "verdict": "The missing MP8-to-Noah handoff is fixed and accounts for most of the previous transient surface drift. Rainfall is close, but full trajectory parity is not established; isolated wind, temperature, humidity, radiation and PBL-height discrepancies remain."
+}
