@@ -2034,6 +2034,25 @@ def refresh_saved_wind_fluxes(state, cfg, ru, rv):
     Run this before small_step_finish overwrites the saved stage fields.
     """
     mux, muy = stage_face_masses(state, cfg, state.total_mu())
+    if getattr(state, "_metal_setup_state", False):
+        # Reuse the production stage coupling kernels, but refresh only
+        # horizontal references. The acoustic mean and saved Omega stay live.
+        nz, ny, nx = state.p.shape
+        context = state._array_module.context
+        context.submit_kernel(
+            "couple_ru",
+            {"u": state.u, "c1h": state.c1h, "c2h": state.c2h,
+             "mux": mux, "msfu": state.msfu, "ru": ru},
+            {"has_msf": int(state.has_msf), "nz": nz, "ny": ny, "nx": nx},
+            exact_policy=WRF_EXACT, grid_size=ru.size)
+        context.submit_kernel(
+            "couple_rv",
+            {"v": state.v, "c1h": state.c1h, "c2h": state.c2h,
+             "muy": muy, "msfv": state.msfv, "rv": rv},
+            {"has_msf": int(state.has_msf), "reciprocal": int(WRF_EXACT),
+             "nz": nz, "ny": ny, "nx": nx},
+            exact_policy=WRF_EXACT, grid_size=rv.size)
+        return
     for wind, muface, msf, flux in ((state.u, mux, state.msfu, ru),
                                     (state.v, muy, state.msfv, rv)):
         kernel = _couple_momentum_kernel(

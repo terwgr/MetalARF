@@ -20,5 +20,5 @@
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v1",
-  "source_commit": "a2a738269e398f1cc9e68e8183c6d634614e885e"
+  "source_commit": "3f0d36aac5bdea56034d5737c559e3736867fded"
 }
