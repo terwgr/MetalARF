@@ -57,5 +57,5 @@
     "native double arithmetic",
     "kernel entrypoint or production signature registration"
   ],
-  "verification": "MetalToolchain 27.1 compiled all four helpers together with the shared binary32/binary64 headers and executed the temporary kernel on Apple M2. Each of logf, expf, powf, and atanf matched the in-tree glibc 2.39 CPU transcription in woof/core/noahmp_libm.py exactly on 4,826 rows (zero bit mismatches each). Inputs covered special values, subnormals, thresholds and adjacent encodings, plus seeded random bit patterns/pairs. This is bounded evidence, not exhaustive certification; production consumption remains blocked by the shared primitive and consumer-level contracts."
+  "verification": "The repeatable tools/metal_gfk_regression.py probe compiles the production helper headers and executes synchronously. On Apple M2, all 25,104 seeded boundary/random rows matched woof/core/noahmp_libm.py exactly for FP32 logf, expf and powf and binary64 pow-log2/exp2-core words after restoring separate RN multiply/add/subtract. The fused baseline had 10,403 pow-log2 and 52 exp2-core word mismatches, while sampled final FP32 results matched. This bounded comparison is not exhaustive certification of the soft64 primitives or all consumers."
 }

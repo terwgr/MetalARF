@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Preserve separate binary64 rounding in Metal glibc exp/log/pow helpers;
+  retain a synchronous FP32 and binary64-core comparison tool.
+
 ## MetalARF 1.0.3
 
 Integrates PRs #8, #14, #13, #9, #11, #10, #12, #16 and #15 in one

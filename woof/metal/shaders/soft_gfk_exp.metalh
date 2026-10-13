@@ -12,6 +12,8 @@
 // in the repository NOTICE and licenses). The source's exceptional FADD(x,x)
 // branch remains the exact source FP32 add; the transcendental path is bits.
 
+// Preserve the pinned source's separate RN-even multiply and add/subtract;
+// using soft64_fma here changes the binary64 rounding graph.
 #include "soft_binary64.metalh"
 #include "soft_binary32.metalh"
 
@@ -47,10 +49,10 @@ static inline ulong soft_gfk_exp2_core(ulong xd, ulong shift,
     ulong t = SOFT_GFK_EXP2F_TAB[uint(ki & 31ul)];
     t += (ki + sign_bias) << 47u;
     const ulong s = t; // CUDA __longlong_as_double is a representation cast.
-    const ulong z = soft64_fma(p0, r, p1);
+    const ulong z = soft64_add(soft64_mul(p0, r), p1);
     const ulong r2 = soft64_mul(r, r);
-    ulong y = soft64_fma(p2, r, 0x3ff0000000000000ul);
-    y = soft64_fma(z, r2, y);
+    ulong y = soft64_add(soft64_mul(p2, r), 0x3ff0000000000000ul);
+    y = soft64_add(soft64_mul(z, r2), y);
     return soft64_mul(y, s);
 }
 
