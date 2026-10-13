@@ -4903,7 +4903,7 @@ WSM6_COLUMN_SHAPES = (('den', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx')
 WSM6_COLUMN_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('hail_opt', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 WSM6_COLUMN_THREADS_PER_GROUP = 32
 WSM6_COLUMN_LAYOUT_HASH = '081a60e13f12430bfee93f9bcfa5e27b6d6adeec301fc8eb3d29db6ac9498afb'
-WSM6_COLUMN_SHADER_HASH = '6dfdc89ce798e640fb104ec171b141c6f9a4ddde2f4d34f55b609964c796441f'
+WSM6_COLUMN_SHADER_HASH = 'b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff'
 
 WSM6_FINISH_RESOURCES = (('theta', 'float', 'read'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -4911,7 +4911,7 @@ WSM6_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('theta', (('nz', '
 WSM6_FINISH_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('no_mp_heating', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float')]
 WSM6_FINISH_THREADS_PER_GROUP = 128
 WSM6_FINISH_LAYOUT_HASH = '9756e7a0c13f5614b5e6f84d9c852d3778a87c5ba4a5aa5a137fcc39826f914e'
-WSM6_FINISH_SHADER_HASH = '6dfdc89ce798e640fb104ec171b141c6f9a4ddde2f4d34f55b609964c796441f'
+WSM6_FINISH_SHADER_HASH = 'b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff'
 
 WSM6_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('p', 'float', 'read'), ('alt', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('theta', 'float', 'read_write'), ('den', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('z8w', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4919,7 +4919,7 @@ WSM6_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('den', (('nz', 'ny', 'nx
 WSM6_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nzi', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 WSM6_PREPARE_THREADS_PER_GROUP = 128
 WSM6_PREPARE_LAYOUT_HASH = '81f6fca3462936ba1f3a8ef197f0db323053cff947f4843f0d23a7c254f02245'
-WSM6_PREPARE_SHADER_HASH = '6dfdc89ce798e640fb104ec171b141c6f9a4ddde2f4d34f55b609964c796441f'
+WSM6_PREPARE_SHADER_HASH = 'b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff'
 
 YSU_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('p', 'float', 'read'), ('p_interface', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('rthraten', 'float', 'read'), ('psfc', 'float', 'read'), ('znt', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('wspd', 'float', 'read'), ('br', 'float', 'read'), ('psim', 'float', 'read'), ('psih', 'float', 'read'), ('xland', 'float', 'read'), ('u10', 'float', 'read'), ('v10', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dtheta', 'float', 'read_write'), ('dqv', 'float', 'read_write'), ('dqc', 'float', 'read_write'), ('dqi', 'float', 'read_write'), ('exch_h', 'float', 'read_write'), ('exch_m', 'float', 'read_write'), ('hpbl', 'float', 'read_write'), ('kpbl', 'int32', 'read_write'), ('wstar', 'float', 'read_write'), ('delta', 'float', 'read_write'), ('topdown_radsum', 'float', 'read_write'), ('wstar3_2', 'float', 'read_write'), ('cloudflg', 'int32', 'read_write'), ('ws', 'float', 'read_write'), ('ctopo', 'float', 'read'), ('ctopo2', 'float', 'read'), ('u10o', 'float', 'read_write'), ('v10o', 'float', 'read_write'))
 YSU_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read_write')

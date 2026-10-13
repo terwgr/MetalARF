@@ -9980,7 +9980,7 @@
       "name": "wsm6_column",
       "parameter_size": 20,
       "resource_count": 21,
-      "shader_hash": "6dfdc89ce798e640fb104ec171b141c6f9a4ddde2f4d34f55b609964c796441f",
+      "shader_hash": "b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff",
       "threads_per_group": 32
     },
     {
@@ -9996,7 +9996,7 @@
       "name": "wsm6_finish",
       "parameter_size": 24,
       "resource_count": 3,
-      "shader_hash": "6dfdc89ce798e640fb104ec171b141c6f9a4ddde2f4d34f55b609964c796441f",
+      "shader_hash": "b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff",
       "threads_per_group": 128
     },
     {
@@ -10012,7 +10012,7 @@
       "name": "wsm6_prepare",
       "parameter_size": 36,
       "resource_count": 12,
-      "shader_hash": "6dfdc89ce798e640fb104ec171b141c6f9a4ddde2f4d34f55b609964c796441f",
+      "shader_hash": "b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff",
       "threads_per_group": 128
     },
     {
