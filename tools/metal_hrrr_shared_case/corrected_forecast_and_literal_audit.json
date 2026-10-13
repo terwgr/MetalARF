@@ -1,0 +1,5839 @@
+{
+  "executed_source_commit": "3a8ca4aa9f8db044d3cf301a7d683f4b441fb395",
+  "corrected_forecast": {
+    "status": "PASS",
+    "steps": 1827,
+    "model_seconds": 43200,
+    "frames": 49,
+    "forecast_and_io_seconds": 621.099168042012,
+    "numeric_field_time_comparison": {
+      "frames": 49,
+      "complete": true,
+      "finite_numeric_field_time_checks": true,
+      "numeric_field_time_checks": 3919,
+      "metrics": [
+        {
+          "field": "PSFC",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 6.1484375,
+          "peak": {
+            "field": "PSFC",
+            "lead_hours": 9.0,
+            "trim": 0,
+            "rmse": 0.5853623153416762,
+            "max_abs": 6.1484375,
+            "i": 4,
+            "j": 35,
+            "k": null
+          },
+          "latest": {
+            "field": "PSFC",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.25482249046728433,
+            "max_abs": 1.2109375,
+            "i": 23,
+            "j": 35,
+            "k": null
+          },
+          "rmse": 0.4418085922201473,
+          "original_rmse": 0.9614768908898759,
+          "noise_floor_rmse": 0.34045049142916134,
+          "original_max_abs": 11.2890625,
+          "noise_floor_max_abs": 9.1953125,
+          "rmse_reduction_fraction": 0.5404896400461169,
+          "rmse_over_noise_floor": 1.297717592844409
+        },
+        {
+          "field": "PSFC",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 5.5546875,
+          "peak": {
+            "field": "PSFC",
+            "lead_hours": 8.75,
+            "trim": 5,
+            "rmse": 0.6938678324449907,
+            "max_abs": 5.5546875,
+            "i": 6,
+            "j": 34,
+            "k": null
+          },
+          "latest": {
+            "field": "PSFC",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.2956072162550896,
+            "max_abs": 1.140625,
+            "i": 24,
+            "j": 34,
+            "k": null
+          },
+          "rmse": 0.5458796974177861,
+          "original_rmse": 1.1556489457246903,
+          "noise_floor_rmse": 0.3273854356599136,
+          "original_max_abs": 11.2890625,
+          "noise_floor_max_abs": 6.8671875,
+          "rmse_reduction_fraction": 0.5276422832061054,
+          "rmse_over_noise_floor": 1.6673915145841833
+        },
+        {
+          "field": "U",
+          "trim": 0,
+          "count": 3937640,
+          "max_abs": 1.751079797744751,
+          "peak": {
+            "field": "U",
+            "lead_hours": 8.75,
+            "trim": 0,
+            "rmse": 0.08236278203944082,
+            "max_abs": 1.751079797744751,
+            "i": 6,
+            "j": 35,
+            "k": 3
+          },
+          "latest": {
+            "field": "U",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.03681170525014955,
+            "max_abs": 0.6609840393066406,
+            "i": 15,
+            "j": 32,
+            "k": 48
+          },
+          "rmse": 0.06725614875049331,
+          "original_rmse": 0.11740852527939194,
+          "noise_floor_rmse": 0.0027466766171062753,
+          "original_max_abs": 2.7219148874282837,
+          "noise_floor_max_abs": 0.1801910400390625,
+          "rmse_reduction_fraction": 0.4271612850050983,
+          "rmse_over_noise_floor": 24.486373216134243
+        },
+        {
+          "field": "U",
+          "trim": 5,
+          "count": 2232930,
+          "max_abs": 1.5540425777435303,
+          "peak": {
+            "field": "U",
+            "lead_hours": 7.25,
+            "trim": 5,
+            "rmse": 0.12341152482561728,
+            "max_abs": 1.5540425777435303,
+            "i": 10,
+            "j": 34,
+            "k": 20
+          },
+          "latest": {
+            "field": "U",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.04462760961640021,
+            "max_abs": 0.6609840393066406,
+            "i": 15,
+            "j": 32,
+            "k": 48
+          },
+          "rmse": 0.08410260621525432,
+          "original_rmse": 0.1449937219674702,
+          "noise_floor_rmse": 0.0032387508320747597,
+          "original_max_abs": 2.7219148874282837,
+          "noise_floor_max_abs": 0.1801910400390625,
+          "rmse_reduction_fraction": 0.4199569121060083,
+          "rmse_over_noise_floor": 25.967606208649826
+        },
+        {
+          "field": "V",
+          "trim": 0,
+          "count": 3937640,
+          "max_abs": 2.153829514980316,
+          "peak": {
+            "field": "V",
+            "lead_hours": 10.25,
+            "trim": 0,
+            "rmse": 0.09481354685735363,
+            "max_abs": 2.153829514980316,
+            "i": 34,
+            "j": 18,
+            "k": 48
+          },
+          "latest": {
+            "field": "V",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.0660130778325437,
+            "max_abs": 1.2324936389923096,
+            "i": 33,
+            "j": 28,
+            "k": 48
+          },
+          "rmse": 0.08459240074804975,
+          "original_rmse": 0.13587375131664922,
+          "noise_floor_rmse": 0.0029821635043237272,
+          "original_max_abs": 2.3706818222999573,
+          "noise_floor_max_abs": 0.2440967559814453,
+          "rmse_reduction_fraction": 0.3774191120188476,
+          "rmse_over_noise_floor": 28.36611762748836
+        },
+        {
+          "field": "V",
+          "trim": 5,
+          "count": 2232930,
+          "max_abs": 2.153829514980316,
+          "peak": {
+            "field": "V",
+            "lead_hours": 10.25,
+            "trim": 5,
+            "rmse": 0.11626960523318887,
+            "max_abs": 2.153829514980316,
+            "i": 34,
+            "j": 18,
+            "k": 48
+          },
+          "latest": {
+            "field": "V",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.07835930225526304,
+            "max_abs": 1.2324936389923096,
+            "i": 33,
+            "j": 28,
+            "k": 48
+          },
+          "rmse": 0.10557403490982839,
+          "original_rmse": 0.16666982407792294,
+          "noise_floor_rmse": 0.00356494965283721,
+          "original_max_abs": 2.3706818222999573,
+          "noise_floor_max_abs": 0.2440967559814453,
+          "rmse_reduction_fraction": 0.3665677905769583,
+          "rmse_over_noise_floor": 29.61445327167691
+        },
+        {
+          "field": "U10",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 0.7744519710540771,
+          "peak": {
+            "field": "U10",
+            "lead_hours": 9.0,
+            "trim": 0,
+            "rmse": 0.07841848027321843,
+            "max_abs": 0.7744519710540771,
+            "i": 4,
+            "j": 35,
+            "k": null
+          },
+          "latest": {
+            "field": "U10",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.03745537256182963,
+            "max_abs": 0.17531776428222656,
+            "i": 17,
+            "j": 8,
+            "k": null
+          },
+          "rmse": 0.079254183183756,
+          "original_rmse": 0.11733713814708947,
+          "noise_floor_rmse": 0.0017028556700096793,
+          "original_max_abs": 1.4486541748046875,
+          "noise_floor_max_abs": 0.09179830551147461,
+          "rmse_reduction_fraction": 0.3245601142546539,
+          "rmse_over_noise_floor": 46.54192635322141
+        },
+        {
+          "field": "U10",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 0.6754748038947582,
+          "peak": {
+            "field": "U10",
+            "lead_hours": 7.0,
+            "trim": 5,
+            "rmse": 0.13470387992375996,
+            "max_abs": 0.6754748038947582,
+            "i": 32,
+            "j": 15,
+            "k": null
+          },
+          "latest": {
+            "field": "U10",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.044478207525736994,
+            "max_abs": 0.17531776428222656,
+            "i": 17,
+            "j": 8,
+            "k": null
+          },
+          "rmse": 0.09739843135998878,
+          "original_rmse": 0.147972484705837,
+          "noise_floor_rmse": 0.0019749767093687164,
+          "original_max_abs": 1.4486541748046875,
+          "noise_floor_max_abs": 0.06323361396789551,
+          "rmse_reduction_fraction": 0.34178011842125433,
+          "rmse_over_noise_floor": 49.3162430209728
+        },
+        {
+          "field": "V10",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 1.1874184608459473,
+          "peak": {
+            "field": "V10",
+            "lead_hours": 10.25,
+            "trim": 0,
+            "rmse": 0.08631168615410326,
+            "max_abs": 1.1874184608459473,
+            "i": 15,
+            "j": 30,
+            "k": null
+          },
+          "latest": {
+            "field": "V10",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.05747415420196562,
+            "max_abs": 0.42234349250793457,
+            "i": 14,
+            "j": 22,
+            "k": null
+          },
+          "rmse": 0.0895839289015919,
+          "original_rmse": 0.1188990956386765,
+          "noise_floor_rmse": 0.001885115185768659,
+          "original_max_abs": 1.0784605145454407,
+          "noise_floor_max_abs": 0.10188531875610352,
+          "rmse_reduction_fraction": 0.24655500178210532,
+          "rmse_over_noise_floor": 47.521726830216956
+        },
+        {
+          "field": "V10",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 1.1874184608459473,
+          "peak": {
+            "field": "V10",
+            "lead_hours": 10.25,
+            "trim": 5,
+            "rmse": 0.11092526365377353,
+            "max_abs": 1.1874184608459473,
+            "i": 15,
+            "j": 30,
+            "k": null
+          },
+          "latest": {
+            "field": "V10",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.07326297561810502,
+            "max_abs": 0.42234349250793457,
+            "i": 14,
+            "j": 22,
+            "k": null
+          },
+          "rmse": 0.1132755492714124,
+          "original_rmse": 0.15228451120251218,
+          "noise_floor_rmse": 0.0023110229272757785,
+          "original_max_abs": 1.0784605145454407,
+          "noise_floor_max_abs": 0.09831523895263672,
+          "rmse_reduction_fraction": 0.2561584341248243,
+          "rmse_over_noise_floor": 49.01532907115768
+        },
+        {
+          "field": "T2",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 1.068145751953125,
+          "peak": {
+            "field": "T2",
+            "lead_hours": 10.25,
+            "trim": 0,
+            "rmse": 0.09851798376602157,
+            "max_abs": 1.068145751953125,
+            "i": 15,
+            "j": 31,
+            "k": null
+          },
+          "latest": {
+            "field": "T2",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.08244022504029332,
+            "max_abs": 0.35675048828125,
+            "i": 27,
+            "j": 30,
+            "k": null
+          },
+          "rmse": 0.05894614684381185,
+          "original_rmse": 0.08891505852772924,
+          "noise_floor_rmse": 0.0038927784295970384,
+          "original_max_abs": 1.184478759765625,
+          "noise_floor_max_abs": 0.269561767578125,
+          "rmse_reduction_fraction": 0.3370510257783975,
+          "rmse_over_noise_floor": 15.142435643303148
+        },
+        {
+          "field": "T2",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 1.068145751953125,
+          "peak": {
+            "field": "T2",
+            "lead_hours": 10.25,
+            "trim": 5,
+            "rmse": 0.12240527883820092,
+            "max_abs": 1.068145751953125,
+            "i": 15,
+            "j": 31,
+            "k": null
+          },
+          "latest": {
+            "field": "T2",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.10305028523384073,
+            "max_abs": 0.35675048828125,
+            "i": 27,
+            "j": 30,
+            "k": null
+          },
+          "rmse": 0.07357321863138737,
+          "original_rmse": 0.11325011019434394,
+          "noise_floor_rmse": 0.004014905670931125,
+          "original_max_abs": 1.184478759765625,
+          "noise_floor_max_abs": 0.269561767578125,
+          "rmse_reduction_fraction": 0.3503474874758944,
+          "rmse_over_noise_floor": 18.32501798587076
+        },
+        {
+          "field": "T",
+          "trim": 0,
+          "count": 3841600,
+          "max_abs": 1.01873779296875,
+          "peak": {
+            "field": "T",
+            "lead_hours": 9.75,
+            "trim": 0,
+            "rmse": 0.0346993782754297,
+            "max_abs": 1.01873779296875,
+            "i": 32,
+            "j": 34,
+            "k": 1
+          },
+          "latest": {
+            "field": "T",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.032520470442280874,
+            "max_abs": 0.420684814453125,
+            "i": 14,
+            "j": 22,
+            "k": 0
+          },
+          "rmse": 0.027497809365342414,
+          "original_rmse": 0.11455504460117373,
+          "noise_floor_rmse": 0.0037590368832808186,
+          "original_max_abs": 1.406982421875,
+          "noise_floor_max_abs": 0.864410400390625,
+          "rmse_reduction_fraction": 0.7599598563199313,
+          "rmse_over_noise_floor": 7.315120925693825
+        },
+        {
+          "field": "T",
+          "trim": 5,
+          "count": 2160900,
+          "max_abs": 1.01873779296875,
+          "peak": {
+            "field": "T",
+            "lead_hours": 9.75,
+            "trim": 5,
+            "rmse": 0.040812978640661204,
+            "max_abs": 1.01873779296875,
+            "i": 32,
+            "j": 34,
+            "k": 1
+          },
+          "latest": {
+            "field": "T",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.03868696160562456,
+            "max_abs": 0.420684814453125,
+            "i": 14,
+            "j": 22,
+            "k": 0
+          },
+          "rmse": 0.03388704369971742,
+          "original_rmse": 0.12887521138139701,
+          "noise_floor_rmse": 0.0038184655369546327,
+          "original_max_abs": 1.406982421875,
+          "noise_floor_max_abs": 0.864410400390625,
+          "rmse_reduction_fraction": 0.7370553783269373,
+          "rmse_over_noise_floor": 8.874518670330488
+        },
+        {
+          "field": "W",
+          "trim": 0,
+          "count": 3920000,
+          "max_abs": 0.37444134801626205,
+          "peak": {
+            "field": "W",
+            "lead_hours": 5.25,
+            "trim": 0,
+            "rmse": 0.0234658851075104,
+            "max_abs": 0.37444134801626205,
+            "i": 19,
+            "j": 16,
+            "k": 15
+          },
+          "latest": {
+            "field": "W",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.0021199230101766695,
+            "max_abs": 0.01674725115299225,
+            "i": 3,
+            "j": 30,
+            "k": 20
+          },
+          "rmse": 0.01529334460525895,
+          "original_rmse": 0.024949208632930913,
+          "noise_floor_rmse": 0.0020645689421974847,
+          "original_max_abs": 0.4752657413482666,
+          "noise_floor_max_abs": 0.19226789847016335,
+          "rmse_reduction_fraction": 0.38702085383690343,
+          "rmse_over_noise_floor": 7.407524298501278
+        },
+        {
+          "field": "W",
+          "trim": 5,
+          "count": 2205000,
+          "max_abs": 0.37444134801626205,
+          "peak": {
+            "field": "W",
+            "lead_hours": 5.25,
+            "trim": 5,
+            "rmse": 0.029876077216609394,
+            "max_abs": 0.37444134801626205,
+            "i": 19,
+            "j": 16,
+            "k": 15
+          },
+          "latest": {
+            "field": "W",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.002175201359164022,
+            "max_abs": 0.013528605602914467,
+            "i": 23,
+            "j": 15,
+            "k": 15
+          },
+          "rmse": 0.01913214995481263,
+          "original_rmse": 0.02521111100160645,
+          "noise_floor_rmse": 0.002285124567805695,
+          "original_max_abs": 0.4752657413482666,
+          "noise_floor_max_abs": 0.19226789847016335,
+          "rmse_reduction_fraction": 0.24112229906910765,
+          "rmse_over_noise_floor": 8.372475717236016
+        },
+        {
+          "field": "QVAPOR",
+          "trim": 0,
+          "count": 3841600,
+          "max_abs": 0.0010792631655931473,
+          "peak": {
+            "field": "QVAPOR",
+            "lead_hours": 8.75,
+            "trim": 0,
+            "rmse": 5.4545762941172966e-05,
+            "max_abs": 0.0010792631655931473,
+            "i": 33,
+            "j": 27,
+            "k": 2
+          },
+          "latest": {
+            "field": "QVAPOR",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 2.4873271350127257e-05,
+            "max_abs": 0.00045890361070632935,
+            "i": 4,
+            "j": 16,
+            "k": 1
+          },
+          "rmse": 4.152260737896117e-05,
+          "original_rmse": 5.547127546547351e-05,
+          "noise_floor_rmse": 1.0061767622401035e-06,
+          "original_max_abs": 0.0018788641318678856,
+          "noise_floor_max_abs": 0.00019999633575906728,
+          "rmse_reduction_fraction": 0.2514574970462736,
+          "rmse_over_noise_floor": 41.2677065673006
+        },
+        {
+          "field": "QVAPOR",
+          "trim": 5,
+          "count": 2160900,
+          "max_abs": 0.0010792631655931473,
+          "peak": {
+            "field": "QVAPOR",
+            "lead_hours": 8.75,
+            "trim": 5,
+            "rmse": 6.935126156228364e-05,
+            "max_abs": 0.0010792631655931473,
+            "i": 33,
+            "j": 27,
+            "k": 2
+          },
+          "latest": {
+            "field": "QVAPOR",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 3.01253163948607e-05,
+            "max_abs": 0.0002701831981539726,
+            "i": 11,
+            "j": 8,
+            "k": 0
+          },
+          "rmse": 5.218350842937159e-05,
+          "original_rmse": 6.78562699120611e-05,
+          "noise_floor_rmse": 1.077997982383394e-06,
+          "original_max_abs": 0.0018788641318678856,
+          "noise_floor_max_abs": 0.00019999633575906728,
+          "rmse_reduction_fraction": 0.23096998262652446,
+          "rmse_over_noise_floor": 48.40779786433063
+        },
+        {
+          "field": "QCLOUD",
+          "trim": 0,
+          "count": 3841600,
+          "max_abs": 0.00042084924643859267,
+          "peak": {
+            "field": "QCLOUD",
+            "lead_hours": 1.0,
+            "trim": 0,
+            "rmse": 1.8122865266765648e-06,
+            "max_abs": 0.00042084924643859267,
+            "i": 28,
+            "j": 14,
+            "k": 19
+          },
+          "latest": {
+            "field": "QCLOUD",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 1.4483920896273913e-07,
+            "max_abs": 1.67402540682815e-05,
+            "i": 3,
+            "j": 30,
+            "k": 21
+          },
+          "rmse": 4.4719035627744934e-07,
+          "original_rmse": 4.4060238337308797e-07,
+          "noise_floor_rmse": 3.688830920359065e-09,
+          "original_max_abs": 0.00041172077180817723,
+          "noise_floor_max_abs": 4.438768883119337e-06,
+          "rmse_reduction_fraction": -0.014952195342036623,
+          "rmse_over_noise_floor": 121.22820642425123
+        },
+        {
+          "field": "QCLOUD",
+          "trim": 5,
+          "count": 2160900,
+          "max_abs": 0.00042084924643859267,
+          "peak": {
+            "field": "QCLOUD",
+            "lead_hours": 1.0,
+            "trim": 5,
+            "rmse": 2.416382035568753e-06,
+            "max_abs": 0.00042084924643859267,
+            "i": 28,
+            "j": 14,
+            "k": 19
+          },
+          "latest": {
+            "field": "QCLOUD",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 5,
+            "j": 5,
+            "k": 0
+          },
+          "rmse": 5.956152139056758e-07,
+          "original_rmse": 5.871096161711281e-07,
+          "noise_floor_rmse": 4.91042518085458e-09,
+          "original_max_abs": 0.00041172077180817723,
+          "noise_floor_max_abs": 4.438768883119337e-06,
+          "rmse_reduction_fraction": -0.014487239691316045,
+          "rmse_over_noise_floor": 121.2960572595505
+        },
+        {
+          "field": "QICE",
+          "trim": 0,
+          "count": 3841600,
+          "max_abs": 0.0,
+          "peak": {
+            "field": "QICE",
+            "lead_hours": 0.0,
+            "trim": 0,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 0,
+            "j": 0,
+            "k": 0
+          },
+          "latest": {
+            "field": "QICE",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 0,
+            "j": 0,
+            "k": 0
+          },
+          "rmse": 0.0,
+          "original_rmse": 1.2846557011777188e-06,
+          "noise_floor_rmse": 3.8958609392405896e-08,
+          "original_max_abs": 4.8888075980357826e-05,
+          "noise_floor_max_abs": 1.0171327885955157e-05,
+          "rmse_reduction_fraction": 1.0,
+          "rmse_over_noise_floor": 0.0
+        },
+        {
+          "field": "QICE",
+          "trim": 5,
+          "count": 2160900,
+          "max_abs": 0.0,
+          "peak": {
+            "field": "QICE",
+            "lead_hours": 0.0,
+            "trim": 5,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 5,
+            "j": 5,
+            "k": 0
+          },
+          "latest": {
+            "field": "QICE",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 5,
+            "j": 5,
+            "k": 0
+          },
+          "rmse": 0.0,
+          "original_rmse": 1.664178027481318e-06,
+          "noise_floor_rmse": 4.883780452359399e-08,
+          "original_max_abs": 4.8888075980357826e-05,
+          "noise_floor_max_abs": 9.271975159208523e-06,
+          "rmse_reduction_fraction": 1.0,
+          "rmse_over_noise_floor": 0.0
+        },
+        {
+          "field": "QSNOW",
+          "trim": 0,
+          "count": 3841600,
+          "max_abs": 1.6055992091423832e-08,
+          "peak": {
+            "field": "QSNOW",
+            "lead_hours": 11.0,
+            "trim": 0,
+            "rmse": 7.44941997752287e-11,
+            "max_abs": 1.6055992091423832e-08,
+            "i": 38,
+            "j": 1,
+            "k": 29
+          },
+          "latest": {
+            "field": "QSNOW",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 1.7004137398258125e-12,
+            "max_abs": 3.012381455391733e-10,
+            "i": 38,
+            "j": 1,
+            "k": 29
+          },
+          "rmse": 1.557409723916662e-11,
+          "original_rmse": 4.474938700734317e-07,
+          "noise_floor_rmse": 2.0524442345039997e-08,
+          "original_max_abs": 3.5950073652202263e-05,
+          "noise_floor_max_abs": 8.662983418616932e-06,
+          "rmse_reduction_fraction": 0.9999651970713328,
+          "rmse_over_noise_floor": 0.0007588073272514665
+        },
+        {
+          "field": "QSNOW",
+          "trim": 5,
+          "count": 2160900,
+          "max_abs": 5.34640040572576e-13,
+          "peak": {
+            "field": "QSNOW",
+            "lead_hours": 10.75,
+            "trim": 5,
+            "rmse": 2.5459049551075045e-15,
+            "max_abs": 5.34640040572576e-13,
+            "i": 34,
+            "j": 5,
+            "k": 29
+          },
+          "latest": {
+            "field": "QSNOW",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 5,
+            "j": 5,
+            "k": 0
+          },
+          "rmse": 4.725198174595753e-16,
+          "original_rmse": 5.566702645738628e-07,
+          "noise_floor_rmse": 2.6592136219763536e-08,
+          "original_max_abs": 3.5950073652202263e-05,
+          "noise_floor_max_abs": 8.662983418616932e-06,
+          "rmse_reduction_fraction": 0.9999999991511674,
+          "rmse_over_noise_floor": 1.7769156022463286e-08
+        },
+        {
+          "field": "PBLH",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 1585.1458740234375,
+          "peak": {
+            "field": "PBLH",
+            "lead_hours": 5.5,
+            "trim": 0,
+            "rmse": 66.04208288571331,
+            "max_abs": 1585.1458740234375,
+            "i": 17,
+            "j": 29,
+            "k": null
+          },
+          "latest": {
+            "field": "PBLH",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 5.42493327440177,
+            "max_abs": 155.56887817382812,
+            "i": 30,
+            "j": 35,
+            "k": null
+          },
+          "rmse": 41.86769407624686,
+          "original_rmse": 73.16232814661227,
+          "noise_floor_rmse": 5.208384340274981,
+          "original_max_abs": 2160.311290740967,
+          "noise_floor_max_abs": 1134.2120380401611,
+          "rmse_reduction_fraction": 0.42774245794438237,
+          "rmse_over_noise_floor": 8.038518538752157
+        },
+        {
+          "field": "PBLH",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 1585.1458740234375,
+          "peak": {
+            "field": "PBLH",
+            "lead_hours": 5.5,
+            "trim": 5,
+            "rmse": 86.49692922621689,
+            "max_abs": 1585.1458740234375,
+            "i": 17,
+            "j": 29,
+            "k": null
+          },
+          "latest": {
+            "field": "PBLH",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 3.0811532441946654,
+            "max_abs": 17.484451293945312,
+            "i": 17,
+            "j": 33,
+            "k": null
+          },
+          "rmse": 53.16232902287128,
+          "original_rmse": 94.2725641403189,
+          "noise_floor_rmse": 6.421060919841042,
+          "original_max_abs": 2160.311290740967,
+          "noise_floor_max_abs": 1134.2120380401611,
+          "rmse_reduction_fraction": 0.4360784655889657,
+          "rmse_over_noise_floor": 8.279368423152626
+        },
+        {
+          "field": "HFX",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 203.29522705078125,
+          "peak": {
+            "field": "HFX",
+            "lead_hours": 1.0,
+            "trim": 0,
+            "rmse": 5.7766825678403775,
+            "max_abs": 203.29522705078125,
+            "i": 28,
+            "j": 15,
+            "k": null
+          },
+          "latest": {
+            "field": "HFX",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.5194168542091973,
+            "max_abs": 4.191864013671875,
+            "i": 2,
+            "j": 34,
+            "k": null
+          },
+          "rmse": 1.7924579178073363,
+          "original_rmse": 2.685865191784794,
+          "noise_floor_rmse": 0.19474359099055885,
+          "original_max_abs": 202.067626953125,
+          "noise_floor_max_abs": 17.957901000976562,
+          "rmse_reduction_fraction": 0.33263295444242913,
+          "rmse_over_noise_floor": 9.204194647382437
+        },
+        {
+          "field": "HFX",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 203.29522705078125,
+          "peak": {
+            "field": "HFX",
+            "lead_hours": 1.0,
+            "trim": 5,
+            "rmse": 7.70032746986677,
+            "max_abs": 203.29522705078125,
+            "i": 28,
+            "j": 15,
+            "k": null
+          },
+          "latest": {
+            "field": "HFX",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.634857622941228,
+            "max_abs": 2.5454444885253906,
+            "i": 11,
+            "j": 20,
+            "k": null
+          },
+          "rmse": 2.3756193588516332,
+          "original_rmse": 3.501461735422275,
+          "noise_floor_rmse": 0.23069044854860768,
+          "original_max_abs": 202.067626953125,
+          "noise_floor_max_abs": 17.957901000976562,
+          "rmse_reduction_fraction": 0.3215349650065119,
+          "rmse_over_noise_floor": 10.297866139659778
+        },
+        {
+          "field": "LH",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 204.97918701171875,
+          "peak": {
+            "field": "LH",
+            "lead_hours": 1.25,
+            "trim": 0,
+            "rmse": 5.623548709503605,
+            "max_abs": 204.97918701171875,
+            "i": 28,
+            "j": 13,
+            "k": null
+          },
+          "latest": {
+            "field": "LH",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.08724457665576758,
+            "max_abs": 0.8584589958190918,
+            "i": 2,
+            "j": 34,
+            "k": null
+          },
+          "rmse": 1.9303143274696941,
+          "original_rmse": 2.794961473391301,
+          "noise_floor_rmse": 0.20077628662736252,
+          "original_max_abs": 204.98580932617188,
+          "noise_floor_max_abs": 24.00347900390625,
+          "rmse_reduction_fraction": 0.3093592359512837,
+          "rmse_over_noise_floor": 9.614254551147894
+        },
+        {
+          "field": "LH",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 204.97918701171875,
+          "peak": {
+            "field": "LH",
+            "lead_hours": 1.25,
+            "trim": 5,
+            "rmse": 7.49775512903394,
+            "max_abs": 204.97918701171875,
+            "i": 28,
+            "j": 13,
+            "k": null
+          },
+          "latest": {
+            "field": "LH",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.10246664562784148,
+            "max_abs": 0.7823486328125,
+            "i": 17,
+            "j": 29,
+            "k": null
+          },
+          "rmse": 2.571169073569718,
+          "original_rmse": 3.6687702844561967,
+          "noise_floor_rmse": 0.24810414778528722,
+          "original_max_abs": 204.98580932617188,
+          "noise_floor_max_abs": 24.00347900390625,
+          "rmse_reduction_fraction": 0.2991741444093087,
+          "rmse_over_noise_floor": 10.363265171184658
+        },
+        {
+          "field": "SWDOWN",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 589.6673583984375,
+          "peak": {
+            "field": "SWDOWN",
+            "lead_hours": 1.25,
+            "trim": 0,
+            "rmse": 17.052077767966807,
+            "max_abs": 589.6673583984375,
+            "i": 28,
+            "j": 13,
+            "k": null
+          },
+          "latest": {
+            "field": "SWDOWN",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 0,
+            "j": 0,
+            "k": null
+          },
+          "rmse": 6.315287347726829,
+          "original_rmse": 9.592385436225161,
+          "noise_floor_rmse": 0.6355529638938937,
+          "original_max_abs": 589.7059631347656,
+          "noise_floor_max_abs": 77.50555419921875,
+          "rmse_reduction_fraction": 0.3416353638295784,
+          "rmse_over_noise_floor": 9.936681451431598
+        },
+        {
+          "field": "SWDOWN",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 589.6673583984375,
+          "peak": {
+            "field": "SWDOWN",
+            "lead_hours": 1.25,
+            "trim": 5,
+            "rmse": 22.73588602251488,
+            "max_abs": 589.6673583984375,
+            "i": 28,
+            "j": 13,
+            "k": null
+          },
+          "latest": {
+            "field": "SWDOWN",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 5,
+            "j": 5,
+            "k": null
+          },
+          "rmse": 8.420068757713288,
+          "original_rmse": 12.577686989988464,
+          "noise_floor_rmse": 0.7764259926055657,
+          "original_max_abs": 589.7059631347656,
+          "noise_floor_max_abs": 77.50555419921875,
+          "rmse_reduction_fraction": 0.33055507229465486,
+          "rmse_over_noise_floor": 10.844650794671155
+        },
+        {
+          "field": "GLW",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 46.366058349609375,
+          "peak": {
+            "field": "GLW",
+            "lead_hours": 3.0,
+            "trim": 0,
+            "rmse": 2.341966103832185,
+            "max_abs": 46.366058349609375,
+            "i": 27,
+            "j": 12,
+            "k": null
+          },
+          "latest": {
+            "field": "GLW",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.5460921351055857,
+            "max_abs": 13.812286376953125,
+            "i": 2,
+            "j": 34,
+            "k": null
+          },
+          "rmse": 0.7739809949386283,
+          "original_rmse": 1.4631962955801743,
+          "noise_floor_rmse": 0.12350310946916082,
+          "original_max_abs": 46.350830078125,
+          "noise_floor_max_abs": 11.167816162109375,
+          "rmse_reduction_fraction": 0.47103406612184195,
+          "rmse_over_noise_floor": 6.266894803421076
+        },
+        {
+          "field": "GLW",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 46.366058349609375,
+          "peak": {
+            "field": "GLW",
+            "lead_hours": 3.0,
+            "trim": 5,
+            "rmse": 3.1140835797529496,
+            "max_abs": 46.366058349609375,
+            "i": 27,
+            "j": 12,
+            "k": null
+          },
+          "latest": {
+            "field": "GLW",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.317421241492704,
+            "max_abs": 1.07891845703125,
+            "i": 20,
+            "j": 13,
+            "k": null
+          },
+          "rmse": 1.0149393934225066,
+          "original_rmse": 1.886861849207686,
+          "noise_floor_rmse": 0.14188621487012065,
+          "original_max_abs": 46.350830078125,
+          "noise_floor_max_abs": 11.167816162109375,
+          "rmse_reduction_fraction": 0.46210190542106155,
+          "rmse_over_noise_floor": 7.153192396819935
+        },
+        {
+          "field": "TSK",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 8.88641357421875,
+          "peak": {
+            "field": "TSK",
+            "lead_hours": 1.0,
+            "trim": 0,
+            "rmse": 0.25128217548738163,
+            "max_abs": 8.88641357421875,
+            "i": 28,
+            "j": 15,
+            "k": null
+          },
+          "latest": {
+            "field": "TSK",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.06479316511320335,
+            "max_abs": 0.579620361328125,
+            "i": 2,
+            "j": 34,
+            "k": null
+          },
+          "rmse": 0.09356658486627437,
+          "original_rmse": 0.16586096540581424,
+          "noise_floor_rmse": 0.010840947826804285,
+          "original_max_abs": 8.8251953125,
+          "noise_floor_max_abs": 0.782318115234375,
+          "rmse_reduction_fraction": 0.43587338565560774,
+          "rmse_over_noise_floor": 8.630849106655658
+        },
+        {
+          "field": "TSK",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 8.88641357421875,
+          "peak": {
+            "field": "TSK",
+            "lead_hours": 1.0,
+            "trim": 5,
+            "rmse": 0.3347274846442673,
+            "max_abs": 8.88641357421875,
+            "i": 28,
+            "j": 15,
+            "k": null
+          },
+          "latest": {
+            "field": "TSK",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.07653463425830886,
+            "max_abs": 0.2955322265625,
+            "i": 29,
+            "j": 28,
+            "k": null
+          },
+          "rmse": 0.1223811125227945,
+          "original_rmse": 0.2154997464092113,
+          "noise_floor_rmse": 0.012078303045245342,
+          "original_max_abs": 8.8251953125,
+          "noise_floor_max_abs": 0.782318115234375,
+          "rmse_reduction_fraction": 0.4321055381178701,
+          "rmse_over_noise_floor": 10.132310148565958
+        },
+        {
+          "field": "RTHRATSW",
+          "trim": 0,
+          "count": 3841600,
+          "max_abs": 0.0002418619806121569,
+          "peak": {
+            "field": "RTHRATSW",
+            "lead_hours": 1.25,
+            "trim": 0,
+            "rmse": 1.0697984160176904e-06,
+            "max_abs": 0.0002418619806121569,
+            "i": 28,
+            "j": 13,
+            "k": 19
+          },
+          "latest": {
+            "field": "RTHRATSW",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 0,
+            "j": 0,
+            "k": 0
+          },
+          "rmse": 3.742781855419586e-07,
+          "original_rmse": 3.330373587245954e-06,
+          "noise_floor_rmse": 1.702658823099015e-07,
+          "original_max_abs": 0.00024178683452191763,
+          "noise_floor_max_abs": 3.3761176382540725e-05,
+          "rmse_reduction_fraction": 0.8876167565779107,
+          "rmse_over_noise_floor": 2.1981983734165462
+        },
+        {
+          "field": "RTHRATSW",
+          "trim": 5,
+          "count": 2160900,
+          "max_abs": 0.0002418619806121569,
+          "peak": {
+            "field": "RTHRATSW",
+            "lead_hours": 1.25,
+            "trim": 5,
+            "rmse": 1.4228815344791772e-06,
+            "max_abs": 0.0002418619806121569,
+            "i": 28,
+            "j": 13,
+            "k": 19
+          },
+          "latest": {
+            "field": "RTHRATSW",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 5,
+            "j": 5,
+            "k": 0
+          },
+          "rmse": 4.950081583853827e-07,
+          "original_rmse": 3.970673554810196e-06,
+          "noise_floor_rmse": 2.011280207910551e-07,
+          "original_max_abs": 0.00024178683452191763,
+          "noise_floor_max_abs": 3.3761176382540725e-05,
+          "rmse_reduction_fraction": 0.8753339574375953,
+          "rmse_over_noise_floor": 2.4611595959552024
+        },
+        {
+          "field": "RTHRATLW",
+          "trim": 0,
+          "count": 3841600,
+          "max_abs": 0.0010463332291692495,
+          "peak": {
+            "field": "RTHRATLW",
+            "lead_hours": 1.25,
+            "trim": 0,
+            "rmse": 4.495826180156718e-06,
+            "max_abs": 0.0010463332291692495,
+            "i": 28,
+            "j": 14,
+            "k": 0
+          },
+          "latest": {
+            "field": "RTHRATLW",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 1.3789144242309785e-06,
+            "max_abs": 5.47592353541404e-05,
+            "i": 4,
+            "j": 19,
+            "k": 0
+          },
+          "rmse": 1.6178213991057847e-06,
+          "original_rmse": 9.162323856925652e-06,
+          "noise_floor_rmse": 5.02282833305509e-07,
+          "original_max_abs": 0.0010399374295957386,
+          "noise_floor_max_abs": 8.746072307985742e-05,
+          "rmse_reduction_fraction": 0.8234267392891925,
+          "rmse_over_noise_floor": 3.2209370733595413
+        },
+        {
+          "field": "RTHRATLW",
+          "trim": 5,
+          "count": 2160900,
+          "max_abs": 0.0010463332291692495,
+          "peak": {
+            "field": "RTHRATLW",
+            "lead_hours": 1.25,
+            "trim": 5,
+            "rmse": 5.986109485252549e-06,
+            "max_abs": 0.0010463332291692495,
+            "i": 28,
+            "j": 14,
+            "k": 0
+          },
+          "latest": {
+            "field": "RTHRATLW",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 1.5949614683799726e-06,
+            "max_abs": 4.380296741146594e-05,
+            "i": 14,
+            "j": 22,
+            "k": 0
+          },
+          "rmse": 2.06918444480723e-06,
+          "original_rmse": 9.985918874348877e-06,
+          "noise_floor_rmse": 5.495185468379252e-07,
+          "original_max_abs": 0.0010399374295957386,
+          "noise_floor_max_abs": 8.746072307985742e-05,
+          "rmse_reduction_fraction": 0.7927897802051642,
+          "rmse_over_noise_floor": 3.7654496953994796
+        },
+        {
+          "field": "RAINNC",
+          "trim": 0,
+          "count": 78400,
+          "max_abs": 0.0,
+          "peak": {
+            "field": "RAINNC",
+            "lead_hours": 0.0,
+            "trim": 0,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 0,
+            "j": 0,
+            "k": null
+          },
+          "latest": {
+            "field": "RAINNC",
+            "lead_hours": 12.0,
+            "trim": 0,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 0,
+            "j": 0,
+            "k": null
+          },
+          "rmse": 0.0,
+          "original_rmse": 0.0,
+          "noise_floor_rmse": 0.0,
+          "original_max_abs": 0.0,
+          "noise_floor_max_abs": 0.0,
+          "rmse_reduction_fraction": null,
+          "rmse_over_noise_floor": null
+        },
+        {
+          "field": "RAINNC",
+          "trim": 5,
+          "count": 44100,
+          "max_abs": 0.0,
+          "peak": {
+            "field": "RAINNC",
+            "lead_hours": 0.0,
+            "trim": 5,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 5,
+            "j": 5,
+            "k": null
+          },
+          "latest": {
+            "field": "RAINNC",
+            "lead_hours": 12.0,
+            "trim": 5,
+            "rmse": 0.0,
+            "max_abs": 0.0,
+            "i": 5,
+            "j": 5,
+            "k": null
+          },
+          "rmse": 0.0,
+          "original_rmse": 0.0,
+          "noise_floor_rmse": 0.0,
+          "original_max_abs": 0.0,
+          "noise_floor_max_abs": 0.0,
+          "rmse_reduction_fraction": null,
+          "rmse_over_noise_floor": null
+        }
+      ],
+      "noise_floor_caveat": "One positive uniform theta perturbation on the original defective build, not a statistical sensitivity distribution or a corrected-build noise floor."
+    }
+  },
+  "first_production_ysu_replay": {
+    "method": "First actual PhysicsDriver._run_ysu inputs after the preceding production atmosphere/radiation/surface/Noah work; original sealed case and corrected build. Captured before running the full-domain YSU call, replayed seven exact FP32 column inputs on Metal and the existing float64 NumPy mirror. Scalar psim/psih use the actual FM/FH fields, not similarly named history fields. Float64 mirror is not an exact CUDA arithmetic oracle; close agreement or disagreement does not alone identify the first CUDA/Metal operation. Capture deliberately stops here, before completing the first model timestep.",
+    "model_elapsed_seconds": 0.0,
+    "dt": 15.0,
+    "ysu_topdown_pblmix": 1,
+    "points_ij": [
+      [
+        28,
+        15
+      ],
+      [
+        28,
+        13
+      ],
+      [
+        28,
+        19
+      ],
+      [
+        15,
+        23
+      ],
+      [
+        31,
+        27
+      ],
+      [
+        32,
+        28
+      ],
+      [
+        32,
+        30
+      ]
+    ],
+    "metrics": [
+      {
+        "field": "du",
+        "max_abs_delta": 1.3302039671240565e-07,
+        "rmse": 2.3576195719217626e-08,
+        "reference_max_abs": 0.0030175586382484333,
+        "metal_max_abs": 0.0030175568535923958
+      },
+      {
+        "field": "dv",
+        "max_abs_delta": 1.0602130711117458e-07,
+        "rmse": 1.2932141550433528e-08,
+        "reference_max_abs": 0.0026591979665766246,
+        "metal_max_abs": 0.002659185789525509
+      },
+      {
+        "field": "dtheta",
+        "max_abs_delta": 8.15607036959894e-07,
+        "rmse": 2.848771208471746e-07,
+        "reference_max_abs": 0.014943093055495637,
+        "metal_max_abs": 0.01494344137609005
+      },
+      {
+        "field": "dqv",
+        "max_abs_delta": 1.3761896032454525e-10,
+        "rmse": 2.2035362265100197e-11,
+        "reference_max_abs": 7.407437711902387e-06,
+        "metal_max_abs": 7.4074296207982115e-06
+      },
+      {
+        "field": "dqc",
+        "max_abs_delta": 0.0,
+        "rmse": 0.0,
+        "reference_max_abs": 0.0,
+        "metal_max_abs": 0.0
+      },
+      {
+        "field": "dqi",
+        "max_abs_delta": 0.0,
+        "rmse": 0.0,
+        "reference_max_abs": 0.0,
+        "metal_max_abs": 0.0
+      },
+      {
+        "field": "hpbl",
+        "max_abs_delta": 0.009131426403200749,
+        "rmse": 0.003533437836362692,
+        "reference_max_abs": 2679.140038495472,
+        "metal_max_abs": 2679.149169921875
+      },
+      {
+        "field": "kpbl",
+        "max_abs_delta": 0.0,
+        "rmse": 0.0,
+        "reference_max_abs": 21.0,
+        "metal_max_abs": 21.0
+      },
+      {
+        "field": "exch_h",
+        "max_abs_delta": 0.007868835023828069,
+        "rmse": 0.0008339638133079541,
+        "reference_max_abs": 1000.0,
+        "metal_max_abs": 1000.0
+      },
+      {
+        "field": "exch_m",
+        "max_abs_delta": 0.003988476890015136,
+        "rmse": 0.0004272114917307711,
+        "reference_max_abs": 481.62442835531033,
+        "metal_max_abs": 481.6268005371094
+      },
+      {
+        "field": "wstar",
+        "max_abs_delta": 2.2500611893683242e-06,
+        "rmse": 9.739850585879945e-07,
+        "reference_max_abs": 2.87862290443405,
+        "metal_max_abs": 2.8786251544952393
+      },
+      {
+        "field": "delta",
+        "max_abs_delta": 0.0001708175595140915,
+        "rmse": 6.638072714706794e-05,
+        "reference_max_abs": 58.44982613068267,
+        "metal_max_abs": 58.44999694824219
+      },
+      {
+        "field": "topdown_radsum",
+        "max_abs_delta": 0.0,
+        "rmse": 0.0,
+        "reference_max_abs": 0.0,
+        "metal_max_abs": 0.0
+      },
+      {
+        "field": "wstar3_2",
+        "max_abs_delta": 0.0,
+        "rmse": 0.0,
+        "reference_max_abs": 0.0,
+        "metal_max_abs": 0.0
+      },
+      {
+        "field": "cloudflg",
+        "max_abs_delta": 0.0,
+        "rmse": 0.0,
+        "reference_max_abs": 0.0,
+        "metal_max_abs": 0.0
+      }
+    ]
+  },
+  "numeric_literal_audit": {
+    "method": "Comment/string-stripped source census. f-suffixed literals normalized to stored float32; unsuffixed literals to float64. 16-hex-digit words additionally decoded as possible software FP64. Factor-of-ten tolerance permits float32 rounding. Preprocessor branch braces balanced without choosing one configuration. Function names/source-verified overrides matched first; other renamed functions paired heuristically and marked. Flags are review candidates, not correctness failures. File-scope literals, multiplicity differences and unmatched functions are retained. No integer-expression evaluation, operator/control-flow validation or proof of every semantic pairing.",
+    "files": [
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/acoustic.cu",
+        "functions": 27,
+        "float_literals": 229,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/advection.cu",
+        "functions": 16,
+        "float_literals": 206,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/bandwidth_glue.cu",
+        "functions": 8,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/common.cuh",
+        "functions": 0,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/coriolis_map.cu",
+        "functions": 3,
+        "float_literals": 27,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/diagnostics.cu",
+        "functions": 0,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/diff6.cu",
+        "functions": 1,
+        "float_literals": 36,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/diff6_seam.cu",
+        "functions": 2,
+        "float_literals": 60,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/diff_opt1.cu",
+        "functions": 13,
+        "float_literals": 16,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/diffusion.cu",
+        "functions": 2,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/dycore.cu",
+        "functions": 36,
+        "float_literals": 113,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ensemble_bookkeeping.cu",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ensemble_stochastic.cu",
+        "functions": 10,
+        "float_literals": 24,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/face_mass.cu",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/gf.cu",
+        "functions": 34,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/glibc_flt32.cuh",
+        "functions": 12,
+        "float_literals": 302,
+        "possible_fp64_words": 32
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/glibc_flt64.cuh",
+        "functions": 82,
+        "float_literals": 1984,
+        "possible_fp64_words": 1546
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/glibc_trig_flt32.cuh",
+        "functions": 25,
+        "float_literals": 154,
+        "possible_fp64_words": 5
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/health.cu",
+        "functions": 6,
+        "float_literals": 20,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/health_tile.cu",
+        "functions": 2,
+        "float_literals": 7,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/held_heating.cu",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/horizontal.cu",
+        "functions": 17,
+        "float_literals": 31,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ieva.cu",
+        "functions": 24,
+        "float_literals": 11,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/jacobi_eigh.cu",
+        "functions": 3,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/kessler.cu",
+        "functions": 1,
+        "float_literals": 49,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/kf.cu",
+        "functions": 11,
+        "float_literals": 639,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/kf_validation.cu",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/lake.cu",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/lake_support.cuh",
+        "functions": 17,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/lake_wrf.cuh",
+        "functions": 21,
+        "float_literals": 686,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/lbc_flow.cu",
+        "functions": 4,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/lbc_state.cu",
+        "functions": 26,
+        "float_literals": 21,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/lbc_time.cu",
+        "functions": 2,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/microphysics_validation.cu",
+        "functions": 2,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/milbrandt2.cu",
+        "functions": 20,
+        "float_literals": 1094,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/milbrandt2_zet.cu",
+        "functions": 1,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/morrison.cu",
+        "functions": 14,
+        "float_literals": 771,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/myj_driver_wspd.cu",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/myjpbl.cu",
+        "functions": 1,
+        "float_literals": 173,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/myjsfc.cu",
+        "functions": 2,
+        "float_literals": 131,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/myjurb.cu",
+        "functions": 1,
+        "float_literals": 167,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/mynn_dmp_sibling.cu",
+        "functions": 58,
+        "float_literals": 1083,
+        "possible_fp64_words": 112
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/mynn_pbl.cu",
+        "functions": 70,
+        "float_literals": 1515,
+        "possible_fp64_words": 112
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/mynn_scalar_mix.cu",
+        "functions": 10,
+        "float_literals": 25,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/mynn_surface.cu",
+        "functions": 22,
+        "float_literals": 372,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/nest.cu",
+        "functions": 17,
+        "float_literals": 64,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/nest_microphysics.cu",
+        "functions": 15,
+        "float_literals": 185,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noah.cu",
+        "functions": 28,
+        "float_literals": 499,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noah_init.cu",
+        "functions": 1,
+        "float_literals": 13,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noah_mosaic.cu",
+        "functions": 35,
+        "float_literals": 801,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_bareflux.cu",
+        "functions": 16,
+        "float_literals": 10,
+        "possible_fp64_words": 118
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_driver.cu",
+        "functions": 8,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_energy.cu",
+        "functions": 5,
+        "float_literals": 72,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_fluxprep.cu",
+        "functions": 15,
+        "float_literals": 248,
+        "possible_fp64_words": 32
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_glacier.cu",
+        "functions": 10,
+        "float_literals": 459,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_leaves.cu",
+        "functions": 19,
+        "float_literals": 230,
+        "possible_fp64_words": 32
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_libm_slab.cu",
+        "functions": 4,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_radiation.cu",
+        "functions": 24,
+        "float_literals": 13,
+        "possible_fp64_words": 118
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_sflx.cu",
+        "functions": 3,
+        "float_literals": 16,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_snow.cu",
+        "functions": 23,
+        "float_literals": 6,
+        "possible_fp64_words": 40
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_soilwater.cu",
+        "functions": 24,
+        "float_literals": 13,
+        "possible_fp64_words": 81
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_thermal.cu",
+        "functions": 11,
+        "float_literals": 89,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_vegeflux.cu",
+        "functions": 24,
+        "float_literals": 213,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_vegprecip.cu",
+        "functions": 12,
+        "float_literals": 101,
+        "possible_fp64_words": 78
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/noahmp_water.cu",
+        "functions": 30,
+        "float_literals": 13,
+        "possible_fp64_words": 81
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/nssl2.cu",
+        "functions": 50,
+        "float_literals": 3532,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/nssl2_diagnostics.cu",
+        "functions": 2,
+        "float_literals": 112,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/nssl2_driver_support.cu",
+        "functions": 37,
+        "float_literals": 674,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/nssl2_fused_gs.cu",
+        "functions": 37,
+        "float_literals": 1763,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/nssl2_nucond.cu",
+        "functions": 8,
+        "float_literals": 246,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/nssl2_qvexcess.cu",
+        "functions": 7,
+        "float_literals": 44,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ntiedtke.cu",
+        "functions": 37,
+        "float_literals": 491,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/openbc.cu",
+        "functions": 6,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/p3.cu",
+        "functions": 54,
+        "float_literals": 745,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/pd_advection.cu",
+        "functions": 10,
+        "float_literals": 125,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/pd_vertical_sl.cu",
+        "functions": 1,
+        "float_literals": 11,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/physics_params.cu",
+        "functions": 1,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/portable_libm64.cuh",
+        "functions": 15,
+        "float_literals": 65,
+        "possible_fp64_words": 56
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/portable_libm64_grade.cu",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/real_init.cu",
+        "functions": 12,
+        "float_literals": 27,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/real_init_common.cuh",
+        "functions": 14,
+        "float_literals": 0,
+        "possible_fp64_words": 4
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/real_init_math.cu",
+        "functions": 3,
+        "float_literals": 19,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/refl.cu",
+        "functions": 18,
+        "float_literals": 288,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rk_bookkeeping.cu",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_aer3.cu",
+        "functions": 9,
+        "float_literals": 486,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_legacy_adapter.cu",
+        "functions": 17,
+        "float_literals": 25,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_legacy_prep.cu",
+        "functions": 16,
+        "float_literals": 105,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_lw.cu",
+        "functions": 12,
+        "float_literals": 176,
+        "possible_fp64_words": 32
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_lw_chain.cu",
+        "functions": 8,
+        "float_literals": 85,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_lw_chain_coalesced.cu",
+        "functions": 8,
+        "float_literals": 85,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_lw_taugb02_10_11_12.cu",
+        "functions": 4,
+        "float_literals": 46,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_lw_taugb03_05.cu",
+        "functions": 7,
+        "float_literals": 64,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_lw_taugb06_09.cu",
+        "functions": 6,
+        "float_literals": 78,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_lw_taugb13_16.cu",
+        "functions": 5,
+        "float_literals": 43,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_lw_zbatched.cu",
+        "functions": 3,
+        "float_literals": 12,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_mcica_wrf.cu",
+        "functions": 8,
+        "float_literals": 12,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_smoke_manifest.cu",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmg_sw.cu",
+        "functions": 51,
+        "float_literals": 330,
+        "possible_fp64_words": 32
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmgp_cloud.cu",
+        "functions": 14,
+        "float_literals": 25,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmgp_gas.cu",
+        "functions": 9,
+        "float_literals": 56,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmgp_mcica.cu",
+        "functions": 6,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmgp_planck_common.cuh",
+        "functions": 3,
+        "float_literals": 9,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmgp_rte.cu",
+        "functions": 7,
+        "float_literals": 96,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/rrtmgp_validation.cu",
+        "functions": 4,
+        "float_literals": 8,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ruc.cu",
+        "functions": 29,
+        "float_literals": 483,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ruc_fused_driver.cuh",
+        "functions": 15,
+        "float_literals": 210,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ruc_fused_sfctmp.cuh",
+        "functions": 6,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ruc_spp.cu",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/sase.cu",
+        "functions": 37,
+        "float_literals": 258,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/saxpy.cu",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/sfclay.cu",
+        "functions": 18,
+        "float_literals": 300,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/shinhong.cu",
+        "functions": 16,
+        "float_literals": 406,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/shinhong_validation.cu",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/smag2d.cu",
+        "functions": 116,
+        "float_literals": 348,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/solar_albedo.cu",
+        "functions": 1,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/spec_bdy.cu",
+        "functions": 2,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/surface_w.cu",
+        "functions": 1,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/swint.cu",
+        "functions": 4,
+        "float_literals": 50,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/terrain_drag.cu",
+        "functions": 8,
+        "float_literals": 284,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/thompson.cu",
+        "functions": 132,
+        "float_literals": 4378,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/thompson_aerosol_cold.cu",
+        "functions": 1,
+        "float_literals": 564,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/thompson_aerosol_common.cuh",
+        "functions": 47,
+        "float_literals": 502,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/thompson_aerosol_sat.cu",
+        "functions": 7,
+        "float_literals": 149,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/thompson_aerosol_sed.cu",
+        "functions": 21,
+        "float_literals": 301,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/thompson_aerosol_state.cu",
+        "functions": 19,
+        "float_literals": 104,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/thompson_aerosol_warm.cu",
+        "functions": 12,
+        "float_literals": 405,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/thompson_cold_start.cu",
+        "functions": 10,
+        "float_literals": 38,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/tke_budget.cu",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/topo_radiation.cu",
+        "functions": 18,
+        "float_literals": 62,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/uh_diag.cu",
+        "functions": 13,
+        "float_literals": 41,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/upper_wind_limiter.cu",
+        "functions": 1,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/urban_bem.cuh",
+        "functions": 64,
+        "float_literals": 348,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/urban_bep.cu",
+        "functions": 34,
+        "float_literals": 307,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/urban_bep_bem.cu",
+        "functions": 36,
+        "float_literals": 789,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/urban_bep_couple.cu",
+        "functions": 2,
+        "float_literals": 45,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/urban_ucm.cu",
+        "functions": 31,
+        "float_literals": 680,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/uwpbl.cu",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/uwpbl_caleddy.cuh",
+        "functions": 1,
+        "float_literals": 377,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/uwpbl_common.cuh",
+        "functions": 28,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/uwpbl_driver.cuh",
+        "functions": 1,
+        "float_literals": 37,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/uwpbl_eddy.cuh",
+        "functions": 6,
+        "float_literals": 47,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/uwpbl_vdiff.cuh",
+        "functions": 3,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/uwpbl_wvsat.cuh",
+        "functions": 3,
+        "float_literals": 11,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/uwpbl_zisocl.cuh",
+        "functions": 3,
+        "float_literals": 212,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/vert_interp.cu",
+        "functions": 8,
+        "float_literals": 22,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/wdm6.cu",
+        "functions": 23,
+        "float_literals": 630,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/wdm6_refl.cu",
+        "functions": 13,
+        "float_literals": 121,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/wrf_cold_start_w.cu",
+        "functions": 1,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/wsm6.cu",
+        "functions": 19,
+        "float_literals": 373,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ysu.cu",
+        "functions": 11,
+        "float_literals": 242,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ysu_topo.cuh",
+        "functions": 2,
+        "float_literals": 30,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/core/kernels/ysu_validation.cu",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/common.cuh",
+        "functions": 0,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/gf.cu",
+        "functions": 34,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/glibc_flt32.cuh",
+        "functions": 14,
+        "float_literals": 166,
+        "possible_fp64_words": 32
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/morrison.cu",
+        "functions": 15,
+        "float_literals": 771,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/noah.cu",
+        "functions": 26,
+        "float_literals": 492,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/ntiedtke.cu",
+        "functions": 37,
+        "float_literals": 490,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/rrtmgp_cloud.cu",
+        "functions": 5,
+        "float_literals": 17,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/rrtmgp_gas.cu",
+        "functions": 8,
+        "float_literals": 35,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/rrtmgp_mcica.cu",
+        "functions": 4,
+        "float_literals": 8,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/rrtmgp_planck_common.cuh",
+        "functions": 3,
+        "float_literals": 9,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/rrtmgp_rte.cu",
+        "functions": 6,
+        "float_literals": 94,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/rrtmgp_validation.cu",
+        "functions": 4,
+        "float_literals": 8,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/sfclay.cu",
+        "functions": 18,
+        "float_literals": 306,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/ysu.cu",
+        "functions": 7,
+        "float_literals": 215,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/core/kernels/ysu_validation.cu",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "cuda",
+        "file": "woof/globe/semilag/kernels.cu",
+        "functions": 38,
+        "float_literals": 23,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/acoustic_advance_mu_th.metal",
+        "functions": 3,
+        "float_literals": 26,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/acoustic_advance_uv.metal",
+        "functions": 4,
+        "float_literals": 16,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/acoustic_advance_w_phi.metal",
+        "functions": 5,
+        "float_literals": 49,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/acoustic_boundary_frame.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/acoustic_calc_cq.metal",
+        "functions": 2,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/acoustic_coefficients.metal",
+        "functions": 1,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/acoustic_emdiv.metal",
+        "functions": 2,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/acoustic_sumflux.metal",
+        "functions": 6,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/advection_flux_div_scalar.metal",
+        "functions": 15,
+        "float_literals": 47,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/advection_flux_div_scalar_vorder.metal",
+        "functions": 16,
+        "float_literals": 59,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/advection_flux_div_u.metal",
+        "functions": 14,
+        "float_literals": 49,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/advection_flux_div_u_vorder.metal",
+        "functions": 15,
+        "float_literals": 61,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/advection_flux_div_v.metal",
+        "functions": 14,
+        "float_literals": 50,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/advection_flux_div_v_vorder.metal",
+        "functions": 15,
+        "float_literals": 62,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/advection_flux_div_w.metal",
+        "functions": 16,
+        "float_literals": 62,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/advection_flux_div_w_vorder.metal",
+        "functions": 17,
+        "float_literals": 74,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/advection_prepare.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/bandwidth_family.metal",
+        "functions": 5,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/bound_tke_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/close_periodic_alias.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/complex64_primitives.metal",
+        "functions": 4,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/coriolis_curvature.metal",
+        "functions": 3,
+        "float_literals": 18,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/coupled_boundary_field.metal",
+        "functions": 5,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/cumulus_clock_family.metal",
+        "functions": 2,
+        "float_literals": 20,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/diagnostics_calc_p_alpha.metal",
+        "functions": 2,
+        "float_literals": 6,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/diagnostics_log1pf.metalh",
+        "functions": 5,
+        "float_literals": 12,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/diff6_family.metal",
+        "functions": 18,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/diffusion.metal",
+        "functions": 4,
+        "float_literals": 6,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/dudhia_shortwave.metal",
+        "functions": 1,
+        "float_literals": 112,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/dycore_advance_stage.metal",
+        "functions": 8,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ensemble_surface_recipe_fragment.metal",
+        "functions": 5,
+        "float_literals": 20,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/face_mass.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/gf_family.metal",
+        "functions": 42,
+        "float_literals": 3,
+        "possible_fp64_words": 3
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_any_u32_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_betts_miller_deep_finalize_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_betts_miller_fragment.metal",
+        "functions": 4,
+        "float_literals": 0,
+        "possible_fp64_words": 14
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_betts_miller_temperature_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_betts_miller_theta_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_cfl_wind_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_column_water_before_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_column_water_stack_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_convective_adjust_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_convective_count_finalize_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_convective_mass_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_convective_pack_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_dynamics_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_enforce_vapor_rows_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_fallout_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 5
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_finite_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_fix_total_water_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_fixer_fragment.metal",
+        "functions": 4,
+        "float_literals": 0,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_floor_grid_tracer_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_gray_radiation_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_gray_radiation_optics_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 3
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_gray_radiation_update_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_gray_solar_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 22
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_grid_mean_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_grid_plane_broadcast_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_hybrid_pressure_setup_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_implicit_diffusion_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_implicit_diffusion_pack_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_insitu_capture_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_insitu_energy_fragment.metal",
+        "functions": 6,
+        "float_literals": 0,
+        "possible_fp64_words": 7
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_insitu_ledger_fragment.metal",
+        "functions": 5,
+        "float_literals": 0,
+        "possible_fp64_words": 6
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_insitu_spectra_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_inverse_longitude_transform_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_inverse_longitude_transform_resident_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_latitude_transform_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_latitude_transform_resident_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_level_water_mass_finalize_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_level_water_mass_rows_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_level_water_mass_total_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_longitude_transform_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_longitude_transform_resident_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_microphysics_fragment.metal",
+        "functions": 5,
+        "float_literals": 0,
+        "possible_fp64_words": 19
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_momentum_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_physics_exner_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_pressure_gradient_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_reductions_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_saturation_adjust_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 12
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_saturation_closure_finalize_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_saturation_closure_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 3
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_saturation_pair_max_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_scalar_tendency_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_screen_diagnostics_fragment.metal",
+        "functions": 9,
+        "float_literals": 0,
+        "possible_fp64_words": 73
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_add_scaled_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_assemble_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_complex_difference_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_departure_fragment.metal",
+        "functions": 6,
+        "float_literals": 0,
+        "possible_fp64_words": 14
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_force_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_gather5_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 6
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_gather_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 6
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_gradient_metric_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_half_apply_fragment.metal",
+        "functions": 5,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_linear_tendencies_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_lipschitz_fragment.metal",
+        "functions": 4,
+        "float_literals": 0,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_lipschitz_norms_fragment.metal",
+        "functions": 6,
+        "float_literals": 0,
+        "possible_fp64_words": 10
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_max_finalize_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_max_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_operator_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_pressure_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_solve_shifted_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_tendencies_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_tracer_fix_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_transport_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 4
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_transport_resident_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 24
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_vector_analysis_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_vector_fragment.metal",
+        "functions": 10,
+        "float_literals": 2,
+        "possible_fp64_words": 12
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_water_column_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_semilag_wind_pair_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_soil_temperature_relax_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_spectral_diffusion.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_spectral_project_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_stratospheric_floor_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_sum_finalize_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_surface_emission_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_surface_energy_update_fragment.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_surface_fallout_cooling_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_surface_flux_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 3
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_surface_flux_prep_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 14
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_surface_flux_prep_resident_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 14
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_surface_pressure_tendency_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_surface_water_add_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_top_sponge_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 10
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_total_water_stores_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 5
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_tracer_extrema_finalize_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_tracer_extrema_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_tracer_flux_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_tracer_gap_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_tracer_minmax_finalize_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_tracer_minmax_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_tracer_resident_fragment.metal",
+        "functions": 21,
+        "float_literals": 0,
+        "possible_fp64_words": 7
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_tracer_walled_fragment.metal",
+        "functions": 5,
+        "float_literals": 0,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_tracer_zonal_fragment.metal",
+        "functions": 5,
+        "float_literals": 0,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_turbulence_geometry_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_vertical_continuity_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_vertical_momentum_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/global_vertical_scalar_flux_fragment.metal",
+        "functions": 4,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/health_family.metal",
+        "functions": 10,
+        "float_literals": 20,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/held_heating.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_acoustic_edge_update_fragment.metal",
+        "functions": 1,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_acoustic_postsolve_damping_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_density_tendency_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_dpdz_tendency_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_exner_pressure_diagnostic_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_fct_apply_fragment.metal",
+        "functions": 1,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_fct_cell_scales_fragment.metal",
+        "functions": 1,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_fct_edge_flux_fragment.metal",
+        "functions": 1,
+        "float_literals": 6,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_horizontal_theta_tendency_fragment.metal",
+        "functions": 1,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_interface_velocity_recovery_fragment.metal",
+        "functions": 1,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_interface_velocity_terrain_fragment.metal",
+        "functions": 1,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_kinematic_diagnostics_fragment.metal",
+        "functions": 3,
+        "float_literals": 11,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_mass_flux_divergence.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_mesh_diagnostics_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_moist_coefficients_v841_fragment.metal",
+        "functions": 3,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_omega_terrain_conversion_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_pressure_gradient_fragment.metal",
+        "functions": 1,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_pressure_perturbation_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_pv_diagnostics_fragment.metal",
+        "functions": 3,
+        "float_literals": 7,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_rk_tendencies_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_scalar_fct_fragment.metal",
+        "functions": 1,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_scalar_rk_update_fragment.metal",
+        "functions": 3,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_solve_vertical_system_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_tangential_velocity_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_theta_diagnostic_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_vector_invariant_momentum_fragment.metal",
+        "functions": 1,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_vector_invariant_momentum_v841_fragment.metal",
+        "functions": 1,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_vertical_coefficients_v841_fragment.metal",
+        "functions": 5,
+        "float_literals": 17,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_vertical_momentum_transport_fragment.metal",
+        "functions": 3,
+        "float_literals": 6,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_vertical_pressure_euler_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_vertical_scalar_flux3_fragment.metal",
+        "functions": 1,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_vertical_theta_tendency_fragment.metal",
+        "functions": 3,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/hex_vertical_velocity_tendency_fragment.metal",
+        "functions": 3,
+        "float_literals": 11,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ieva_family.metal",
+        "functions": 3,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ieva_solve_family.metal",
+        "functions": 20,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/jacobi_eigh_fp64.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 6
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/kessler.metal",
+        "functions": 1,
+        "float_literals": 49,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/kessler_family.metal",
+        "functions": 5,
+        "float_literals": 52,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/kf_column_family.metal",
+        "functions": 12,
+        "float_literals": 596,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/kf_output_validation.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/kf_w0avg_update.metal",
+        "functions": 1,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/lake_family.metal",
+        "functions": 2,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/lake_support.metalh",
+        "functions": 49,
+        "float_literals": 1,
+        "possible_fp64_words": 4
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/lake_wrf_fragment.metalh",
+        "functions": 21,
+        "float_literals": 150,
+        "possible_fp64_words": 535
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/lbc_flow.metal",
+        "functions": 4,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/lbc_state.metal",
+        "functions": 28,
+        "float_literals": 16,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/lbc_time.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/milbrandt2_family.metal",
+        "functions": 22,
+        "float_literals": 1219,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/milbrandt2_fields.metal",
+        "functions": 2,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/milbrandt2_zet.metal",
+        "functions": 1,
+        "float_literals": 6,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/moist_pd.metal",
+        "functions": 12,
+        "float_literals": 70,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/moist_pd_source_fold.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/moist_scalar_update.metal",
+        "functions": 1,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/morrison_family.metal",
+        "functions": 28,
+        "float_literals": 788,
+        "possible_fp64_words": 7
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/morrison_refl.metal",
+        "functions": 26,
+        "float_literals": 11,
+        "possible_fp64_words": 25
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/mp_zero_out_fragment.metal",
+        "functions": 1,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/myjpbl_family.metal",
+        "functions": 1,
+        "float_literals": 173,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/myjsfc_family.metal",
+        "functions": 4,
+        "float_literals": 132,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/mynn_pbl_family.metal",
+        "functions": 66,
+        "float_literals": 1347,
+        "possible_fp64_words": 6
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/mynn_surface_family.metal",
+        "functions": 29,
+        "float_literals": 348,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nest_family.metal",
+        "functions": 9,
+        "float_literals": 20,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nest_interp_fragment.metal",
+        "functions": 7,
+        "float_literals": 19,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nest_stream_transfer_fragment.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noah_family.metal",
+        "functions": 39,
+        "float_literals": 508,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noah_forcing_family.metal",
+        "functions": 4,
+        "float_literals": 7,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noah_mosaic_family.metal",
+        "functions": 47,
+        "float_literals": 667,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noah_sfcdiags_family.metal",
+        "functions": 1,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_bareflux_family.metal",
+        "functions": 5,
+        "float_literals": 96,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_driver_family.metal",
+        "functions": 12,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_fluxprep_family.metal",
+        "functions": 0,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_glacier_family.metal",
+        "functions": 19,
+        "float_literals": 457,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_leaves_family.metal",
+        "functions": 6,
+        "float_literals": 68,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_radiation_family.metal",
+        "functions": 14,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_sflx_family.metal",
+        "functions": 7,
+        "float_literals": 15,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_thermal_family.metal",
+        "functions": 12,
+        "float_literals": 102,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_vegeflux_family.metal",
+        "functions": 13,
+        "float_literals": 190,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_vegprecip_family.metal",
+        "functions": 4,
+        "float_literals": 86,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/noahmp_water_family.metal",
+        "functions": 72,
+        "float_literals": 255,
+        "possible_fp64_words": 90
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nssl2_diagnostics.metal",
+        "functions": 4,
+        "float_literals": 107,
+        "possible_fp64_words": 5
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nssl2_driver_transport.metal",
+        "functions": 4,
+        "float_literals": 59,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nssl2_fused_gs_family.metal",
+        "functions": 56,
+        "float_literals": 1763,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nssl2_nucond.metal",
+        "functions": 11,
+        "float_literals": 246,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nssl2_runtime.metal",
+        "functions": 3,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nssl2_sedimentation.metal",
+        "functions": 14,
+        "float_literals": 323,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/nssl2_soft64.metalh",
+        "functions": 14,
+        "float_literals": 4,
+        "possible_fp64_words": 11
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ntiedtke_family.metal",
+        "functions": 70,
+        "float_literals": 520,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/openbc_radiative.metal",
+        "functions": 7,
+        "float_literals": 22,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_constants.metalh",
+        "functions": 0,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_entry.metal",
+        "functions": 1,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_final.metal",
+        "functions": 9,
+        "float_literals": 93,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_homofreeze.metal",
+        "functions": 1,
+        "float_literals": 8,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_kloop1.metal",
+        "functions": 3,
+        "float_literals": 99,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_kloopmain.metal",
+        "functions": 19,
+        "float_literals": 490,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_math.metalh",
+        "functions": 11,
+        "float_literals": 0,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_reference_pow.metalh",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 392
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_saveold_precip.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_sed_cloud.metal",
+        "functions": 2,
+        "float_literals": 42,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_sed_ice.metal",
+        "functions": 6,
+        "float_literals": 44,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/p3_sed_rain.metal",
+        "functions": 4,
+        "float_literals": 37,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/physics_atmosphere_prepare.metal",
+        "functions": 4,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rayleigh_family.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/real_total_geopotential.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/refl_family.metal",
+        "functions": 9,
+        "float_literals": 5,
+        "possible_fp64_words": 5
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rk_bookkeeping.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rk_total_theta.metal",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtm_lw_family.metal",
+        "functions": 27,
+        "float_literals": 198,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmg_aer3_sw_optics.metal",
+        "functions": 6,
+        "float_literals": 464,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmg_legacy_lw_family.metal",
+        "functions": 32,
+        "float_literals": 340,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmg_legacy_sw_bodies.metalh",
+        "functions": 15,
+        "float_literals": 255,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmg_legacy_sw_family.metal",
+        "functions": 18,
+        "float_literals": 22,
+        "possible_fp64_words": 7
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmg_legacy_sw_tables.metalh",
+        "functions": 0,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmgp_cloud_family.metal",
+        "functions": 11,
+        "float_literals": 25,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+        "functions": 11,
+        "float_literals": 147,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmgp_gas_family.metal",
+        "functions": 16,
+        "float_literals": 36,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmgp_mcica_family.metal",
+        "functions": 10,
+        "float_literals": 0,
+        "possible_fp64_words": 6
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmgp_prepare_family.metal",
+        "functions": 13,
+        "float_literals": 16,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/rrtmgp_rte_family.metal",
+        "functions": 14,
+        "float_literals": 91,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ruc_driver_family.metal",
+        "functions": 26,
+        "float_literals": 271,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ruc_family.metal",
+        "functions": 1,
+        "float_literals": 24,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ruc_sfclay_seaice.metal",
+        "functions": 4,
+        "float_literals": 37,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ruc_sfctmp_family.metal",
+        "functions": 10,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ruc_sfctmp_helpers.metalh",
+        "functions": 28,
+        "float_literals": 452,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/sase_family.metal",
+        "functions": 55,
+        "float_literals": 79,
+        "possible_fp64_words": 49
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/sfclay_family.metal",
+        "functions": 20,
+        "float_literals": 312,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/shinhong_column.metal",
+        "functions": 17,
+        "float_literals": 410,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/slow_buoyancy.metal",
+        "functions": 5,
+        "float_literals": 13,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/slow_geopotential.metal",
+        "functions": 8,
+        "float_literals": 24,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/slow_pgf.metal",
+        "functions": 8,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/smag2d_alternates_fragment.metal",
+        "functions": 2,
+        "float_literals": 16,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/smag2d_family.metal",
+        "functions": 105,
+        "float_literals": 199,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/small_step.metal",
+        "functions": 6,
+        "float_literals": 8,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/soft_binary32.metalh",
+        "functions": 33,
+        "float_literals": 0,
+        "possible_fp64_words": 4
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/soft_binary64.metalh",
+        "functions": 49,
+        "float_literals": 3,
+        "possible_fp64_words": 10
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/soft_gfk_atan.metalh",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/soft_gfk_exp.metalh",
+        "functions": 2,
+        "float_literals": 0,
+        "possible_fp64_words": 38
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/soft_gfk_log.metalh",
+        "functions": 4,
+        "float_literals": 0,
+        "possible_fp64_words": 39
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/soft_gfk_pow.metalh",
+        "functions": 5,
+        "float_literals": 0,
+        "possible_fp64_words": 47
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/soft_gfk_tgamma.metalh",
+        "functions": 2,
+        "float_literals": 2,
+        "possible_fp64_words": 164
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/soft_libm64.metalh",
+        "functions": 10,
+        "float_literals": 0,
+        "possible_fp64_words": 89
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/solar_albedo_fragment.metal",
+        "functions": 2,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/spec_zone_ring.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/spectral_scalar.metal",
+        "functions": 7,
+        "float_literals": 39,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/stage_mass_fluxes.metal",
+        "functions": 6,
+        "float_literals": 7,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/surface_diagnostics_seed.metal",
+        "functions": 1,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/surface_humidity.metal",
+        "functions": 1,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/surface_w.metal",
+        "functions": 1,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/swint_fragment.metal",
+        "functions": 4,
+        "float_literals": 52,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/tendency_coupling.metal",
+        "functions": 6,
+        "float_literals": 9,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/terrain_drag_family.metal",
+        "functions": 7,
+        "float_literals": 295,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+        "functions": 69,
+        "float_literals": 795,
+        "possible_fp64_words": 76
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_aerosol_common.metalh",
+        "functions": 14,
+        "float_literals": 97,
+        "possible_fp64_words": 3
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_aerosol_sat_family.metal",
+        "functions": 38,
+        "float_literals": 192,
+        "possible_fp64_words": 15
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+        "functions": 14,
+        "float_literals": 69,
+        "possible_fp64_words": 4
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+        "functions": 38,
+        "float_literals": 341,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_aerosol_warm_family.metal",
+        "functions": 52,
+        "float_literals": 649,
+        "possible_fp64_words": 31
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+        "functions": 17,
+        "float_literals": 206,
+        "possible_fp64_words": 13
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_cloud_sedimentation.metal",
+        "functions": 4,
+        "float_literals": 42,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_cold_start_family.metal",
+        "functions": 3,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_cold_start_numbers.metal",
+        "functions": 16,
+        "float_literals": 8,
+        "possible_fp64_words": 6
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_cold_start_surface.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_effective_radius.metal",
+        "functions": 5,
+        "float_literals": 87,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_family.metal",
+        "functions": 19,
+        "float_literals": 190,
+        "possible_fp64_words": 10
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_final_phase_cleanup.metal",
+        "functions": 4,
+        "float_literals": 77,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_frozen_vapor_network.metal",
+        "functions": 25,
+        "float_literals": 582,
+        "possible_fp64_words": 80
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_graupel_sedimentation.metal",
+        "functions": 5,
+        "float_literals": 78,
+        "possible_fp64_words": 2
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_ice_sedimentation.metal",
+        "functions": 12,
+        "float_literals": 72,
+        "possible_fp64_words": 8
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_rain_evaporation.metal",
+        "functions": 9,
+        "float_literals": 94,
+        "possible_fp64_words": 4
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_rain_sedimentation.metal",
+        "functions": 5,
+        "float_literals": 60,
+        "possible_fp64_words": 1
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_reflectivity.metal",
+        "functions": 25,
+        "float_literals": 58,
+        "possible_fp64_words": 34
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_snow_sedimentation.metal",
+        "functions": 5,
+        "float_literals": 118,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+        "functions": 61,
+        "float_literals": 558,
+        "possible_fp64_words": 158
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/tke_budget_family.metal",
+        "functions": 0,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/topo_radiation_family.metal",
+        "functions": 11,
+        "float_literals": 60,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/uh_diag_family.metal",
+        "functions": 17,
+        "float_literals": 43,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/uh_smooth_max.metal",
+        "functions": 1,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_atmosphere_gather_fragment.metal",
+        "functions": 1,
+        "float_literals": 9,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_atmosphere_interp_fragment.metal",
+        "functions": 7,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_building_level_scan_fragment.metal",
+        "functions": 1,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_buildings_tendency_fragment.metal",
+        "functions": 5,
+        "float_literals": 45,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_consump_total_fragment.metal",
+        "functions": 3,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_final_output_fragment.metal",
+        "functions": 4,
+        "float_literals": 7,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_flat_flux_fragment.metal",
+        "functions": 7,
+        "float_literals": 50,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_flat_flux_pack_fragment.metal",
+        "functions": 1,
+        "float_literals": 2,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_height_init_fragment.metal",
+        "functions": 3,
+        "float_literals": 12,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_icbep_xy_fragment.metal",
+        "functions": 10,
+        "float_literals": 28,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_indoor_fluxes_fragment.metal",
+        "functions": 5,
+        "float_literals": 32,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_indoor_radiation_fragment.metal",
+        "functions": 14,
+        "float_literals": 67,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_indoor_state_update_fragment.metal",
+        "functions": 5,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_interior_flux_fragment.metal",
+        "functions": 4,
+        "float_literals": 9,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_interior_radiation_fragment.metal",
+        "functions": 14,
+        "float_literals": 61,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_interp_length_fragment.metal",
+        "functions": 5,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_longwave_fragment.metal",
+        "functions": 7,
+        "float_literals": 20,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_material_solve_fragment.metal",
+        "functions": 6,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_material_solve_green_roof_fragment.metal",
+        "functions": 8,
+        "float_literals": 30,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_occupancy_fragment.metal",
+        "functions": 4,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_occupancy_inputs_fragment.metal",
+        "functions": 1,
+        "float_literals": 5,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_param_fragment.metal",
+        "functions": 5,
+        "float_literals": 63,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_profile_init_fragment.metal",
+        "functions": 4,
+        "float_literals": 8,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_rain_update_fragment.metal",
+        "functions": 4,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_roof_radiation_fragment.metal",
+        "functions": 6,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_room_balance_inputs_fragment.metal",
+        "functions": 6,
+        "float_literals": 42,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_room_control_fragment.metal",
+        "functions": 5,
+        "float_literals": 25,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_shadow_mas_fragment.metal",
+        "functions": 6,
+        "float_literals": 28,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_shortwave_fragment.metal",
+        "functions": 6,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_surface_temp_fragment.metal",
+        "functions": 6,
+        "float_literals": 22,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_temperature_average_fragment.metal",
+        "functions": 5,
+        "float_literals": 9,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_temperature_profile_average_fragment.metal",
+        "functions": 5,
+        "float_literals": 4,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_urban_meso_fragment.metal",
+        "functions": 7,
+        "float_literals": 51,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_view_factors_fragment.metal",
+        "functions": 10,
+        "float_literals": 28,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_view_inputs_fragment.metal",
+        "functions": 1,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bem_wall_flux_fragment.metal",
+        "functions": 6,
+        "float_literals": 39,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_albedo_fragment.metal",
+        "functions": 9,
+        "float_literals": 20,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_class_init_fragment.metal",
+        "functions": 1,
+        "float_literals": 14,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_class_profile_pack_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_family.metal",
+        "functions": 0,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_finalize_fragment.metal",
+        "functions": 5,
+        "float_literals": 13,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_flat_roof_flux_fragment.metal",
+        "functions": 10,
+        "float_literals": 72,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_green_roof_fragment.metal",
+        "functions": 15,
+        "float_literals": 138,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_hi_profile_gather_fragment.metal",
+        "functions": 1,
+        "float_literals": 1,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_profile_select_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_pv_solve_fragment.metal",
+        "functions": 10,
+        "float_literals": 45,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_state_gather_fragment.metal",
+        "functions": 1,
+        "float_literals": 6,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_state_scatter_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_upward_rad_fragment.metal",
+        "functions": 6,
+        "float_literals": 38,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_bem_wall_fragment.metal",
+        "functions": 5,
+        "float_literals": 10,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_buildings_fragment.metal",
+        "functions": 1,
+        "float_literals": 8,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_couple_family.metal",
+        "functions": 4,
+        "float_literals": 42,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_family.metal",
+        "functions": 36,
+        "float_literals": 159,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_flux_helpers_fragment.metal",
+        "functions": 4,
+        "float_literals": 36,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_radiation_fragment.metal",
+        "functions": 6,
+        "float_literals": 25,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_radiosity_fragment.metal",
+        "functions": 6,
+        "float_literals": 36,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_bep_surface_temperature_fragment.metal",
+        "functions": 7,
+        "float_literals": 44,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_ucm_family.metal",
+        "functions": 6,
+        "float_literals": 3,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_ucm_math_fragment.metal",
+        "functions": 1,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/urban_ucm_noahmp_after_lsm_fragment.metal",
+        "functions": 27,
+        "float_literals": 671,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/uwpbl_family.metal",
+        "functions": 47,
+        "float_literals": 0,
+        "possible_fp64_words": 1007
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/wdm6_family.metal",
+        "functions": 23,
+        "float_literals": 630,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/wdm6_reflectivity.metal",
+        "functions": 25,
+        "float_literals": 0,
+        "possible_fp64_words": 4
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/wrf_tke_km_fragment.metal",
+        "functions": 3,
+        "float_literals": 47,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/wrf_tke_rhs_fragment.metal",
+        "functions": 3,
+        "float_literals": 34,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/wrf_w_cfl_stat.metal",
+        "functions": 4,
+        "float_literals": 0,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/wsm6_family.metal",
+        "functions": 21,
+        "float_literals": 375,
+        "possible_fp64_words": 0
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ysu_column.metal",
+        "functions": 19,
+        "float_literals": 270,
+        "possible_fp64_words": 3
+      },
+      {
+        "backend": "metal",
+        "file": "woof/metal/shaders/ysu_family.metal",
+        "functions": 17,
+        "float_literals": 41,
+        "possible_fp64_words": 0
+      }
+    ],
+    "cuda_scopes": 2671,
+    "metal_scopes": 3407,
+    "paired_metal_scopes": 1144,
+    "unmatched_cuda_scopes": 1654,
+    "unmatched_metal_scopes": 2263,
+    "ambiguous_pairs": 218,
+    "flag_counts": {
+      "metal_only_value": 1073,
+      "cuda_only_value": 1937,
+      "factor_of_ten": 23
+    }
+  },
+  "historical_c7_flags": [
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_common.cuh",
+      "cuda_function": "thompson_rslf",
+      "cuda_line": 868,
+      "metal_file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+      "metal_function": "cold_rslf",
+      "metal_line": 141,
+      "matching": "source_verified_wrapper_or_helper_mapping",
+      "score": 0.8123201123201123,
+      "ambiguous": false,
+      "cuda_only_values": [
+        "3.795342946172342e-12"
+      ],
+      "metal_only_values": [
+        "3.7953432063808634e-11"
+      ],
+      "counts_equal": false,
+      "kind": "factor_of_ten",
+      "cuda_value": "3.795342946172342e-12",
+      "metal_value": "3.7953432063808634e-11",
+      "power10_exponent": 1,
+      "aligned_single_replacement": false,
+      "cuda_literal": "0.379534310e-11f",
+      "cuda_literal_line": 879,
+      "metal_literal": "0.0000000000379534310f",
+      "metal_literal_line": 144
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_common.cuh",
+      "cuda_function": "thompson_rslf",
+      "cuda_line": 868,
+      "metal_file": "woof/metal/shaders/thompson_aerosol_warm_family.metal",
+      "metal_function": "thompson_aa_rslf",
+      "metal_line": 135,
+      "matching": "source_verified_wrapper_or_helper_mapping",
+      "score": 0.86498468912262,
+      "ambiguous": false,
+      "cuda_only_values": [
+        "3.795342946172342e-12"
+      ],
+      "metal_only_values": [
+        "3.7953432063808634e-11"
+      ],
+      "counts_equal": false,
+      "kind": "factor_of_ten",
+      "cuda_value": "3.795342946172342e-12",
+      "metal_value": "3.7953432063808634e-11",
+      "power10_exponent": 1,
+      "aligned_single_replacement": true,
+      "cuda_literal": "0.379534310e-11f",
+      "cuda_literal_line": 879,
+      "metal_literal": "0.0000000000379534310f",
+      "metal_literal_line": 137
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson.cu",
+      "cuda_function": "thompson_rslf",
+      "cuda_line": 43,
+      "metal_file": "woof/metal/shaders/thompson_frozen_vapor_network.metal",
+      "metal_function": "trslf",
+      "metal_line": 37,
+      "matching": "source_verified_wrapper_or_helper_mapping",
+      "score": 0.7057271557271557,
+      "ambiguous": false,
+      "cuda_only_values": [
+        "3.795342946172342e-12"
+      ],
+      "metal_only_values": [
+        "3.7953432063808634e-11"
+      ],
+      "counts_equal": false,
+      "kind": "factor_of_ten",
+      "cuda_value": "3.795342946172342e-12",
+      "metal_value": "3.7953432063808634e-11",
+      "power10_exponent": 1,
+      "aligned_single_replacement": true,
+      "cuda_literal": "0.379534310e-11f",
+      "cuda_literal_line": 52,
+      "metal_literal": ".0000000000379534310f",
+      "metal_literal_line": 39
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson.cu",
+      "cuda_function": "thompson_rslf",
+      "cuda_line": 43,
+      "metal_file": "woof/metal/shaders/thompson_warm_frozen_source.metal",
+      "metal_function": "trslf",
+      "metal_line": 60,
+      "matching": "source_verified_wrapper_or_helper_mapping",
+      "score": 0.7119047619047619,
+      "ambiguous": false,
+      "cuda_only_values": [
+        "3.795342946172342e-12"
+      ],
+      "metal_only_values": [
+        "3.7953432063808634e-11"
+      ],
+      "counts_equal": false,
+      "kind": "factor_of_ten",
+      "cuda_value": "3.795342946172342e-12",
+      "metal_value": "3.7953432063808634e-11",
+      "power10_exponent": 1,
+      "aligned_single_replacement": true,
+      "cuda_literal": "0.379534310e-11f",
+      "cuda_literal_line": 52,
+      "metal_literal": ".0000000000379534310f",
+      "metal_literal_line": 60
+    }
+  ],
+  "factor10_review": [
+    {
+      "cuda_file": "woof/core/kernels/mynn_pbl.cu",
+      "cuda_function": "mynn_driver_surface_columns",
+      "cuda_literal_line": 4517,
+      "cuda_literal": "0.25f",
+      "metal_file": "woof/metal/shaders/mynn_pbl_family.metal",
+      "metal_function": "mynn_driver_surface_columns",
+      "metal_literal_line": 358,
+      "metal_literal": "2500000.0f",
+      "power10_exponent": 7,
+      "classification": "different_quantities_or_macro_placement",
+      "reason": "CUDA 0.25 is the GSD stability exponent; Metal 2.5e6 is latent heat. Not corresponding coefficients."
+    },
+    {
+      "cuda_file": "woof/core/kernels/mynn_pbl.cu",
+      "cuda_function": "mynn_mym_length_gsd41_column",
+      "cuda_literal_line": 2519,
+      "cuda_literal": "0.25f",
+      "metal_file": "woof/metal/shaders/mynn_pbl_family.metal",
+      "metal_function": "mynn_mym_length_gsd41",
+      "metal_literal_line": 2131,
+      "metal_literal": "25.0f",
+      "power10_exponent": 2,
+      "classification": "unresolved_scheme_variant_mapping",
+      "reason": "Metal comments specify experimental WRF v4.1 CASE(2); CUDA GSD41/local implementations differ in multiple coefficients. Not a single exponent typo; needs configuration-specific mapping and replay."
+    },
+    {
+      "cuda_file": "woof/core/kernels/mynn_pbl.cu",
+      "cuda_function": "mynn_mym_length_gsd41_column",
+      "cuda_literal_line": 2574,
+      "cuda_literal": "30.0f",
+      "metal_file": "woof/metal/shaders/mynn_pbl_family.metal",
+      "metal_function": "mynn_mym_length_gsd41",
+      "metal_literal_line": 2099,
+      "metal_literal": "3.0f",
+      "power10_exponent": -1,
+      "classification": "unresolved_scheme_variant_mapping",
+      "reason": "Metal comments specify experimental WRF v4.1 CASE(2); CUDA GSD41/local implementations differ in multiple coefficients. Not a single exponent typo; needs configuration-specific mapping and replay."
+    },
+    {
+      "cuda_file": "woof/core/kernels/noahmp_bareflux.cu",
+      "cuda_function": "<file_scope>",
+      "cuda_literal_line": 97,
+      "cuda_literal": "0xBFDFFFFEF20A4123ULL",
+      "metal_file": "woof/metal/shaders/noahmp_bareflux_family.metal",
+      "metal_function": "<file_scope>",
+      "metal_literal_line": 18,
+      "metal_literal": "50.0f",
+      "power10_exponent": 2,
+      "classification": "unrelated_software_math_and_physical_clamp",
+      "reason": "A decoded FP64 logarithm coefficient is compared with -50/-5 clamps."
+    },
+    {
+      "cuda_file": "woof/core/kernels/noahmp_bareflux.cu",
+      "cuda_function": "<file_scope>",
+      "cuda_literal_line": 97,
+      "cuda_literal": "0xBFDFFFFEF20A4123ULL",
+      "metal_file": "woof/metal/shaders/noahmp_bareflux_family.metal",
+      "metal_function": "<file_scope>",
+      "metal_literal_line": 18,
+      "metal_literal": "5.0f",
+      "power10_exponent": 1,
+      "classification": "unrelated_software_math_and_physical_clamp",
+      "reason": "A decoded FP64 logarithm coefficient is compared with -50/-5 clamps."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_warm.cu",
+      "cuda_function": "thompson_aa_warm_source_network",
+      "cuda_literal_line": 1526,
+      "cuda_literal": "120.0f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+      "metal_function": "cold_prepare_entry",
+      "metal_literal_line": 514,
+      "metal_literal": "1.2e-5f",
+      "power10_exponent": -7,
+      "classification": "unestablished_helper_pairing",
+      "reason": "Heuristic pairs a cold/rain-speed stage against a warm/classic/graupel function. Numeric relationship alone has no semantic meaning."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_warm.cu",
+      "cuda_function": "thompson_aa_warm_source_network",
+      "cuda_literal_line": 1213,
+      "cuda_literal": "2.5f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+      "metal_function": "cold_prepare_entry",
+      "metal_literal_line": 499,
+      "metal_literal": "0.25f",
+      "power10_exponent": -1,
+      "classification": "unestablished_helper_pairing",
+      "reason": "Heuristic pairs a cold/rain-speed stage against a warm/classic/graupel function. Numeric relationship alone has no semantic meaning."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_warm.cu",
+      "cuda_function": "thompson_aa_warm_source_network",
+      "cuda_literal_line": 1354,
+      "cuda_literal": "2.5e6f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+      "metal_function": "cold_prepare_entry",
+      "metal_literal_line": 499,
+      "metal_literal": "0.25f",
+      "power10_exponent": -7,
+      "classification": "unestablished_helper_pairing",
+      "reason": "Heuristic pairs a cold/rain-speed stage against a warm/classic/graupel function. Numeric relationship alone has no semantic meaning."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson.cu",
+      "cuda_function": "thompson_classic_graupel_number",
+      "cuda_literal_line": 2065,
+      "cuda_literal": "1.0e-10f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_cold_family.metal",
+      "metal_function": "cold_prepare_graupel",
+      "metal_literal_line": 655,
+      "metal_literal": "1.0e-6f",
+      "power10_exponent": 4,
+      "classification": "unestablished_helper_pairing",
+      "reason": "Heuristic pairs a cold/rain-speed stage against a warm/classic/graupel function. Numeric relationship alone has no semantic meaning."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_function": "<file_scope>",
+      "cuda_literal_line": 88,
+      "cuda_literal": "1.0e-15f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "metal_function": "<file_scope>",
+      "metal_literal_line": 155,
+      "metal_literal": "1.0f",
+      "power10_exponent": 15,
+      "classification": "different_global_tables_or_macro_placement",
+      "reason": "Global EPS threshold and gamma table constants are different quantities, not matched coefficients."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_state.cu",
+      "cuda_function": "<file_scope>",
+      "cuda_literal_line": 88,
+      "cuda_literal": "1.0e-15f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+      "metal_function": "<file_scope>",
+      "metal_literal_line": 179,
+      "metal_literal": "10.0f",
+      "power10_exponent": 16,
+      "classification": "different_global_tables_or_macro_placement",
+      "reason": "Global EPS threshold and gamma table constants are different quantities, not matched coefficients."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_warm.cu",
+      "cuda_function": "thompson_aa_warm_rain_rates",
+      "cuda_literal_line": 431,
+      "cuda_literal": "1.0e6f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_warm_family.metal",
+      "metal_function": "thompson_aa_warm_rates",
+      "metal_literal_line": 395,
+      "metal_literal": "1.0f",
+      "power10_exponent": -6,
+      "classification": "folded_expression_or_different_branch",
+      "reason": "Verified expression folds include D0C*1e6 -> 1, 99.5/100 -> 0.995, 40/100 -> 0.4, and radius 0.5*15 -> 7.5 / 0.5*3 -> 1.5. The radius flag compares different cloud/ice branches."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_warm.cu",
+      "cuda_function": "thompson_aa_frozen_collect_rates",
+      "cuda_literal_line": 924,
+      "cuda_literal": "99.5",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_warm_family.metal",
+      "metal_function": "thompson_aa_frozen_rates",
+      "metal_literal_line": 535,
+      "metal_literal": "0.995f",
+      "power10_exponent": -2,
+      "classification": "folded_expression_or_different_branch",
+      "reason": "Verified expression folds include D0C*1e6 -> 1, 99.5/100 -> 0.995, 40/100 -> 0.4, and radius 0.5*15 -> 7.5 / 0.5*3 -> 1.5. The radius flag compares different cloud/ice branches."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_warm.cu",
+      "cuda_function": "thompson_aa_frozen_collect_rates",
+      "cuda_literal_line": 924,
+      "cuda_literal": "99.5",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_warm_family.metal",
+      "metal_function": "thompson_aa_frozen_rates",
+      "metal_literal_line": 542,
+      "metal_literal": "0x3fefd70a3d70a3d7ul",
+      "power10_exponent": -2,
+      "classification": "folded_expression_or_different_branch",
+      "reason": "Verified expression folds include D0C*1e6 -> 1, 99.5/100 -> 0.995, 40/100 -> 0.4, and radius 0.5*15 -> 7.5 / 0.5*3 -> 1.5. The radius flag compares different cloud/ice branches."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_function": "thompson_aa_wrf39_graupel_sediment_impl",
+      "cuda_literal_line": 1216,
+      "cuda_literal": "1.0e-11f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "metal_function": "wrf39_rain_speed",
+      "metal_literal_line": 25,
+      "metal_literal": "1000.0f",
+      "power10_exponent": 14,
+      "classification": "unestablished_helper_pairing",
+      "reason": "Heuristic pairs a cold/rain-speed stage against a warm/classic/graupel function. Numeric relationship alone has no semantic meaning."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_function": "thompson_aa_wrf39_graupel_sediment_impl",
+      "cuda_literal_line": 1125,
+      "cuda_literal": "1.0e-10f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "metal_function": "wrf39_rain_speed",
+      "metal_literal_line": 25,
+      "metal_literal": "1000.0f",
+      "power10_exponent": 13,
+      "classification": "unestablished_helper_pairing",
+      "reason": "Heuristic pairs a cold/rain-speed stage against a warm/classic/graupel function. Numeric relationship alone has no semantic meaning."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson_aerosol_sed.cu",
+      "cuda_function": "thompson_aa_wrf39_graupel_sediment_impl",
+      "cuda_literal_line": 1183,
+      "cuda_literal": "1.0e-3f",
+      "metal_file": "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal",
+      "metal_function": "wrf39_rain_speed",
+      "metal_literal_line": 25,
+      "metal_literal": "1000.0f",
+      "power10_exponent": 6,
+      "classification": "unestablished_helper_pairing",
+      "reason": "Heuristic pairs a cold/rain-speed stage against a warm/classic/graupel function. Numeric relationship alone has no semantic meaning."
+    },
+    {
+      "cuda_file": "woof/core/kernels/thompson.cu",
+      "cuda_function": "thompson_effective_radius",
+      "cuda_literal_line": 418,
+      "cuda_literal": "15.0",
+      "metal_file": "woof/metal/shaders/thompson_effective_radius.metal",
+      "metal_function": "thompson_effective_radius",
+      "metal_literal_line": 67,
+      "metal_literal": "1.5f",
+      "power10_exponent": -1,
+      "classification": "folded_expression_or_different_branch",
+      "reason": "Verified expression folds include D0C*1e6 -> 1, 99.5/100 -> 0.995, 40/100 -> 0.4, and radius 0.5*15 -> 7.5 / 0.5*3 -> 1.5. The radius flag compares different cloud/ice branches."
+    },
+    {
+      "cuda_file": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_function": "bb_flux_flat",
+      "cuda_literal_line": 3547,
+      "cuda_literal": ".001f",
+      "metal_file": "woof/metal/shaders/urban_bem_flat_flux_fragment.metal",
+      "metal_function": "urban_bem_flat_flux_fragment",
+      "metal_literal_line": 70,
+      "metal_literal": "10.0f",
+      "power10_exponent": 4,
+      "classification": "different_quantities_or_parameters",
+      "reason": "Flux tol=.001 is unused in CUDA; p0=1e5 is passed as a Metal parameter, and stability/heat constants are different sites."
+    },
+    {
+      "cuda_file": "woof/core/kernels/urban_bep_bem.cu",
+      "cuda_function": "bb_flux_flat",
+      "cuda_literal_line": 3559,
+      "cuda_literal": "1.e+5f",
+      "metal_file": "woof/metal/shaders/urban_bem_flat_flux_fragment.metal",
+      "metal_function": "urban_bem_flat_flux_fragment",
+      "metal_literal_line": 70,
+      "metal_literal": "10.0f",
+      "power10_exponent": -4,
+      "classification": "different_quantities_or_parameters",
+      "reason": "Flux tol=.001 is unused in CUDA; p0=1e5 is passed as a Metal parameter, and stability/heat constants are different sites."
+    },
+    {
+      "cuda_file": "woof/core/kernels/urban_bem.cuh",
+      "cuda_function": "bem_hsfluxpv",
+      "cuda_literal_line": 1058,
+      "cuda_literal": "40.f",
+      "metal_file": "woof/metal/shaders/urban_bep_bem_pv_solve_fragment.metal",
+      "metal_function": "urban_bep_bem_pv_solve_fragment",
+      "metal_literal_line": 100,
+      "metal_literal": "0.4f",
+      "power10_exponent": -2,
+      "classification": "folded_expression_or_different_branch",
+      "reason": "Verified expression folds include D0C*1e6 -> 1, 99.5/100 -> 0.995, 40/100 -> 0.4, and radius 0.5*15 -> 7.5 / 0.5*3 -> 1.5. The radius flag compares different cloud/ice branches."
+    },
+    {
+      "cuda_file": "woof/core/kernels/urban_bep.cu",
+      "cuda_function": "bep_flux_flat",
+      "cuda_literal_line": 1604,
+      "cuda_literal": ".001f",
+      "metal_file": "woof/metal/shaders/urban_bep_family.metal",
+      "metal_function": "urban_bep_flux_flat",
+      "metal_literal_line": 1064,
+      "metal_literal": "1.0f",
+      "power10_exponent": 3,
+      "classification": "different_quantities_or_parameters",
+      "reason": "Flux tol=.001 is unused in CUDA; p0=1e5 is passed as a Metal parameter, and stability/heat constants are different sites."
+    },
+    {
+      "cuda_file": "woof/core/kernels/urban_bep.cu",
+      "cuda_function": "bep_flux_flat",
+      "cuda_literal_line": 1604,
+      "cuda_literal": ".001f",
+      "metal_file": "woof/metal/shaders/urban_bep_flux_helpers_fragment.metal",
+      "metal_function": "urban_bep_flux_flat",
+      "metal_literal_line": 53,
+      "metal_literal": "1.0f",
+      "power10_exponent": 3,
+      "classification": "different_quantities_or_parameters",
+      "reason": "Flux tol=.001 is unused in CUDA; p0=1e5 is passed as a Metal parameter, and stability/heat constants are different sites."
+    }
+  ]
+}

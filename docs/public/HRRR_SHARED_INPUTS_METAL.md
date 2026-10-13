@@ -50,49 +50,72 @@ Forecast plus I/O took 597.22 s on an M2 8-core GPU / 16 GB, versus the CUDA
 reference's 119.64 s on RTX 2000 Ada. These are observed machine timings,
 not a controlled benchmark. A later +1e-6 K initial-theta sensitivity run used
 the same original build, completed all 49 histories and passed health. It
-took 577.02 s for forecast plus I/O. No full forecast has used the coefficient
-correction; both existing Metal trajectories retain the original defect.
+took 577.02 s for forecast plus I/O. A subsequent corrected run also completed 49 histories and health PASS,
+with forecast plus I/O 621.10 s. The original and noise trajectories remain
+separate from the corrected trajectory.
 
 Input hashes, bundle/source identities, bounded results, trajectory summaries,
 and peak locations are retained in
 `tools/metal_hrrr_shared_case/validation.json`.
 
-## Numerical limits
+## Numerical limits after the coefficient correction
 
-This repair establishes execution of the case; it does not establish exact
-CUDA or general WRF parity. At +12 h, T2 RMSE is 0.0915 K and U/V RMSE is
-0.1013/0.1260 m/s. Across all output times, local maxima reach 1.1845 K for T2
-and 2.7219/2.3707 m/s for U/V. Both rain totals remain zero.
+The corrected 43,200-second forecast at commit
+`3a8ca4aa9f8db044d3cf301a7d683f4b441fb395` completes 1,827 steps, 49
+histories and health PASS. All 3,919 numeric variable/time checks against CUDA
+are finite and matching in shapes, dtypes, units and valid times.
 
-Those large maxima are interior, not boundary-frame outliers. Removing five
-native rows/faces on every side leaves the listed maxima unchanged. The main
-wind and T2 peaks sit 7–9 cells in; pressure's peak is 15 cells in. Archived
-top-three-level speeds remain below 16.9 m/s, versus the limiter's 110 m/s
-activation threshold; 15-minute histories cannot prove every intermediate
-substep's activation status.
+The correction removes QICE differences at all saved times and leaves only a
+tiny QSNOW residual (max 1.61e-8 kg/kg). Pooled temperature RMSE drops from
+0.11456 to 0.02750 K. Pooled U/U10/T2 RMSE falls from
+0.11741/0.11734/0.08892 to 0.06726/0.07925/0.05895, but remains
+24.5/46.5/15.1 times the recorded original-build perturbation spread. QCLOUD
+RMSE remains 121 times that spread. One positive uniform perturbation on the
+old build is not a statistical or corrected-build sensitivity ensemble.
+Corrected CUDA forecast parity is not established.
 
-The +1e-6 K sensitivity run stays close to baseline Metal at the main error
-columns. Across all 49 times, pooled U/U10 RMSE is 0.00275/0.00170 m/s,
-versus Metal–CUDA 0.1174/0.1173 m/s; T2 RMSE is 0.00389 K versus 0.0889 K.
-Individual sensitivity maxima can still be large (PSFC 9.20 Pa, PBLH 1,134 m),
-so one perturbation is not a statistical noise envelope or parity criterion.
+The remaining low-level column still develops appreciable vapour differences
+before saved liquid cloud: at (28,15,19), +15/+30 min deltas are
+7.65e-5/2.95e-4 kg/kg. Radiation and surface forcing there stay close until
+cloud appears at +45 min. Therefore the high-altitude cold-source defect was
+not the sole trigger of the main liquid-cloud/radiation/PBL chain. Histories
+alone cannot identify the first remaining within-step backend operation.
 
-At +15 minutes, Metal has cloud ice and snow while CUDA has neither; the
-liquid cloud appears later, at +45 minutes. Zero surface rain does not imply
-only condensation is active. Identical-input replay found a concrete upstream
-error: CUDA's RSLF c7 is `0.379534310e-11f`, while four Metal helpers expanded
-it to `0.0000000000379534310f`, ten times too large. The wrong saturation
-opens the classic cold-source nucleation gate in clear air. On 143 selected
-initial clear-air states, a single original kernel launch changes temperature
-and vapour (max 0.523 K / 1.85e-4 kg/kg); the correct CUDA predicate returns
-without changing them. An ice-supersaturated control also makes spurious ice.
-After fixing all four copies, all 146 replay cases keep their physical input
-words exactly; the expected snow-velocity boost reset is excluded.
+A bounded capture stopped at the first production YSU call, replaying seven
+exact FP32 input columns against the existing float64 NumPy mirror. Maximum
+vapour-tendency difference is 1.38e-10 kg/kg/s, PBLH differs by at most 9 mm,
+and kpbl agrees. This exposes no large first-call YSU error on common inputs;
+it does not establish CUDA bitwise parity or clear later thresholds, transport
+and producer/input coupling. No subsequent full forecast was launched.
 
-This verifies the classic cold-source clear-air fix, not all aerosol or
-warm-source regimes. Fifteen-minute histories cannot identify every first
-within-step operation or establish that this defect accounts for every later
-peak. The corrected forecast has not been integrated, so CUDA forecast parity
-is still unmeasured. The initial P/TH2 ULP differences remain an earlier
-observed diagnostic rounding difference. Both original full trajectories and
-the sensitivity experiment are preserved as evidence of the pre-fix behavior.
+## Numeric-literal census
+
+Run the source-only tool without CUDA or GPU dependencies:
+
+```bash
+python tools/audit_backend_numeric_literals.py --root . --out literal-audit
+```
+
+The census covers all `.cu`/`.cuh` files under `woof` and all Metal shader/header
+files, including unused schemes and globals. It normalizes f-suffixed literals
+to float32, retains possible software-FP64 words, matches named functions and
+source-verified wrapper/helper mappings first, and marks heuristic/ambiguous
+pairings. Missing values, multiplicities and unmatched scopes remain visible.
+Its historical-source positive control catches all four original c7 errors.
+
+The current census covers 552 files and 63,005 floating-literal occurrences,
+plus 5,875 possible software-FP64 words. It pairs 1,144 Metal scopes, with
+218 ambiguous pairings, and retains 2,263 unmatched Metal / 1,654 unmatched
+CUDA scopes. It flags 1,937 CUDA-only values, 1,073 Metal-only values and 23
+factor-of-ten candidates. Expression folds, unrelated constants, wrong helper
+pairings and scheme/formulation variants create legitimate review candidates;
+a flag is not a proven defect. In particular the MYNN mixing-length variants
+need configuration-specific mapping/replay, not silent acceptance of their
+coefficient differences. This case uses YSU.
+
+The census/flags are complete, but semantic validation of every flagged value
+and unmatched scope is not. It does not evaluate every expression or macro,
+preprocess every configuration, validate operators/control flow, or establish
+that every pairing represents identical physics. No further coefficient was
+changed solely because of a heuristic flag. Compact receipts and all paired
+flags are in `tools/metal_hrrr_shared_case/`.
