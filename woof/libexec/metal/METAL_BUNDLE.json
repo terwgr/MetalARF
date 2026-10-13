@@ -6,19 +6,19 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "1e7d164325c7a1c23c96f5d9877b18ab2c83ed03a329bd25ac85df8c39db65ba",
-      "size": 10905400
+      "sha256": "6d230232b2370bfd8e4b0b90a2b7b0731f358e5b3bb6460759e603aba878f792",
+      "size": 10964760
     },
     "woof_exact.metallib": {
-      "sha256": "6a900ad846f00da13ba18c69e510940fb1919c1282ece95c728b96071df0a09f",
-      "size": 6870189
+      "sha256": "32f336119f05673f3c37bfaa6f95e8a58b8078c70056f3d19e0278ecfb382b2a",
+      "size": 6902317
     }
   },
-  "implementation_file_count": 1844,
-  "implementation_sha256": "fd4cb711337f680c9afe5749a98d00e3b40b0bfe2936a33d90bb8ddaa7c50d2f",
-  "metal_inputs_sha256": "18121b0c9ba044adbf0b790e66a03f04814a40848fc7b1ffaf44f23be993aac7",
+  "implementation_file_count": 1845,
+  "implementation_sha256": "fe7be8a798233fa8a4561b337228ec517830f01ddf43ddd4302050948a1dc3cd",
+  "metal_inputs_sha256": "fce0c3e8c1bbfedd67814f06319cd36fbc85de1001f27a9e643bf958879877a0",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v1",
-  "source_commit": "15faa65b4ea87f210c05a9b45bb1313bf7fa86b9"
+  "source_commit": "26b9582dd7f62eec4c344d7c2e88ce8cb0957bbc"
 }

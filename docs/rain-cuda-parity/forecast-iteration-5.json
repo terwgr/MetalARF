@@ -1,0 +1,156 @@
+{
+  "status": "PASS",
+  "source_commit": "26b9582dd7f62eec4c344d7c2e88ce8cb0957bbc",
+  "input_identities_match": {
+    "experiment_config_sha256": true,
+    "geometry_receipt_sha256": true,
+    "prepared_content_sha256": true,
+    "prepared_header_sha256": true,
+    "proof_sha256": true,
+    "source_manifest_sha256": true,
+    "static_cache_sha256": true,
+    "wps_namelist_sha256": true,
+    "wrf_direct_contract_sha256": true
+  },
+  "validation": {
+    "frames": 49,
+    "numeric_field_time_checks": 3919,
+    "all_finite": true,
+    "time_schema_shape_dtype_units_match": true,
+    "exact_checks": 1998
+  },
+  "rain": {
+    "metal": {
+      "mean": 3.382262438740581,
+      "max": 17.3289852142334
+    },
+    "cuda": {
+      "mean": 3.3820343064144254,
+      "max": 17.329736709594727
+    },
+    "mean_excess_pct": 0.00674541726921607,
+    "final_rmse": 0.005339194502003316,
+    "final_max_abs": 0.08304309844970703,
+    "correlation": 0.999998503740363
+  },
+  "metrics": [
+    {
+      "field": "RAINNC",
+      "units": "mm",
+      "before": 0.21696622216015313,
+      "after": 0.0041853263032255,
+      "change_pct": -98.070977933083,
+      "new_max_abs": 0.08780288696289062,
+      "final_rmse": 0.005339194502003316
+    },
+    {
+      "field": "T2",
+      "units": "K",
+      "before": 0.28239402599323166,
+      "after": 0.017695528601419642,
+      "change_pct": -93.73374541505217,
+      "new_max_abs": 0.60784912109375,
+      "final_rmse": 0.003441390104071924
+    },
+    {
+      "field": "U10",
+      "units": "m s-1",
+      "before": 0.1272293956939667,
+      "after": 0.008259806478352769,
+      "change_pct": -93.5079417509609,
+      "new_max_abs": 0.3422093391418457,
+      "final_rmse": 0.0007888669368675778
+    },
+    {
+      "field": "V10",
+      "units": "m s-1",
+      "before": 0.46146673348860484,
+      "after": 0.028759118843631852,
+      "change_pct": -93.76788904668855,
+      "new_max_abs": 1.7217955589294434,
+      "final_rmse": 0.000931166948327958
+    },
+    {
+      "field": "U",
+      "units": "m s-1",
+      "before": 0.1290279442861828,
+      "after": 0.004613674438173671,
+      "change_pct": -96.42428276781611,
+      "new_max_abs": 0.5305767059326172,
+      "final_rmse": 0.0005934963137588968
+    },
+    {
+      "field": "V",
+      "units": "m s-1",
+      "before": 0.20108336401620686,
+      "after": 0.00941680167675355,
+      "change_pct": -95.31696631254161,
+      "new_max_abs": 1.830371379852295,
+      "final_rmse": 0.0007329205156918179
+    },
+    {
+      "field": "QVAPOR",
+      "units": "kg kg-1",
+      "before": 5.189764859732603e-05,
+      "after": 1.4777679751538875e-06,
+      "change_pct": -97.1525338525067,
+      "new_max_abs": 0.00031118281185626984,
+      "final_rmse": 3.6276345698238303e-07
+    },
+    {
+      "field": "QCLOUD",
+      "units": "kg kg-1",
+      "before": 1.3141903236906162e-05,
+      "after": 7.501175059673658e-07,
+      "change_pct": -94.29216992055743,
+      "new_max_abs": 0.0001642558490857482,
+      "final_rmse": 2.8835056752642734e-09
+    },
+    {
+      "field": "QRAIN",
+      "units": "kg kg-1",
+      "before": 2.4215726482115623e-06,
+      "after": 8.604116971270612e-08,
+      "change_pct": -96.44688876973187,
+      "new_max_abs": 1.0766998457256705e-05,
+      "final_rmse": 4.36382891476394e-12
+    },
+    {
+      "field": "QICE",
+      "units": "kg kg-1",
+      "before": 4.1920729653453286e-08,
+      "after": 2.939642841679816e-08,
+      "change_pct": -29.8761527773728,
+      "new_max_abs": 2.379675515840063e-05,
+      "final_rmse": 0.0
+    },
+    {
+      "field": "QSNOW",
+      "units": "kg kg-1",
+      "before": 2.7018431848179484e-06,
+      "after": 1.1422862894885917e-07,
+      "change_pct": -95.77219619588855,
+      "new_max_abs": 2.5459739845246077e-05,
+      "final_rmse": 2.823891202988694e-11
+    },
+    {
+      "field": "SWDOWN",
+      "units": "W m-2",
+      "before": 7.415899119162309,
+      "after": 1.2291863856802907,
+      "change_pct": -83.42498507693915,
+      "new_max_abs": 58.35845947265625,
+      "final_rmse": 0.0
+    },
+    {
+      "field": "PBLH",
+      "units": "m",
+      "before": 275.2187897286049,
+      "after": 31.773999242373463,
+      "change_pct": -88.4550036450251,
+      "new_max_abs": 1087.682695388794,
+      "final_rmse": 0.14069425806141414
+    }
+  ],
+  "verdict": "Source contraction policy corrected; rainfall and pooled V10 improve, but the large PBL-height and V10 peaks remain. The next diagnosis isolates exact-rounding thermodynamic operations."
+}

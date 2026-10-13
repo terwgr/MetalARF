@@ -4,6 +4,7 @@ using namespace metal;
 #include "../generated/noah_check_soil_categories_bindings.metalh"
 #include "../generated/noah_initialize_sh2o_bindings.metalh"
 #include "soft_binary64.metalh"
+#include "pressure_power.metalh"
 #pragma clang fp contract(off)
 typedef float real;
 #define CP 1004.5f
@@ -1035,8 +1036,8 @@ static inline void noah_column_body(device const int*  ivgtyp,
     real q2k = qv1_a[idx] / (1.0f + qv1_a[idx]);
     real q2sat = qgh_a[idx] / (1.0f + qgh_a[idx]);
     real sfctmp = sfctmp_a[idx];
-    real apes = pow(1.0e5f / psfc, RCP);             // CAPA = R_d/CP
-    real apelm = pow(1.0e5f / sfcprs, RCP);
+    real apes = fp32_pressure_power(1.0e5f, psfc, RCP); // CAPA = R_d/CP
+    real apelm = fp32_pressure_power(1.0e5f, sfcprs, RCP);
     real sfcth2 = sfctmp * apelm;
     real th2 = sfcth2 / apes;
     real emissi = emiss_a[idx];

@@ -1,6 +1,7 @@
 #include <metal_stdlib>
 #include "thompson_family_bindings.metalh"
 #include "soft_binary64.metalh"
+#include "pressure_power.metalh"
 
 using namespace metal;
 
@@ -116,8 +117,8 @@ kernel void thompson_exner_power(
     constant ThompsonExnerPowerParams &p [[buffer(1)]],
     uint idx [[thread_position_in_grid]]) {
     if (idx >= uint(p.size)) return;
-    r.exner[idx] = precise::pow(r.pressure[idx] / p.reference_pressure,
-                                p.exponent);
+    r.exner[idx] = fp32_pressure_power(
+        r.pressure[idx], p.reference_pressure, p.exponent);
 }
 
 #define THOMPSON_CLOUD_KERNEL(NAME, TYPE, RD, RT, CM, CP) \

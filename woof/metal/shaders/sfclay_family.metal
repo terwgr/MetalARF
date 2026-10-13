@@ -3,6 +3,7 @@
 #include "soft_binary64.metalh"
 #include "soft_gfk_log.metalh"
 #include "soft_libm64.metalh"
+#include "pressure_power.metalh"
 using namespace metal;
 // Ordinary CUDA SFCLAY is compiled with NVRTC's default fmad=true.
 // Match that contraction policy within this numerical kernel; driver-level
@@ -221,8 +222,8 @@ kernel void sfclay_column(constant SfclayColumnResources &r [[buffer(0)]],
     float old_zol = r.zol[idx];
     float old_hfx = r.hfx[idx], old_qfx = r.qfx[idx], qs = r.qsfc[idx];
 
-    float thgb = ground_t * pow(P0 / ps, RCP);
-    float thx = temp * pow(P0 / press, RCP);
+    float thgb = ground_t * fp32_pressure_power(P0, ps, RCP);
+    float thx = temp * fp32_pressure_power(P0, press, RCP);
     float thvx = thx * (1.0f + ep1 * qvx);
     float tv = temp * (1.0f + ep1 * qvx);
     float cpm = CP * (1.0f + 0.8f * qvx);
@@ -453,7 +454,7 @@ kernel void sfclay_column(constant SfclayColumnResources &r [[buffer(0)]],
     float u10 = uu * psix10 / psix, v10 = vv * psix10 / psix;
     float th2 = thgb + (thx - thgb) * psit2 / psit;
     float q2 = qs + (qvx - qs) * psiq2 / psiq;
-    float t2 = th2 * pow(sf_div_rn(ps, P0), RCP);
+    float t2 = th2 * fp32_pressure_power(ps, P0, RCP);
     if (land) new_ust = fmax(new_ust, q.option == 91 ? 0.1f : 0.001f);
     float new_mol = karman * (thx - thgb) / psit;
 

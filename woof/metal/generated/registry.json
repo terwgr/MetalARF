@@ -3589,7 +3589,7 @@
       "name": "noah_check_soil_categories",
       "parameter_size": 12,
       "resource_count": 2,
-      "shader_hash": "edf763ab2903a670524121546de5e71dc4319a4e3fea17dffde197f44fe8845d",
+      "shader_hash": "6551cd4c8dca0c6950a2db29323d95a281830f451e15486a6041d2cc234a7285",
       "threads_per_group": 64
     },
     {
@@ -3605,7 +3605,7 @@
       "name": "noah_column",
       "parameter_size": 52,
       "resource_count": 61,
-      "shader_hash": "edf763ab2903a670524121546de5e71dc4319a4e3fea17dffde197f44fe8845d",
+      "shader_hash": "6551cd4c8dca0c6950a2db29323d95a281830f451e15486a6041d2cc234a7285",
       "threads_per_group": 64
     },
     {
@@ -3637,7 +3637,7 @@
       "name": "noah_initialize_sh2o",
       "parameter_size": 12,
       "resource_count": 5,
-      "shader_hash": "edf763ab2903a670524121546de5e71dc4319a4e3fea17dffde197f44fe8845d",
+      "shader_hash": "6551cd4c8dca0c6950a2db29323d95a281830f451e15486a6041d2cc234a7285",
       "threads_per_group": 64
     },
     {
@@ -3685,7 +3685,7 @@
       "name": "noah_sfcdiags",
       "parameter_size": 32,
       "resource_count": 11,
-      "shader_hash": "d8a19a7f4753d187e2862f8c8d16e5d28f425a168a5429ee43c893c1ab6573c3",
+      "shader_hash": "8ec5752cb5d95f95fcc6da64c9d9fc209f27da0fce1879cb5d087aae8c19c176",
       "threads_per_group": 128
     },
     {
@@ -4983,7 +4983,7 @@
       "name": "physics_atmosphere_prepare",
       "parameter_size": 52,
       "resource_count": 29,
-      "shader_hash": "abdf5ad88c131f30d0ac217aeddf63dc537bb0edd4e8fb0aeca3f88ef11a242a",
+      "shader_hash": "d462aa7ce811b8847c4d2acc03db5cf9e17fe37e50c923e11eb5b988890746c7",
       "threads_per_group": 128
     },
     {
@@ -6749,7 +6749,7 @@
       "name": "sfclay_column",
       "parameter_size": 32,
       "resource_count": 46,
-      "shader_hash": "0664799a513ea0959868b29d94338054befbaff34d54e1075827d0ce6f73335a",
+      "shader_hash": "022ef564dbc143561548b03db94f604942608f2e59796ff7e6ee6c4f6d6f01b3",
       "threads_per_group": 128
     },
     {
@@ -7509,7 +7509,7 @@
       "name": "thompson_adapter_entry",
       "parameter_size": 20,
       "resource_count": 10,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7525,7 +7525,7 @@
       "name": "thompson_adapter_finish",
       "parameter_size": 32,
       "resource_count": 9,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7541,7 +7541,7 @@
       "name": "thompson_adapter_masks",
       "parameter_size": 16,
       "resource_count": 5,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 32
     },
     {
@@ -7557,7 +7557,7 @@
       "name": "thompson_adapter_prepare",
       "parameter_size": 32,
       "resource_count": 20,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7575,7 +7575,7 @@
       "name": "thompson_classic_graupel_number_finalize",
       "parameter_size": 16,
       "resource_count": 5,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7593,7 +7593,7 @@
       "name": "thompson_classic_graupel_number_init",
       "parameter_size": 16,
       "resource_count": 5,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7609,7 +7609,7 @@
       "name": "thompson_cloud_saturation_adjust",
       "parameter_size": 16,
       "resource_count": 4,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7625,7 +7625,7 @@
       "name": "thompson_cloud_saturation_adjust_history_density_marker",
       "parameter_size": 16,
       "resource_count": 6,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7641,7 +7641,7 @@
       "name": "thompson_cloud_saturation_adjust_history_marker_only",
       "parameter_size": 16,
       "resource_count": 5,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7657,7 +7657,7 @@
       "name": "thompson_cloud_saturation_adjust_with_density",
       "parameter_size": 16,
       "resource_count": 5,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7673,7 +7673,7 @@
       "name": "thompson_cloud_saturation_adjust_with_history",
       "parameter_size": 16,
       "resource_count": 7,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7689,7 +7689,7 @@
       "name": "thompson_cloud_saturation_adjust_with_presence",
       "parameter_size": 16,
       "resource_count": 8,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7705,7 +7705,7 @@
       "name": "thompson_cloud_saturation_adjust_with_state",
       "parameter_size": 16,
       "resource_count": 6,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7758,7 +7758,7 @@
       "name": "thompson_exner_power",
       "parameter_size": 24,
       "resource_count": 2,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -7810,7 +7810,7 @@
       "name": "thompson_graupel_fallout_column_mask",
       "parameter_size": 12,
       "resource_count": 3,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 32
     },
     {
@@ -7844,7 +7844,7 @@
       "name": "thompson_hydrometeor_column_mask",
       "parameter_size": 12,
       "resource_count": 2,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 32
     },
     {
@@ -7950,7 +7950,7 @@
       "name": "thompson_microphysics_columns",
       "parameter_size": 12,
       "resource_count": 9,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 32
     },
     {
@@ -8128,7 +8128,7 @@
       "name": "thompson_warm_saturation_adjust",
       "parameter_size": 16,
       "resource_count": 4,
-      "shader_hash": "393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b",
+      "shader_hash": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
       "threads_per_group": 256
     },
     {
@@ -10028,7 +10028,7 @@
       "name": "ysu_column",
       "parameter_size": 44,
       "resource_count": 43,
-      "shader_hash": "51f028353998d9f9dd62a2917a9abae87246f4d804b5ff39b62d91d787b6215c",
+      "shader_hash": "2737e49fb95e392b742fe2ea0c61f4abaa3c3139758aa989627f4b047e166ada",
       "threads_per_group": 32
     },
     {
@@ -10044,7 +10044,7 @@
       "name": "ysu_validate_outputs",
       "parameter_size": 20,
       "resource_count": 14,
-      "shader_hash": "51f028353998d9f9dd62a2917a9abae87246f4d804b5ff39b62d91d787b6215c",
+      "shader_hash": "2737e49fb95e392b742fe2ea0c61f4abaa3c3139758aa989627f4b047e166ada",
       "threads_per_group": 128
     },
     {

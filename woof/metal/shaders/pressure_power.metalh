@@ -1,0 +1,20 @@
+#ifndef WOOF_PRESSURE_POWER_METALH
+#define WOOF_PRESSURE_POWER_METALH
+
+#include "soft_libm64.metalh"
+
+// Preserve the source FP32 normalization and FP32 result. Metal's native
+// pow has a systematic 1-2 ULP low bias on the pressure/Exner range, which
+// matters when surface virtual-temperature differences are nearly zero.
+// Evaluate only the transcendental internally in software binary64 and
+// round back to FP32; no physics field or surrounding operator is widened.
+static __attribute__((noinline)) float fp32_pressure_power(
+        float numerator, float denominator, float exponent) {
+    #pragma clang fp contract(off)
+    const float normalized = numerator / denominator;
+    const ulong base = soft64_from_f32_bits(as_type<uint>(normalized));
+    const ulong power = soft64_from_f32_bits(as_type<uint>(exponent));
+    return as_type<float>(soft64_to_f32_bits(soft64_plm_pow(base, power)));
+}
+
+#endif
