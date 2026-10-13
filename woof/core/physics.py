@@ -7946,12 +7946,6 @@ def _initialize_metal_sfclay_without_cupy(
             host_fields.setdefault(name, np.zeros(shape, dtype=DTYPE))
         host_fields["albbck"] = host_array(
             landuse.albbck if landuse is not None else 0.20)
-        if int(getattr(cfg, "alb_sol", 0)) == 1:
-            # The no-CuPy initializer returns before the generic field
-            # allocation below, so provision WRF's persistent albedo pair
-            # here as well.  These remain live RUC fields between calls.
-            host_fields["albsol"] = host_fields["albedo"].copy()
-            host_fields["albbcksol"] = host_fields["albbck"].copy()
         host_fields["shdmin"] = np.full(shape, DTYPE(10.0), dtype=DTYPE)
         host_fields["shdmax"] = np.full(shape, DTYPE(90.0), dtype=DTYPE)
         host_fields["psfc"] = np.full(shape, DTYPE(1.0e5), dtype=DTYPE)
@@ -8171,6 +8165,15 @@ def _initialize_metal_sfclay_without_cupy(
         host_fields["kpbl"] = np.zeros(shape, dtype=np.int32)
         host_fields["exch_h"] = np.zeros(state.p.shape, dtype=DTYPE)
         host_fields["exch_m"] = np.zeros(state.p.shape, dtype=DTYPE)
+    if int(getattr(cfg, "alb_sol", 0)) == 1:
+        if landuse_dataset not in ("MODIFIED_IGBP_MODIS_NOAH", "MODI-RUC"):
+            raise ValueError(
+                "alb_sol=1 needs the 21-category MODIS vegetation table: "
+                f"{landuse_dataset!r} assigns different meanings to IVGTYP")
+        # This initializer returns before the shared CUDA allocation below.
+        # Radiation owns the persistent albedo pair for Noah as well as RUC.
+        host_fields["albsol"] = host_fields["albedo"].copy()
+        host_fields["albbcksol"] = host_fields["albbck"].copy()
     fields = {
         name: module.asarray(
             np.ascontiguousarray(

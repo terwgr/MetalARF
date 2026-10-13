@@ -133472,6 +133472,122 @@
         "fp32-output",
         "software-libm-approximation-unverified"
       ]
+    },
+    {
+      "name": "diff6_edge_pad",
+      "module": "diff6_family",
+      "source": "woof/metal/shaders/diff6_family.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_edge_pad_into",
+      "resources": [
+        [
+          "src",
+          "float32",
+          "read"
+        ],
+        [
+          "dst",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "nlev",
+            "ny",
+            "nx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dst": [
+          [
+            "nlev",
+            "ny+7",
+            "nx+7"
+          ],
+          [
+            "ny+7",
+            "nx+7"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "diff6_edge_crop_add",
+      "module": "diff6_family",
+      "source": "woof/metal/shaders/diff6_family.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "launch_diff6_to_edge",
+      "resources": [
+        [
+          "padded",
+          "float32",
+          "read"
+        ],
+        [
+          "tend",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "padded": [
+          [
+            "nlev",
+            "ny+7",
+            "nx+7"
+          ]
+        ],
+        "tend": [
+          [
+            "nlev",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
     }
   ],
   "schema": "woof-metal-kernel-signatures-v1"

@@ -311,7 +311,7 @@ DIFF6_SHAPES = (('c1', (('nlev',),)), ('c2', (('nlev',),)), ('f', (('nlev', 'nys
 DIFF6_PARAM_FIELDS = [('coef', 'ctypes.c_float'), ('mono', 'ctypes.c_int32'), ('slopeopt', 'ctypes.c_int32'), ('dzthr_x', 'ctypes.c_float'), ('dzthr_y', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nys', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nxs', 'ctypes.c_int32'), ('variant', 'ctypes.c_int32'), ('wstag', 'ctypes.c_int32'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32')]
 DIFF6_THREADS_PER_GROUP = 128
 DIFF6_LAYOUT_HASH = '9f82c5670abc48b1dfdabd761c839cbf0146f387bf0d646de19b5fcd0c537983'
-DIFF6_SHADER_HASH = '2c90cdb3062bb78d30dee2c7a2cc1384fd589dc043d709f7f2343f9222f7369d'
+DIFF6_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
 
 DIFF6_SEAM_U_RESOURCES = (('f', 'float', 'read'), ('tend', 'float', 'read_write'), ('mut', 'float', 'read'), ('c1', 'float', 'read'), ('c2', 'float', 'read'), ('phb', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('msft', 'float', 'read'))
 DIFF6_SEAM_U_ACCESS = ('read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -319,7 +319,7 @@ DIFF6_SEAM_U_SHAPES = (('c1', (('nlev',),)), ('c2', (('nlev',),)), ('f', (('nlev
 DIFF6_SEAM_U_PARAM_FIELDS = [('coef', 'ctypes.c_float'), ('mono', 'ctypes.c_int32'), ('slopeopt', 'ctypes.c_int32'), ('dzthr_x', 'ctypes.c_float'), ('dzthr_y', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('h0', 'ctypes.c_int32'), ('h1', 'ctypes.c_int32'), ('boundary_cross', 'ctypes.c_int32')]
 DIFF6_SEAM_U_THREADS_PER_GROUP = 128
 DIFF6_SEAM_U_LAYOUT_HASH = 'aacaf278ff4e0387c3dab2db9846f06d678abf4b6c5cfaa43c089dabad372ac8'
-DIFF6_SEAM_U_SHADER_HASH = '2c90cdb3062bb78d30dee2c7a2cc1384fd589dc043d709f7f2343f9222f7369d'
+DIFF6_SEAM_U_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
 
 DIFF6_SEAM_V_RESOURCES = (('f', 'float', 'read'), ('tend', 'float', 'read_write'), ('mut', 'float', 'read'), ('c1', 'float', 'read'), ('c2', 'float', 'read'), ('phb', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('msft', 'float', 'read'))
 DIFF6_SEAM_V_ACCESS = ('read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -327,7 +327,7 @@ DIFF6_SEAM_V_SHAPES = (('c1', (('nlev',),)), ('c2', (('nlev',),)), ('f', (('nlev
 DIFF6_SEAM_V_PARAM_FIELDS = [('coef', 'ctypes.c_float'), ('mono', 'ctypes.c_int32'), ('slopeopt', 'ctypes.c_int32'), ('dzthr_x', 'ctypes.c_float'), ('dzthr_y', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('h0', 'ctypes.c_int32'), ('h1', 'ctypes.c_int32'), ('boundary_cross', 'ctypes.c_int32')]
 DIFF6_SEAM_V_THREADS_PER_GROUP = 128
 DIFF6_SEAM_V_LAYOUT_HASH = '0c5cea3f1e23d0ea490f5c71b30b79a571409ffcd5a63a0814acb1ed71845d07'
-DIFF6_SEAM_V_SHADER_HASH = '2c90cdb3062bb78d30dee2c7a2cc1384fd589dc043d709f7f2343f9222f7369d'
+DIFF6_SEAM_V_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
 
 DUDHIA_SHORTWAVE_COLUMNS_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qr', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('dz', 'float', 'read'), ('exner', 'float', 'read'), ('cosine_zenith', 'float', 'read'), ('albedo', 'float', 'read'), ('heating', 'float', 'read_write'), ('swdown', 'float', 'read_write'), ('gsw', 'float', 'read_write'), ('coszen', 'float', 'read_write'))
 DUDHIA_SHORTWAVE_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -6536,3 +6536,19 @@ REFL10CM_WDM6_COLUMN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_
 REFL10CM_WDM6_COLUMN_THREADS_PER_GROUP = 32
 REFL10CM_WDM6_COLUMN_LAYOUT_HASH = '263dac6e30a1cbf29556af44dd61ff52ae909d55762f20fed1851ccea6c39587'
 REFL10CM_WDM6_COLUMN_SHADER_HASH = 'e959f3f02da525c448ca7b7695c37aa5bb9f9f25e85568d5b07bb147cceb9c23'
+
+DIFF6_EDGE_PAD_RESOURCES = (('src', 'float32', 'read'), ('dst', 'float32', 'read_write'))
+DIFF6_EDGE_PAD_ACCESS = ('read', 'read_write')
+DIFF6_EDGE_PAD_SHAPES = (('src', (('nlev', 'ny', 'nx'), ('ny', 'nx'))), ('dst', (('nlev', 'ny+7', 'nx+7'), ('ny+7', 'nx+7'))))
+DIFF6_EDGE_PAD_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+DIFF6_EDGE_PAD_THREADS_PER_GROUP = 128
+DIFF6_EDGE_PAD_LAYOUT_HASH = '758bef6f4768a3c6d2afece4701c74b5403eef4ebbf8d601e8bd2768a78eeb69'
+DIFF6_EDGE_PAD_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
+
+DIFF6_EDGE_CROP_ADD_RESOURCES = (('padded', 'float32', 'read'), ('tend', 'float32', 'read_write'))
+DIFF6_EDGE_CROP_ADD_ACCESS = ('read', 'read_write')
+DIFF6_EDGE_CROP_ADD_SHAPES = (('padded', (('nlev', 'ny+7', 'nx+7'),)), ('tend', (('nlev', 'ny', 'nx'),)))
+DIFF6_EDGE_CROP_ADD_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+DIFF6_EDGE_CROP_ADD_THREADS_PER_GROUP = 128
+DIFF6_EDGE_CROP_ADD_LAYOUT_HASH = '6a3c3c8ae62eda49f28fdd55266fc0dccdc41d507e04245b85830b3b527125d1'
+DIFF6_EDGE_CROP_ADD_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
