@@ -2645,7 +2645,7 @@
       "name": "kessler_column",
       "parameter_size": 48,
       "resource_count": 10,
-      "shader_hash": "accec79d876ddcef1932a1aff965e34971d3260d4eab414566b85bc94eb17613",
+      "shader_hash": "881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94",
       "threads_per_group": 128
     },
     {
@@ -2661,7 +2661,7 @@
       "name": "kessler_finish",
       "parameter_size": 24,
       "resource_count": 3,
-      "shader_hash": "accec79d876ddcef1932a1aff965e34971d3260d4eab414566b85bc94eb17613",
+      "shader_hash": "881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94",
       "threads_per_group": 128
     },
     {
@@ -2677,7 +2677,7 @@
       "name": "kessler_prepare",
       "parameter_size": 32,
       "resource_count": 13,
-      "shader_hash": "accec79d876ddcef1932a1aff965e34971d3260d4eab414566b85bc94eb17613",
+      "shader_hash": "881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94",
       "threads_per_group": 128
     },
     {
