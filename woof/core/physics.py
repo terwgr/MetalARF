@@ -7810,6 +7810,7 @@ def _initialize_metal_sfclay_without_cupy(
         # Noah and Noah-MP Metal fields; a supplied land-use table remains
         # authoritative.
         "albedo": host_array(landuse.albedo if landuse is not None else 0.20),
+        "albbck": host_array(landuse.albbck if landuse is not None else 0.20),
         # RRTMGP's longwave surface boundary requires explicit band
         # emissivity; preserve the land-use table value when available.
         "emiss": host_array(landuse.emiss if landuse is not None else 0.95),
