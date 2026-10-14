@@ -50,10 +50,14 @@ kernel void advance_mu_th(constant AdvanceMuThResources &r [[buffer(0)]],
 #else
         float rmu = r.rmu_t[c];
         if (q.write_mudf) r.mudf[c] = 0.0f;
-        r.mu_pp[c] = r.mu_pp[c] + q.dtau * rmu;
-        for (int k = 0; k < q.nz; ++k) {
-            ulong h = ulong(k) * st + c;
-            r.th_pp[h] = r.th_pp[h] + q.dtau * (r.rth_t[h] + (300.0f * r.c1h[k]) * rmu);
+        {
+            // Preserve the CUDA arn_mul/arn_add round points in frame tendencies.
+#pragma clang fp contract(off)
+            r.mu_pp[c] = r.mu_pp[c] + q.dtau * rmu;
+            for (int k = 0; k < q.nz; ++k) {
+                ulong h = ulong(k) * st + c;
+                r.th_pp[h] = r.th_pp[h] + q.dtau * (r.rth_t[h] + (300.0f * r.c1h[k]) * rmu);
+            }
         }
         return;
 #endif
@@ -100,13 +104,17 @@ kernel void advance_mu_th(constant AdvanceMuThResources &r [[buffer(0)]],
 #endif
     }
     float rmu = r.rmu_t[c];
+    {
+        // Preserve CUDA mass-update round points without changing interior algebra.
+#pragma clang fp contract(off)
 #if GPUWM_WRF_EXACT
-    float mass_tendency = dmdt_pp + rmu;
+        float mass_tendency = dmdt_pp + rmu;
 #else
-    float mass_tendency = dmdt_pp + dmdt_rf + rmu;
+        float mass_tendency = (dmdt_pp + dmdt_rf) + rmu;
 #endif
-    if (q.write_mudf) r.mudf[c] = mass_tendency;
-    r.mu_pp[c] = r.mu_pp[c] + q.dtau * mass_tendency;
+        if (q.write_mudf) r.mudf[c] = mass_tendency;
+        r.mu_pp[c] = r.mu_pp[c] + q.dtau * mass_tendency;
+    }
     float wwk = 0.0f;
 #if GPUWM_WRF_EXACT
     r.ww_pp[c] = 0.0f - r.ww_ref[c];

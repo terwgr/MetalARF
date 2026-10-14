@@ -2,12 +2,12 @@
   "abi_version": 65543,
   "files": {
     "libwoof_metal.dylib": {
-      "sha256": "448b4cdb2944811f28b873ac09202295146f5a6f94231df9f1b11d3a98068567",
+      "sha256": "87065be227159a7c91e7677bd61cacd3f8d0e732556906afe58d2b8449c25952",
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "da31f8f1f6a70a99a48bf577e6612a812b23ba8588cf2753802fb6f963c92d98",
-      "size": 11115050
+      "sha256": "37401a3affbafa6d9d16f21763c825a3961203eed3cb5cd5be04a1e4b5d0ce75",
+      "size": 11115258
     },
     "woof_exact.metallib": {
       "sha256": "7403d0e0e92a03925d8fbe23fe4e5aea370424a0284da7c9babee6f3906ab157",
@@ -15,8 +15,8 @@
     }
   },
   "implementation_file_count": 880,
-  "implementation_sha256": "c508291ec474fb0b97e49f7832777e9508e028cab124a514c06a8b823839e5f6",
-  "metal_inputs_sha256": "d30dd93a238a1044ce4ea22939dce2d8c49ad1bce066c3bef4203cc904587fb4",
+  "implementation_sha256": "fc10017bf2b16996fef286e363cbe5844f2b388ef0fb41d96276c86d2e1776d9",
+  "metal_inputs_sha256": "658052611a1ef9c821d0a83bb70b3aea9a3ec85188048ff19ea0d7fcb79332dc",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -48,15 +48,15 @@
         "size": 86669
       },
       "woof/metal/shaders/acoustic_advance_mu_th.metal": {
-        "sha256": "be04168ebd36a77fc91bff5352aa1eb0194e13956a1b1126410b5927ecf7e680",
-        "size": 7823
+        "sha256": "de5d62d1cae250208ad2a2d1408278af57baf123f384f9d94d91bb9ef8e40cf1",
+        "size": 8123
       },
       "woof/metal/shaders/acoustic_advance_uv.metal": {
-        "sha256": "b84e2e8c12bf66d2d96bbce212cae8896b60a59c58750ae4046c30736d6ad0fb",
-        "size": 6832
+        "sha256": "9f45a5d9dd30994a6acdba67143ae4a611473ca0df3a29f139dd434f40e4f15a",
+        "size": 7040
       },
       "woof/metal/shaders/acoustic_advance_w_phi.metal": {
-        "sha256": "0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f",
+        "sha256": "65a9650829a16b844f4cacac5e5d0625c1cf4e1daea1363531bd95424fcb28ba",
         "size": 13074
       },
       "woof/metal/shaders/acoustic_boundary_frame.metal": {
@@ -2944,6 +2944,6 @@
         "size": 296
       }
     },
-    "sha256": "d30dd93a238a1044ce4ea22939dce2d8c49ad1bce066c3bef4203cc904587fb4"
+    "sha256": "658052611a1ef9c821d0a83bb70b3aea9a3ec85188048ff19ea0d7fcb79332dc"
   }
 }
