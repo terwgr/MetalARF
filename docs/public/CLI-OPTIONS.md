@@ -1906,8 +1906,25 @@ Takes no options of its own.
 
 | option | what it does |
 |---|---|
+| `--backend {cuda,metal}` | verification backend (default: cuda) |
 | `--explain` | print the full reasoning, alternate routes and per-item evidence behind this command's output, instead of the default one-line-per-item summary |
 | `--outdir OUT` | directory for the PNG and wrfout NetCDF output (omit to compute metrics only) |
+
+## `woof verify-fields`
+
+| argument | what it does |
+|---|---|
+| `case` | verification case whose saved outputs are compared |
+
+| option | what it does |
+|---|---|
+| `--candidate-config` | saved physical configuration JSON, checked against the reference digest |
+| `--candidate-dir DIR` | directory containing candidate case outputs |
+| `--candidate-initializer` | saved initializer artifact checked against its independently registered digest |
+| `--explain` | print the full reasoning, alternate routes and per-item evidence behind this command's output, instead of the default one-line-per-item summary |
+| `--out-report JSON` | write the saved-field comparison receipt as JSON |
+| `--reference-dir DIR` | directory containing pinned reference outputs and provenance |
+| `--registration` | independently declared and SHA-256 sealed acceptance JSON; omission blocks |
 
 ## `woof verify-visuals`
 

@@ -127,6 +127,7 @@ update_register_cli = _lazy_register("woof.update_cli")
 version_register_cli = _lazy_register("woof.version_cli")
 warm_kernels_register_cli = _lazy_register("woof.warm_kernels")
 spectral_register_cli = _lazy_register("woof.verify.spectral_cli")
+backend_fields_register_cli = _lazy_register("woof.verify.backend_fields_cli")
 cells_register_cli = _lazy_register("woof.cells.cli")
 
 #: Discovered verification cases: name -> case module exposing
@@ -492,6 +493,7 @@ def build_parser(*, render_only: bool = False) -> argparse.ArgumentParser:
     # The first forecast's GPU kernel compile, paid ahead of time.
     warm_kernels_register_cli(sub)
     spectral_register_cli(sub)
+    backend_fields_register_cli(sub)
     cells_register_cli(sub)
     lst = sub.add_parser(
         "cases", help="list the discovered verification cases and the "
