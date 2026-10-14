@@ -3276,7 +3276,7 @@ class PhysicsDriver:
         if not isinstance(result, MicrophysicsDiagnostics):
             raise TypeError("microphysics must return MicrophysicsDiagnostics")
         if getattr(self.state, "_metal_setup_state", False) and cp is None:
-            # The narrow Metal Kessler lane produces the state's canonical
+            # The Metal schemes produce the state's canonical
             # surface accumulators directly. Validate that ownership and
             # layout here without routing live Metal arrays through CuPy's
             # native-kernel validators or an implicit host conversion.
@@ -3357,6 +3357,12 @@ class PhysicsDriver:
                     raise ValueError(
                         "microphysics SR is outside its validated range: "
                         f"allowed=[0, {float(self._sr_roundoff_upper):.9g}]")
+            # Every accepted scheme contributes its per-call precipitation
+            # (mm) to the next surface call, including non-GFS Thompson.
+            # Noah adds the pending total to RAINBL and clears both carriers
+            # after consuming it; canonical RAINNCV remains scheme-owned.
+            # MP-only configurations have no surface consumer or carrier.
+            if self._pending_rainbl is not None:
                 from woof.metal.bandwidth_family import add_array
                 if not add_array(result.rainncv, self._pending_rainbl):
                     raise NotImplementedError(
@@ -7670,6 +7676,43 @@ def _declare_initial_surface_carriers(carriers, glw, glw_provenance, swdown):
                                         else source(swdown)))
 
 
+def _allocate_shortwave_interpolation_fields(state, cfg, fields):
+    """Allocate the persistent SWINT surface fields on the domain backend."""
+    if int(getattr(cfg, "swint_opt", 0)) != 1:
+        return
+    from woof.core.swint import STATE_FIELDS
+
+    arrays = (state._array_module
+              if getattr(state, "_metal_setup_state", False) else cp)
+    for name in (*STATE_FIELDS, "gsw"):
+        if name not in fields:
+            fields[name] = arrays.zeros(state.mup.shape, dtype=DTYPE)
+
+
+def _attach_shortwave_interpolation(
+        driver, state, cfg, *, radiation_start_time,
+        radiation_latitude, radiation_longitude):
+    """Attach the per-step SWINT carrier on either initialization path."""
+    if int(getattr(cfg, "swint_opt", 0)) != 1:
+        return
+    from woof.core.swint import ShortwaveInterpolation
+
+    if (radiation_latitude is None or radiation_longitude is None
+            or radiation_start_time is None):
+        raise ValueError(
+            "swint_opt = 1 needs the domain's latitude, longitude and "
+            "UTC start time (radiation_latitude/radiation_longitude/"
+            "radiation_start_time): the between-call surface shortwave "
+            "is evaluated at the local solar zenith angle every step")
+    driver.swint = ShortwaveInterpolation(
+        start_time=radiation_start_time,
+        latitude_deg=radiation_latitude,
+        longitude_deg=radiation_longitude, shape=state.mup.shape,
+        array_module=(state._array_module
+                      if getattr(state, "_metal_setup_state", False)
+                      else None))
+
+
 def _initialize_metal_sfclay_without_cupy(
         state, cfg, *, landmask, tsk, sst, landuse, pblh, mavail, xland,
         ivgtyp, isltyp,
@@ -7946,12 +7989,6 @@ def _initialize_metal_sfclay_without_cupy(
             host_fields.setdefault(name, np.zeros(shape, dtype=DTYPE))
         host_fields["albbck"] = host_array(
             landuse.albbck if landuse is not None else 0.20)
-        if int(getattr(cfg, "alb_sol", 0)) == 1:
-            # The no-CuPy initializer returns before the generic field
-            # allocation below, so provision WRF's persistent albedo pair
-            # here as well.  These remain live RUC fields between calls.
-            host_fields["albsol"] = host_fields["albedo"].copy()
-            host_fields["albbcksol"] = host_fields["albbck"].copy()
         host_fields["shdmin"] = np.full(shape, DTYPE(10.0), dtype=DTYPE)
         host_fields["shdmax"] = np.full(shape, DTYPE(90.0), dtype=DTYPE)
         host_fields["psfc"] = np.full(shape, DTYPE(1.0e5), dtype=DTYPE)
@@ -8171,6 +8208,15 @@ def _initialize_metal_sfclay_without_cupy(
         host_fields["kpbl"] = np.zeros(shape, dtype=np.int32)
         host_fields["exch_h"] = np.zeros(state.p.shape, dtype=DTYPE)
         host_fields["exch_m"] = np.zeros(state.p.shape, dtype=DTYPE)
+    if int(getattr(cfg, "alb_sol", 0)) == 1:
+        if landuse_dataset not in ("MODIFIED_IGBP_MODIS_NOAH", "MODI-RUC"):
+            raise ValueError(
+                "alb_sol=1 needs the 21-category MODIS vegetation table: "
+                f"{landuse_dataset!r} assigns different meanings to IVGTYP")
+        # This initializer returns before the shared CUDA allocation below.
+        # Radiation owns the persistent albedo pair for Noah as well as RUC.
+        host_fields["albsol"] = host_fields["albedo"].copy()
+        host_fields["albbcksol"] = host_fields["albbck"].copy()
     fields = {
         name: module.asarray(
             np.ascontiguousarray(
@@ -8184,11 +8230,14 @@ def _initialize_metal_sfclay_without_cupy(
     }
     if int(cfg.sf_surface_physics) == 2:
         fields["ebal"] = module.zeros(shape, dtype=np.int32)
+    _allocate_shortwave_interpolation_fields(state, cfg, fields)
     result = SFClayResult(**{name: fields[name] for name in SFCLAY_OUTPUTS})
 
     carriers = CarrierContract(getattr(
         cfg, "surface_radiation_policy", SURFACE_RADIATION_POLICY_REQUIRED))
     _declare_initial_surface_carriers(carriers, glw, glw_provenance, swdown)
+    if "gsw" in fields:
+        carriers.declare("gsw", source=CARRIER_SOURCE_UNWRITTEN)
     if noahmp_params is not None:
         carriers.declare("coszen", source=CARRIER_SOURCE_ANALYTIC_GEOMETRY,
                          model_time=0.0)
@@ -8273,6 +8322,10 @@ def _initialize_metal_sfclay_without_cupy(
             state=state, cfg=cfg, fields=fields, latitude=latitude,
             longitude=longitude, start_time=start_time)
         request_surface_diffuse(rad)
+    _attach_shortwave_interpolation(
+        driver, state, cfg, radiation_start_time=radiation_start_time,
+        radiation_latitude=radiation_latitude,
+        radiation_longitude=radiation_longitude)
     # WRF's topo_wind / gwd_opt on Metal (woof.metal.terrain_drag_family).
     if int(getattr(cfg, "topo_wind", 0) or 0) \
             or int(getattr(cfg, "gwd_opt", 0) or 0):
@@ -9049,24 +9102,7 @@ def initialize_physics(
     # different sources because a receipt that cannot tell a typed
     # constant from a source dataset's GLW is not a receipt.
     _declare_initial_surface_carriers(carriers, glw, glw_provenance, swdown)
-    if int(getattr(cfg, "swint_opt", 0)) == 1:
-        # WRF swint_opt = 1 (woof.core.swint): the fit coefficients, the
-        # reference call, SWDDIR/SWDDIF/SWDDNI and the radiation-call
-        # albedo, zero at the start as WRF's misc state is, serialized
-        # with the surface inventory.  GSW joins too where the land
-        # surface did not already allocate it: interp_sw_radiation writes
-        # it on every step.
-        from woof.core.swint import STATE_FIELDS as _swint_fields
-        if getattr(state, "_metal_setup_state", False):
-            from woof.metal.array import MetalArrayModule
-            swint_arrays = MetalArrayModule(state._array_module.context)
-            for name in (*_swint_fields, "gsw"):
-                if name not in f:
-                    f[name] = swint_arrays.zeros(shape, dtype=DTYPE)
-        else:
-            for name in (*_swint_fields, "gsw"):
-                if name not in f:
-                    f[name] = cp.zeros(shape, dtype=DTYPE)
+    _allocate_shortwave_interpolation_fields(state, cfg, f)
     if int(getattr(cfg, "alb_sol", 0)) == 1:
         if landuse_dataset not in ("MODIFIED_IGBP_MODIS_NOAH", "MODI-RUC"):
             raise ValueError(
@@ -9211,26 +9247,10 @@ def initialize_physics(
             state=state, cfg=cfg, fields=f, latitude=radiation_latitude,
             longitude=radiation_longitude, start_time=radiation_start_time)
         request_surface_diffuse(driver.radiation_callable)
-    if int(getattr(cfg, "swint_opt", 0)) == 1:
-        # WRF's swint_opt = 1 carrier (woof.core.swint): the per-step
-        # zenith cosine and the fit kernels, on this domain's own
-        # latitude, longitude and start time.  Only where the config asks
-        # for it, so every other driver is built exactly as before.
-        from woof.core.swint import ShortwaveInterpolation
-        if (radiation_latitude is None or radiation_longitude is None
-                or radiation_start_time is None):
-            raise ValueError(
-                "swint_opt = 1 needs the domain's latitude, longitude and "
-                "UTC start time (radiation_latitude/radiation_longitude/"
-                "radiation_start_time): the between-call surface shortwave "
-                "is evaluated at the local solar zenith angle every step")
-        driver.swint = ShortwaveInterpolation(
-            start_time=radiation_start_time,
-            latitude_deg=radiation_latitude,
-            longitude_deg=radiation_longitude, shape=shape,
-            array_module=(state._array_module
-                          if getattr(state, "_metal_setup_state", False)
-                          else None))
+    _attach_shortwave_interpolation(
+        driver, state, cfg, radiation_start_time=radiation_start_time,
+        radiation_latitude=radiation_latitude,
+        radiation_longitude=radiation_longitude)
     # WRF's topo_wind / gwd_opt (woof.core.terrain_drag): the topo_wind
     # coefficients from this domain's terrain (start_em.F:1539-1626) and the
     # gwd_opt statistics, on the device once.  Only where either is on, so

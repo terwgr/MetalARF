@@ -56,6 +56,5 @@
     "generic log/exp/pow substitutes",
     "native double arithmetic",
     "kernel entrypoint or production signature registration"
-  ],
-  "verification": "MetalToolchain 27.1 compiled all four helpers together with the shared binary32/binary64 headers and executed the temporary kernel on Apple M2. Each of logf, expf, powf, and atanf matched the in-tree glibc 2.39 CPU transcription in woof/core/noahmp_libm.py exactly on 4,826 rows (zero bit mismatches each). Inputs covered special values, subnormals, thresholds and adjacent encodings, plus seeded random bit patterns/pairs. This is bounded evidence, not exhaustive certification; production consumption remains blocked by the shared primitive and consumer-level contracts."
+  ]
 }

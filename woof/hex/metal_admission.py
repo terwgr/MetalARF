@@ -34,7 +34,7 @@ _EXPECTED_FILES = (
 class HexMetalCompileRuntimeIdentity:
     """Verified build and live-device identity for one Hex Metal kernel."""
 
-    source_commit: str
+    source_inputs_sha256: str
     implementation_sha256: str
     bundle_abi_version: int
     runtime_sha256: str
@@ -49,8 +49,8 @@ class HexMetalCompileRuntimeIdentity:
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "schema": "woof.hex-metal-compile-runtime-identity/v1",
-            "source_commit": self.source_commit,
+            "schema": "woof.hex-metal-compile-runtime-identity/v2",
+            "source_inputs_sha256": self.source_inputs_sha256,
             "implementation_sha256": self.implementation_sha256,
             "bundle_abi_version": self.bundle_abi_version,
             "runtime_sha256": self.runtime_sha256,
@@ -146,11 +146,11 @@ def _verified_bundle(
             f"the active Metal bundle identity cannot be read: {error}",
             "a built Metal bundle with its METAL_BUNDLE.json receipt",
         ) from error
-    if not isinstance(document, dict) or document.get("schema") != "woof-metal-bundle-v1":
+    if not isinstance(document, dict) or document.get("schema") != "woof-metal-bundle-v2":
         raise ConfigurationRefusal(
             "hex.metal_bundle_manifest", str(manifest),
-            "the receipt is not a WOOF Metal bundle v1",
-            "a WOOF Metal bundle v1",
+            "the receipt is not a WOOF Metal bundle v2",
+            "a WOOF Metal bundle v2",
         )
     files = document.get("files")
     if not isinstance(files, dict) or set(files) != set(_EXPECTED_FILES):
@@ -169,14 +169,14 @@ def _verified_bundle(
             "Metal ABI and platform",
             "a Darwin arm64 WOOF Metal bundle with ABI major 1/minor >= 7",
         )
-    source_commit = document.get("source_commit")
+    source_inputs_sha256 = document.get("metal_inputs_sha256")
     implementation = document.get("implementation_sha256")
-    if (not isinstance(source_commit, str) or not _COMMIT.fullmatch(source_commit)
+    if (not isinstance(source_inputs_sha256, str) or not _SHA256.fullmatch(source_inputs_sha256)
             or not isinstance(implementation, str)
             or not _SHA256.fullmatch(implementation)):
         raise ConfigurationRefusal(
-            "hex.metal_implementation_identity", source_commit,
-            "the bundle receipt lacks a pinned source commit or implementation "
+            "hex.metal_implementation_identity", source_inputs_sha256,
+            "the bundle receipt lacks a build-input or implementation "
             "digest",
             "a bundle produced by tools/build_metal_backend.py",
         )
@@ -205,7 +205,7 @@ def _verified_bundle(
                 "the unmodified artifact set produced with this receipt",
             )
         hashes[name] = digest
-    return (source_commit, implementation, abi,
+    return (source_inputs_sha256, implementation, abi,
             hashes[_EXPECTED_FILES[0]], hashes[_EXPECTED_FILES[1]],
             hashes[_EXPECTED_FILES[2]])
 
@@ -292,7 +292,7 @@ def require_hex_metal(context: object) -> HexMetalCapability:
             "available for identity verification",
             "a complete installed or development Metal bundle",
         ) from error
-    source_commit, implementation, abi, runtime_sha, default_sha, exact_sha = \
+    source_inputs_sha256, implementation, abi, runtime_sha, default_sha, exact_sha = \
         _verified_bundle(*(str(path) for path in paths), file_state)
 
     loaded_runtime = Path(str(getattr(getattr(context, "_lib", None), "_name", "")))
@@ -308,8 +308,8 @@ def require_hex_metal(context: object) -> HexMetalCapability:
     # the verified metallib digests; do not claim to reverse-engineer Apple's
     # compiled metallib back into source identity.
     identity_payload = {
-        "schema": "woof.hex-metal-compile-runtime-identity/v1",
-        "source_commit": source_commit,
+        "schema": "woof.hex-metal-compile-runtime-identity/v2",
+        "source_inputs_sha256": source_inputs_sha256,
         "implementation_sha256": implementation,
         "bundle_abi_version": abi,
         "runtime_sha256": runtime_sha,
@@ -324,7 +324,7 @@ def require_hex_metal(context: object) -> HexMetalCapability:
     encoded = json.dumps(identity_payload, sort_keys=True,
                          separators=(",", ":")).encode("utf-8")
     identity = HexMetalCompileRuntimeIdentity(
-        source_commit=source_commit,
+        source_inputs_sha256=source_inputs_sha256,
         implementation_sha256=implementation,
         bundle_abi_version=abi,
         runtime_sha256=runtime_sha,

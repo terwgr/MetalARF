@@ -45,8 +45,9 @@ kernel void coriolis_curvature(
         const ulong cB = ulong(j) * ulong(q.nx) + ulong(imc);
         const ulong rvA = (ulong(k) * ulong(nyf) + ulong(j)) * ulong(q.nx);
         const ulong rvB = rvA + ulong(q.nx);
-        const float rv4 = 0.25f * (r.v[rvA + ulong(imc)] + r.v[rvA + ulong(ic)]
-                                 + r.v[rvB + ulong(imc)] + r.v[rvB + ulong(ic)]);
+        // Coriolis and curvature add to coupled momentum tendencies.
+        const float rv4 = 0.25f * (r.rv[rvA + ulong(imc)] + r.rv[rvA + ulong(ic)]
+                                 + r.rv[rvB + ulong(imc)] + r.rv[rvB + ulong(ic)]);
         const float rw4 = 0.25f * (rw_at(r, k, cB, st, r.msft[cB])
                                  + rw_at(r, k + 1, cB, st, r.msft[cB])
                                  + rw_at(r, k, cA, st, r.msft[cA])

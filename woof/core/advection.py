@@ -224,12 +224,14 @@ def _launch_metal_advection(func, q, ru, rv, rw, tend, rdnw, fnm, fnp,
         kernel_name += "_vorder"
     field = {"flux_div_u": "u", "flux_div_v": "v", "flux_div_w": "w"}[func]
     vertical_spacing = "rdn" if func == "flux_div_w" else "rdnw"
-    grid_levels = nz + 1 if func == "flux_div_w" else nz
     q.buffer.context.submit_kernel(
         kernel_name, {field: q, "ru": ru, "rv": rv, "rw": rw, "tend": tend,
               vertical_spacing: rdnw, "fnm": fnm, "fnp": fnp, "msf": msf},
         parameters, exact_policy=WRF_ADVECTION_EXACT,
-        grid_size=grid_levels * ny * n_i)
+        # V has ny+1 staggered rows; launching the mass-grid count leaves
+        # its final row-band/levels unwritten. U and W already have q.size
+        # points too, so the actual target extent is the shared launch count.
+        grid_size=int(q.size))
 
 
 def launch_flux_div_v(v, ru, rv, rw, tend, coord, dx, dy,

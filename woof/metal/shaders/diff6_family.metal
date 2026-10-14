@@ -2,8 +2,36 @@
 #include "diff6_bindings.metalh"
 #include "diff6_seam_u_bindings.metalh"
 #include "diff6_seam_v_bindings.metalh"
+#include "diff6_edge_pad_bindings.metalh"
+#include "diff6_edge_crop_add_bindings.metalh"
 
 using namespace metal;
+
+// Copy WRF's zero-gradient physical halo: low=3, high=4. This leaves the
+// existing periodic diff6 arithmetic untouched; real stencil reads cannot
+// reach the padded grid's wrap. Padding supports surface planes and fields.
+kernel void diff6_edge_pad(constant Diff6EdgePadResources &r [[buffer(0)]],
+                          constant Diff6EdgePadParams &p [[buffer(1)]],
+                          uint flat [[thread_position_in_grid]]) {
+    const uint py=uint(p.ny+7), px=uint(p.nx+7);
+    const uint count=uint(p.nlev)*py*px;
+    if (flat>=count) return;
+    const int i=clamp(int(flat%px)-3,0,p.nx-1);
+    const int j=clamp(int((flat/px)%py)-3,0,p.ny-1);
+    const uint k=flat/(py*px);
+    r.dst[flat]=r.src[(k*uint(p.ny)+uint(j))*uint(p.nx)+uint(i)];
+}
+
+kernel void diff6_edge_crop_add(constant Diff6EdgeCropAddResources &r [[buffer(0)]],
+                               constant Diff6EdgeCropAddParams &p [[buffer(1)]],
+                               uint flat [[thread_position_in_grid]]) {
+    const uint count=uint(p.nlev)*uint(p.ny)*uint(p.nx);
+    if (flat>=count) return;
+    const uint i=flat%uint(p.nx), j=(flat/uint(p.nx))%uint(p.ny);
+    const uint k=flat/(uint(p.ny)*uint(p.nx));
+    const uint src=(k*uint(p.ny+7)+j+3)*uint(p.nx+7)+i+3;
+    r.tend[flat]=r.tend[flat]+r.padded[src];
+}
 
 // Keep CUDA's explicit FP32 operation boundaries and the Fortran face-flux
 // sequence visible in both libraries. No contraction is permitted here.
@@ -207,10 +235,15 @@ static inline void d6_cell(device const float *f, device float *tend,
     if (variant == 1) map=msfu[ulong(j)*ulong(nx+1)+ulong(i)];
     else if (variant == 2) map=msfv[ulong(j)*ulong(nx)+ulong(i)];
     else map=msft[d6_mass_index(d6_wrap(j,ny),d6_wrap(i,nx),nx)];
-    const float mx0=d6_face_mu(mut,c1,c2,k,j,i-1,variant,true,ny,nx,mode,boundary_cross);
-    const float mx1=d6_face_mu(mut,c1,c2,k,j,i,variant,true,ny,nx,mode,boundary_cross);
-    const float my0=d6_face_mu(mut,c1,c2,k,j-1,i,variant,false,ny,nx,mode,boundary_cross);
-    const float my1=d6_face_mu(mut,c1,c2,k,j,i,variant,false,ny,nx,mode,boundary_cross);
+    // u's x flux and v's y flux use donor mass centers. Other fluxes
+    // average the two/four cells bracketing the face: left uses (i-1,i),
+    // right uses (i,i+1), and the y analogue. Do not shift that average.
+    const int x0=i-(variant==1 ? 1 : 0), x1=i+(variant==1 ? 0 : 1);
+    const int y0=j-(variant==2 ? 1 : 0), y1=j+(variant==2 ? 0 : 1);
+    const float mx0=d6_face_mu(mut,c1,c2,k,j,x0,variant,true,ny,nx,mode,boundary_cross);
+    const float mx1=d6_face_mu(mut,c1,c2,k,j,x1,variant,true,ny,nx,mode,boundary_cross);
+    const float my0=d6_face_mu(mut,c1,c2,k,y0,i,variant,false,ny,nx,mode,boundary_cross);
+    const float my1=d6_face_mu(mut,c1,c2,k,y1,i,variant,false,ny,nx,mode,boundary_cross);
     const float tx=coef*map*((sx1*mx1)*dx1-(sx0*mx0)*dx0);
     const float ty=coef*map*((sy1*my1)*dy1-(sy0*my0)*dy0);
     const ulong out=d6_field_index(k,j,i,nys,nxs);
