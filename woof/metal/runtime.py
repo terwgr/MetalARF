@@ -189,7 +189,6 @@ class MetalContext:
             raise TypeError("batch_kernel_calls must be a boolean")
         package_root = Path(__file__).resolve().parents[1]
         from .bundle_integrity import verify_metal_bundle
-        verify_metal_bundle(package_root.parent)
         dylib_path = _artifact_path(
             "WOOF_METAL_RUNTIME_LIB",
             Path(library) if library else package_root /
@@ -202,6 +201,11 @@ class MetalContext:
             "WOOF_METAL_EXACT_SHADER_LIBRARY",
             Path(exact_metallib) if exact_metallib else package_root /
             "libexec" / "metal" / "woof_exact.metallib")
+        verify_metal_bundle(package_root.parent, artifact_paths={
+            "libwoof_metal.dylib": dylib_path,
+            "woof_default.metallib": shader_path,
+            "woof_exact.metallib": exact_shader_path,
+        })
         self._lib = ctypes.CDLL(str(dylib_path))
         self._bind()
         native_abi = self._lib.woof_metal_abi_version()

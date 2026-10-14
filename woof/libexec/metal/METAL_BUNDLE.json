@@ -2,23 +2,2932 @@
   "abi_version": 65543,
   "files": {
     "libwoof_metal.dylib": {
-      "sha256": "15064299f9c5c738cf882bfb9fc3deb182d819830a7d84c71928c516b72a1a3f",
+      "sha256": "2bcb9fb03fbd976c8bf5fd6cfc2333fe75790fde6c5c4d50cc3fb25f0625cea6",
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "c6902fbc16edec0f066f32b7e94e5b5ffe9d7406c0e67e90b55e7d85e807988f",
-      "size": 10876771
+      "sha256": "ed14fc89c62cd314c98d0da159f470727e3606b362220e74e701d5753de02769",
+      "size": 11009773
     },
     "woof_exact.metallib": {
-      "sha256": "30243450b3a7386b006ef78abcdcd05d0601d7d7cae6db3159295b1d6a6b69b7",
-      "size": 6855557
+      "sha256": "3be3c4f298d014f6b09baa387d4e8fb9037b69ac4fb9bdcff18f41713a7fdcec",
+      "size": 6930578
     }
   },
-  "implementation_file_count": 1839,
-  "implementation_sha256": "eca0c64234a88b89e7a851e885cad7f9a5adf0027b7583e60d5f04ccb04cf86d",
-  "metal_inputs_sha256": "ddc6833504bcdf287062423dee11cf6acc5b4446a49f813b69feac05c1dcd54f",
+  "implementation_file_count": 875,
+  "implementation_sha256": "b050f494ce22fbc950cfe2b5cfc24f8e745bd2a7600343ec1db38140ab9319cb",
+  "metal_inputs_sha256": "24694360e340c2bfe8d7d41f30f3270c8b0d3db0ec54efeab2f696f72539ac96",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
-  "schema": "woof-metal-bundle-v1",
-  "source_commit": "f903c2102dff0aed29d772fe94c85c4d5ff24f33"
+  "schema": "woof-metal-bundle-v2",
+  "source_provenance": {
+    "binding": "sha256-build-inputs",
+    "files": {
+      "tools/build_metal_backend.py": {
+        "sha256": "c6ea715e6a678abb3e1827a84d7008c43bb0b223bc455355f51ea1f8f793dbeb",
+        "size": 91488
+      },
+      "tools/generate_metal_kernel_signatures.py": {
+        "sha256": "828b6378afd4c24d9925d0b3ed62e5947a4633725264a07bc981132df6e286c4",
+        "size": 10876
+      },
+      "tools/metal_abi.py": {
+        "sha256": "799acdefd27b46553ba705a78eff302aee11aec21f232963b20d364150f80051",
+        "size": 1296
+      },
+      "woof/metal/kernel_signatures.json": {
+        "sha256": "d43203a4c35e8e491954a28cddaa3a69d39bba500ceee2be6a17cf7e90a42711",
+        "size": 2223898
+      },
+      "woof/metal/native/woof_metal.h": {
+        "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
+        "size": 6409
+      },
+      "woof/metal/native/woof_metal.mm": {
+        "sha256": "7b4bfcfd11431e09957d955b274668d180404bee651ffef0e21a6e6c800d8104",
+        "size": 86669
+      },
+      "woof/metal/shaders/acoustic_advance_mu_th.metal": {
+        "sha256": "be04168ebd36a77fc91bff5352aa1eb0194e13956a1b1126410b5927ecf7e680",
+        "size": 7823
+      },
+      "woof/metal/shaders/acoustic_advance_uv.metal": {
+        "sha256": "b84e2e8c12bf66d2d96bbce212cae8896b60a59c58750ae4046c30736d6ad0fb",
+        "size": 6832
+      },
+      "woof/metal/shaders/acoustic_advance_w_phi.metal": {
+        "sha256": "0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f",
+        "size": 13074
+      },
+      "woof/metal/shaders/acoustic_boundary_frame.metal": {
+        "sha256": "b94f3cf97fd5c806a084612599c9445f36dcb4834f792ec1778e11b4fa88647f",
+        "size": 2284
+      },
+      "woof/metal/shaders/acoustic_calc_cq.metal": {
+        "sha256": "13c01eeb7ca35d189b05eaf8a92da9f4ec38a42ab1fc95b93465a29802d846ad",
+        "size": 3118
+      },
+      "woof/metal/shaders/acoustic_coefficients.metal": {
+        "sha256": "01cbc5efb43a433b62b4d6dd7450f646b9d68cd6babdb5eef47f39c8aad1ae2d",
+        "size": 4093
+      },
+      "woof/metal/shaders/acoustic_emdiv.metal": {
+        "sha256": "c527724e0eb4533d24ab6e64c25e30b8ee0b4fbe8172399cc738c8071211aefe",
+        "size": 3077
+      },
+      "woof/metal/shaders/acoustic_sumflux.metal": {
+        "sha256": "03d5218040e5edd1ad6b9f1b4c99590d3dfbd098c5b5365e17a05f6212706230",
+        "size": 3149
+      },
+      "woof/metal/shaders/advection_flux_div_scalar.metal": {
+        "sha256": "2d3d48ae303e6eee6cecad2d6e30436405646307ac748aec53b9e3e435cb39dc",
+        "size": 14801
+      },
+      "woof/metal/shaders/advection_flux_div_scalar_vorder.metal": {
+        "sha256": "e942ecc5746e8f48b2da4e88757ec00fe1baa33e39fe6c412929affda694bc08",
+        "size": 15587
+      },
+      "woof/metal/shaders/advection_flux_div_u.metal": {
+        "sha256": "30695a12f287727ba61bc56ae5d02ce1dda043f2322b5e4095d0077fd5021f81",
+        "size": 7762
+      },
+      "woof/metal/shaders/advection_flux_div_u_vorder.metal": {
+        "sha256": "5b4bf5a021d0d48c07b127c2452257574de7a0cfa7f58754e19b8727fa4c7ff1",
+        "size": 8406
+      },
+      "woof/metal/shaders/advection_flux_div_v.metal": {
+        "sha256": "66c6702e734c42605d6ca79607a575c7cd81cd65f52a79d28593df3f8b80e9a8",
+        "size": 7145
+      },
+      "woof/metal/shaders/advection_flux_div_v_vorder.metal": {
+        "sha256": "9c50f54623e7a3771a4bb48c3fc8964ac32e4e9904d44d0e9dd3bfa9bc4b6802",
+        "size": 7789
+      },
+      "woof/metal/shaders/advection_flux_div_w.metal": {
+        "sha256": "f65fb6a0f609fc44178baecea22939a60220d48f3f1722edb57edef19d9f67a7",
+        "size": 10500
+      },
+      "woof/metal/shaders/advection_flux_div_w_vorder.metal": {
+        "sha256": "28b7e5002f01c476e80e276393f4e0977bab28af672d8564f1def415dce2e31e",
+        "size": 11197
+      },
+      "woof/metal/shaders/advection_prepare.metal": {
+        "sha256": "e176111ba7e66174372c5d8540ae7c2baad59e6e624bb79ae238289921cc2972",
+        "size": 688
+      },
+      "woof/metal/shaders/bandwidth_family.metal": {
+        "sha256": "6aa7a59ea9f67bcac2a69b5b70158a5fd0b1c571856e283c6ef68ca6e65b5915",
+        "size": 1323
+      },
+      "woof/metal/shaders/bound_tke_fragment.metal": {
+        "sha256": "63ce62853ba7f441ef7a8183c1ad087c4fe0aa58082eae777988548da9596eef",
+        "size": 283
+      },
+      "woof/metal/shaders/close_periodic_alias.metal": {
+        "sha256": "305064350f377b7d26317d724703b6705ceb8571dc2d26be0b781ef7bdd2315b",
+        "size": 945
+      },
+      "woof/metal/shaders/complex64_primitives.metal": {
+        "sha256": "168187bf22820fb83a5d142f3092ce1ffc09811c82a03f9628a51fe7a699d9e5",
+        "size": 2654
+      },
+      "woof/metal/shaders/coriolis_curvature.metal": {
+        "sha256": "2669eec78104b57c97ea796fc8269eed1de70706a0fc0cde4d42cd6dfb8629a1",
+        "size": 5664
+      },
+      "woof/metal/shaders/coupled_boundary_field.metal": {
+        "sha256": "a273df909805d1ed8d6ac8af55dbd713c93660a489c83043b5b39d84495117e9",
+        "size": 4450
+      },
+      "woof/metal/shaders/cumulus_clock_family.metal": {
+        "sha256": "5333b92b776bb138412ba56fc74fb8ca80b496d6bd1e8553e73347a34af9710c",
+        "size": 2677
+      },
+      "woof/metal/shaders/diagnostics_calc_p_alpha.metal": {
+        "sha256": "2a636ab57c37b7ff42c9b84ce3293481283e6d9b24a9731ddf3ae3e7fa2da6d3",
+        "size": 2271
+      },
+      "woof/metal/shaders/diagnostics_log1pf.metalh": {
+        "sha256": "11f7297a2eaca6bb48ee3817722f7f04e6ed02fe419c6a0d05336ff1dafc65fc",
+        "size": 4000
+      },
+      "woof/metal/shaders/diff6_family.metal": {
+        "sha256": "68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8",
+        "size": 15955
+      },
+      "woof/metal/shaders/diffusion.metal": {
+        "sha256": "d779666e7bf83e8e138474b5d15a419bb37e82bf2d163cd20a1e4ddc8595c28f",
+        "size": 4346
+      },
+      "woof/metal/shaders/dudhia_shortwave.metal": {
+        "sha256": "90e8f2514dd5c01e0f1d0ae853cded34d0cc9e10452ca7f82f71113f2585c458",
+        "size": 4611
+      },
+      "woof/metal/shaders/dycore_advance_stage.metal": {
+        "sha256": "5d9adaee468607b68e15bee79a5636624ac72b3c692b8d454c78f0a526faafbc",
+        "size": 6016
+      },
+      "woof/metal/shaders/ensemble_surface_recipe_fragment.metal": {
+        "sha256": "1ad7171900d127092c629a276be58a9419c66a52fa42693815e82660be0d4d05",
+        "size": 3808
+      },
+      "woof/metal/shaders/face_mass.metal": {
+        "sha256": "0b7efeea016f4cbd3fb6da62c4bb1b8449283017f672da6feb4c07b53536360f",
+        "size": 1615
+      },
+      "woof/metal/shaders/gf_family.metal": {
+        "sha256": "7b4068c82b34d5602626745c9dbb9b897040deea3f469c24553fb12069aae4aa",
+        "size": 145188
+      },
+      "woof/metal/shaders/global_any_u32_fragment.metal": {
+        "sha256": "626ac3e3bc43917dcd79e8ab627e1a86a7276f6913f790f78b7b7223be5a7238",
+        "size": 554
+      },
+      "woof/metal/shaders/global_betts_miller_deep_finalize_fragment.metal": {
+        "sha256": "e7536a18365dde3ffa57a6ea5ede6a7dd59f038af7d2c5e35c9d01bc91464ca8",
+        "size": 614
+      },
+      "woof/metal/shaders/global_betts_miller_fragment.metal": {
+        "sha256": "73c4da0890df8c73932122f622194c70796021f8e8bb23ee69de778fdaa0521a",
+        "size": 5539
+      },
+      "woof/metal/shaders/global_betts_miller_temperature_fragment.metal": {
+        "sha256": "410e9d1133add56c67ed89055192b3acc259a5a840b95d33a9ec6829babcfd98",
+        "size": 623
+      },
+      "woof/metal/shaders/global_betts_miller_theta_fragment.metal": {
+        "sha256": "adc2b298e80a7ce6e0bb1041ad0e831fbe7cf3cb60800d755e40abc2fa51b110",
+        "size": 555
+      },
+      "woof/metal/shaders/global_cfl_wind_fragment.metal": {
+        "sha256": "c7d96b65e20625b9507d42ef6591d2d99e1e99c84d6bea8f3e11a7267eb355ac",
+        "size": 588
+      },
+      "woof/metal/shaders/global_column_water_before_fragment.metal": {
+        "sha256": "1be4bf590fb110902448ac2ffb7658b385dcad3a7bcf01ddff7b673b84ad6cf9",
+        "size": 1184
+      },
+      "woof/metal/shaders/global_column_water_stack_fragment.metal": {
+        "sha256": "3697678c955d89bf11530a83a09b7904ffb73b89c2db56a5bcca35d75ea06c4f",
+        "size": 785
+      },
+      "woof/metal/shaders/global_convective_adjust_fragment.metal": {
+        "sha256": "5e87a121f027245a72984413fc0783260289de84ccefbf2a8cfeec70271251fe",
+        "size": 2207
+      },
+      "woof/metal/shaders/global_convective_count_finalize_fragment.metal": {
+        "sha256": "2f14855475687ca3ee8ecfb527b77221605f48e6d64d59b521e038d92c8da601",
+        "size": 620
+      },
+      "woof/metal/shaders/global_convective_mass_fragment.metal": {
+        "sha256": "17277702ae94ab2b49a95faf1dd5a4e59c85717d840e8f83edd98562864657a5",
+        "size": 535
+      },
+      "woof/metal/shaders/global_convective_pack_fragment.metal": {
+        "sha256": "d9a9683a3570b382ee96c388db10ff66d153c402bb53f0653f7fbb4744ea1b2a",
+        "size": 829
+      },
+      "woof/metal/shaders/global_dynamics_fragment.metal": {
+        "sha256": "d2b90f942f792de8c78aa64cd3fe777d97b8f44ea4a1c899545f2d1523950289",
+        "size": 609
+      },
+      "woof/metal/shaders/global_enforce_vapor_rows_fragment.metal": {
+        "sha256": "ab92a52fa6c9e7737a1127690f8ddd85bca8199125aaae2d739bd058f5f47d8d",
+        "size": 1419
+      },
+      "woof/metal/shaders/global_fallout_fragment.metal": {
+        "sha256": "af416058498efaeb9d8ab796b8cb4c659a7cb20b0bb5c72c381aff6f0a66dbdc",
+        "size": 2299
+      },
+      "woof/metal/shaders/global_finite_fragment.metal": {
+        "sha256": "83205f8e3cef467b10b9cf1f4f98631728621eb4df30b74b1d5352e9c2333f29",
+        "size": 1232
+      },
+      "woof/metal/shaders/global_fix_total_water_fragment.metal": {
+        "sha256": "a0a15861ee995b67b2f9aa12a5c4505e75aee346d313f56b203d4876f143d35d",
+        "size": 697
+      },
+      "woof/metal/shaders/global_fixer_fragment.metal": {
+        "sha256": "f73d770c88a09ea0d39949b7e739cf66bb50f993a4ff3368c2d7c649eb6a18c5",
+        "size": 2505
+      },
+      "woof/metal/shaders/global_floor_grid_tracer_fragment.metal": {
+        "sha256": "c2c3143a7375f24370d4a413a49a6d61f98d9a3ff74da9120259b6be01c5207e",
+        "size": 569
+      },
+      "woof/metal/shaders/global_gray_radiation_fragment.metal": {
+        "sha256": "eedbe43ec5d783b8c94e3d901d847893e2a151e145e0628efcc813c33d877b73",
+        "size": 3588
+      },
+      "woof/metal/shaders/global_gray_radiation_optics_fragment.metal": {
+        "sha256": "6d1207296655bb27af6edc7696be0c5075597a30c66389394be1ead7fe7974f3",
+        "size": 1938
+      },
+      "woof/metal/shaders/global_gray_radiation_update_fragment.metal": {
+        "sha256": "768bbcc8d963ebda8fe35de567538676c3f189f8a3646153d474bb4911738df6",
+        "size": 1017
+      },
+      "woof/metal/shaders/global_gray_solar_fragment.metal": {
+        "sha256": "88f29726f0ad08c0135d79ce2324460b878158eda922bf1ec2a837a35a12ae55",
+        "size": 3092
+      },
+      "woof/metal/shaders/global_grid_mean_fragment.metal": {
+        "sha256": "9365b3cefc929459fe64c36ddca348a776d95a7f929a031dfbe032294b5b86ab",
+        "size": 1319
+      },
+      "woof/metal/shaders/global_grid_plane_broadcast_fragment.metal": {
+        "sha256": "b069c6fddbbb3e37546e817fc02adf86b07e0e436177300ad613ee1c19a9d01c",
+        "size": 559
+      },
+      "woof/metal/shaders/global_hybrid_pressure_setup_fragment.metal": {
+        "sha256": "dfd17d0599a4e3d83c934e754396fe0c06e25d4ae9dd3c970c8d8203d934356d",
+        "size": 1200
+      },
+      "woof/metal/shaders/global_implicit_diffusion_fragment.metal": {
+        "sha256": "321643c8341fbbdd44a7957675e89450cd08fc51d50704e5ba75c2d0bb9713a1",
+        "size": 2382
+      },
+      "woof/metal/shaders/global_implicit_diffusion_pack_fragment.metal": {
+        "sha256": "46272e98a5683f3b67e22e4b91d9ea385360c7dfa6aff04a9ea66d3a87d574e6",
+        "size": 820
+      },
+      "woof/metal/shaders/global_insitu_capture_fragment.metal": {
+        "sha256": "63a5c9e50a09fb46e4c98f9343a08008d9f1b36d6d19c9b8c5641d1bdfd22ea9",
+        "size": 3170
+      },
+      "woof/metal/shaders/global_insitu_energy_fragment.metal": {
+        "sha256": "39ff198b0ff92e34ce9c419c2380d38aef2dcb92416f43c8fa1bea8e5ce0cfc6",
+        "size": 7271
+      },
+      "woof/metal/shaders/global_insitu_ledger_fragment.metal": {
+        "sha256": "9c5a4fb5ece4b8076eb9ce5b81db15e702c9919d5d02fde8e11834002af67d0d",
+        "size": 7746
+      },
+      "woof/metal/shaders/global_insitu_spectra_fragment.metal": {
+        "sha256": "f9b9ded769609b8ff6f07ec8188307137e42bd87cbcc911c61a1931eb693dc9a",
+        "size": 2875
+      },
+      "woof/metal/shaders/global_inverse_longitude_transform_fragment.metal": {
+        "sha256": "244e3f65234a9886519be7ce51784a77ba556c8397ef9854410c0e92850f0c8c",
+        "size": 1865
+      },
+      "woof/metal/shaders/global_inverse_longitude_transform_resident_fragment.metal": {
+        "sha256": "e74af2cf28729f78226a7fbd49ebade406229458bcd2880b69204bfff734b071",
+        "size": 1839
+      },
+      "woof/metal/shaders/global_latitude_transform_fragment.metal": {
+        "sha256": "e924b9d4ba31c137e0ac38a6f0e35dd5e38fe864fed29bf7fdececa1083daa47",
+        "size": 1388
+      },
+      "woof/metal/shaders/global_latitude_transform_resident_fragment.metal": {
+        "sha256": "b142a7fe6c25ca3e41fe8e3ec01112e88b32bb83cbf25acc0be1e69c55792fe4",
+        "size": 1789
+      },
+      "woof/metal/shaders/global_level_water_mass_finalize_fragment.metal": {
+        "sha256": "ba6c44a7e5ff0833bfe1ad24be85bb5dd680dbd5b68f0218c7c61c6864008a05",
+        "size": 909
+      },
+      "woof/metal/shaders/global_level_water_mass_rows_fragment.metal": {
+        "sha256": "cbcf6edc75b17d68f14a937e211ae32f24bd59a6397b3523fb2215d179e93e8d",
+        "size": 1025
+      },
+      "woof/metal/shaders/global_level_water_mass_total_fragment.metal": {
+        "sha256": "df4c2d56118181ccbf71377081d1b8f7fefba97a3524848781a0b76472f0fadd",
+        "size": 641
+      },
+      "woof/metal/shaders/global_longitude_transform_fragment.metal": {
+        "sha256": "794b3bb8119214d8ceff7d1067e0eac0d0f0eb0673025aec2bedaedd1a2cdd58",
+        "size": 1737
+      },
+      "woof/metal/shaders/global_longitude_transform_resident_fragment.metal": {
+        "sha256": "5f7a96ca3cec5dcbb4ff0396cc3578dc3f7649451f0b8338fcaf7d22f2dc5e82",
+        "size": 1613
+      },
+      "woof/metal/shaders/global_microphysics_fragment.metal": {
+        "sha256": "a441d903b9fca3059d95d5f46d6ce56554514d78a5ff650ea081a0492174fb6f",
+        "size": 4540
+      },
+      "woof/metal/shaders/global_momentum_fragment.metal": {
+        "sha256": "0238aca4f775221a3f8ee2b0b95d230e84fbdf9b0242ab0062cd6e003b4cc0ae",
+        "size": 1917
+      },
+      "woof/metal/shaders/global_physics_exner_fragment.metal": {
+        "sha256": "52f3af2c5c7b774fb0fa0d4c36ebc8ec3ac0bc093d0d8356da525933004e82e3",
+        "size": 643
+      },
+      "woof/metal/shaders/global_pressure_gradient_fragment.metal": {
+        "sha256": "669e5fc447eccb5f3ad45ef0f1c5fd05f0a268452cdde5a34dcc559843e9ae7c",
+        "size": 999
+      },
+      "woof/metal/shaders/global_reductions_fragment.metal": {
+        "sha256": "77757f0cf34292da7be227737ae2310b86b4c8b706d96034b1df87d8ed5dfc88",
+        "size": 776
+      },
+      "woof/metal/shaders/global_saturation_adjust_fragment.metal": {
+        "sha256": "8abdd5ff576e7c1bdda53346428e713662ea6659a64209bf85148d14a7bfd89c",
+        "size": 3042
+      },
+      "woof/metal/shaders/global_saturation_closure_finalize_fragment.metal": {
+        "sha256": "37c2b93a8e6ce7db151ce5bd47baf06e49395870bf4c71d40901c3e87c346d51",
+        "size": 847
+      },
+      "woof/metal/shaders/global_saturation_closure_fragment.metal": {
+        "sha256": "73b06d7d32f335411cea852eae7114e178ebe6bfefe60ba16f74bb437ac3fd2f",
+        "size": 2514
+      },
+      "woof/metal/shaders/global_saturation_pair_max_fragment.metal": {
+        "sha256": "0cd99af9341c029a8c824000cb53b5ed332adf6cded7c613e72db67be16ff3f0",
+        "size": 874
+      },
+      "woof/metal/shaders/global_scalar_tendency_fragment.metal": {
+        "sha256": "9591d02fcd912f87edffa2e7211c293b36b71cd3a8fb527482ef07c7f5c6b238",
+        "size": 1126
+      },
+      "woof/metal/shaders/global_screen_diagnostics_fragment.metal": {
+        "sha256": "4c17a8af4e2ce415bed3764c942ae51439d77f92dc4b0c4e54ada0ff1015266c",
+        "size": 11796
+      },
+      "woof/metal/shaders/global_semilag_add_scaled_fragment.metal": {
+        "sha256": "4803c8471d491565a4582c04dad76e653090c4116360fd89302d459e3e3f443e",
+        "size": 699
+      },
+      "woof/metal/shaders/global_semilag_assemble_fragment.metal": {
+        "sha256": "03d548bc06a4219c1aa75bbb753f0d4756d1d49c9f014130d0753f35028d94fe",
+        "size": 1516
+      },
+      "woof/metal/shaders/global_semilag_complex_difference_fragment.metal": {
+        "sha256": "d7dde60b276a9e895bd214b6b3da783d3176ae3e7de102e327b5c8e07db717c5",
+        "size": 862
+      },
+      "woof/metal/shaders/global_semilag_departure_fragment.metal": {
+        "sha256": "e7f36254ea74d82e4c8b9a28cc435a00dc1d0d0a46d8902b67eac80fd2ae3bb4",
+        "size": 8914
+      },
+      "woof/metal/shaders/global_semilag_force_fragment.metal": {
+        "sha256": "b1b30966ab8bcc1c4e1df748cbdc7c0f7be8d6f9ac0e74948c7fb10ad61810cb",
+        "size": 582
+      },
+      "woof/metal/shaders/global_semilag_gather5_fragment.metal": {
+        "sha256": "921ae1c9b6b446f9b8d55ab474b901b49ade9e54fd374489634854a8d7cb16fa",
+        "size": 5998
+      },
+      "woof/metal/shaders/global_semilag_gather_fragment.metal": {
+        "sha256": "7456583d7f94fd298e1349df580b2e63e36207c40e8a174f6293cafa7647906c",
+        "size": 6184
+      },
+      "woof/metal/shaders/global_semilag_gradient_metric_fragment.metal": {
+        "sha256": "16a5a07d97e1ec83e6b85db6a561628c1f289dc45bcb9af59976838e3a977b13",
+        "size": 806
+      },
+      "woof/metal/shaders/global_semilag_half_apply_fragment.metal": {
+        "sha256": "18f6ebf9de66bbd6f1db9dde53a2c6ce282a7293ce7eaf75d84a30b68d4114ef",
+        "size": 4838
+      },
+      "woof/metal/shaders/global_semilag_linear_tendencies_fragment.metal": {
+        "sha256": "82995a54e7352f11e290813916c9585c95746b4520fb34104ecdc88f20406b31",
+        "size": 3151
+      },
+      "woof/metal/shaders/global_semilag_lipschitz_fragment.metal": {
+        "sha256": "08548de5b4e484f6eaf98f9e8ff76f2aa557ac1990c6223929c6735bf39c491e",
+        "size": 3734
+      },
+      "woof/metal/shaders/global_semilag_lipschitz_norms_fragment.metal": {
+        "sha256": "4d306ef233f7b9421ef164c80bcb93af9bb7dde01087a7cd2c456e4ed5f529ad",
+        "size": 7824
+      },
+      "woof/metal/shaders/global_semilag_max_finalize_fragment.metal": {
+        "sha256": "6be6115710456b12dcfe5b59faff6b435b254eaf27f8441988476b8b17483bb5",
+        "size": 704
+      },
+      "woof/metal/shaders/global_semilag_max_fragment.metal": {
+        "sha256": "724320300e0c035192550d234c0d725fb0f04f25bd166094682d52840b7c09b1",
+        "size": 730
+      },
+      "woof/metal/shaders/global_semilag_operator_fragment.metal": {
+        "sha256": "58f4a02cd786b82baab48ad342f58a7af539038e4adf2f9c247bace39bca9e4f",
+        "size": 2893
+      },
+      "woof/metal/shaders/global_semilag_pressure_fragment.metal": {
+        "sha256": "92065a6705e497bb5e5f0f1d1739db0f58a15c9e4f6159f9e4746b9f90c14619",
+        "size": 1564
+      },
+      "woof/metal/shaders/global_semilag_solve_shifted_fragment.metal": {
+        "sha256": "6212fda779e707513f14255d91484e43afc8d004e637ea4b0753e87be54f1b7b",
+        "size": 3003
+      },
+      "woof/metal/shaders/global_semilag_tendencies_fragment.metal": {
+        "sha256": "25571c8bcf7d06d3ffafa85fc18ae2feac0fc233e50849166041501e6d5e17a4",
+        "size": 1290
+      },
+      "woof/metal/shaders/global_semilag_tracer_fix_fragment.metal": {
+        "sha256": "e32c4415d611dc7985dac098c6143dc9cd82d774150f8fa41d9b54e117f2d802",
+        "size": 2001
+      },
+      "woof/metal/shaders/global_semilag_transport_fragment.metal": {
+        "sha256": "d2d1086263c9c1df0680b26feb3190df7d0e6dd04331e3dc26280e627e9bd3ff",
+        "size": 2176
+      },
+      "woof/metal/shaders/global_semilag_transport_resident_fragment.metal": {
+        "sha256": "853e1d91cfe31e4a608173fb4e314380012211c212bbac173f0287f1b6765ada",
+        "size": 4604
+      },
+      "woof/metal/shaders/global_semilag_vector_analysis_fragment.metal": {
+        "sha256": "31349c33fa6b86af418fb77d39316e4d099fb69ae9b2a5997ecd368c5eea827f",
+        "size": 2384
+      },
+      "woof/metal/shaders/global_semilag_vector_fragment.metal": {
+        "sha256": "2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881",
+        "size": 10291
+      },
+      "woof/metal/shaders/global_semilag_water_column_fragment.metal": {
+        "sha256": "10a1b20163539af4c49167700fd7068dbaba154e91f2620e442fbc0765b6e18f",
+        "size": 1077
+      },
+      "woof/metal/shaders/global_semilag_wind_pair_fragment.metal": {
+        "sha256": "5265b49293a87489eee6d9551c43331971d1ebc48d70dd95fb6eace6b803dadc",
+        "size": 559
+      },
+      "woof/metal/shaders/global_soil_temperature_relax_fragment.metal": {
+        "sha256": "c3a3cedfade97e76f9ab10f28f76ac9dc04604ecce2dac3e15d05f7ddc1d0884",
+        "size": 1263
+      },
+      "woof/metal/shaders/global_spectral_diffusion.metal": {
+        "sha256": "be34b6a484ed38043f6d34d5ee89865704ab17b0c227aeef7e8bf451b4be820a",
+        "size": 1530
+      },
+      "woof/metal/shaders/global_spectral_project_fragment.metal": {
+        "sha256": "9abd901c48c9b0278d410af009537a678844d345ba9a4a165bc36d8d753d6679",
+        "size": 868
+      },
+      "woof/metal/shaders/global_stratospheric_floor_fragment.metal": {
+        "sha256": "b493c3738ebf2460be152d9d9457ce8c5a59a795f91d98146faedc8ea3c1b9b0",
+        "size": 1211
+      },
+      "woof/metal/shaders/global_sum_finalize_fragment.metal": {
+        "sha256": "7004a80c2ce05c246b493bffdb69a7228f9798ff25107f46c6d1e69cfc325a20",
+        "size": 607
+      },
+      "woof/metal/shaders/global_surface_emission_fragment.metal": {
+        "sha256": "ffb630181e90ad68f9d01c5fa39eaed2793c04b75f0034cd9d5b7e663f23fb40",
+        "size": 723
+      },
+      "woof/metal/shaders/global_surface_energy_update_fragment.metal": {
+        "sha256": "f7d2071ca081a7ee231165a4e9dbae6f9aa28b523914f3e7e9f372dc18d61b11",
+        "size": 1152
+      },
+      "woof/metal/shaders/global_surface_fallout_cooling_fragment.metal": {
+        "sha256": "edf0f43fb086b7159a347d5a6db02da0b74e86852c7f62280e2c68d55dbda79a",
+        "size": 1195
+      },
+      "woof/metal/shaders/global_surface_flux_fragment.metal": {
+        "sha256": "0b65f908db09ab4bc0c95fd6aa946c6987989e13ab34ccd10bd2e04d20669de3",
+        "size": 3158
+      },
+      "woof/metal/shaders/global_surface_flux_prep_fragment.metal": {
+        "sha256": "3631b092592483755b28709aa633aa61db62588a36f2ece3be556f0afbea333d",
+        "size": 2975
+      },
+      "woof/metal/shaders/global_surface_flux_prep_resident_fragment.metal": {
+        "sha256": "01b4d7afe79da47e2931860e67cc73d32801e0da17928d4439149d903636ca9b",
+        "size": 3156
+      },
+      "woof/metal/shaders/global_surface_pressure_tendency_fragment.metal": {
+        "sha256": "4f2ecd12741f48fb692c6ba6f8d1ad9c4cbf97537ec61d39174e2601d805c4d1",
+        "size": 880
+      },
+      "woof/metal/shaders/global_surface_water_add_fragment.metal": {
+        "sha256": "30bc82cdf5a3f2752668a39dc8ec3b6a106cc6c6b8745a8c96e7af50c0e175fb",
+        "size": 548
+      },
+      "woof/metal/shaders/global_top_sponge_fragment.metal": {
+        "sha256": "1af4749c7e42d5f1a1cde40908e102e2006f5532ed1ce4d656a7e3731e26aad6",
+        "size": 2973
+      },
+      "woof/metal/shaders/global_total_water_stores_fragment.metal": {
+        "sha256": "911ed96006cccd23914801946ff53336879982aa98366f0ad2c96d1e714a6463",
+        "size": 1482
+      },
+      "woof/metal/shaders/global_tracer_extrema_finalize_fragment.metal": {
+        "sha256": "658c26daf24cd3e73c8a99848c0ac12f1b48733c96f38eb60fac5a06dfafcc5b",
+        "size": 1217
+      },
+      "woof/metal/shaders/global_tracer_extrema_fragment.metal": {
+        "sha256": "7fa168362e2254d0b7892e89a5b8f447c1c6e8cbc974a796a28a2746773058cb",
+        "size": 2089
+      },
+      "woof/metal/shaders/global_tracer_flux_fragment.metal": {
+        "sha256": "672809e5a8f49bd03fe65bd0129e8681bf5eabe3e34b467083b0495b6b0129b9",
+        "size": 1016
+      },
+      "woof/metal/shaders/global_tracer_gap_fragment.metal": {
+        "sha256": "be07ef97cb0c985aba4dc033f6f27ea500abf6b30a13291222de0d5b4baea6ae",
+        "size": 774
+      },
+      "woof/metal/shaders/global_tracer_minmax_finalize_fragment.metal": {
+        "sha256": "8d9b31c1c0cca72873f6265be6e9ca82719cc84a0aef21d87c6a8304b55aa17d",
+        "size": 909
+      },
+      "woof/metal/shaders/global_tracer_minmax_fragment.metal": {
+        "sha256": "805797bc05da45012ef1305006c8b1da541dadcc846009276622655abe031208",
+        "size": 941
+      },
+      "woof/metal/shaders/global_tracer_resident_fragment.metal": {
+        "sha256": "a933c1b27c03d0f18e057bb13559819d75ae3292b1a03c5c0fd254949f83e68c",
+        "size": 18377
+      },
+      "woof/metal/shaders/global_tracer_walled_fragment.metal": {
+        "sha256": "dd58ba626668b202e7a38cfda62bc6b182d5809ebc72df0d3948c347760aae15",
+        "size": 6770
+      },
+      "woof/metal/shaders/global_tracer_zonal_fragment.metal": {
+        "sha256": "2a9e610aec6e3e6ff20bf3099f25ab3bded1758505cb81940a84140214e8ddc7",
+        "size": 4567
+      },
+      "woof/metal/shaders/global_turbulence_geometry_fragment.metal": {
+        "sha256": "2f800855600b1a178c97a68608900d0036d45509111b13afd4c83a0c83672402",
+        "size": 1277
+      },
+      "woof/metal/shaders/global_vertical_continuity_fragment.metal": {
+        "sha256": "0486094fe912cb34ac1fb83aa70a5da7b70bc39b35e061a4e291f0e486fee405",
+        "size": 1121
+      },
+      "woof/metal/shaders/global_vertical_momentum_fragment.metal": {
+        "sha256": "b1a601b2e91a674610d7fc3d05f48fd00b444ea649707cc8ae6f14f6e7b1eef2",
+        "size": 1981
+      },
+      "woof/metal/shaders/global_vertical_scalar_flux_fragment.metal": {
+        "sha256": "5ff060d305eebf623a24c01f056ef3cecf696525519f8c355e7181c824c60a2d",
+        "size": 3740
+      },
+      "woof/metal/shaders/health_family.metal": {
+        "sha256": "43a0d405c5ad4b2fe794d7c768aca45bd90b3674cb9a67b96f1b6c7a8a594226",
+        "size": 17929
+      },
+      "woof/metal/shaders/held_heating.metal": {
+        "sha256": "4308b74abf549cfeff20dbf297b9f6d0168283c271777d1e3b31d1e9938e61f9",
+        "size": 1362
+      },
+      "woof/metal/shaders/hex_acoustic_edge_update_fragment.metal": {
+        "sha256": "3b000651bd7e6d81ecc3bf0f0b9f2b6061c585293b7a17b4458c66d0849baee3",
+        "size": 2008
+      },
+      "woof/metal/shaders/hex_acoustic_postsolve_damping_fragment.metal": {
+        "sha256": "e4723430cf96eff58fd18e52ee36df7f444bb66c0bccd2d2d1c5f07f4c329543",
+        "size": 1300
+      },
+      "woof/metal/shaders/hex_density_tendency_fragment.metal": {
+        "sha256": "945784bd904f5fd3689b9287a71d26b375f6c5bd140c6811b6c3d6ad4ddba326",
+        "size": 860
+      },
+      "woof/metal/shaders/hex_dpdz_tendency_fragment.metal": {
+        "sha256": "2fc1ad53c907a9fad28205afefc9611f0bb45454834304727ed3ba3118d8429c",
+        "size": 815
+      },
+      "woof/metal/shaders/hex_exner_pressure_diagnostic_fragment.metal": {
+        "sha256": "8f9097a51f6c95844fde46fe828a0e58f0f697334fee2325027fd9dfdeafbf0e",
+        "size": 970
+      },
+      "woof/metal/shaders/hex_fct_apply_fragment.metal": {
+        "sha256": "b5ae5432db787ea6e482046042d83726aea86b6cc29503c72bf51f121939ebcf",
+        "size": 2404
+      },
+      "woof/metal/shaders/hex_fct_cell_scales_fragment.metal": {
+        "sha256": "ea12a142ea6dc6e147a2e25f23ec17f7b389346f698365b44039c114570af941",
+        "size": 4867
+      },
+      "woof/metal/shaders/hex_fct_edge_flux_fragment.metal": {
+        "sha256": "0ac00b4439b6990957ada802f2342a709b1104dc32112117624e1308486b6f12",
+        "size": 2781
+      },
+      "woof/metal/shaders/hex_horizontal_theta_tendency_fragment.metal": {
+        "sha256": "5d61149d486481c6d4684e3d205c30c7ac838292a2a45c9035cf44e9888baa44",
+        "size": 2656
+      },
+      "woof/metal/shaders/hex_interface_velocity_recovery_fragment.metal": {
+        "sha256": "3b7ee15479d4ced66dc708969ea95033a33a3928904682690499120466a1ab97",
+        "size": 1574
+      },
+      "woof/metal/shaders/hex_interface_velocity_terrain_fragment.metal": {
+        "sha256": "dd25f1be8bd8ffc21aac854a9469d619d356eb0b99c8d7f00cb0dd57aaca0959",
+        "size": 2281
+      },
+      "woof/metal/shaders/hex_kinematic_diagnostics_fragment.metal": {
+        "sha256": "22662c0794484710fb87d704d92fdddd36df7962eae7a84cb0198cdda115d007",
+        "size": 3740
+      },
+      "woof/metal/shaders/hex_mass_flux_divergence.metal": {
+        "sha256": "23770b414639e6dea481b9a4013b9da8354132122c6696b6184777865cc6a613",
+        "size": 1506
+      },
+      "woof/metal/shaders/hex_mesh_diagnostics_fragment.metal": {
+        "sha256": "93bfb8e74b09ad188b0d0d6b28b0f4e00169ce59420be5d0a7615ff9da4ac78e",
+        "size": 1035
+      },
+      "woof/metal/shaders/hex_moist_coefficients_v841_fragment.metal": {
+        "sha256": "34c98a6ae786ecdcb4854ee3a6707da7ef5ce5cd12441655dff60bfefa151906",
+        "size": 2426
+      },
+      "woof/metal/shaders/hex_omega_terrain_conversion_fragment.metal": {
+        "sha256": "160a06fc869e1abc050d7740eab0f8a32c45b2dffbbee2407f206dddce212b53",
+        "size": 1706
+      },
+      "woof/metal/shaders/hex_pressure_gradient_fragment.metal": {
+        "sha256": "a2e065409851b92f9940d617db29eb6fea0647119f30ec71392ce65594fd7a6c",
+        "size": 1696
+      },
+      "woof/metal/shaders/hex_pressure_perturbation_fragment.metal": {
+        "sha256": "fa230a63c7b55a68d3dd429bc9eeec5e1d507c35ec55840908f5af726f7ef3ab",
+        "size": 1014
+      },
+      "woof/metal/shaders/hex_pv_diagnostics_fragment.metal": {
+        "sha256": "86e253fd1e9bfa8bef8d40ac6c473b86a4f5da7d975663543cc2ad00c9028219",
+        "size": 3316
+      },
+      "woof/metal/shaders/hex_rk_tendencies_fragment.metal": {
+        "sha256": "c57a69c840be01979116958f35079d4b436497f06999ef0cee5d2c70fdca32d1",
+        "size": 715
+      },
+      "woof/metal/shaders/hex_scalar_fct_fragment.metal": {
+        "sha256": "c104ed75a12e3a459e12d4cc07a9a9898c54852e62ed90c085ab63be490931ba",
+        "size": 1731
+      },
+      "woof/metal/shaders/hex_scalar_rk_update_fragment.metal": {
+        "sha256": "24f288446296f3f96666088cb765950d68ec9ba85b87e40a4c19f8ccac438fd2",
+        "size": 5548
+      },
+      "woof/metal/shaders/hex_solve_vertical_system_fragment.metal": {
+        "sha256": "3f53643d377199cff9907edd309a4878e153c65dc56b368d292d47f8ad59daee",
+        "size": 1235
+      },
+      "woof/metal/shaders/hex_tangential_velocity_fragment.metal": {
+        "sha256": "9cea3b3cad968f0d47c7f831f938b4c97e2fd0a88adb0c624086b824cc612571",
+        "size": 985
+      },
+      "woof/metal/shaders/hex_theta_diagnostic_fragment.metal": {
+        "sha256": "c9571d6d4c2e60632495230e49028abf9dff57974ff0cf67312cf6e133017452",
+        "size": 660
+      },
+      "woof/metal/shaders/hex_vector_invariant_momentum_fragment.metal": {
+        "sha256": "08166118d776a4009234cf761af901623666f11ff7452023bdc9a7931db0ed11",
+        "size": 1832
+      },
+      "woof/metal/shaders/hex_vector_invariant_momentum_v841_fragment.metal": {
+        "sha256": "2d9fdabb58ff018409602cc1bb91536d5ddf4fc1c1b4324053c7840bb49d9a11",
+        "size": 2276
+      },
+      "woof/metal/shaders/hex_vertical_coefficients_v841_fragment.metal": {
+        "sha256": "861bc6f314b75dbcf8ce730c7a4d59bbc842a2fbbcbc16d6a0eed9503d67ad2f",
+        "size": 6001
+      },
+      "woof/metal/shaders/hex_vertical_momentum_transport_fragment.metal": {
+        "sha256": "209bfa1ec9afe7c16ceb3b4c80c968a4353514d1190ca6e2944225d5103fe3a6",
+        "size": 2165
+      },
+      "woof/metal/shaders/hex_vertical_pressure_euler_fragment.metal": {
+        "sha256": "ef9656421d95e9a469f4544ecbaf160d1928451c939f365a2ead73967195037e",
+        "size": 1087
+      },
+      "woof/metal/shaders/hex_vertical_scalar_flux3_fragment.metal": {
+        "sha256": "38c01e4ad2c1055ebb764cb3efd86629791efa8f04f167e32bb64d3b43385962",
+        "size": 1380
+      },
+      "woof/metal/shaders/hex_vertical_theta_tendency_fragment.metal": {
+        "sha256": "de6871d73b903c8cb86450f157111c804348847c0a86f646a5964f50b66c07da",
+        "size": 2419
+      },
+      "woof/metal/shaders/hex_vertical_velocity_tendency_fragment.metal": {
+        "sha256": "548fc5100b7e347a5b99f094acd0603dd8fdd45c0825db67c49104ae40647d81",
+        "size": 3534
+      },
+      "woof/metal/shaders/ieva_family.metal": {
+        "sha256": "f0913c91c96f8975e15a75b451867411421d43565811a41eb87772af0460d268",
+        "size": 5400
+      },
+      "woof/metal/shaders/ieva_solve_family.metal": {
+        "sha256": "7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777",
+        "size": 21497
+      },
+      "woof/metal/shaders/jacobi_eigh_fp64.metal": {
+        "sha256": "e51c3288c133df05d1dfdfbc36af90135f5da5a6a8c6d9ee63fab3a7415c9e2a",
+        "size": 11889
+      },
+      "woof/metal/shaders/kessler.metal": {
+        "sha256": "df1a2293e1594561eacff357b2d38a239aa95df766c466bb6d67d9002675edb6",
+        "size": 5055
+      },
+      "woof/metal/shaders/kessler_family.metal": {
+        "sha256": "accec79d876ddcef1932a1aff965e34971d3260d4eab414566b85bc94eb17613",
+        "size": 7722
+      },
+      "woof/metal/shaders/kf_column_family.metal": {
+        "sha256": "250d34ace43304607a72bccbc18c895b3d83dd7a270cbf6e7b051200b735222d",
+        "size": 59987
+      },
+      "woof/metal/shaders/kf_output_validation.metal": {
+        "sha256": "63e2608ef11bef3e7a0983d4d2de4ed32ed566af2f8654c1fcd5ad5725cf24a7",
+        "size": 1192
+      },
+      "woof/metal/shaders/kf_w0avg_update.metal": {
+        "sha256": "dd67634fb85c6731bc17668083ee1c1b04c373627170fa86a998c42c6a6f66c6",
+        "size": 744
+      },
+      "woof/metal/shaders/lake_family.metal": {
+        "sha256": "581db60a2126d72efa40e4781ee5b8c6f12119d1fd9681e6d9e48fa5b9aee5fe",
+        "size": 29281
+      },
+      "woof/metal/shaders/lake_support.metalh": {
+        "sha256": "51d84ddfea1aa992ce2fffc8d477d4c5b2cc6b44207b89336ee1dd18ed8c80d5",
+        "size": 8472
+      },
+      "woof/metal/shaders/lake_wrf_fragment.metalh": {
+        "sha256": "7c1d2db9c39a738aaad646c7b9e983fc5f76c68cbcb5874f7ea0188281f8d0b3",
+        "size": 119652
+      },
+      "woof/metal/shaders/lbc_flow.metal": {
+        "sha256": "ca2bde04329da81f78de6676c2ac81eded47b13f46f2eaeb7953c25ae3b4eaae",
+        "size": 5402
+      },
+      "woof/metal/shaders/lbc_state.metal": {
+        "sha256": "67f2cddfe12f685eeb4ac3cf3fbbee3a7823a486ad4c22508f9520d21393877b",
+        "size": 21670
+      },
+      "woof/metal/shaders/lbc_time.metal": {
+        "sha256": "0fb965af3956a1a6bb7602ca3f6fa3b85c9a6082fb5c4ccce39ca7047ec4de8c",
+        "size": 706
+      },
+      "woof/metal/shaders/milbrandt2_family.metal": {
+        "sha256": "b14da08bed7c2df9b4540ff7afe614278c76e81d1f263217f4fbb2b0ff1f65d1",
+        "size": 84750
+      },
+      "woof/metal/shaders/milbrandt2_fields.metal": {
+        "sha256": "0d734fd42dd72c695c14495033374eb4c5752ae23642c971d8b194d3a36c5b8d",
+        "size": 2472
+      },
+      "woof/metal/shaders/milbrandt2_zet.metal": {
+        "sha256": "9f578220676bd075e9c392f3b2ddc607a89c805ecc2368fa78a0b86e732c8009",
+        "size": 1783
+      },
+      "woof/metal/shaders/moist_pd.metal": {
+        "sha256": "e72a91381557c57daf6290cd53b98a51341a86b273e2e295e7d01bc029e8f247",
+        "size": 12237
+      },
+      "woof/metal/shaders/moist_pd_source_fold.metal": {
+        "sha256": "3149437c3ff11e13e09dfd9752d9cc456d30bcb98e3793c3995f0ec8e665a593",
+        "size": 1100
+      },
+      "woof/metal/shaders/moist_scalar_update.metal": {
+        "sha256": "4ae1bdd5d4c2274818fc223183c1548a21e91708780d7873306da89877fd5542",
+        "size": 2110
+      },
+      "woof/metal/shaders/morrison_family.metal": {
+        "sha256": "026c3d3eb8384a3a570d43364fdb5d8a2e7a4bd2e634b494950dedc207a928f8",
+        "size": 58718
+      },
+      "woof/metal/shaders/morrison_refl.metal": {
+        "sha256": "1d3d79c4ca993ff832872ddb8bc6dca773b97df1c21e7df8c0dbad03dea49b1a",
+        "size": 14671
+      },
+      "woof/metal/shaders/mp_zero_out_fragment.metal": {
+        "sha256": "5117f9bc541dc8c9e4662f1977898e930dcf8921fa8fbf0405d5a48227dd5ff4",
+        "size": 1222
+      },
+      "woof/metal/shaders/myjpbl_family.metal": {
+        "sha256": "1535df06aaf63e05a5c882254ab21553b1a34a4bdda30d5c4b3abbb487884eb0",
+        "size": 24443
+      },
+      "woof/metal/shaders/myjsfc_family.metal": {
+        "sha256": "ce246d2fd8618d1efe636390f1c8fa063e99b7a135f0ad00a0bf1121e7fef983",
+        "size": 19986
+      },
+      "woof/metal/shaders/mynn_pbl_family.metal": {
+        "sha256": "6f1dabe7f5030e519657317f37660d8f8e3991c4d913c5f54e42b1922cbd3f7c",
+        "size": 178877
+      },
+      "woof/metal/shaders/mynn_surface_family.metal": {
+        "sha256": "7acfcd0f45ec9cf31f0263d2dcdbf5b13727134c9423802dfb4b586a12587f2d",
+        "size": 27833
+      },
+      "woof/metal/shaders/nest_family.metal": {
+        "sha256": "e332b07ccb888e9f1534ac9c4753978be9e4bfc5aea2029c8e529a31fcf45287",
+        "size": 10959
+      },
+      "woof/metal/shaders/nest_interp_fragment.metal": {
+        "sha256": "bab41ec9ce222b297fb2bebbc55ae32bfbee4c248c7960cc894bcf19ac43bc18",
+        "size": 4933
+      },
+      "woof/metal/shaders/nest_stream_transfer_fragment.metal": {
+        "sha256": "9c1119a23dbc0ff2cb03716e8b0e05bdf7e42d83e2da9ec2af1ef48694826c71",
+        "size": 1589
+      },
+      "woof/metal/shaders/noah_family.metal": {
+        "sha256": "6551cd4c8dca0c6950a2db29323d95a281830f451e15486a6041d2cc234a7285",
+        "size": 66459
+      },
+      "woof/metal/shaders/noah_forcing_family.metal": {
+        "sha256": "867591b94a3bf61fc932609ad6c1e54cc38e93c195b347ad3fdf171621e254b3",
+        "size": 1905
+      },
+      "woof/metal/shaders/noah_mosaic_family.metal": {
+        "sha256": "5da5364203813318bcbdb616a716515bc1f407d3bcc967879d6dae88a2b9d80a",
+        "size": 100100
+      },
+      "woof/metal/shaders/noah_sfcdiags_family.metal": {
+        "sha256": "8ec5752cb5d95f95fcc6da64c9d9fc209f27da0fce1879cb5d087aae8c19c176",
+        "size": 1717
+      },
+      "woof/metal/shaders/noahmp_bareflux_family.metal": {
+        "sha256": "c9d591a026acb9b4b1ba8b8203ed10b3a208c86f2b0919ce431cd27ce498d10f",
+        "size": 5907
+      },
+      "woof/metal/shaders/noahmp_driver_family.metal": {
+        "sha256": "6ed0537a5b301a79ebb609c63baa83b13c647d5ece5e990df817d7679be60edd",
+        "size": 12187
+      },
+      "woof/metal/shaders/noahmp_fluxprep_family.metal": {
+        "sha256": "939b7f346f8b6b7cf487342364f59d983560502bd0b560bbcff78602e8261cbf",
+        "size": 380
+      },
+      "woof/metal/shaders/noahmp_glacier_family.metal": {
+        "sha256": "1ba7de6cf615e3be64677110a5f540cf436a285191e35352ce8f6aa08fa0159d",
+        "size": 70789
+      },
+      "woof/metal/shaders/noahmp_leaves_family.metal": {
+        "sha256": "b00903dd29a23810725048989a10364ea91a4cca30c2b3bdcf9cf14ad3298d5f",
+        "size": 5084
+      },
+      "woof/metal/shaders/noahmp_radiation_family.metal": {
+        "sha256": "4993151baff775e9e601a23d65b016a0d88c7b956668013a9b83c97e33f13362",
+        "size": 16022
+      },
+      "woof/metal/shaders/noahmp_sflx_family.metal": {
+        "sha256": "195864cd3dbd9c8110b93f1e85320a4960c94f8e0f5e8d7cb2e92c1d95ad3d2d",
+        "size": 7577
+      },
+      "woof/metal/shaders/noahmp_thermal_family.metal": {
+        "sha256": "d74e759f21d3e029527ae84f6c97168d3d58ccd7f18a459f75dc594a94b52dca",
+        "size": 16005
+      },
+      "woof/metal/shaders/noahmp_vegeflux_family.metal": {
+        "sha256": "af7ecdbe6be666d92ca2c6e517d053521713f5abc7d83a159d58ac8ac1ba616c",
+        "size": 10814
+      },
+      "woof/metal/shaders/noahmp_vegprecip_family.metal": {
+        "sha256": "e68f7b2d56bc4495dc3520d31e7f47cc7571c489f0e435054c44e483b13a0e4a",
+        "size": 6070
+      },
+      "woof/metal/shaders/noahmp_water_family.metal": {
+        "sha256": "66b37a1a2dd2938b15379182dc097857050e53fdf0be4dc7c0531471298db744",
+        "size": 41917
+      },
+      "woof/metal/shaders/nssl2_diagnostics.metal": {
+        "sha256": "9adc13ecd2d150db95526d5f52710ae024a0d473dafae2c715ea1c520f5eb65c",
+        "size": 9005
+      },
+      "woof/metal/shaders/nssl2_driver_transport.metal": {
+        "sha256": "7b8b72afb40ba00fc5b72c3f9f124f93d4c66a897d6782f3432a2b91edc0320d",
+        "size": 10923
+      },
+      "woof/metal/shaders/nssl2_fused_gs_family.metal": {
+        "sha256": "e44fee561a37f37673dfb970cbf2bb552bb9ec4ea000f3825cb5a1c6447ee9fc",
+        "size": 136116
+      },
+      "woof/metal/shaders/nssl2_nucond.metal": {
+        "sha256": "cf2dfd5089a6fa1cb72ed3add99ae45efb9228c243c6cbf352ff0cc9c8740c6f",
+        "size": 27520
+      },
+      "woof/metal/shaders/nssl2_runtime.metal": {
+        "sha256": "8493ca32b5e6e1ee9328de550ae3479ef1fd10f4c06d73d8aa968e63fc25300d",
+        "size": 1860
+      },
+      "woof/metal/shaders/nssl2_sedimentation.metal": {
+        "sha256": "3978ff4606512e2da623a33bd0fa026b976b1110c2a97705d3238737c6934be8",
+        "size": 34194
+      },
+      "woof/metal/shaders/nssl2_soft64.metalh": {
+        "sha256": "5af32af8659ae0a0642ff89c17a52e139fef496c4e16b4f9f1dcb1e950a1a286",
+        "size": 5388
+      },
+      "woof/metal/shaders/ntiedtke_family.metal": {
+        "sha256": "fcb9a87ae259bad7b6773f5c872cb69c51ac5fbb05e3d871e5f02f6354d671b5",
+        "size": 131793
+      },
+      "woof/metal/shaders/openbc_radiative.metal": {
+        "sha256": "565dee628cd20356f4b739419ec62996f41c2ccf7e4834ed0e84dd03104fc097",
+        "size": 8948
+      },
+      "woof/metal/shaders/p3_constants.metalh": {
+        "sha256": "e9a80f436e243c0cc505bd347216b644148c657850b9fea6c26d51e28f702a3f",
+        "size": 3028
+      },
+      "woof/metal/shaders/p3_entry.metal": {
+        "sha256": "4f1a4bb141d4355a92eb6af407805fb3e0a35c6ddcfdab4caebdabf7f12705af",
+        "size": 1848
+      },
+      "woof/metal/shaders/p3_final.metal": {
+        "sha256": "ade4b36dfc22f45b666097693c8c6b61f4fbfc72420616ba26964f9d17ba708a",
+        "size": 8668
+      },
+      "woof/metal/shaders/p3_homofreeze.metal": {
+        "sha256": "1965ef555abb61fe029d185d44fb4ca3d057e153b8b053b6052f556bee4fa3cf",
+        "size": 2172
+      },
+      "woof/metal/shaders/p3_kloop1.metal": {
+        "sha256": "3bc59a8aa85e351b6bb17712bb27e43d59614782fc0bbdb56c1788f4171e7e34",
+        "size": 5635
+      },
+      "woof/metal/shaders/p3_kloopmain.metal": {
+        "sha256": "76d06a1851780d9352801574bc20b254cceb3bf61249412e5d4d66491f00496b",
+        "size": 54263
+      },
+      "woof/metal/shaders/p3_math.metalh": {
+        "sha256": "e3661e3ed9d49f10ca8c0015f8813b97577320a19db0e84fd247d89b8b7cec0e",
+        "size": 1525
+      },
+      "woof/metal/shaders/p3_reference_pow.metalh": {
+        "sha256": "fb6bbcc390fe754911e56b06c2a96f192bddee3244924f2d9015f51fdabeca5b",
+        "size": 11878
+      },
+      "woof/metal/shaders/p3_saveold_precip.metal": {
+        "sha256": "1f7c5d3c22d219fae5059d1abcde47861874b580ffa8cecf7dbece5d22d48a4d",
+        "size": 1147
+      },
+      "woof/metal/shaders/p3_sed_cloud.metal": {
+        "sha256": "24f1252425803e8d4dd7cc4d7a2f6a49e90d1d019e6d855152bb4b74393f4508",
+        "size": 4777
+      },
+      "woof/metal/shaders/p3_sed_ice.metal": {
+        "sha256": "5de4dacd280d6567e1f805fcc6bafda3625bfd90db28ee4325987e9c25fe00b1",
+        "size": 7149
+      },
+      "woof/metal/shaders/p3_sed_rain.metal": {
+        "sha256": "a8e236864e6cb1ed84ba597b8ecea3150396b9ba6635622abc9d54438b77545a",
+        "size": 5312
+      },
+      "woof/metal/shaders/physics_atmosphere_prepare.metal": {
+        "sha256": "d462aa7ce811b8847c4d2acc03db5cf9e17fe37e50c923e11eb5b988890746c7",
+        "size": 4082
+      },
+      "woof/metal/shaders/pressure_power.metalh": {
+        "sha256": "ab81f9f9b778f9fc4e60bf7014d2fc2a9eccdb0db970c44d18842b916a791765",
+        "size": 913
+      },
+      "woof/metal/shaders/rayleigh_family.metal": {
+        "sha256": "b92ca03a25bdf73faecb85d166c538e2d434468a411ec3281fc06ae9f54eac1a",
+        "size": 506
+      },
+      "woof/metal/shaders/real_total_geopotential.metal": {
+        "sha256": "5c62adf5b9fb8ee2f4c48cdb906be156c45c00b4488a4a306e5e73550d62a89b",
+        "size": 679
+      },
+      "woof/metal/shaders/refl_family.metal": {
+        "sha256": "ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026",
+        "size": 3956
+      },
+      "woof/metal/shaders/rk_bookkeeping.metal": {
+        "sha256": "abf1b8b89f38ae69242d25816e65a9692f5c648d252807cfb24035b7e370f33a",
+        "size": 2902
+      },
+      "woof/metal/shaders/rk_total_theta.metal": {
+        "sha256": "8cf8dede09d109f508bc68e7d8c58b8077ca20a2b125f4cc5304833340a3008d",
+        "size": 883
+      },
+      "woof/metal/shaders/rrtm_lw_family.metal": {
+        "sha256": "daec8f63c8937ff61e6ce15be0c5b2e002fd1a6017b37c133fb15808f1dddb67",
+        "size": 48618
+      },
+      "woof/metal/shaders/rrtmg_aer3_sw_optics.metal": {
+        "sha256": "53aa058d6430231b0dad1170f3e2c9dd49c972e3212f8a46ea4ae88d10b3d224",
+        "size": 8773
+      },
+      "woof/metal/shaders/rrtmg_legacy_lw_family.metal": {
+        "sha256": "7b5a12e1905e86453846e119fc309f18777f36b336f42bb83d929e970fd3e806",
+        "size": 106789
+      },
+      "woof/metal/shaders/rrtmg_legacy_sw_bodies.metalh": {
+        "sha256": "9f78bcc56fbd6297ee976bf21df8ed1773e07bfec44790ba091fff448812e620",
+        "size": 58624
+      },
+      "woof/metal/shaders/rrtmg_legacy_sw_family.metal": {
+        "sha256": "a46901550493d83109656e7cffd31505c6060aa9583f6ffb1add7a5b5cff3033",
+        "size": 15275
+      },
+      "woof/metal/shaders/rrtmg_legacy_sw_tables.metalh": {
+        "sha256": "cde1f67c0b6e91375172b4d3e0680c59a821a335e1b80a5e0fba9c85854dceef",
+        "size": 4084
+      },
+      "woof/metal/shaders/rrtmgp_cloud_family.metal": {
+        "sha256": "763549edb11ed5eb0174a711c4476ac19ca9ea4dac6d8ff0720bd7e4717a9d75",
+        "size": 9822
+      },
+      "woof/metal/shaders/rrtmgp_cloud_prep_family.metal": {
+        "sha256": "d6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc",
+        "size": 16712
+      },
+      "woof/metal/shaders/rrtmgp_gas_family.metal": {
+        "sha256": "cf8c538d8ffcbdd4baedb853686573965879fa901525e6ff5e6adaddb2b8e1c6",
+        "size": 20006
+      },
+      "woof/metal/shaders/rrtmgp_mcica_family.metal": {
+        "sha256": "98300629e594becc7680df5edeed7d2b8d81679671b8cadfc24e4588c39e247a",
+        "size": 6375
+      },
+      "woof/metal/shaders/rrtmgp_prepare_family.metal": {
+        "sha256": "f041a7729341e5ac7a424a523caf5231b32ec511506fa78af03585fdba3a1448",
+        "size": 12422
+      },
+      "woof/metal/shaders/rrtmgp_rte_family.metal": {
+        "sha256": "9834a9279101baae4d56682056e5cb545560c9d412525812d8e50da496045479",
+        "size": 19681
+      },
+      "woof/metal/shaders/ruc_driver_family.metal": {
+        "sha256": "ba3ff95e87e7a51640254cd8a74fa91440f675b4b66244687c2fb6c13c927c71",
+        "size": 72130
+      },
+      "woof/metal/shaders/ruc_family.metal": {
+        "sha256": "0e072ac3ef5acc7dcea3dffc7cc84aaabecc4ebd4c07c3b35898f062d4013ac5",
+        "size": 2982
+      },
+      "woof/metal/shaders/ruc_sfclay_seaice.metal": {
+        "sha256": "0b0deead47cba680679e86c143cb234cedfa131090b644f12638f1b3cd0ad534",
+        "size": 3498
+      },
+      "woof/metal/shaders/ruc_sfctmp_family.metal": {
+        "sha256": "fc75c834059c789a9b2f7098e68492bad8443acfe05c5c4adabe2a7f0fcb5410",
+        "size": 282081
+      },
+      "woof/metal/shaders/ruc_sfctmp_helpers.metalh": {
+        "sha256": "43d66a583cb196f649b21b475cf79982c088967e628ec5105c118ba3b725738e",
+        "size": 166014
+      },
+      "woof/metal/shaders/sase_family.metal": {
+        "sha256": "132f4e7691095bd741a839687b6044efb2a91f8ef751bdf1e7dbd3fe9dd74812",
+        "size": 82422
+      },
+      "woof/metal/shaders/sfclay_family.metal": {
+        "sha256": "022ef564dbc143561548b03db94f604942608f2e59796ff7e6ee6c4f6d6f01b3",
+        "size": 22401
+      },
+      "woof/metal/shaders/shinhong_column.metal": {
+        "sha256": "8201f5c615937a873a5178b907edfd2b53d12fac4111553721c7d95ef01fc137",
+        "size": 67434
+      },
+      "woof/metal/shaders/slow_buoyancy.metal": {
+        "sha256": "c1394d3e94ad21b3e0b3a586fa91058b20ce808d9b7dd9b206bab8f1e8c43da3",
+        "size": 4547
+      },
+      "woof/metal/shaders/slow_geopotential.metal": {
+        "sha256": "0356e5b77dd859ebe0debf71129cf0ba898ba02a113299ad04d9370f35d2e110",
+        "size": 10541
+      },
+      "woof/metal/shaders/slow_pgf.metal": {
+        "sha256": "f6177d18c21e15dde62b5ca117a1beef41f4be5cc93d1db504b85ab434927109",
+        "size": 8564
+      },
+      "woof/metal/shaders/smag2d_alternates_fragment.metal": {
+        "sha256": "25adb684f0b051c9b78d848a856f5929600a58885e68bd7537621823adf4dfc3",
+        "size": 4159
+      },
+      "woof/metal/shaders/smag2d_family.metal": {
+        "sha256": "357a6d9a1bc9d4128efa9744e5c47497565bea0bb8e0a3347d732439cb710b25",
+        "size": 65298
+      },
+      "woof/metal/shaders/small_step.metal": {
+        "sha256": "db762299ed031d187ab06ac714fd536a12ba9d6b8e761dd22e46fe884c147df2",
+        "size": 7367
+      },
+      "woof/metal/shaders/soft_binary32.metalh": {
+        "sha256": "2094726a6b2a341ea0d51fcc5738c642224303e0e0b13f76ea96622659875961",
+        "size": 13291
+      },
+      "woof/metal/shaders/soft_binary64.metalh": {
+        "sha256": "9dd9167a730d5d001688e39a49fc07f2935e29c0b43ee8894c9855a9072dd5cf",
+        "size": 26832
+      },
+      "woof/metal/shaders/soft_gfk_atan.metalh": {
+        "sha256": "18cbcc5a8346b92ba33d65a59b31d5c0267c22f1c1b0334d8278c10d729e347f",
+        "size": 3917
+      },
+      "woof/metal/shaders/soft_gfk_exp.metalh": {
+        "sha256": "5f35a2dc62a07ea3962d53b24ee16fa04af3afd25d4da18cdc7f25ed58024b8b",
+        "size": 3834
+      },
+      "woof/metal/shaders/soft_gfk_log.metalh": {
+        "sha256": "ba143b8b0cbe3a28cfe6d1f017e3b6c2550e791453898dbc5c0c65e2e07893f3",
+        "size": 5448
+      },
+      "woof/metal/shaders/soft_gfk_pow.metalh": {
+        "sha256": "7d3b9e97ecef445bfa4f6982b5ccb33b4b97ce458f7d940d0a4ecf65a3027d33",
+        "size": 6365
+      },
+      "woof/metal/shaders/soft_gfk_tgamma.metalh": {
+        "sha256": "6e861c90f952246b3fb9efcd6563870b381d829f7764fbd15e68a7e4632428e0",
+        "size": 6628
+      },
+      "woof/metal/shaders/soft_libm64.metalh": {
+        "sha256": "db5e290399d258708d831f17ee529d451a3966735732e20b364e603b0a52f3f9",
+        "size": 15469
+      },
+      "woof/metal/shaders/solar_albedo_fragment.metal": {
+        "sha256": "426dfe302beb52178ce92b887049716c659a27d928d7eef81ca852e031f2feb6",
+        "size": 1991
+      },
+      "woof/metal/shaders/spec_zone_ring.metal": {
+        "sha256": "78034c2508afa5ef0a43aefdc5db7b9684391172bccefdced64d6b3966fd48aa",
+        "size": 904
+      },
+      "woof/metal/shaders/spectral_scalar.metal": {
+        "sha256": "aee065ab61a13abecae4388a3fc3767921c95b354aa7f1af9fa07b501e33f1d0",
+        "size": 6711
+      },
+      "woof/metal/shaders/stage_mass_fluxes.metal": {
+        "sha256": "85e94f691a6bc739d7a652bad07f9b500a1c6e2be4d6da945c0d67bf684ef3fd",
+        "size": 6134
+      },
+      "woof/metal/shaders/surface_diagnostics_seed.metal": {
+        "sha256": "8bda7097d4a96372fb579cd9ed096b49e6cef4faa3f84cfca133ca6cf5bc9cdd",
+        "size": 732
+      },
+      "woof/metal/shaders/surface_humidity.metal": {
+        "sha256": "ce66d1ecb0321967f92c18aa52ec36162d090dc60efb04433d96489e3cecab24",
+        "size": 809
+      },
+      "woof/metal/shaders/surface_w.metal": {
+        "sha256": "65a007a9b24ab06544a73dec0454f4ad88fc703a8a95104b1c7162fcee71c133",
+        "size": 1936
+      },
+      "woof/metal/shaders/swint_fragment.metal": {
+        "sha256": "1c45823f43788db3648de360475dd281f2faa2dc5e40954fdbd21b726a5d64fe",
+        "size": 4502
+      },
+      "woof/metal/shaders/tendency_coupling.metal": {
+        "sha256": "a8b2876d9bff19b19de96b194701844b937e5eab01819114c101aa2d0c743a5e",
+        "size": 5456
+      },
+      "woof/metal/shaders/terrain_drag_family.metal": {
+        "sha256": "232455d2b3ee102f594ab59de0d7a72b5e5b59fe575440244850797871cbf346",
+        "size": 34569
+      },
+      "woof/metal/shaders/thompson_aerosol_cold_family.metal": {
+        "sha256": "f621544f97b2393f4bbebe459a77a92ee4e8b697240d238380848b1691e467c7",
+        "size": 111956
+      },
+      "woof/metal/shaders/thompson_aerosol_common.metalh": {
+        "sha256": "a000e4588ad348dc47f160a0d2a747f39a6024d5a3f86f1e189d1e957740da4d",
+        "size": 6702
+      },
+      "woof/metal/shaders/thompson_aerosol_sat_family.metal": {
+        "sha256": "8c607d01264c08cb11e510d7a3dd8866037a4f0669e17cfe47606226994035fa",
+        "size": 23628
+      },
+      "woof/metal/shaders/thompson_aerosol_sed_family.metal": {
+        "sha256": "c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa",
+        "size": 22065
+      },
+      "woof/metal/shaders/thompson_aerosol_state_family.metal": {
+        "sha256": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+        "size": 38693
+      },
+      "woof/metal/shaders/thompson_aerosol_warm_family.metal": {
+        "sha256": "254468a343d74a2dd6606e1ff683e4fb10647e2fd616c1d45763445c071ca4cb",
+        "size": 55515
+      },
+      "woof/metal/shaders/thompson_aerosol_wrf39_sed_family.metal": {
+        "sha256": "7439bcb596756ad003ea096dc0068f0018ad2d1cf757e043ca43d1ef0d0dfffc",
+        "size": 14976
+      },
+      "woof/metal/shaders/thompson_cloud_sedimentation.metal": {
+        "sha256": "96c204bfa008caf0e80fea58d9094f4b21b23a5941d9e4d3f6cf353674c6d22b",
+        "size": 5149
+      },
+      "woof/metal/shaders/thompson_cold_start_family.metal": {
+        "sha256": "e58ac58039f95a419815d13c81d5e383427a5737ed99030cedab5245f1a326fd",
+        "size": 2461
+      },
+      "woof/metal/shaders/thompson_cold_start_numbers.metal": {
+        "sha256": "52038f52440aa9b02cd64663536a6114fb79b71f65401a5deb333385abac2db5",
+        "size": 11281
+      },
+      "woof/metal/shaders/thompson_cold_start_surface.metal": {
+        "sha256": "e193401cd87b44a940acda968206b899e078a342c234f42e5dff16e9f1138da2",
+        "size": 1544
+      },
+      "woof/metal/shaders/thompson_effective_radius.metal": {
+        "sha256": "0cfbff53b13240ff1627ef04f70df11d13430569e83c1cb3af559c32eaee3b0e",
+        "size": 3545
+      },
+      "woof/metal/shaders/thompson_family.metal": {
+        "sha256": "b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119",
+        "size": 19824
+      },
+      "woof/metal/shaders/thompson_final_phase_cleanup.metal": {
+        "sha256": "1da9c57441c137117863230945836d550d9caee348d7ea6b2a2149e2b6ebd548",
+        "size": 4524
+      },
+      "woof/metal/shaders/thompson_frozen_vapor_network.metal": {
+        "sha256": "9c7b3420bff1ce618d79ac21c7cb27d4e66f6ab01abd43e641893a79f0cdcd24",
+        "size": 28577
+      },
+      "woof/metal/shaders/thompson_graupel_sedimentation.metal": {
+        "sha256": "cab554907f60d12776a52242a1685950902241b630d42286d9f4eaaed7ee8f4b",
+        "size": 8348
+      },
+      "woof/metal/shaders/thompson_ice_sedimentation.metal": {
+        "sha256": "e5622828542ad32ffc77aa254b0b7d1dc037c4c4e555415e80ca30b737e8f8fc",
+        "size": 12094
+      },
+      "woof/metal/shaders/thompson_rain_evaporation.metal": {
+        "sha256": "b0db08606d30eb8d2c73dcfbb4c2ae051c1b31da1dd1081403d05817544c374f",
+        "size": 6825
+      },
+      "woof/metal/shaders/thompson_rain_sedimentation.metal": {
+        "sha256": "3ee7c675ed5bd46fe2eeefea3f8a2a062c1b3ed44be3d198c2d6fdd47b9f51cf",
+        "size": 7565
+      },
+      "woof/metal/shaders/thompson_reflectivity.metal": {
+        "sha256": "0ba056fa7053c86bd3065558f03269d816b4927c24c45a2467ed595791215625",
+        "size": 14779
+      },
+      "woof/metal/shaders/thompson_snow_sedimentation.metal": {
+        "sha256": "1d9890532c9eec16411eaeb602f405fc4988696eab0c7c00d0201a0efa6f757b",
+        "size": 9185
+      },
+      "woof/metal/shaders/thompson_warm_frozen_source.metal": {
+        "sha256": "081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7",
+        "size": 87570
+      },
+      "woof/metal/shaders/tke_budget_family.metal": {
+        "sha256": "adb8da0b0c83b40131feb56f6ab270e5617f71b1a48e37fe6be20be5c1250989",
+        "size": 483
+      },
+      "woof/metal/shaders/topo_radiation_family.metal": {
+        "sha256": "69e0e64fc6fa8a6a8dbc19fa14ef3feb638ff3317e0688c1e2f68635ab57aea6",
+        "size": 8249
+      },
+      "woof/metal/shaders/uh_diag_family.metal": {
+        "sha256": "8d7b82d0f214f5c02ac3d4d721158ff360d9e64e3da428c981762839f1e86365",
+        "size": 7379
+      },
+      "woof/metal/shaders/uh_smooth_max.metal": {
+        "sha256": "fc683a62eb79aff3d01d4155efc5cef089a827d76b6c1cd3b0a1c6b85c29daa1",
+        "size": 1507
+      },
+      "woof/metal/shaders/urban_bem_atmosphere_gather_fragment.metal": {
+        "sha256": "2a5f55b5359d65834f8544baf32e77f80ad17333395377eee8da4e167a176814",
+        "size": 2683
+      },
+      "woof/metal/shaders/urban_bem_atmosphere_interp_fragment.metal": {
+        "sha256": "25f4d5206299ffed9081acbc6d01c5e88c2b221d28640eaa4280eb35ea963e1c",
+        "size": 4200
+      },
+      "woof/metal/shaders/urban_bem_building_level_scan_fragment.metal": {
+        "sha256": "1ccfb1b7beb338572da84627d00c41ccc69e66a00343648e07730f6a6ac531ca",
+        "size": 2081
+      },
+      "woof/metal/shaders/urban_bem_buildings_tendency_fragment.metal": {
+        "sha256": "96be2f72219d195fd2995830ab938e8325675e3fbffb29570c75125809f35d99",
+        "size": 6795
+      },
+      "woof/metal/shaders/urban_bem_consump_total_fragment.metal": {
+        "sha256": "95dea68a069f22e681ce122b199c4a852cb730d1808baba823a59dd78c795b7c",
+        "size": 1924
+      },
+      "woof/metal/shaders/urban_bem_final_output_fragment.metal": {
+        "sha256": "fd89d2aaad43db9d4815d0dcd5c3f93ed7f930d647aeb7384cbf30851ed18bb9",
+        "size": 3599
+      },
+      "woof/metal/shaders/urban_bem_flat_flux_fragment.metal": {
+        "sha256": "60129c43ec0f34261952f4d1151e5dfe402c645ca4e35dcace627349a9df1ab8",
+        "size": 6115
+      },
+      "woof/metal/shaders/urban_bem_flat_flux_pack_fragment.metal": {
+        "sha256": "6098656e67646479b941c2846da31da6428033f5b198bdb5778f3dd81c3c2a89",
+        "size": 1695
+      },
+      "woof/metal/shaders/urban_bem_height_init_fragment.metal": {
+        "sha256": "a0873a03cea5516014eb4e8ae34597b029c518b0ebe7096d3be8c287245d3afb",
+        "size": 3018
+      },
+      "woof/metal/shaders/urban_bem_icbep_xy_fragment.metal": {
+        "sha256": "88f7a92e61bfef1d3a9eb0e062be47431632d3273f04ef5cf104c9cf369a10dc",
+        "size": 9337
+      },
+      "woof/metal/shaders/urban_bem_indoor_fluxes_fragment.metal": {
+        "sha256": "9d65e06cbfb6f99a4f2ed4ec3cdd8852f1204dc4b121b7ec43b24de8d23c396c",
+        "size": 5479
+      },
+      "woof/metal/shaders/urban_bem_indoor_radiation_fragment.metal": {
+        "sha256": "c850ce046afa59b62e7bf267474bda15490bd8bd6253626df62c5f7b092cccb5",
+        "size": 16656
+      },
+      "woof/metal/shaders/urban_bem_indoor_state_update_fragment.metal": {
+        "sha256": "95da7d51284931c17be5d12b699cb561eea243d8c83beaa2e3f05b18c60f27fb",
+        "size": 2425
+      },
+      "woof/metal/shaders/urban_bem_interior_flux_fragment.metal": {
+        "sha256": "20acfe73834edd8a1ca67ef484d90db8283f1850a12d6ee926035b2baff2a027",
+        "size": 3723
+      },
+      "woof/metal/shaders/urban_bem_interior_radiation_fragment.metal": {
+        "sha256": "a22da7d90bbbd838d7eb5c8efb2b109ad0905ac3a0c9d8f7d08feb0229ed495f",
+        "size": 17733
+      },
+      "woof/metal/shaders/urban_bem_interp_length_fragment.metal": {
+        "sha256": "748c3f773928fddb6054e4f43372c9e4524ff886f0c2d31246395e0a37926e8a",
+        "size": 3262
+      },
+      "woof/metal/shaders/urban_bem_longwave_fragment.metal": {
+        "sha256": "bb33b9b1903acbb6fba3b125946fa340d6a5edf5620038c2765851e1511942aa",
+        "size": 8555
+      },
+      "woof/metal/shaders/urban_bem_material_solve_fragment.metal": {
+        "sha256": "b281f03e4f486aa3a004af6c91d80a7eeb22005b8f85033ee0738de75cc8f4a2",
+        "size": 7367
+      },
+      "woof/metal/shaders/urban_bem_material_solve_green_roof_fragment.metal": {
+        "sha256": "a90179ea1982c530205d77efa7045c79c9b9ac94da33dbadc2d2f0bb8d5c5151",
+        "size": 14606
+      },
+      "woof/metal/shaders/urban_bem_occupancy_fragment.metal": {
+        "sha256": "f0f67c2d98f74489bbc925ba48eebb837369b1894cec049cfc3c5d398b653989",
+        "size": 2186
+      },
+      "woof/metal/shaders/urban_bem_occupancy_inputs_fragment.metal": {
+        "sha256": "13e7d38d5ba89f922f5d0cd0b4070b0f920e964a5f12955adf8d0ba0a124f058",
+        "size": 2153
+      },
+      "woof/metal/shaders/urban_bem_param_fragment.metal": {
+        "sha256": "aff6ac3368421b865a4d0302bb072fe74093338a5b34a9f85a60d52df09125cd",
+        "size": 9379
+      },
+      "woof/metal/shaders/urban_bem_profile_init_fragment.metal": {
+        "sha256": "4dbebef557770d57bcb0e7633ed892a7bb4a16e7acc069d392acd1d43db06264",
+        "size": 2748
+      },
+      "woof/metal/shaders/urban_bem_rain_update_fragment.metal": {
+        "sha256": "e91b928a0670348aeca97fe7edfa76c1297eeef62bbba987b991cf9925a058e9",
+        "size": 2012
+      },
+      "woof/metal/shaders/urban_bem_roof_radiation_fragment.metal": {
+        "sha256": "dba59841578701088a16764f43610f41773320f9118983156b66fc582528d194",
+        "size": 3222
+      },
+      "woof/metal/shaders/urban_bem_room_balance_inputs_fragment.metal": {
+        "sha256": "edb15d69414e46a5abe8ba7c152f0acb077d4201c46df0d4208244a215f41d63",
+        "size": 4801
+      },
+      "woof/metal/shaders/urban_bem_room_control_fragment.metal": {
+        "sha256": "3e31a99d8e71c661f1f798036351843273c0305b12e7101d25bf4231a17c0fdc",
+        "size": 5986
+      },
+      "woof/metal/shaders/urban_bem_shadow_mas_fragment.metal": {
+        "sha256": "8b27a76d73b482e56879a0eb1eea3fb9aeaad02bf7f48df96b4bb727586ad9cb",
+        "size": 6796
+      },
+      "woof/metal/shaders/urban_bem_shortwave_fragment.metal": {
+        "sha256": "08ba60cc4824c5583278b3e75889b18843e4dc93c73508dd2818fb38c5e83983",
+        "size": 5877
+      },
+      "woof/metal/shaders/urban_bem_surface_temp_fragment.metal": {
+        "sha256": "85339991ac613cafd01f15bd5a0c033d7e69d8a113e09854e2905ed2ac8f95de",
+        "size": 4638
+      },
+      "woof/metal/shaders/urban_bem_temperature_average_fragment.metal": {
+        "sha256": "c6891cf8360c369e5ff3adba852d97d6e07d5367af86a6d777cc1651c79d1463",
+        "size": 4045
+      },
+      "woof/metal/shaders/urban_bem_temperature_profile_average_fragment.metal": {
+        "sha256": "e1cf970834ebf9f7680cd48ad82cfd692bfbd3fad2462afb3a1bfcb6bbed4840",
+        "size": 3149
+      },
+      "woof/metal/shaders/urban_bem_urban_meso_fragment.metal": {
+        "sha256": "eb67ad38c90246b6f403c94a31ba34b3badda799dcf0c7234a383c63c075882e",
+        "size": 9199
+      },
+      "woof/metal/shaders/urban_bem_view_factors_fragment.metal": {
+        "sha256": "1e64b5ac093e80fa619852ae3787360b39d0c1fa6cf6acec4e1f566b84ec1df5",
+        "size": 7887
+      },
+      "woof/metal/shaders/urban_bem_view_inputs_fragment.metal": {
+        "sha256": "c3f7fa88fec02d51643f8f7ad3172ff6ca18fc05b7bd8b97ba0c7a74950d73d8",
+        "size": 1258
+      },
+      "woof/metal/shaders/urban_bem_wall_flux_fragment.metal": {
+        "sha256": "979d9dd9ba7265370335297d140ea6cb4ba6131896a885677a82caa65000a791",
+        "size": 4915
+      },
+      "woof/metal/shaders/urban_bep_bem_albedo_fragment.metal": {
+        "sha256": "84ed4e69305c14749de6d99e9f5b82226939ae50110cb93d2b34223a529e6e54",
+        "size": 3196
+      },
+      "woof/metal/shaders/urban_bep_bem_class_init_fragment.metal": {
+        "sha256": "748b7749d1f88d18a9e8c7a91697891486d16cf22cb8be8a2468c2171792e09d",
+        "size": 3099
+      },
+      "woof/metal/shaders/urban_bep_bem_class_profile_pack_fragment.metal": {
+        "sha256": "ed526808426f584d574e3dcd21d29df56e445a2787dc070f474a10bc2f5d6d1d",
+        "size": 894
+      },
+      "woof/metal/shaders/urban_bep_bem_family.metal": {
+        "sha256": "c4764e6ebe5d1c386effd33aaa7305286481f5f7d6eb4c90dde612095c912097",
+        "size": 154
+      },
+      "woof/metal/shaders/urban_bep_bem_finalize_fragment.metal": {
+        "sha256": "5dafdfdd672c37f3274fe254d98ef55ee234efb5c0eb1d3fc60f4a3b390d83d8",
+        "size": 3780
+      },
+      "woof/metal/shaders/urban_bep_bem_flat_roof_flux_fragment.metal": {
+        "sha256": "87b71ae5ecc3ec4b8bb1d2515d4d8f02f709725c6a1ee823374136e3203a8772",
+        "size": 6294
+      },
+      "woof/metal/shaders/urban_bep_bem_green_roof_fragment.metal": {
+        "sha256": "b99c831e728be91d12484c4fb4476f7f0ecef3517f8abde1af7c28c35fbd1662",
+        "size": 18960
+      },
+      "woof/metal/shaders/urban_bep_bem_hi_profile_gather_fragment.metal": {
+        "sha256": "b897eea55c130cee04bb49d5418ca13cbeb41fa0e4c4f711ef93d08907ac466f",
+        "size": 980
+      },
+      "woof/metal/shaders/urban_bep_bem_profile_select_fragment.metal": {
+        "sha256": "0fd45b896deb6bd104e1ef8ad6ebecf3c08840e8b2342c7bf962cb137c7e2767",
+        "size": 1080
+      },
+      "woof/metal/shaders/urban_bep_bem_pv_solve_fragment.metal": {
+        "sha256": "4cce37374861563d4e93f225c5b1af2f2a0c3b8c2262a71020931fad28ca0ed7",
+        "size": 6428
+      },
+      "woof/metal/shaders/urban_bep_bem_state_gather_fragment.metal": {
+        "sha256": "90a6759e0a763e695c85e31209c91cba8cba0cd340922d6e1ba766b76a481e0f",
+        "size": 9622
+      },
+      "woof/metal/shaders/urban_bep_bem_state_scatter_fragment.metal": {
+        "sha256": "ce621c2f1997d8f7e00ae50f1a5af5df064fd4aa627fde44ded705f60e768ea2",
+        "size": 7072
+      },
+      "woof/metal/shaders/urban_bep_bem_upward_rad_fragment.metal": {
+        "sha256": "8afabd8ceb44965110c2bca3dbc7f284001ff270389c51eb33cd4340966b8765",
+        "size": 9418
+      },
+      "woof/metal/shaders/urban_bep_bem_wall_fragment.metal": {
+        "sha256": "9ca61ddba8acee76b97675b414b275c1f8b533b3f7640498130df88a00435c3e",
+        "size": 4844
+      },
+      "woof/metal/shaders/urban_bep_buildings_fragment.metal": {
+        "sha256": "322eb9909dd8bf488d21790cc5e4b3700ed76c2ad543f2126b866b4b7e561270",
+        "size": 2906
+      },
+      "woof/metal/shaders/urban_bep_couple_family.metal": {
+        "sha256": "fbc58ba6f57f4245625396336759f286ebc13a02b0b8f99fa325e6866a5def18",
+        "size": 4285
+      },
+      "woof/metal/shaders/urban_bep_family.metal": {
+        "sha256": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+        "size": 53808
+      },
+      "woof/metal/shaders/urban_bep_flux_helpers_fragment.metal": {
+        "sha256": "b677a52bb472ce693e201a5362298774ddd7da8af4afed29174ac503dab0390e",
+        "size": 3649
+      },
+      "woof/metal/shaders/urban_bep_radiation_fragment.metal": {
+        "sha256": "9a122ac14914752bc07b2a59c69ac9053d07ebdbec53b69e3152d30272485a79",
+        "size": 5810
+      },
+      "woof/metal/shaders/urban_bep_radiosity_fragment.metal": {
+        "sha256": "8cc60cbd0ddd7618f30a7693a4ae75b788a95f8b98def162100a00d18b57d507",
+        "size": 10680
+      },
+      "woof/metal/shaders/urban_bep_surface_temperature_fragment.metal": {
+        "sha256": "4a7b39c759baf1b73573f6705468650baccd12eebbdf8bec95b06db7b0f1ce68",
+        "size": 9212
+      },
+      "woof/metal/shaders/urban_ucm_family.metal": {
+        "sha256": "7d8a10fac32a173437acf6ac81903ca9f510cd7a51330101a6081339d2ec1eaf",
+        "size": 2915
+      },
+      "woof/metal/shaders/urban_ucm_math_fragment.metal": {
+        "sha256": "276edb0339bd02a4393138fdbe401810126a8f1e9baffa17416e180762704180",
+        "size": 831
+      },
+      "woof/metal/shaders/urban_ucm_noahmp_after_lsm_fragment.metal": {
+        "sha256": "375fccccfa242c05ec95da25e83c25acc84d49906836210abddc8f1d15e4d82d",
+        "size": 74677
+      },
+      "woof/metal/shaders/uwpbl_family.metal": {
+        "sha256": "25d9c5f7d90b3d1ded2cf2dbe280b5e972e4c9710b2210e24c90065dd54b3a9e",
+        "size": 134488
+      },
+      "woof/metal/shaders/wdm6_family.metal": {
+        "sha256": "d57265f4582fa1acb7d471b23264ea6633bb52db169a17c96791a7272d13c5b7",
+        "size": 64376
+      },
+      "woof/metal/shaders/wdm6_reflectivity.metal": {
+        "sha256": "e959f3f02da525c448ca7b7695c37aa5bb9f9f25e85568d5b07bb147cceb9c23",
+        "size": 15913
+      },
+      "woof/metal/shaders/wrf_tke_km_fragment.metal": {
+        "sha256": "4e98e1b6d895ba74fe5241f4181342fd65573239e1efa2f608af12bb81beb624",
+        "size": 4724
+      },
+      "woof/metal/shaders/wrf_tke_rhs_fragment.metal": {
+        "sha256": "9b58e0cc9344792494dc6aa15b17816e823a44e3c49c9d50d156b313f400e1fa",
+        "size": 4592
+      },
+      "woof/metal/shaders/wrf_w_cfl_stat.metal": {
+        "sha256": "e3f2028c283aa2f5eab409c0ef19d63eb1978c90eaedfce3749e2daa93ebc520",
+        "size": 3628
+      },
+      "woof/metal/shaders/wsm6_family.metal": {
+        "sha256": "b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff",
+        "size": 33531
+      },
+      "woof/metal/shaders/ysu_column.metal": {
+        "sha256": "2737e49fb95e392b742fe2ea0c61f4abaa3c3139758aa989627f4b047e166ada",
+        "size": 29293
+      },
+      "woof/metal/shaders/ysu_family.metal": {
+        "sha256": "788252edab088a4ed140f097995a70bbad8edc366c986b2f4b477b553149dbf1",
+        "size": 10070
+      },
+      "woof/metal/signature_fragments/acoustic_boundary_frame.json": {
+        "sha256": "15f7d27714e209a7839e348bb42af0c70473c514f7090ae01a70dbc49f499559",
+        "size": 4503
+      },
+      "woof/metal/signature_fragments/acoustic_calc_cq.json": {
+        "sha256": "92d42df80ba21dd8230084b55bea3d988edd5b8ef407bb8438c522ecde5c5124",
+        "size": 1257
+      },
+      "woof/metal/signature_fragments/acoustic_emdiv.json": {
+        "sha256": "d39c4e260c5dfdefbcc04ddae0a681c77635caf2d32323be74b27a9d355158a2",
+        "size": 3729
+      },
+      "woof/metal/signature_fragments/acoustic_sumflux.json": {
+        "sha256": "0de5376a6193573010a94cadef119ece47d26d597ded439b1ca56b943701d32a",
+        "size": 3016
+      },
+      "woof/metal/signature_fragments/advection_prepare.json": {
+        "sha256": "d8fca677d229802b334a8181062efa8612aa316e424c91929c4cf1c3636b7029",
+        "size": 779
+      },
+      "woof/metal/signature_fragments/advection_vertical_order5.json": {
+        "sha256": "e718e65d0b4f05e122baf07f74d94f74b541dc71bc8783059342ad52345d68be",
+        "size": 10183
+      },
+      "woof/metal/signature_fragments/bandwidth_family.json": {
+        "sha256": "0fd39af774e35406f394651bd6f62da16ef7196ef9575a4abcda8e5198f7b1b1",
+        "size": 2724
+      },
+      "woof/metal/signature_fragments/close_periodic_alias.json": {
+        "sha256": "59d471ad9a7102108376cc81471754ac85f599bdbeff87e7949de97f8f0e5b7e",
+        "size": 729
+      },
+      "woof/metal/signature_fragments/coriolis_curvature.json": {
+        "sha256": "426b7bcd343a34012910ce0a6783735f4a138c1c31189ed51bd353abcedcc3fd",
+        "size": 1856
+      },
+      "woof/metal/signature_fragments/coupled_boundary_field.json": {
+        "sha256": "c32b1ea51a26464446eaab426e8032c99e5826bcb59935ad799c3cd0164e4ad7",
+        "size": 1616
+      },
+      "woof/metal/signature_fragments/cumulus_clock_family.json": {
+        "sha256": "b2496c6ce1217ff30a253549184b7941101cd7de85565495010d356d6ba5838e",
+        "size": 2346
+      },
+      "woof/metal/signature_fragments/da_air_density.json": {
+        "sha256": "0241e25add3b6b9bf65c2a290d0775315e3dabee3b8a68e69d8fd4a915cf4516",
+        "size": 799
+      },
+      "woof/metal/signature_fragments/da_observation_thermodynamics.json": {
+        "sha256": "444a6792a335bad915bdbc560f825e49951976d4ec0676aaa09433df003262a6",
+        "size": 1040
+      },
+      "woof/metal/signature_fragments/diff6_edge_padding.json": {
+        "sha256": "4e720b471cf29fe58beaaba951881ea6ea504d7f8658951fd5e87aed67606f7d",
+        "size": 1239
+      },
+      "woof/metal/signature_fragments/diff6_family.json": {
+        "sha256": "cf7279a32dc095872af3bd74cae9aa7fa0a02a00a6d8c5ff3198861d37628aaf",
+        "size": 8294
+      },
+      "woof/metal/signature_fragments/diffusion.json": {
+        "sha256": "14fab1c297970db9a2c5cd2a68a6c20395c364bc3e5eb360dd384885653e98df",
+        "size": 2222
+      },
+      "woof/metal/signature_fragments/dudhia_shortwave.json": {
+        "sha256": "570eac4b3b0b42acb5e3cc1cb6384dfda2ab84396ba4f5184d0d06d0a603b7be",
+        "size": 1813
+      },
+      "woof/metal/signature_fragments/dycore_advance_stage.json": {
+        "sha256": "27070c7fcd950a6ba7927cd7da3cf7efa6ac78dfbe96d2a7b20c08fb4e4c0289",
+        "size": 4802
+      },
+      "woof/metal/signature_fragments/ensemble_surface_recipe_fragment.json": {
+        "sha256": "decc6637c87b3e70b768af0a75e11977b02939cbe296221d2e8ab3404917bbe5",
+        "size": 4352
+      },
+      "woof/metal/signature_fragments/face_mass.json": {
+        "sha256": "24ec3745b01c46493fb7ed3e8f07d75b0734cdec988e4b6bed19b25ee60e8704",
+        "size": 733
+      },
+      "woof/metal/signature_fragments/gf_family.json": {
+        "sha256": "0a69d85beb8b11d29c6ca17e905bd6915d17cf5d6691038d141b1237ecee7bbd",
+        "size": 5719
+      },
+      "woof/metal/signature_fragments/global_any_u32_fragment.json": {
+        "sha256": "5e922074fdf71a845c8b8ab3cac5f51a03c10136de68931b4f90556eb678ee34",
+        "size": 634
+      },
+      "woof/metal/signature_fragments/global_betts_miller_stages_fragment.json": {
+        "sha256": "4c0faa099b5e85290984af469ae46fd421deb4cc8ab3c01c53c40fec9555e788",
+        "size": 2184
+      },
+      "woof/metal/signature_fragments/global_cfl_wind_fragment.json": {
+        "sha256": "351434390218e69252f04bd5819ad8bfd0d65b0fb2de6bec0bd20d53c04bc5e1",
+        "size": 701
+      },
+      "woof/metal/signature_fragments/global_column_positivity_fragment.json": {
+        "sha256": "0bad7ec2a6f88b6f17b1578a2b4fe535c532afe54e05183f15084e1003588780",
+        "size": 1656
+      },
+      "woof/metal/signature_fragments/global_column_water_before_fragment.json": {
+        "sha256": "ae6c4eb81ea674bf59ef8e2b0caf0aca52c31a5fa38ecfe90b9f8422fbbf7f9c",
+        "size": 1251
+      },
+      "woof/metal/signature_fragments/global_column_water_stack_fragment.json": {
+        "sha256": "e196234b6fc57db19ae4da36cd96257d81bf79634df7fe9823c41b15f6bac753",
+        "size": 1020
+      },
+      "woof/metal/signature_fragments/global_convective_fragments.json": {
+        "sha256": "7e4db028876419c5803daef9c8448f2289f4bbad6cc44ab9549113136e0eda38",
+        "size": 3037
+      },
+      "woof/metal/signature_fragments/global_convective_mass_fragment.json": {
+        "sha256": "3f1787c667eb458aeac89d110521736aa2352b8e43c8ed349035bcb7182c59e2",
+        "size": 741
+      },
+      "woof/metal/signature_fragments/global_dynamics_fragment.json": {
+        "sha256": "5f54a509004e8937440113a4a96782d9b367614e28b697df6315553f5059b868",
+        "size": 839
+      },
+      "woof/metal/signature_fragments/global_enforce_vapor_rows_fragment.json": {
+        "sha256": "23d9612cbac9dce8623c4ba7f4dd021c84c299d3de4e8a0c33270ba74a54ff37",
+        "size": 1009
+      },
+      "woof/metal/signature_fragments/global_finite_fragment.json": {
+        "sha256": "8854ad8936b6210ce1080820157a4b15e7f2943cfdd61e857171b3abd23f930a",
+        "size": 1403
+      },
+      "woof/metal/signature_fragments/global_gray_radiation_optics_fragment.json": {
+        "sha256": "b29b7a5ebbc4ef37d44a18fe1ccfddb77590792c924708716579b0172aabbfd0",
+        "size": 1567
+      },
+      "woof/metal/signature_fragments/global_gray_radiation_update_fragment.json": {
+        "sha256": "a4668b2613645d6d4a9404797df7e802eb28f88097047485a825d741678223ca",
+        "size": 1225
+      },
+      "woof/metal/signature_fragments/global_gray_solar_fragment.json": {
+        "sha256": "980ab0975a51dfa79a981f2859ef41b091d81ed8ad0f7b98d402859942050d73",
+        "size": 1369
+      },
+      "woof/metal/signature_fragments/global_grid_mean_fragment.json": {
+        "sha256": "7634ca169422b13ce151255bbd9d7487cfcc2aa335fd8636532214b5e6c47bea",
+        "size": 2016
+      },
+      "woof/metal/signature_fragments/global_grid_plane_broadcast_fragment.json": {
+        "sha256": "e63ca13a13e59e3ae787f1f7086c513fd44441e78b69cb84bd5db21263872fc0",
+        "size": 814
+      },
+      "woof/metal/signature_fragments/global_implicit_diffusion_pack_fragment.json": {
+        "sha256": "7d59b7eb0da336fe1f12bed59638fb24686e9cb9a292404450e5a4b066b675f1",
+        "size": 1032
+      },
+      "woof/metal/signature_fragments/global_insitu_capture_fragment.json": {
+        "sha256": "3daff9e52f0bcd6a3994b829977aed09ed4b2736a0b633743a7124179db37822",
+        "size": 2389
+      },
+      "woof/metal/signature_fragments/global_insitu_energy_fragment.json": {
+        "sha256": "f1d0628f5e48c9ec4a6a46942adc44e63a49626dfd5eb1fa560024b5b6555b5b",
+        "size": 5173
+      },
+      "woof/metal/signature_fragments/global_insitu_ledger_fragment.json": {
+        "sha256": "b3ac47486dc83af04889bf3a72453bfeb5f9a054341278070ed0691e8c87e626",
+        "size": 6627
+      },
+      "woof/metal/signature_fragments/global_insitu_spectra_fragment.json": {
+        "sha256": "895f964002201129e923e7bdeac3d3cd0d2d4265df0900b97a639d66f4826499",
+        "size": 2486
+      },
+      "woof/metal/signature_fragments/global_inverse_longitude_transform_fragment.json": {
+        "sha256": "77ef4bbe2a12d0fc4707a1f86d938a99b01c565c4a2a074c8513adc989d79afa",
+        "size": 958
+      },
+      "woof/metal/signature_fragments/global_inverse_longitude_transform_resident_fragment.json": {
+        "sha256": "3eb0f6d55f6cbd1b23c67fbf6e90b1ed8d928e5aacf5cb1435f99de32c70a962",
+        "size": 1452
+      },
+      "woof/metal/signature_fragments/global_latitude_transform_fragment.json": {
+        "sha256": "afa4184024c6b1d046dfb23ce96bc9881c8c43a0dc732719c63ca7d4d92a8255",
+        "size": 1056
+      },
+      "woof/metal/signature_fragments/global_latitude_transform_resident_fragment.json": {
+        "sha256": "71a6d78b90ae53c917e6bc21ffb627ba4387ad2f41d58ed96548629d2b6ff2c3",
+        "size": 1428
+      },
+      "woof/metal/signature_fragments/global_level_water_mass_finalize_fragment.json": {
+        "sha256": "6ba12ad8af59d281f6e56276f85322d9d4cac6e953b46ee827981ceb7e2e141a",
+        "size": 920
+      },
+      "woof/metal/signature_fragments/global_level_water_mass_total_fragment.json": {
+        "sha256": "0f5e546e62bab899fbb5f69f2bd65e8209dcf30f7554b13ed503af6226841883",
+        "size": 684
+      },
+      "woof/metal/signature_fragments/global_longitude_transform_fragment.json": {
+        "sha256": "fab702a743e8a208cf4a420a43341ae33d8e9ae7c8ab25f9374828ff07713657",
+        "size": 1531
+      },
+      "woof/metal/signature_fragments/global_longitude_transform_resident_fragment.json": {
+        "sha256": "a5a7a1199e9c1fbc4e5d950551f9bfc3526e3c05b78fb207095c6397a0ec4ab6",
+        "size": 1567
+      },
+      "woof/metal/signature_fragments/global_momentum_fragment.json": {
+        "sha256": "4b4b6fb63f2d59688f26c2780833482df1b548b26bcca563251dfb6a18e0842b",
+        "size": 3356
+      },
+      "woof/metal/signature_fragments/global_physics_exner_fragment.json": {
+        "sha256": "4964e5eb23d57b6ddfd517ea37f5ebb5d16b8fe36f4024ec59d7447caf3e1524",
+        "size": 673
+      },
+      "woof/metal/signature_fragments/global_pressure_gradient_fragment.json": {
+        "sha256": "163543935ba0e67acd2486e281094db17a59e4c73be9651ef56d224be2a48b95",
+        "size": 1003
+      },
+      "woof/metal/signature_fragments/global_reductions_fragment.json": {
+        "sha256": "30a49032436d0f3f5fd884d67cfc0f84e66b7999d2fac3014c0ac9e6074048be",
+        "size": 681
+      },
+      "woof/metal/signature_fragments/global_saturation_closure_finalize_fragment.json": {
+        "sha256": "09aca1b60b0b4c2492a5ea8200e5a5d5e2b9a62e24c8f32c18f68d2fbbabc554",
+        "size": 914
+      },
+      "woof/metal/signature_fragments/global_saturation_closure_fragment.json": {
+        "sha256": "04478e17e6e6d62471f0f839201a5bb130a2419c851b5755a465444dc28e92ae",
+        "size": 2036
+      },
+      "woof/metal/signature_fragments/global_saturation_pair_max_fragment.json": {
+        "sha256": "8313877d9426918ebf376891dfec25cecc8a982cbc992f52ccac48c20228cabd",
+        "size": 838
+      },
+      "woof/metal/signature_fragments/global_screen_diagnostics_resident_fragment.json": {
+        "sha256": "0f3df51f13cfb9ba56364e91e4bbd1dc68126589e3e5767bcd340d1e21b08207",
+        "size": 1906
+      },
+      "woof/metal/signature_fragments/global_semilag_add_scaled_fragment.json": {
+        "sha256": "b64045d513160b8ec994d6b47fefc24ab31a23762a18e56dac624f18e0148930",
+        "size": 1603
+      },
+      "woof/metal/signature_fragments/global_semilag_assemble_fragment.json": {
+        "sha256": "a53713607c6345fae5223576c744ee06322b79e81f6a0bd776b44253c489d217",
+        "size": 1937
+      },
+      "woof/metal/signature_fragments/global_semilag_complex_difference_fragment.json": {
+        "sha256": "ca21ce89459a044e6ad8e9b2742c823debf91e4be5bae256e3abf2abfc7df308",
+        "size": 769
+      },
+      "woof/metal/signature_fragments/global_semilag_force_fragment.json": {
+        "sha256": "8405edafe5345d313a7149d1912148bd7419f48460fd5cb4304ad893c28da030",
+        "size": 871
+      },
+      "woof/metal/signature_fragments/global_semilag_gather5_fragment.json": {
+        "sha256": "c351f885a6246e2030c2cffdda1aded986e5d1a3a47afcc03e9f9e5969b68157",
+        "size": 2696
+      },
+      "woof/metal/signature_fragments/global_semilag_gather_fragment.json": {
+        "sha256": "171394742740a3519e2fd291102568b5edebf458a391f2a8d416d2b71ec1d667",
+        "size": 2691
+      },
+      "woof/metal/signature_fragments/global_semilag_half_apply_fragment.json": {
+        "sha256": "87ec7a3b4b1f023c5c4358cfc3cd3cbeb48b21da9cb1b97dce208ed7086f3747",
+        "size": 1615
+      },
+      "woof/metal/signature_fragments/global_semilag_linear_tendencies_fragment.json": {
+        "sha256": "32140190e30471b6b84e738d0fa73d937a3950bb6ecd9d449c1057f7e6f04596",
+        "size": 1375
+      },
+      "woof/metal/signature_fragments/global_semilag_lipschitz_fragment.json": {
+        "sha256": "3568a7ccfe2efb538222bf3d5146f6f041e2d733b5889b6391c7b4218ba31801",
+        "size": 1946
+      },
+      "woof/metal/signature_fragments/global_semilag_lipschitz_norms_fragment.json": {
+        "sha256": "adf497f65008ebd0574fa41c8b8f672a152e99b4151093539fb0ad0ebafdee3b",
+        "size": 4102
+      },
+      "woof/metal/signature_fragments/global_semilag_max_finalize_fragment.json": {
+        "sha256": "b66e0bd0545ffbda2d232627c8df5879e9c33ce0fb4f9bc9dc16f8d469b706cc",
+        "size": 732
+      },
+      "woof/metal/signature_fragments/global_semilag_operator_fragment.json": {
+        "sha256": "c795987df1f50b612705187512173cb9aad05ff4ea0f387e7b5a44f54a119a8a",
+        "size": 2252
+      },
+      "woof/metal/signature_fragments/global_semilag_pressure_fragment.json": {
+        "sha256": "ba6db58bdc546aa4f4328a00340e96fa0654ad5290a60f84eb2dd7b20f9f4b7e",
+        "size": 1295
+      },
+      "woof/metal/signature_fragments/global_semilag_synthesis_fragment.json": {
+        "sha256": "747b2a09a9fe3576c609d45fd0da55d4845881d1cbc7640fba9f99822e439443",
+        "size": 6767
+      },
+      "woof/metal/signature_fragments/global_semilag_tracer_fix_fragment.json": {
+        "sha256": "4f5029a259758075dcab2217eb990effdd0e59abcaaa9443d5c3e015903be905",
+        "size": 2006
+      },
+      "woof/metal/signature_fragments/global_semilag_transport_fragment.json": {
+        "sha256": "14edce70bc5bd105ced804a4ace034e4c5d15df36d64b7f43a6d27984caa2e39",
+        "size": 1497
+      },
+      "woof/metal/signature_fragments/global_semilag_transport_resident_fragment.json": {
+        "sha256": "eccad1b41a6bbf1a0829119419f2afbf83a130a8c1a33f2b132aa29be2334739",
+        "size": 1404
+      },
+      "woof/metal/signature_fragments/global_semilag_vector_analysis_fragment.json": {
+        "sha256": "a94bbc9a7cb9fa19fd52f1f8c021298df30ea3ba4427d4940475b16918d5c492",
+        "size": 1897
+      },
+      "woof/metal/signature_fragments/global_semilag_vector_fragment.json": {
+        "sha256": "4b1ee31c0ed38ba02f3173c6555dfb3536b3b3b73b20c048c67ee1ce7f5676a0",
+        "size": 2598
+      },
+      "woof/metal/signature_fragments/global_semilag_water_column_fragment.json": {
+        "sha256": "66c61ee4d8c7c48c6ad966a9cecaf928410cd78fe1b5d5c22a234569aef6a783",
+        "size": 1223
+      },
+      "woof/metal/signature_fragments/global_semilag_wind_pair_fragment.json": {
+        "sha256": "4e216fc66a9973a9ac0c3ea0fe99e5c77c9d6db986fd476ea468933e8e9dfe7b",
+        "size": 750
+      },
+      "woof/metal/signature_fragments/global_spectral_diffusion.json": {
+        "sha256": "bd80c1de3ca4859e2c8df91c1b84312a68fc78911cd3625790f5fd74a8070775",
+        "size": 846
+      },
+      "woof/metal/signature_fragments/global_spectral_project_fragment.json": {
+        "sha256": "8056423862680fc9c07ae1b687fca145e40b618bf1ffd0ff3049f5241a1b9586",
+        "size": 761
+      },
+      "woof/metal/signature_fragments/global_sum_finalize_fragment.json": {
+        "sha256": "c0ffe68bc733939b34d062dc09032beeb182a224a160b76034e5625b4787848d",
+        "size": 665
+      },
+      "woof/metal/signature_fragments/global_surface_flux_prep_fragment.json": {
+        "sha256": "a25b32543c3ee9039714ea41c85cba7e165efb60e1ba9563d589afb0ffc22c58",
+        "size": 2283
+      },
+      "woof/metal/signature_fragments/global_surface_flux_prep_resident_fragment.json": {
+        "sha256": "10ecd20d9a18b3b18ecd3ac7f2d46de52c2f2dae2fe60d8d6e1886025f09b691",
+        "size": 4736
+      },
+      "woof/metal/signature_fragments/global_surface_pressure_tendency_fragment.json": {
+        "sha256": "44e515eddd8c2f33c11090f0e4e1b0ea2fb9b229f46831964df76c6098d400bc",
+        "size": 1053
+      },
+      "woof/metal/signature_fragments/global_surface_temperature_fragments.json": {
+        "sha256": "c9380ed8228c7b444f30dd3ae1b2485126b6d46ccf9f29c78e0abaff8acb00f5",
+        "size": 4228
+      },
+      "woof/metal/signature_fragments/global_surface_water_add_fragment.json": {
+        "sha256": "31efbdd4fdda5e2778a68a35e280f9df3408861cdbc249d0968622a5e042d9fc",
+        "size": 774
+      },
+      "woof/metal/signature_fragments/global_top_sponge_fragment.json": {
+        "sha256": "cfb2b4cbdaa5ad45a410f2ccf8090c8a701c66bc7d2c38bf244223923de50751",
+        "size": 1019
+      },
+      "woof/metal/signature_fragments/global_total_water_stores_fragment.json": {
+        "sha256": "ad80c7fb1502aa1001aa7e7045ba4ec3aad9ce853e642f6512a1bba9ee5d1b75",
+        "size": 1080
+      },
+      "woof/metal/signature_fragments/global_tracer_extrema_fragments.json": {
+        "sha256": "7307a95193bef98838a86cb6182819ea7ffcf64831a631450c3424799be20ca3",
+        "size": 3342
+      },
+      "woof/metal/signature_fragments/global_tracer_flux_fragment.json": {
+        "sha256": "198aaa9b15320b4b062c23c65b7dbe2a033a5dcc35aa33d9b6a41d0def2093ef",
+        "size": 1571
+      },
+      "woof/metal/signature_fragments/global_tracer_gap_fragment.json": {
+        "sha256": "fb0599aa082cfd6ec95d49c7aa441f437bfe3adb879db1155d05c9fc8f3ac5f1",
+        "size": 996
+      },
+      "woof/metal/signature_fragments/global_tracer_minmax_fragment.json": {
+        "sha256": "eb678a3910d5fda2df62b07d30b076ddb67e395fe4e70403e19c7a6ce0b8f20f",
+        "size": 1722
+      },
+      "woof/metal/signature_fragments/global_tracer_resident_fragment.json": {
+        "sha256": "1db4a4ff237eec50c09f4e9b18ef51d3af6afa5b93369362209215f7cacc8a66",
+        "size": 20647
+      },
+      "woof/metal/signature_fragments/global_turbulence_geometry_fragment.json": {
+        "sha256": "5ddce5e953f25482a673ed9aacb6eb81dd5025c24a985e79ae44641662090814",
+        "size": 889
+      },
+      "woof/metal/signature_fragments/global_vertical_continuity_fragment.json": {
+        "sha256": "bf1e550bfadce5f14ae45b853017c3432251489061aa68b893b6f101106438ea",
+        "size": 933
+      },
+      "woof/metal/signature_fragments/global_vertical_momentum_fragment.json": {
+        "sha256": "ff50c3018c3bbf978e5b520cb0458ce291e251954d9c2683c040f9f30687dc03",
+        "size": 927
+      },
+      "woof/metal/signature_fragments/global_vertical_scalar_flux_fragment.json": {
+        "sha256": "56fca2e0c20d8aad8a95aa8e55bf394c25f32f9d7cedc84b257cf5fd1d057bc0",
+        "size": 1037
+      },
+      "woof/metal/signature_fragments/health_family.json": {
+        "sha256": "8b529e7882528c935b5a31cad2e9da3ae78d2c172dde3eabfc8f30d236efefa3",
+        "size": 2915
+      },
+      "woof/metal/signature_fragments/held_heating.json": {
+        "sha256": "fe7da33ab3c742672bdb2a19a01deda984783f2ab7ce893cfb2bf0aebe219571",
+        "size": 1000
+      },
+      "woof/metal/signature_fragments/hex_acoustic_edge_update.json": {
+        "sha256": "1f8c0ac0c62906e105db8cafd135261b58fe2cbab0aaefda901b94d5c792cd85",
+        "size": 1619
+      },
+      "woof/metal/signature_fragments/hex_acoustic_postsolve_damping.json": {
+        "sha256": "539614be3de3354b0f3173a1c987c5454585230ae0fa7e14d8ede4258e9e828a",
+        "size": 1206
+      },
+      "woof/metal/signature_fragments/hex_density_tendency_fragment.json": {
+        "sha256": "85649c0234781902c7bde1f66bb10d718f6a757b813c54dbd7c69868f1378474",
+        "size": 853
+      },
+      "woof/metal/signature_fragments/hex_dpdz_tendency_fragment.json": {
+        "sha256": "fe3c5a63d6ff95d8b143c403a32871145ad827fa2225be6741d6d3bf52ae7ece",
+        "size": 858
+      },
+      "woof/metal/signature_fragments/hex_exner_pressure_diagnostic.json": {
+        "sha256": "860719c859f45be033d1298b056321797ac3a1d8835a3003f4b8c8efd7e2ff24",
+        "size": 945
+      },
+      "woof/metal/signature_fragments/hex_fct_apply_fragment.json": {
+        "sha256": "fe4655ed019c4bae7e48f8709c123a2c69a0ff42ceef3d6bcb15697b208eab03",
+        "size": 1686
+      },
+      "woof/metal/signature_fragments/hex_fct_cell_scales_fragment.json": {
+        "sha256": "c51104847000361b59e6f7444d378ad5ea152e83fe4eedae0b01b6ee30d500d4",
+        "size": 2156
+      },
+      "woof/metal/signature_fragments/hex_fct_edge_flux_fragment.json": {
+        "sha256": "d510289708a3780825f3d7b6726a4f7ce3ad203cf3b209a9a8e4232ebe48b9ea",
+        "size": 1527
+      },
+      "woof/metal/signature_fragments/hex_horizontal_theta_tendency_fragment.json": {
+        "sha256": "426fa34aeac905f605779949ba1f88ea428b687498ecee557c56baa82493269a",
+        "size": 1887
+      },
+      "woof/metal/signature_fragments/hex_interface_velocity_recovery_fragment.json": {
+        "sha256": "4bca67652e86e64381d4e8bca9c9e2986f09eb5bf6513b300318544a8db11667",
+        "size": 1814
+      },
+      "woof/metal/signature_fragments/hex_interface_velocity_terrain_fragment.json": {
+        "sha256": "c17a3303f1b4a1e7c17eefb03d21080ca295f7db239329f509c0e2aba7491ddd",
+        "size": 1400
+      },
+      "woof/metal/signature_fragments/hex_kinematic_diagnostics_fragment.json": {
+        "sha256": "1e19be905d9d3f26295a9e7d865be9a329d079f353076e521d46dcbb74b9d099",
+        "size": 3523
+      },
+      "woof/metal/signature_fragments/hex_mass_flux_divergence.json": {
+        "sha256": "6b436fb41ecf6830330a186ece6bb0421a29e647e3c93eea942648ef2fe89e8c",
+        "size": 2160
+      },
+      "woof/metal/signature_fragments/hex_mesh_diagnostics_fragment.json": {
+        "sha256": "6b6b92f4cee2ada079a3da7e3e4e98cc70c0cee631cc1d05da5fd46cb6cb35f3",
+        "size": 926
+      },
+      "woof/metal/signature_fragments/hex_moist_coefficients_v841_fragment.json": {
+        "sha256": "53a0affbe06012f72709ad968d1fe623ee21451b5eca174957fb7098273f704e",
+        "size": 1063
+      },
+      "woof/metal/signature_fragments/hex_omega_terrain_conversion_fragment.json": {
+        "sha256": "7691ec24ed74f1e94cb78b6a06d6768cc6e7218886e6088835aebe0cd178704a",
+        "size": 1492
+      },
+      "woof/metal/signature_fragments/hex_pressure_gradient.json": {
+        "sha256": "c7585717a9954f377af4eb3a9e4dc4b10849cefeeb9387f1be7764ca84c7c333",
+        "size": 1202
+      },
+      "woof/metal/signature_fragments/hex_pressure_perturbation.json": {
+        "sha256": "73d329c8b1a57990e030a4817adce6c8786830de8ddce09c45d527120dc610c6",
+        "size": 1081
+      },
+      "woof/metal/signature_fragments/hex_pv_diagnostics_fragment.json": {
+        "sha256": "0408d9a8431650f0c9eb982d665b647d7ea1f5152151ab3e7b16a3cbce95a075",
+        "size": 6451
+      },
+      "woof/metal/signature_fragments/hex_rk_tendencies_fragment.json": {
+        "sha256": "008215d12b7ee6bd2d1e304d01a309ea995323987886973f6436dc4853d8cfea",
+        "size": 1069
+      },
+      "woof/metal/signature_fragments/hex_scalar_fct_fragment.json": {
+        "sha256": "f3c375081a0e8dd6c14932d9a96f919d583fda89b85a6e157f4970abc097649c",
+        "size": 2706
+      },
+      "woof/metal/signature_fragments/hex_scalar_rk_update_fragment.json": {
+        "sha256": "0b116664e67d183282e1069f0a3f6a187507037c050a3defc090e5d7bc99d574",
+        "size": 2613
+      },
+      "woof/metal/signature_fragments/hex_solve_vertical_system.json": {
+        "sha256": "67680742f38dae1f0cf53d9e4c9dd1fc2be0fbb0b54a8cc576d568c29721fe91",
+        "size": 873
+      },
+      "woof/metal/signature_fragments/hex_tangential_velocity_fragment.json": {
+        "sha256": "603ea7a20457755c293640511946ea9d24cc826954cbd125e3b4c667c87b9453",
+        "size": 998
+      },
+      "woof/metal/signature_fragments/hex_theta_diagnostic.json": {
+        "sha256": "6d9df75a686b087e7181f6a4d0d4ce09e0e0913e7b25f221ad2f31fa1cbbb1c4",
+        "size": 740
+      },
+      "woof/metal/signature_fragments/hex_vector_invariant_momentum_fragment.json": {
+        "sha256": "396f3d5331a6cdd21da035083d85bc79fd06bb20eb2b88f7198ab9b88f2d9b68",
+        "size": 1533
+      },
+      "woof/metal/signature_fragments/hex_vector_invariant_momentum_v841_fragment.json": {
+        "sha256": "6fb2f8d92f1286e74b0334dd17e31f69cc732e73ee27c7f62867adc801c04441",
+        "size": 1821
+      },
+      "woof/metal/signature_fragments/hex_vertical_coefficients_v841_fragment.json": {
+        "sha256": "b4db0d23c3ca8fc5810a74836aecf8240b073a0b0c8474ccbea3f618ad649af1",
+        "size": 2443
+      },
+      "woof/metal/signature_fragments/hex_vertical_momentum_transport_fragment.json": {
+        "sha256": "1bcdbf07f2c7a22c3e19d72f70a3a17d058e2b66dffa76a8bfd3883f79580f95",
+        "size": 973
+      },
+      "woof/metal/signature_fragments/hex_vertical_pressure_euler_fragment.json": {
+        "sha256": "3b7e98128a12a118f9b8852694cee9bc0f8e1150a56ad6a27add53733998032d",
+        "size": 991
+      },
+      "woof/metal/signature_fragments/hex_vertical_scalar_flux3.json": {
+        "sha256": "67abefa0d834731f3696b088e6ceb7a48e3463eacf74c179902bafb77be3f518",
+        "size": 977
+      },
+      "woof/metal/signature_fragments/hex_vertical_theta_tendency_fragment.json": {
+        "sha256": "4a03bd55ad4b1258b2f61d1b37fdb0bdad3775369a8188cb736b2fc0e9f1248d",
+        "size": 1174
+      },
+      "woof/metal/signature_fragments/hex_vertical_velocity_tendency_fragment.json": {
+        "sha256": "ac0a1365065f11227677769e613e267c1772ca93ded6ce233bb3046ad9f769af",
+        "size": 2057
+      },
+      "woof/metal/signature_fragments/ieva_family.json": {
+        "sha256": "aac245dbf779dac21e18255509210f865d11707a51f1a236259a69596bcd3a72",
+        "size": 7092
+      },
+      "woof/metal/signature_fragments/ieva_solve_ph.json": {
+        "sha256": "544f5e5b9c424cd998df0b36c38dc0225c2e752f7ecb572086df574e500eaecd",
+        "size": 1249
+      },
+      "woof/metal/signature_fragments/ieva_solve_s.json": {
+        "sha256": "728a11638c6b1e30e9edd2adcbf09e5363dccb90b20a86e3073c6a5fe64f4c34",
+        "size": 1223
+      },
+      "woof/metal/signature_fragments/ieva_solve_uv.json": {
+        "sha256": "ce3dda62ad45411626fadd12973753b638811548869193557528cd17ff2f2bf4",
+        "size": 2744
+      },
+      "woof/metal/signature_fragments/ieva_solve_w.json": {
+        "sha256": "1ada8d42a2ffc07ce22d7ae3ace8b80c433cc1664ce6bd87f8029b2cc4986e06",
+        "size": 2226
+      },
+      "woof/metal/signature_fragments/jacobi_eigh_fp64.json": {
+        "sha256": "ee354b0e03b61e39077cc28094008722bb1a154e917d1faf5bad8495ccdf5de7",
+        "size": 1737
+      },
+      "woof/metal/signature_fragments/kessler.json": {
+        "sha256": "c4a92591a36c4ac0ce21f05b96d49650ab0aba180bce41dc64edcd8aca7b0a1e",
+        "size": 1494
+      },
+      "woof/metal/signature_fragments/kessler_family.json": {
+        "sha256": "e1f284c21b036fd6549bfb7ee94a2c9e646afdba2d7245ed18cd1a39059a2806",
+        "size": 7656
+      },
+      "woof/metal/signature_fragments/kf_column_family.json": {
+        "sha256": "6e0f8249a0f71269390984e89fb03f6bc9f34b7eb07902f7ab3c06efde420825",
+        "size": 5325
+      },
+      "woof/metal/signature_fragments/kf_output_validation.json": {
+        "sha256": "a75e591974070e31bf6d63965f7b7c2f221d457fdba5f52f60fa5072e47760f1",
+        "size": 1159
+      },
+      "woof/metal/signature_fragments/kf_w0avg_update.json": {
+        "sha256": "708ff56e1aa8b350e30748d1ca0f1330f2fe5f1f4e8044f4cc133d2a6b234184",
+        "size": 684
+      },
+      "woof/metal/signature_fragments/lake_family.json": {
+        "sha256": "2b0008b35f30c48ec1aad8db85c03f91bc5e72fe065d59d5e030ddcda9b47d16",
+        "size": 8679
+      },
+      "woof/metal/signature_fragments/lbc_flow.json": {
+        "sha256": "2da9bd505717ae29b33624a4b40fcb6020a55b588877673236974d7a56541a84",
+        "size": 1949
+      },
+      "woof/metal/signature_fragments/lbc_state.json": {
+        "sha256": "ec197b8a4131b98f66f97837709b4140929a2880778b1955ba37a6dd2d983536",
+        "size": 10454
+      },
+      "woof/metal/signature_fragments/lbc_time.json": {
+        "sha256": "4d4730535c6085bc711ec73dc3978bb615f71a44ec5adbe148a55df3f1d3b93a",
+        "size": 810
+      },
+      "woof/metal/signature_fragments/milbrandt2_family.json": {
+        "sha256": "45ca11d2354bb049a9cdcdb6e2c865c6eb9f9f7c9e2dde265aac867b1c769cdf",
+        "size": 31251
+      },
+      "woof/metal/signature_fragments/milbrandt2_fields.json": {
+        "sha256": "448750c6484f29b2c304238f1ddcdf9555d589559677312b09b2274e88a77147",
+        "size": 4624
+      },
+      "woof/metal/signature_fragments/milbrandt2_zet.json": {
+        "sha256": "6e355caa05a40c8f495a9aee951b24048824778a52f58134b9060e8b2bd78fc3",
+        "size": 1774
+      },
+      "woof/metal/signature_fragments/moist_pd.json": {
+        "sha256": "1a0aa2828b84147152cb6f7f8dbd226d2f9bd36cf1e323c9cce5d8a3c2d8774e",
+        "size": 7220
+      },
+      "woof/metal/signature_fragments/moist_pd_source_fold.json": {
+        "sha256": "a81e4bdd86b3309b4fcb69aad9e04a90362eeb14b1a40cf42720abeb2c7eec2b",
+        "size": 2293
+      },
+      "woof/metal/signature_fragments/moist_scalar_update.json": {
+        "sha256": "2fe0d34ca8d13d30bf342f402fa83e7b47673cf5ae464ad15e9e7a2797060582",
+        "size": 1528
+      },
+      "woof/metal/signature_fragments/morrison_family.json": {
+        "sha256": "24a2e8ba3faa7b71c3a774f34a749ee6f7f34f031d2670f198a7661222779f2c",
+        "size": 27139
+      },
+      "woof/metal/signature_fragments/mp_zero_out_fragment.json": {
+        "sha256": "8d488a58ab42e5b41d52ccff8564b665c8f0a45993b272020f06d170442cfb49",
+        "size": 1129
+      },
+      "woof/metal/signature_fragments/myjpbl_family.json": {
+        "sha256": "935e57b8a9a02f579d2fca1767217cfb0fd219f6cf323497d77ab1f8a7289d8f",
+        "size": 3497
+      },
+      "woof/metal/signature_fragments/myjsfc_family.json": {
+        "sha256": "6ffb0ae231209d21c46f3839747499d00d6738f8e34fca6c46ccb6fd5ac0dc82",
+        "size": 10964
+      },
+      "woof/metal/signature_fragments/mynn_condensation_gsd41.json": {
+        "sha256": "7b87e02aed8abee7c52b03b248540bbd97a2b451f9b05b4db09965391e6bb778",
+        "size": 1668
+      },
+      "woof/metal/signature_fragments/mynn_dmp_mf_gsd41.json": {
+        "sha256": "a1d484f732f32fcb0d2dcbd083d092712c5f71c3acc4e96ecf30c066402faca9",
+        "size": 3865
+      },
+      "woof/metal/signature_fragments/mynn_driver_surface_gsd41.json": {
+        "sha256": "e614d496ff9061ccab0e3cb7874b9c07f7aa81a3c88c260d42e627fd7b69cb12",
+        "size": 1667
+      },
+      "woof/metal/signature_fragments/mynn_pbl_family.json": {
+        "sha256": "7e3e99eebb1357895fc37c928dc4cef0078f925c949ec52dcf167985d58d486e",
+        "size": 61014
+      },
+      "woof/metal/signature_fragments/mynn_pbl_gsd41.json": {
+        "sha256": "b37c3b782d64a1c4c16b423a016d3a5292d61aae62390413922e7e684b942570",
+        "size": 8089
+      },
+      "woof/metal/signature_fragments/mynn_scalar_pblmix_columns.json": {
+        "sha256": "5dbdbe5e93e174cb4e0bf656cf6e10084ae52d2a41539b9265414e51f6e07048",
+        "size": 942
+      },
+      "woof/metal/signature_fragments/mynn_surface_family.json": {
+        "sha256": "e50428be4d31f7de0f2595997c0488b3a47c1717fc33dddff3b4f65a8f1b3bfb",
+        "size": 10907
+      },
+      "woof/metal/signature_fragments/nest_copy_fcn_theta.json": {
+        "sha256": "1bc055b7a567178fc0af1b5ac1570097ed5a42b56db2793eca5085622bcbce1a",
+        "size": 1374
+      },
+      "woof/metal/signature_fragments/nest_family.json": {
+        "sha256": "db9f80ba63a2eb63d77701fca7e0aec0d731ddad01144031a6e2533fc620fd2d",
+        "size": 4180
+      },
+      "woof/metal/signature_fragments/nest_interp_fragment.json": {
+        "sha256": "56800302c3c74121a2aee60a4e01c071b27c809aa621b36dddb739674f14afc2",
+        "size": 2374
+      },
+      "woof/metal/signature_fragments/nest_stream_transfer_fragment.json": {
+        "sha256": "ef39d3af3f4aeff159aa3a384102445592ccc0970678c704709436b1e593ab10",
+        "size": 1562
+      },
+      "woof/metal/signature_fragments/noah_family.json": {
+        "sha256": "99cbc467090b37e0f982e62178cd6352264ca47be99d6758527db5af8240bebf",
+        "size": 13916
+      },
+      "woof/metal/signature_fragments/noah_forcing_family.json": {
+        "sha256": "43b2f7ff33905d84e0bc4e854cf72adbb6169f078c8b706080b89534ee32da53",
+        "size": 3671
+      },
+      "woof/metal/signature_fragments/noah_mosaic_family.json": {
+        "sha256": "3f1f777755b86390bfbd3c4cfa6ef1c4aa7382d7e4b69485fabf3e3bf2f872bf",
+        "size": 27396
+      },
+      "woof/metal/signature_fragments/noah_sfcdiags_family.json": {
+        "sha256": "c454e7dde2976a4f0b36e71bba4e3f2c782a954f9738b708da85fb55f74cdead",
+        "size": 1446
+      },
+      "woof/metal/signature_fragments/noahmp_bareflux_family.json": {
+        "sha256": "23b6893278d6eb295c9d5e18461696a02e766e1b2bdf2d0d56e59a0f0e6f7551",
+        "size": 1073
+      },
+      "woof/metal/signature_fragments/noahmp_driver_family.json": {
+        "sha256": "7ddf3e59b86733e9592988c859f53ee882466d9c0ecfe5c16b01da7eaa80796d",
+        "size": 2039
+      },
+      "woof/metal/signature_fragments/noahmp_fluxprep_family.json": {
+        "sha256": "37b968bab8814158f635870440f8c8eb834dad5da3720c95ec6060f10af956c3",
+        "size": 20
+      },
+      "woof/metal/signature_fragments/noahmp_glacier_family.json": {
+        "sha256": "0caa7211cc3ca6ac1632732bae1e3dd75ef36685ff90a56e6c57cab56ef692f8",
+        "size": 811
+      },
+      "woof/metal/signature_fragments/noahmp_leaves_family.json": {
+        "sha256": "3e49bd9a7ec9c668e5814346cde4547741353d673a99d0f8a389a6e893d4d317",
+        "size": 2716
+      },
+      "woof/metal/signature_fragments/noahmp_radiation_family.json": {
+        "sha256": "82a1348abfc84ee485e6b3174967dcd68c1eac05658cfd7ba4905cad1b2b5b6d",
+        "size": 609
+      },
+      "woof/metal/signature_fragments/noahmp_sflx_family.json": {
+        "sha256": "4b4b2954da7217040464877172dae680c5b5d8815c33281dead2b515facc7e5c",
+        "size": 2298
+      },
+      "woof/metal/signature_fragments/noahmp_thermal_family.json": {
+        "sha256": "abbc6a789f17f95695aecd49f15fbeb80b13750d322c1ad6f06641676273920e",
+        "size": 2680
+      },
+      "woof/metal/signature_fragments/noahmp_vegeflux_family.json": {
+        "sha256": "f2ce192072a7feddecfbc8ba35bceb23136d80d31f0a2207b4a422dfd5823228",
+        "size": 1698
+      },
+      "woof/metal/signature_fragments/noahmp_vegprecip_family.json": {
+        "sha256": "0efd603a48f58cfb248f19274a2d62e929848baec2bbb702d01733ae25484b50",
+        "size": 2045
+      },
+      "woof/metal/signature_fragments/noahmp_water_family.json": {
+        "sha256": "096419089ed99d56f89fdd28eddfa7820d439b6121d6a96c39319daf7b09eef3",
+        "size": 1371
+      },
+      "woof/metal/signature_fragments/nssl2_diagnostics.json": {
+        "sha256": "aa81e5dd8b953c36d3e299e86613bb0329be1d939be8da9aac239f9f6f108358",
+        "size": 6099
+      },
+      "woof/metal/signature_fragments/nssl2_driver_transport.json": {
+        "sha256": "be6aec2646e296b43898adb2c2eef7ff0ec2268a0b0d3cff4461631832f56edb",
+        "size": 11538
+      },
+      "woof/metal/signature_fragments/nssl2_effective_radius_registry_units.json": {
+        "sha256": "3deced567d7c2e41edf7d3db14f4f10e25d8bb16e013e9e60893729272b159a9",
+        "size": 1991
+      },
+      "woof/metal/signature_fragments/nssl2_fused_gs.json": {
+        "sha256": "7d715c8eeb5d4a3c3cb81b03a6fbf91680a950f2ae9b2160815f56d887c70284",
+        "size": 4285
+      },
+      "woof/metal/signature_fragments/nssl2_nucond.json": {
+        "sha256": "c7989f10340b62e4cbe5e050ca6c40492bb37fa89c1b603ef1ce345f252f9c32",
+        "size": 5626
+      },
+      "woof/metal/signature_fragments/nssl2_runtime.json": {
+        "sha256": "da34d0d7f749e6c379ef4f9a381222259ea1bc2ff1fc1acb3b7fb38f0fa02ae8",
+        "size": 3338
+      },
+      "woof/metal/signature_fragments/nssl2_sedimentation.json": {
+        "sha256": "ab61f22b857c068bfebd6cc53b382477c198b325c1782ebd68b4f66e5b41d1a0",
+        "size": 3774
+      },
+      "woof/metal/signature_fragments/ntiedtke_family.json": {
+        "sha256": "24e0f9524d5c90e3113c43ba2f69a798fae769f8273fc26ef7b51998ea6dc2f3",
+        "size": 97560
+      },
+      "woof/metal/signature_fragments/openbc_radiative.json": {
+        "sha256": "287278686ddc6ff5b7598a67b767433484c6c2b86347da293f9e3ceef535a374",
+        "size": 11345
+      },
+      "woof/metal/signature_fragments/p3_entry.json": {
+        "sha256": "469edc87b7adf7614308c219803af6319a203a2ee245aaa3395d826acb48e1a3",
+        "size": 1996
+      },
+      "woof/metal/signature_fragments/p3_final.json": {
+        "sha256": "0c4dcaf858bcca06a7cb6589e587ce436e2552702b0e6d279365af3e7c216e9a",
+        "size": 2170
+      },
+      "woof/metal/signature_fragments/p3_homofreeze.json": {
+        "sha256": "fbb27d03fa339842820f57bb65ed596f304d48f23f9b58a3b8e2fca3e69126cd",
+        "size": 1548
+      },
+      "woof/metal/signature_fragments/p3_kloop1.json": {
+        "sha256": "5a04c255c3b13107a69555b6071ae13811cd1cf739699551352a54de20a677fc",
+        "size": 2544
+      },
+      "woof/metal/signature_fragments/p3_kloopmain.json": {
+        "sha256": "9e3498cdabf2fd0f788e6cd6513c80f11d0070514372aa002909930de76f7faa",
+        "size": 2874
+      },
+      "woof/metal/signature_fragments/p3_saveold_precip.json": {
+        "sha256": "9e477313463a8cff5e051e6ea66162dd8db646391bfad4c26b2dbc269e63a860",
+        "size": 1362
+      },
+      "woof/metal/signature_fragments/p3_sed_cloud.json": {
+        "sha256": "f32b136ed3f3cadd5c296f35cb874cda76edc105833c4f95fae356c70693df54",
+        "size": 1404
+      },
+      "woof/metal/signature_fragments/p3_sed_ice.json": {
+        "sha256": "26c47025beeb091e0b0b238d5b28bec4d8dc4654a423752d9e4e626b248fcf9a",
+        "size": 1701
+      },
+      "woof/metal/signature_fragments/p3_sed_rain.json": {
+        "sha256": "f8d82188bff32007af7bd7ef5d9da8b14080805e27442bce69fc3f1097b96e71",
+        "size": 1501
+      },
+      "woof/metal/signature_fragments/physics_atmosphere_prepare.json": {
+        "sha256": "72e53ee74fa34c4fe481735bba8321d09083110e15d8b94a486743bd61d8bece",
+        "size": 2763
+      },
+      "woof/metal/signature_fragments/rayleigh_family.json": {
+        "sha256": "408202a219552ae7cfa4df6e9b7a0ea4fbe6c4908d001d01c188c8099283d19b",
+        "size": 660
+      },
+      "woof/metal/signature_fragments/real_total_geopotential.json": {
+        "sha256": "5f57a015aa9f896d4779187177fbec78db8f9ddd5657c1033d0f207106aefc5c",
+        "size": 791
+      },
+      "woof/metal/signature_fragments/refl_family.json": {
+        "sha256": "8fdf7933f8491729a392f6c552f974d37295cc60be66cbb642011c06d2fe5367",
+        "size": 3119
+      },
+      "woof/metal/signature_fragments/rk_total_theta.json": {
+        "sha256": "fc5a447c3b073eb17ddd0c14b4a4b45709db2d0fdbd432163d8d60b7211566b8",
+        "size": 1207
+      },
+      "woof/metal/signature_fragments/rrtm_lw_family.json": {
+        "sha256": "b24b5020e47ee9d62273c6150b639ef4cc1fb7dc895b4f865764313157c2b568",
+        "size": 29646
+      },
+      "woof/metal/signature_fragments/rrtmg_aer3_sw_optics.json": {
+        "sha256": "dc51d5224398ea7347e54d51f6dfd8a39cd5d3e8350f805bdbb5aa1545c844d0",
+        "size": 1299
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_lw_cldprmc.json": {
+        "sha256": "b26be011f04a821a6267298b71ce8f15230d1ea4db49fade8ac71b89f684802a",
+        "size": 1576
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_lw_family.json": {
+        "sha256": "8533954fbad031b7cc96d13914673de669faa993f73455dc4307e7f7b8048083",
+        "size": 38876
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_lw_rtrn_accum.json": {
+        "sha256": "71be329682e993952676dcba2404c00d8436894408ea8d2351179b261bfeae76",
+        "size": 2995
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_lw_rtrn_final.json": {
+        "sha256": "90d4735ea84c80de8bb8516fde695855cc2f758a976240152a4d60c00b77eba8",
+        "size": 2303
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_lw_rtrn_march.json": {
+        "sha256": "11a53ed2f2cb986bb960f3d956c344e452c0337e1ac6e03e20025220119cb433",
+        "size": 4628
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_lw_rtrn_prol.json": {
+        "sha256": "51b3c44c34d0a5de2b8a77b73aed3dda19f9dd1c1435160c4eef3587f336f4b0",
+        "size": 1856
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_lw_rtrn_secdiff.json": {
+        "sha256": "ae86552cd6b1ac515af71e6f7161f701b6a79a8310b4a3040bd5964478b4712e",
+        "size": 1298
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_lw_taugb13.json": {
+        "sha256": "0e1756ff19ad19e44bc746563ea6b811070749e22e934b249d8295cf875c806c",
+        "size": 2911
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_lw_taugb16.json": {
+        "sha256": "d9a72f8137a0c045c0449f6b250ddedd820a2d394f49e16d5c7445e24cab7eff",
+        "size": 2605
+      },
+      "woof/metal/signature_fragments/rrtmg_legacy_sw_family.json": {
+        "sha256": "387e6a450f76288607cf8a4d72dc6bdbc44532f1f9776252e9c35ca43e56a242",
+        "size": 14715
+      },
+      "woof/metal/signature_fragments/rrtmgp_cloud_family.json": {
+        "sha256": "d416395e0bcfb5c39ed3ecd5cf4558ff9828f98adac27a4c31748ccef2dd7cfc",
+        "size": 10572
+      },
+      "woof/metal/signature_fragments/rrtmgp_cloud_prep_family.json": {
+        "sha256": "73fd5ce299eccddb82a99c9d774e47a82fa1a878913ce2d65a91b512566f0087",
+        "size": 1111
+      },
+      "woof/metal/signature_fragments/rrtmgp_cloud_prep_ops.json": {
+        "sha256": "171a0f6f17b3b03bac2982670f47691dfbfa1ec4185f34b2498571e4d84551e8",
+        "size": 7170
+      },
+      "woof/metal/signature_fragments/rrtmgp_fluxes_to_radiation.json": {
+        "sha256": "25c9f4642079c7a27c4089700fed21705b0d4882be6672ceb398326c45dc14d0",
+        "size": 1589
+      },
+      "woof/metal/signature_fragments/rrtmgp_gas_family.json": {
+        "sha256": "5072d005cb6eeb931a393b214c5bd3ae3f509250e3dae9c3f2d3c7f434402549",
+        "size": 26750
+      },
+      "woof/metal/signature_fragments/rrtmgp_mcica_family.json": {
+        "sha256": "92e31435789ccbb95da30e72158547d03b2523403884c31b883ad1bca11700b3",
+        "size": 1890
+      },
+      "woof/metal/signature_fragments/rrtmgp_prepare_family.json": {
+        "sha256": "26900b709d8ac8756aa6b3d168b342e4961f1eff62f02b000b2d031cb73ae620",
+        "size": 14387
+      },
+      "woof/metal/signature_fragments/rrtmgp_rte_family.json": {
+        "sha256": "e81350c258c995d551fdc07a181949b0c06ee487d0ee1fefddbe4c28a5edab3d",
+        "size": 7195
+      },
+      "woof/metal/signature_fragments/rrtmgp_validate_call.json": {
+        "sha256": "70d5a4d68b061ecc2afe2486d9e3b4f221c54ff7b634d41eb40e649347246438",
+        "size": 2685
+      },
+      "woof/metal/signature_fragments/ruc_driver_family.json": {
+        "sha256": "640c715a36aafda02a9c7d6f74b60c96b6ebf7ad345922f268aa3f6ab3bd4877",
+        "size": 6070
+      },
+      "woof/metal/signature_fragments/ruc_family.json": {
+        "sha256": "d5bd65d147f8decc3c6bc78d8421d68b2f765e4444cb257716e58e43102a6a53",
+        "size": 2603
+      },
+      "woof/metal/signature_fragments/ruc_sfclay_seaice.json": {
+        "sha256": "57589a2fb5cfc842391f17d7ab906f857fc10a8fae1a6dd8a77830c874927070",
+        "size": 5309
+      },
+      "woof/metal/signature_fragments/ruc_sfctmp_family.json": {
+        "sha256": "ae91e75a4fb8a018dadf01705dd73bb586e5c52b4b7435a348dec5900202ff31",
+        "size": 3561
+      },
+      "woof/metal/signature_fragments/sase_family.json": {
+        "sha256": "fc0b81c7eb3b21ddcfc88953bbaab7929574df2d4a5ae96282930945c181503b",
+        "size": 75741
+      },
+      "woof/metal/signature_fragments/sfclay_family.json": {
+        "sha256": "99ed4813499c5d3e28029edb0edfe95fe772c0404bb526432595a7d34314505f",
+        "size": 8542
+      },
+      "woof/metal/signature_fragments/shinhong_family.json": {
+        "sha256": "e132430b5bfea4050dcad76a3be8281d80f8f2578ded042c48fe20ae5f88aef9",
+        "size": 7621
+      },
+      "woof/metal/signature_fragments/shinhong_output_validation.json": {
+        "sha256": "37df6f6c97427cbd37a0d5154a14246f1abd888dc5ff485869ade2193b0e546d",
+        "size": 1268
+      },
+      "woof/metal/signature_fragments/slow_buoyancy.json": {
+        "sha256": "13d3d42dc730607aad342e97de66a655208fb98f20e3ee73270f36f1c3f28afa",
+        "size": 3975
+      },
+      "woof/metal/signature_fragments/slow_geopotential.json": {
+        "sha256": "9367075f5729e9000e5754dad85060a6f1361dc464aecba37a9f9af8b20d0fa7",
+        "size": 4645
+      },
+      "woof/metal/signature_fragments/smag2d_alternates_fragment.json": {
+        "sha256": "1e8685472a71779496d7f9cc5b4f4d3e2bcef011d8572d9498d0bb94cc5890b8",
+        "size": 9821
+      },
+      "woof/metal/signature_fragments/smag2d_family.json": {
+        "sha256": "2d7c50c2260a06a86d0e63ef5ff9cdea22281f69c020fdf3e2b99338e83dd3aa",
+        "size": 100367
+      },
+      "woof/metal/signature_fragments/small_step.json": {
+        "sha256": "1111a562391af9a7a13c174a03b401a407f1acf48a3b5f881df03986afa861e7",
+        "size": 14337
+      },
+      "woof/metal/signature_fragments/solar_albedo_fragment.json": {
+        "sha256": "6c46569f3434526428456448adf87a0748e05e353a0f84b398548e6a0421f68a",
+        "size": 2034
+      },
+      "woof/metal/signature_fragments/spec_zone_ring.json": {
+        "sha256": "6b73e6ad9e5f19c43cef473dcf64342883842719d9f31759c163ee2cbddebf53",
+        "size": 1757
+      },
+      "woof/metal/signature_fragments/spectral_scalar.json": {
+        "sha256": "cc64e9701f91eb3643a80d61c5995c8b81792e9bb6cf07303104ad785b45a4cf",
+        "size": 8617
+      },
+      "woof/metal/signature_fragments/stage_mass_fluxes.json": {
+        "sha256": "11e90a41e33bda8a8bfa50048b1fb861778d41fd110e93c3c95835d14018d152",
+        "size": 3735
+      },
+      "woof/metal/signature_fragments/surface_diagnostics_seed.json": {
+        "sha256": "d5fd7136f87cd54ebbe339247baaabf42f34a201468190a1e869fc8c95f5cbf3",
+        "size": 1085
+      },
+      "woof/metal/signature_fragments/surface_humidity.json": {
+        "sha256": "8f9a8a170e8d39c5156d95d612b600f57998c912be452ff47a4af56f372f4a29",
+        "size": 689
+      },
+      "woof/metal/signature_fragments/surface_w.json": {
+        "sha256": "349f6ed1282bd7d1ba56702212ea830b6ef23d9244b72fa3be4c9a3783d3ea3d",
+        "size": 1087
+      },
+      "woof/metal/signature_fragments/swint_fragment.json": {
+        "sha256": "db3ad688f338b3320c32ca18a20351cd7689c76369bc213dfb26ebbf0d09401e",
+        "size": 6234
+      },
+      "woof/metal/signature_fragments/tendency_coupling.json": {
+        "sha256": "a631ea9dbfd495a51c2ce62615829b9eba08917abacaeadd37a260759819f84b",
+        "size": 3311
+      },
+      "woof/metal/signature_fragments/terrain_drag_family.json": {
+        "sha256": "0b3e3188cf17ef4fb87973ffcf1a9c50d59fea434b24a49cc8752662ddd915ab",
+        "size": 5433
+      },
+      "woof/metal/signature_fragments/thompson_aerosol_cold_family.json": {
+        "sha256": "3273546009b2ce454d02ead631a745f8b3246e65658b4ef410425c8a3a8e592b",
+        "size": 11488
+      },
+      "woof/metal/signature_fragments/thompson_aerosol_sat_family.json": {
+        "sha256": "99f17210f4d8b3182b785171b0d7e4cab1966b8b05981be8537afa76c842ef2e",
+        "size": 7440
+      },
+      "woof/metal/signature_fragments/thompson_aerosol_sed_family.json": {
+        "sha256": "807cba7c7d1b6a6f7d51c0a010d2e460db9618b09862ae4e0373c292f1a46e75",
+        "size": 30023
+      },
+      "woof/metal/signature_fragments/thompson_aerosol_state_family.json": {
+        "sha256": "088dfd10af56341c4b45dda773b683251f0e0a046152c6cc01eccc745aca8b3b",
+        "size": 12908
+      },
+      "woof/metal/signature_fragments/thompson_aerosol_warm_family.json": {
+        "sha256": "dc3097a55d30d9e1a7ce51197567849777659c8dd52436537989a5069c913654",
+        "size": 9071
+      },
+      "woof/metal/signature_fragments/thompson_aerosol_wrf39_sed_family.json": {
+        "sha256": "cc22a5aa07451687ed3e6ea0602fd3ab85d0b1ed1bc7d0ddca1571b4d177c849",
+        "size": 22032
+      },
+      "woof/metal/signature_fragments/thompson_aerosol_wrf39_state.json": {
+        "sha256": "a88540de2970560d5c9ff948917ca25d2b155958b033fb2570396f0b664b6326",
+        "size": 3759
+      },
+      "woof/metal/signature_fragments/thompson_cloud_sedimentation.json": {
+        "sha256": "ff2c84df1ac0d671881f74b342c219cf4453556e76c931ce74fdc87cb748f3b6",
+        "size": 1521
+      },
+      "woof/metal/signature_fragments/thompson_cold_start_family.json": {
+        "sha256": "2ad19ecd2313b7da4cbc00e64c2f93921451961d28e78d7e55b8f75b8d234421",
+        "size": 5285
+      },
+      "woof/metal/signature_fragments/thompson_effective_radius.json": {
+        "sha256": "773e7beef573a76ca2ddc4cb2fb9c86158f5108a6b8f9f8744ca7122165d2bc3",
+        "size": 2142
+      },
+      "woof/metal/signature_fragments/thompson_family.json": {
+        "sha256": "83addf186f29ea5074d878eedf0116f4677d4662301dba2dbdc403287cfd5b6f",
+        "size": 41400
+      },
+      "woof/metal/signature_fragments/thompson_final_phase_cleanup.json": {
+        "sha256": "ffd74e4f4ed66fd3d0b24f4408dffbb330b7d8a468b06d491bc2d468388ed0b6",
+        "size": 1184
+      },
+      "woof/metal/signature_fragments/thompson_frozen_vapor_network.json": {
+        "sha256": "164a2e74d29b7ad99b1f377ec9d0b6c55cac8a46c428140d8af0a809671ec349",
+        "size": 7552
+      },
+      "woof/metal/signature_fragments/thompson_graupel_sedimentation.json": {
+        "sha256": "ac4fb5d9f7d76c056ef79a3a95665b41bd4b3b39fc8e1f0d3eb5f95cf3379dba",
+        "size": 1748
+      },
+      "woof/metal/signature_fragments/thompson_ice_sedimentation.json": {
+        "sha256": "cc50f430469de1945a20ac22149dd5c50e9d507e77b90536aa4a706b3578d76d",
+        "size": 7532
+      },
+      "woof/metal/signature_fragments/thompson_rain_evaporation.json": {
+        "sha256": "9a226ebf0542ae3b7a16af6b55de8737513c48751ead21bfede3afbdc4b9e79f",
+        "size": 1417
+      },
+      "woof/metal/signature_fragments/thompson_rain_sedimentation.json": {
+        "sha256": "d76a9aa9fab9ddf051fedc98506c053652b5b481369b918809708c5939b3c629",
+        "size": 1581
+      },
+      "woof/metal/signature_fragments/thompson_reflectivity.json": {
+        "sha256": "7b59b437a6d14c90438b9c4eb7c32bdb448217e377ac09d9785d972f50094a59",
+        "size": 1322
+      },
+      "woof/metal/signature_fragments/thompson_snow_sedimentation.json": {
+        "sha256": "98effde0674d587a2521935db41d43fc88fc1c390d1e77e56ab1a70465bf5356",
+        "size": 2279
+      },
+      "woof/metal/signature_fragments/thompson_warm_frozen_source.json": {
+        "sha256": "70a91aa5048a09c41dc5d70381a9da201422c8692a92da53316f78e7ca9e25b9",
+        "size": 40733
+      },
+      "woof/metal/signature_fragments/tke_budget_family.json": {
+        "sha256": "37b968bab8814158f635870440f8c8eb834dad5da3720c95ec6060f10af956c3",
+        "size": 20
+      },
+      "woof/metal/signature_fragments/topo_radiation_family.json": {
+        "sha256": "d5bc37740cc98db108f5cfdbdf851278f5fdcdc91fc17c4afa80892f68c3efca",
+        "size": 5073
+      },
+      "woof/metal/signature_fragments/uh_diag_family.json": {
+        "sha256": "43d39f8720d61f1945b11026f98708317d84312cd86cb39911186165d6ad7e43",
+        "size": 4121
+      },
+      "woof/metal/signature_fragments/uh_smooth_max.json": {
+        "sha256": "acf53ba31bc6abe3ae57569d1270e293fcc554f307b784567dcd848616137cd2",
+        "size": 806
+      },
+      "woof/metal/signature_fragments/upper_wind_limiter.json": {
+        "sha256": "981381346a5cc3a50d2c13a2795827a3c8b1cfefff5cb7b841ef3abe1d79a572",
+        "size": 772
+      },
+      "woof/metal/signature_fragments/urban_bem_atmosphere_gather_fragment.json": {
+        "sha256": "65eea4349c0f9ae7330212674f31760a8c3738f8dc28d3cbd91821d7c4bde6e2",
+        "size": 2201
+      },
+      "woof/metal/signature_fragments/urban_bem_atmosphere_interp_fragment.json": {
+        "sha256": "df6aef10514da93ad28a545210b2861d2beb45d7b20a14aedeeb39d9b20e4639",
+        "size": 1531
+      },
+      "woof/metal/signature_fragments/urban_bem_building_level_scan_fragment.json": {
+        "sha256": "65b5b3357704e8dc6f6b8d0ba973eac1ef27d997174138273182d73662e1bd59",
+        "size": 1097
+      },
+      "woof/metal/signature_fragments/urban_bem_buildings_tendency_fragment.json": {
+        "sha256": "29542e79d7694a80aa258a89aefab7c078be7878456e13cfb96bd4b3140b33f9",
+        "size": 3208
+      },
+      "woof/metal/signature_fragments/urban_bem_consump_total_fragment.json": {
+        "sha256": "654ee1efdfcc2ec090550c1589dd6215ed3692324ca931558333f750b064c801",
+        "size": 988
+      },
+      "woof/metal/signature_fragments/urban_bem_final_output_fragment.json": {
+        "sha256": "daabbf96f2f18bcf3257ed26648448aebd2b5a6b25592263528e0e25fd8fbc7a",
+        "size": 4036
+      },
+      "woof/metal/signature_fragments/urban_bem_flat_flux_fragment.json": {
+        "sha256": "37ce800e2c4148df5f0fd8a7d2901aa12a43542326df1fe55d7c0fce2c8f7a3b",
+        "size": 1749
+      },
+      "woof/metal/signature_fragments/urban_bem_flat_flux_pack_fragment.json": {
+        "sha256": "84be4ff00736de726bfa2981bb64505e211a47835cd5379ee60542f200228d98",
+        "size": 1201
+      },
+      "woof/metal/signature_fragments/urban_bem_green_roof_material_solve_fragment.json": {
+        "sha256": "ecd0bc8336f53e6a57865b2b3554499f8a2167a7b88bc2013d289dfdf081bb47",
+        "size": 6728
+      },
+      "woof/metal/signature_fragments/urban_bem_icbep_xy_fragment.json": {
+        "sha256": "53d41db573819ce231601acec39c600fbe27a0d737a4c2aa6c3110b82d77fa66",
+        "size": 1550
+      },
+      "woof/metal/signature_fragments/urban_bem_indoor_fluxes_fragment.json": {
+        "sha256": "6e4e7adbcc745f4a04ad9291fad1bfb5d2d16839e8080160c86ab116858fdeab",
+        "size": 2522
+      },
+      "woof/metal/signature_fragments/urban_bem_indoor_radiation_fragment.json": {
+        "sha256": "3c23348b377551b34fea8edf1459f368d58304fe9b122521f56e807b1733eb81",
+        "size": 1847
+      },
+      "woof/metal/signature_fragments/urban_bem_indoor_state_update_fragment.json": {
+        "sha256": "7ce8654cb69951f8df49c2f40f618c827290664da370622b10e80df153591fcb",
+        "size": 1572
+      },
+      "woof/metal/signature_fragments/urban_bem_interior_flux_fragment.json": {
+        "sha256": "3a619c15472b3d3f7c5eb7160e39bc1702593cccfe40afa8d243143851dd8773",
+        "size": 1742
+      },
+      "woof/metal/signature_fragments/urban_bem_interior_radiation_fragment.json": {
+        "sha256": "553c65c2cfc3424075800d6c43bb34a57d4b5080e46adabf33325672668f6902",
+        "size": 1479
+      },
+      "woof/metal/signature_fragments/urban_bem_interp_length_fragment.json": {
+        "sha256": "15128fdd132b2fcb52628da4e25c48d8762b8a7127653e3c64efb3516c073ceb",
+        "size": 1062
+      },
+      "woof/metal/signature_fragments/urban_bem_material_solve_fragment.json": {
+        "sha256": "db95c36bf4f78f11e163d1032b8c9b5d3b1d53e7ba6b2b66e23a6e6369052522",
+        "size": 2668
+      },
+      "woof/metal/signature_fragments/urban_bem_occupancy_fragment.json": {
+        "sha256": "a2abc25ad5553b07e52d458a735b2280e9f3cc9beadcb89680444eced03c4f94",
+        "size": 883
+      },
+      "woof/metal/signature_fragments/urban_bem_occupancy_inputs_fragment.json": {
+        "sha256": "0bd9af7fbe16b4f40462aa68816e1a98b5ba266181f488191bbdbaf9043354d9",
+        "size": 1064
+      },
+      "woof/metal/signature_fragments/urban_bem_param_fragment.json": {
+        "sha256": "4d184b5311ffba29109b24d0fea1ee3cff8cb827ba5a4a4cfebe24f43f062759",
+        "size": 7397
+      },
+      "woof/metal/signature_fragments/urban_bem_profile_init_family.json": {
+        "sha256": "a9b8626bca86f495a2008962b6dc124398d62adc3541be95ef1ab6ca502a3ecc",
+        "size": 1737
+      },
+      "woof/metal/signature_fragments/urban_bem_radiation_fragment.json": {
+        "sha256": "c78dcbb1ae161afaddc8ecb06eca3448ce850b26c577ce15275d4c0e95d31cbd",
+        "size": 2903
+      },
+      "woof/metal/signature_fragments/urban_bem_rain_update_fragment.json": {
+        "sha256": "08b9fcd67042993c3546558d11ccf4a9f48a37fe08de54776b95beb8e4d381fc",
+        "size": 1169
+      },
+      "woof/metal/signature_fragments/urban_bem_room_balance_inputs_fragment.json": {
+        "sha256": "bef3502b977346b040187d611ba0713ce017c1f008c1fd548574b3c05b7f3ab1",
+        "size": 3179
+      },
+      "woof/metal/signature_fragments/urban_bem_room_control_fragment.json": {
+        "sha256": "c2f7616a64d41774a898304751ababbd28ce0ce13d2414528fa5315b809ee51b",
+        "size": 1889
+      },
+      "woof/metal/signature_fragments/urban_bem_shadow_mas_fragment.json": {
+        "sha256": "992d2cec16b36fcdc04d05b1ad40c03b66e6d126932cfcb394bd509beb897c0b",
+        "size": 1659
+      },
+      "woof/metal/signature_fragments/urban_bem_solver_family.json": {
+        "sha256": "f9df474cc83ba19d435c96126ce00a4219a6929e95cd338c7a8ef970c6aa9f7d",
+        "size": 17718
+      },
+      "woof/metal/signature_fragments/urban_bem_surface_temp_fragment.json": {
+        "sha256": "c8c1bcda7ea67c2c907cb43eaae241cb423f066a9f125d63a16f930ecd2d6c40",
+        "size": 1543
+      },
+      "woof/metal/signature_fragments/urban_bem_temperature_profile_average_fragment.json": {
+        "sha256": "d981fca9f7011a574d8e16910c4523e9d40c3070d17a2133678446cc0d229c56",
+        "size": 1190
+      },
+      "woof/metal/signature_fragments/urban_bem_urban_meso_fragment.json": {
+        "sha256": "aa50d61ad7890bebf76a9ed30843b8c3a13dbf2870573e9e559cbe0689c021d3",
+        "size": 2553
+      },
+      "woof/metal/signature_fragments/urban_bem_view_factors_fragment.json": {
+        "sha256": "afdf736084ba2967842f56db300c254b5f93da869fd255c5e6ee996fd2715588",
+        "size": 1293
+      },
+      "woof/metal/signature_fragments/urban_bem_view_inputs_fragment.json": {
+        "sha256": "79f2ae8abaa09a85907cd7112e6111df3f1662b0c8283b6c712cb647c3836f3f",
+        "size": 1147
+      },
+      "woof/metal/signature_fragments/urban_bem_wall_flux_fragment.json": {
+        "sha256": "410259ff2a320366af2a3578d45511b0bbb08863d279f702c14e15fb46f79847",
+        "size": 1752
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_family.json": {
+        "sha256": "feb781dfba4c3975cecb121c1c99470012b27cabb8a210f4b08f6087025672f7",
+        "size": 2630
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_finalize_fragment.json": {
+        "sha256": "8392876cbe0f7733b73cc35dc8d2a4c5ff22101c9c31c3bc922600b3ef0cefe1",
+        "size": 1636
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_flat_roof_flux_fragment.json": {
+        "sha256": "6736506ed9c1e68f61286a1c20ddb072a7c72f2597e4ab1a2ee24b29407a7595",
+        "size": 2103
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_green_roof_fragment.json": {
+        "sha256": "5af611b350c7fb8d55c8dacb6ba3f8c59fb2d74f6388aa1ade19d492d920b51b",
+        "size": 18246
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_hi_profile_gather_fragment.json": {
+        "sha256": "90972ad5fcdfadf6f74931143293673ef13db1f9c381b429ad61126cc6fc6af3",
+        "size": 842
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_profile_select_fragment.json": {
+        "sha256": "6121b950633a251137fe8d059129396ca8f978058978fdfc382b6b01e756803c",
+        "size": 934
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_pv_solve_fragment.json": {
+        "sha256": "afcb1db118c9011139e7355ad5f07db29348c8887113625e45121479d5e64846",
+        "size": 1414
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_state_gather_fragment.json": {
+        "sha256": "f94f5c83166c3e881a40936c3c8cb254ac975c43489b4fd6d45293affc178171",
+        "size": 4649
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_state_scatter_fragment.json": {
+        "sha256": "d046ba164c54ae902b943083b568b4f27bbb6142f7bf7838b51ff2662c3c2e57",
+        "size": 4020
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_upward_rad_fragment.json": {
+        "sha256": "e0dbda51c22b05cbb9d12e0bcb0efec5bd7db5bee7722295b8e4bec5603df029",
+        "size": 2637
+      },
+      "woof/metal/signature_fragments/urban_bep_bem_wall_fragment.json": {
+        "sha256": "212628a3168160e8f5bd7826aa14666ff039e90e7ddf2badc2afde5be742535c",
+        "size": 2757
+      },
+      "woof/metal/signature_fragments/urban_bep_couple_family.json": {
+        "sha256": "22cf389802ffa95b47756cb75bcb8f9212f3b134140fdd3cd89ae548ae9bf281",
+        "size": 8688
+      },
+      "woof/metal/signature_fragments/urban_bep_family.json": {
+        "sha256": "9b904bf999718b1fcf7160e2e2772e44424bd8dbce84edd6eea12dfd48621277",
+        "size": 22827
+      },
+      "woof/metal/signature_fragments/urban_bep_radiation_fragment.json": {
+        "sha256": "8f5fca0779c3aaf7c6b6c26cb58f2b3710c705499b562aeb4b95a1770abf9ed1",
+        "size": 2345
+      },
+      "woof/metal/signature_fragments/urban_bep_radiosity_fragment.json": {
+        "sha256": "c583ed79a1272927a746a8afa41e3b8d4a1830b9969916313b9e3100a5e910b4",
+        "size": 3170
+      },
+      "woof/metal/signature_fragments/urban_bep_surface_temperature_fragment.json": {
+        "sha256": "37d73f22acb2cb9112e3614ef3ea272418cea09961a88a4f2efa86a04800cefe",
+        "size": 3178
+      },
+      "woof/metal/signature_fragments/urban_ucm_after_lsm_family.json": {
+        "sha256": "24d9d7560e4196c6cdc623710feab23ceb4ab475f94d0eb1dc30aca741d4e4d0",
+        "size": 12710
+      },
+      "woof/metal/signature_fragments/urban_ucm_family.json": {
+        "sha256": "a7fb79f917b41e299423cbcb7c3642fd75070597f33ee777a400409f60ee5a9f",
+        "size": 8468
+      },
+      "woof/metal/signature_fragments/uwpbl_family.json": {
+        "sha256": "2c5739595526eb9fa4a706042aac25ef50cc636e8b8bb2eb40127e4b8cf9d0a2",
+        "size": 9114
+      },
+      "woof/metal/signature_fragments/wdm6_family.json": {
+        "sha256": "bc00c79ad6e4b94e8ce011bc4750338dc8a93ed88a9558f557ffb30311fd23dd",
+        "size": 2339
+      },
+      "woof/metal/signature_fragments/wdm6_reflectivity.json": {
+        "sha256": "7117537d5be771db88618815cf88f46c1f1cdbdd9af44300b4e6310cc788aa87",
+        "size": 1204
+      },
+      "woof/metal/signature_fragments/wrf_tke_km.json": {
+        "sha256": "73ea9730e7f0e27f2afad3087364f0a7b1ef28b6677e6c70fc8f97c7530ba923",
+        "size": 5722
+      },
+      "woof/metal/signature_fragments/wrf_w_cfl_stat.json": {
+        "sha256": "1916099ae3dc81a17bf11484589785cc02d7e37b10f8e80e023e868124ac1bc8",
+        "size": 1040
+      },
+      "woof/metal/signature_fragments/wsm6_family.json": {
+        "sha256": "414f4eb3f41188d9e21d3ab6a3b40578c4dc051833860d2897304f4b54e61f12",
+        "size": 4421
+      },
+      "woof/metal/signature_fragments/ysu_column.json": {
+        "sha256": "56e4106e396ea1cd67e823588664fa54a94dd4492b08f27c3eee5436c634837c",
+        "size": 5256
+      },
+      "woof/metal/signature_fragments/ysu_family.json": {
+        "sha256": "01616386c7292e8743de3b4c0019f2b251229eed635d9cfa65a5c464b6330cf0",
+        "size": 296
+      }
+    },
+    "sha256": "24694360e340c2bfe8d7d41f30f3270c8b0d3db0ec54efeab2f696f72539ac96"
+  }
 }

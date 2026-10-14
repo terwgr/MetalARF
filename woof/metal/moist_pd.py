@@ -17,9 +17,12 @@ def _require_state(state):
 
 def submit_pd_fluxes(q, q0, ru, rv, rw, mut, coord, dx, dy, dt,
                      fxl, fxc, fyl, fyc, fzl, fzc, *,
-                     msft=None, has_msf=None, open_x=False, open_y=False):
+                     msft=None, has_msf=None, open_x=False, open_y=False,
+                     vorder=3):
     """Submit the face flux decomposition into caller-owned scratch arrays."""
     _require_state(coord)
+    if vorder not in (3, 5):
+        raise ValueError("PD vertical advection order must be 3 or 5")
     nz, ny, nx = q.shape
     if has_msf is None:
         has_msf = msft is not None
@@ -35,6 +38,7 @@ def submit_pd_fluxes(q, q0, ru, rv, rw, mut, coord, dx, dy, dt,
     params = {"dx": float(np.float32(dx)), "dy": float(np.float32(dy)),
               "dt": float(np.float32(dt)), "has_msf": int(bool(has_msf)),
               "open_x": int(bool(open_x)), "open_y": int(bool(open_y)),
+              "vorder": int(vorder),
               "nz": nz, "ny": ny, "nx": nx}
     return coord._array_module.context.submit_kernel(
         "pd_fluxes", arrays, params, exact_policy=False,

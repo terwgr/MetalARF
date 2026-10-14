@@ -14,6 +14,8 @@
 // owned by the exp packet. Do not add a second exp/log implementation here;
 // pow owns only the pinned log2 polynomial below.
 
+// Preserve the pinned source's separate RN-even multiply and add/subtract;
+// using soft64_fma here changes the binary64 rounding graph.
 #include "soft_binary64.metalh"
 #include "soft_binary32.metalh"
 #include "soft_gfk_exp.metalh"
@@ -87,19 +89,16 @@ static inline ulong soft_gfk_powf_log2_bits(uint ix)
     const uint iz = ix - top;
     const int k = as_type<int>(top) >> 23;
     const ulong z = soft64_from_f32_bits(iz);
-    const ulong r = soft64_fma(z, soft_gfk_powf_invc[i],
-                               0xbff0000000000000ul);
+    const ulong r = soft64_sub(soft64_mul(z, soft_gfk_powf_invc[i]), 0x3ff0000000000000ul);
     const ulong y0 = soft64_add(soft_gfk_powf_logc[i],
                                 soft_gfk_i32_to_f64_bits(k));
     const ulong r2 = soft64_mul(r, r);
-    const ulong y = soft64_fma(soft_gfk_powf_a[0], r,
-                               soft_gfk_powf_a[1]);
-    const ulong p = soft64_fma(soft_gfk_powf_a[2], r,
-                               soft_gfk_powf_a[3]);
+    const ulong y = soft64_add(soft64_mul(soft_gfk_powf_a[0], r), soft_gfk_powf_a[1]);
+    const ulong p = soft64_add(soft64_mul(soft_gfk_powf_a[2], r), soft_gfk_powf_a[3]);
     const ulong r4 = soft64_mul(r2, r2);
-    ulong q = soft64_fma(soft_gfk_powf_a[4], r, y0);
-    q = soft64_fma(p, r2, q);
-    return soft64_fma(y, r4, q);
+    ulong q = soft64_add(soft64_mul(soft_gfk_powf_a[4], r), y0);
+    q = soft64_add(soft64_mul(p, r2), q);
+    return soft64_add(soft64_mul(y, r4), q);
 }
 
 // Bitwise translation of pinned glibc 2.39 gfk_pow. The only binary32

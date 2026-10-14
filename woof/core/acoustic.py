@@ -37,7 +37,7 @@ class _AcousticSubstepTopology:
     label: str
 
 
-def prepare_upper_wind_limiter(state, cfg, dtau):
+def prepare_upper_wind_limiter(state, cfg, dtau, *, _prepare=False):
     """Bind the fork's advance_w limiter on the saved physical stage winds.
 
     state.u/v are u_save/v_save during the acoustic loop, consumed by
@@ -49,6 +49,19 @@ def prepare_upper_wind_limiter(state, cfg, dtau):
         return None
     if cfg.nz < 3:
         raise ValueError("the upper-wind limiter reads three top mass levels; nz must be at least 3")
+    if getattr(state, "_metal_setup_state", False):
+        context = state._array_module.context
+        call = context.prepare_kernel_call(
+            "upper_wind_limiter",
+            {"u": state.u, "v": state.v, "php": state.php, "phb": state.phb},
+            {"dts": float(DTYPE(dtau)), "hdepth": float(DTYPE(cfg.zdamp)),
+             "base3d": int(_base3d(state)), "zone": _mass_w_boundary_zone(cfg),
+             "nz": int(cfg.nz), "ny": int(cfg.ny), "nx": int(cfg.nx)},
+            exact_policy=WRF_EXACT, grid_size=cfg.ny * cfg.nx)
+        if _prepare:
+            return call
+        return lambda: context.submit_prepared_kernel_call(
+            call, label="HRRR saved-wind upper limiter")
     kernel = get_kernel("upper_wind_limiter", "upper_wind_limiter")
     args = (state.u, state.v, state.php, state.phb, DTYPE(dtau),
             DTYPE(cfg.zdamp), _base3d(state),
@@ -653,7 +666,8 @@ def prepare_acoustic_substep_launch(state: DomainState, cfg: RunConfig,
     immutable Python launch containers and scalar wrappers are reused.
     """
     nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
-    upper_wind_limiter = prepare_upper_wind_limiter(state, cfg, dtau)
+    upper_wind_limiter = prepare_upper_wind_limiter(
+        state, cfg, dtau, _prepare=bool(getattr(state, "_metal_setup_state", False)))
     wphi_level_tier(nz)   # refuse a too-deep column before allocating
 
     if getattr(state, "_metal_setup_state", False):
@@ -661,6 +675,9 @@ def prepare_acoustic_substep_launch(state: DomainState, cfg: RunConfig,
               (state.p, state.p, state.p, False))
         entrypoints = ["advance_uv", "advance_mu_th", "advance_w_phi"]
         grid_sizes = [nz * (ny + 1) * (nx + 1), ny * nx, ny * nx]
+        if upper_wind_limiter is not None:
+            entrypoints.append("upper_wind_limiter")
+            grid_sizes.append(ny * nx)
         if _boundary_forced(cfg):
             entrypoints.append("acoustic_boundary_frame")
             grid_sizes.append(ny * nx)
@@ -686,6 +703,8 @@ def prepare_acoustic_substep_launch(state: DomainState, cfg: RunConfig,
                 state, cfg, dtau, mudf=mudf, _prepare=True))
             calls.append(submit_metal_acoustic_advance_w_phi(
                 state, cfg, dtau, coefficients, cq=cq, _prepare=True))
+            if upper_wind_limiter is not None:
+                calls.append(upper_wind_limiter)
             if _boundary_forced(cfg):
                 calls.append(submit_metal_acoustic_boundary_frame(
                     state, cfg, dtau, coefficients, _prepare=True))

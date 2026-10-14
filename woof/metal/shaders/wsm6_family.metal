@@ -203,52 +203,35 @@ static inline float plm_regular_remap(
     qpi[nz] = qa[nz]; qmi[nz] = qa[nz];
     for (int k = 0; k < nz; ++k) qn[k] = 0.0f;
 
-    int kb = 0, kt = 0;
+    // Integrate the limited profile over each complete regular cell. Arrival
+    // cells cover only the falling column; the space above it contains no mass.
+    // A persistent source cursor avoids sentinel indices and keeps the overlap
+    // walk linear in the number of interfaces.
+    int source = 0;
     for (int k = 0; k < nz; ++k) {
-        kb = (kb > 0) ? kb - 1 : 0;
-        kt = (kt > 0) ? kt - 1 : 0;
-        if (zi[k] >= za[nz]) break;
-        for (int kk = kb; kk < nz; ++kk) {
-            if (zi[k] <= za[kk + 1]) { kb = kk; break; }
-        }
-        for (int kk = kt; kk < nz; ++kk) {
-            if (zi[k + 1] <= za[kk]) { kt = kk; break; }
-        }
-        kt = (kt > 0) ? kt - 1 : 0;
-        if (kt == kb) {
-            float tl = (zi[k] - za[kb]) / dza[kb];
-            float th = (zi[k + 1] - za[kb]) / dza[kb];
-            float qqd = 0.5f * (qpi[kb] - qmi[kb]);
-            float qqh = qqd * th * th + qmi[kb] * th;
-            float qql = qqd * tl * tl + qmi[kb] * tl;
-            qn[k] = (qqh - qql) / (th - tl);
-        } else if (kt > kb) {
-            float tl = (zi[k] - za[kb]) / dza[kb];
-            float qqd = 0.5f * (qpi[kb] - qmi[kb]);
-            float qql = qqd * tl * tl + qmi[kb] * tl;
-            float zsum = (1.0f - tl) * dza[kb];
-            float qsum = (qa[kb] - qql) * dza[kb];
-            for (int m = kb + 1; m < kt; ++m) {
-                zsum += dza[m]; qsum += qa[m] * dza[m];
+        while (source < nz && za[source + 1] <= zi[k]) ++source;
+        float mass = 0.0f;
+        for (int j = source; j < nz && za[j] < zi[k + 1]; ++j) {
+            float low = max(zi[k], za[j]);
+            float high = min(zi[k + 1], za[j + 1]);
+            if (high > low) {
+                float middle = clamp01(0.5f * ((low - za[j]) + (high - za[j]))
+                                       / dza[j]);
+                float average = qmi[j] * (1.0f - middle) + qpi[j] * middle;
+                mass += (high - low) * average;
             }
-            float th = (zi[k + 1] - za[kt]) / dza[kt];
-            float dqh = 0.5f * (qpi[kt] - qmi[kt]) * th * th
-                      + qmi[kt] * th;
-            zsum += th * dza[kt]; qsum += dqh * dza[kt];
-            qn[k] = qsum / zsum;
         }
+        qn[k] = mass / (zi[k + 1] - zi[k]);
     }
 
+    // The outflow uses the same linear profile as the retained cell mass,
+    // including a partially fallen cell with a nonzero slope.
     float precip = 0.0f;
-    for (int k = 0; k < nz; ++k) {
-        if (za[k] < 0.0f && za[k + 1] < 0.0f) {
-            precip += qa[k] * dza[k];
-        } else if (za[k] < 0.0f && za[k + 1] >= 0.0f) {
-            precip += qa[k] * (0.0f - za[k]);
-            break;
-        } else {
-            break;
-        }
+    for (int j = 0; j < nz && za[j] < 0.0f; ++j) {
+        float high = min(0.0f, za[j + 1]);
+        float middle = clamp01(0.5f * (high - za[j]) / dza[j]);
+        float average = qmi[j] * (1.0f - middle) + qpi[j] * middle;
+        precip += (high - za[j]) * average;
     }
     return precip;
 }

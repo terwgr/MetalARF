@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 #include "physics_atmosphere_prepare_bindings.metalh"
+#include "pressure_power.metalh"
 using namespace metal;
 
 // Keep the field-wise FP32 order used by woof.core.physics._prepare_atmosphere.
@@ -56,7 +57,8 @@ kernel void physics_atmosphere_prepare(
     for (uint k = 0; k < nz; ++k) {
         const ulong idx = pa_index(k, cell, stride);
         const float theta = pa_base(r.thb, k, cell, stride, thb3d) + r.thp[idx];
-        const float exner = pow(r.p[idx] / 100000.0f, 0.2857142984867096f);
+        const float exner = fp32_pressure_power(
+            r.p[idx], 100000.0f, 0.2857142984867096f);
         r.theta[idx] = theta;
         r.exner[idx] = exner;
         r.temperature[idx] = theta * exner;

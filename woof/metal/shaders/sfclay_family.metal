@@ -3,8 +3,12 @@
 #include "soft_binary64.metalh"
 #include "soft_gfk_log.metalh"
 #include "soft_libm64.metalh"
+#include "pressure_power.metalh"
 using namespace metal;
-#pragma clang fp contract(off)
+// Ordinary CUDA SFCLAY is compiled with NVRTC's default fmad=true.
+// Match that contraction policy within this numerical kernel; driver-level
+// CuPy operator boundaries remain separate in their own Metal kernels.
+#pragma clang fp contract(fast)
 // FP32 logf follows the in-tree pinned glibc gfk_log bit implementation.
 // The CUDA-defined zero/subnormal-z0 rescue widens exact FP32 bits and uses
 // the shared software binary64 log. These helpers remain uncompiled and
@@ -12,7 +16,8 @@ using namespace metal;
 constant float G=9.81f, RD=287.0f, RV=461.6f, CP=1004.5f;
 constant float P0=100000.0f, RCP=0.2857142984867096f;
 constant float SVP1=0.6112f, SVP2=17.67f, SVPT0=273.15f, SVP3=29.65f;
-constant float EP2=0.6217157244682312f, XLV=2.5e6f;
+// Derive the vapor/dry-air gas ratio from the same constants as CUDA EP2.
+constant float EP2=RD/RV, XLV=2.5e6f;
 
 // gpuwm/core/kernels/sfclay.cu
 //
@@ -217,8 +222,8 @@ kernel void sfclay_column(constant SfclayColumnResources &r [[buffer(0)]],
     float old_zol = r.zol[idx];
     float old_hfx = r.hfx[idx], old_qfx = r.qfx[idx], qs = r.qsfc[idx];
 
-    float thgb = ground_t * pow(P0 / ps, RCP);
-    float thx = temp * pow(P0 / press, RCP);
+    float thgb = ground_t * fp32_pressure_power(P0, ps, RCP);
+    float thx = temp * fp32_pressure_power(P0, press, RCP);
     float thvx = thx * (1.0f + ep1 * qvx);
     float tv = temp * (1.0f + ep1 * qvx);
     float cpm = CP * (1.0f + 0.8f * qvx);
@@ -449,7 +454,7 @@ kernel void sfclay_column(constant SfclayColumnResources &r [[buffer(0)]],
     float u10 = uu * psix10 / psix, v10 = vv * psix10 / psix;
     float th2 = thgb + (thx - thgb) * psit2 / psit;
     float q2 = qs + (qvx - qs) * psiq2 / psiq;
-    float t2 = th2 * pow(sf_div_rn(ps, P0), RCP);
+    float t2 = th2 * fp32_pressure_power(ps, P0, RCP);
     if (land) new_ust = fmax(new_ust, q.option == 91 ? 0.1f : 0.001f);
     float new_mol = karman * (thx - thgb) / psit;
 

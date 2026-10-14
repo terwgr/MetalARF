@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Correct Metal Coriolis momentum coupling and separately rounded binary64
+  exponential, logarithm and power helpers.
+- Verify packaged runtime and shader-library contents before loading, with
+  content bindings for native sources and build inputs.
+- Support HRRR/Noah solar albedo, edge diffusion and saved-wind limiting.
+- Honor configured vertical scalar-advection order and correct Thompson
+  saturation, snow collision and warm-source latent heating.
+- Restore Smagorinsky stage ordering and deliver accepted rainfall to Noah
+  once per surface interval.
+- Align surface/PBL arithmetic contraction and thermodynamic pressure powers.
+- Initialize persistent shortwave interpolation on both Metal initialization
+  paths and include its kernels in the packaged libraries.
+- Conserve WSM6 sedimentation water across complete target cells and surface
+  outflow using the same limited linear profile.
+
 ## MetalARF 1.0.3
 
 Integrates PRs #8, #14, #13, #9, #11, #10, #12, #16 and #15 in one

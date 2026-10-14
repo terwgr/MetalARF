@@ -1,10 +1,53 @@
 #include <metal_stdlib>
 #include "advance_w_phi_bindings.metalh"
+#include "upper_wind_limiter_bindings.metalh"
+#include "soft_binary32.metalh"
+#include "soft_gfk_pow.metalh"
 
 using namespace metal;
 
 constant float WOOF_GRAVITY = 9.81f;
 #define WPHI_MAX_LEV 257
+
+// NOAA WRFV3.9 advance_w's saved-wind limiter. One thread owns a
+// column; qq's descending recurrence must not be parallelized by level.
+#pragma clang fp contract(off)
+kernel void upper_wind_limiter(constant UpperWindLimiterResources &r [[buffer(0)]],
+                              constant UpperWindLimiterParams &p [[buffer(1)]],
+                              uint col [[thread_position_in_grid]]) {
+    if (col>=uint(p.ny)*uint(p.nx)) return;
+    const int j=int(col/uint(p.nx)), i=int(col%uint(p.nx));
+    if (i<p.zone || i>=p.nx-p.zone || j<p.zone || j>=p.ny-p.zone) return;
+    float qq=0.0f;
+    for (int k=p.nz-1;k>=p.nz-3;--k) {
+        const float uk=r.u[(k*p.ny+j)*(p.nx+1)+i];
+        const float vk=r.v[(k*(p.ny+1)+j)*p.nx+i];
+        qq=max(qq,uk*uk+vk*vk);
+    }
+    qq=qq/12100.0f;
+    if (qq<=1.0f) return;
+    const int top=p.nz*p.ny*p.nx+int(col);
+    const float htop=(r.php[top]+r.phb[p.base3d ? top : p.nz])/WOOF_GRAVITY;
+    const float hbot=htop-p.hdepth;
+    for (int k=p.nz-1;k>=1;--k) {
+        const int pos=k*p.ny*p.nx+int(col);
+        const float hk=(r.php[pos]+r.phb[p.base3d ? pos : k])/WOOF_GRAVITY;
+        if (hk>=hbot && qq>1.0f) {
+            qq=sqrt((qq-1.0f)*qq);
+            float drag=(p.dts/86400.0f)*2.0f;
+            drag=drag*qq;
+            const float exponent=0.4f*float(k-(p.nz-1));
+            const float taper=as_type<float>(soft_gfk_pow_bits(
+                as_type<uint>(2.0f),as_type<uint>(exponent)));
+            drag=drag*taper;
+            const float factor=1.0f-drag;
+            const int up=(k*p.ny+j)*(p.nx+1)+i;
+            const int vp=(k*(p.ny+1)+j)*p.nx+i;
+            r.u[up]=r.u[up]*factor;
+            r.v[vp]=r.v[vp]*factor;
+        }
+    }
+}
 
 static inline ulong wphi_idx3(int k, int j, int i, int ny, int nx) {
     return (ulong(k) * ulong(ny) + ulong(j)) * ulong(nx) + ulong(i);

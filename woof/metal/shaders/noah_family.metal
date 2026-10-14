@@ -4,6 +4,7 @@ using namespace metal;
 #include "../generated/noah_check_soil_categories_bindings.metalh"
 #include "../generated/noah_initialize_sh2o_bindings.metalh"
 #include "soft_binary64.metalh"
+#include "pressure_power.metalh"
 #pragma clang fp contract(off)
 typedef float real;
 #define CP 1004.5f
@@ -14,6 +15,10 @@ static inline real __fdiv_rn(real a, real b) { return a / b; }
 static inline real __fmul_rn(real a, real b) { return a * b; }
 static inline real __fadd_rn(real a, real b) { return a + b; }
 static inline real __fsub_rn(real a, real b) { return a - b; }
+// Explicit CUDA RN operations above retain separate rounding. Ordinary
+// Noah expressions below permit contraction, matching the recorded CUDA
+// kernel's default NVRTC fmad=true policy.
+#pragma clang fp contract(fast)
 #define NSOIL 4
 
 #define NRD      287.04f      // noahlsm module RD
@@ -1031,8 +1036,8 @@ static inline void noah_column_body(device const int*  ivgtyp,
     real q2k = qv1_a[idx] / (1.0f + qv1_a[idx]);
     real q2sat = qgh_a[idx] / (1.0f + qgh_a[idx]);
     real sfctmp = sfctmp_a[idx];
-    real apes = pow(1.0e5f / psfc, RCP);             // CAPA = R_d/CP
-    real apelm = pow(1.0e5f / sfcprs, RCP);
+    real apes = fp32_pressure_power(1.0e5f, psfc, RCP); // CAPA = R_d/CP
+    real apelm = fp32_pressure_power(1.0e5f, sfcprs, RCP);
     real sfcth2 = sfctmp * apelm;
     real th2 = sfcth2 / apes;
     real emissi = emiss_a[idx];

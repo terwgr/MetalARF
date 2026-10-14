@@ -1325,7 +1325,10 @@ def launch_wrf_smag2d_km(state: DomainState, cfg: RunConfig,
     """
     nz, ny, nx = xkmh.shape
     if getattr(state, "_metal_setup_state", False):
-        from woof.metal.smag2d_family import submit_wrf_smag2d_km
+        from woof.metal.smag2d_family import (
+            submit_wrf_smag_deform, submit_wrf_smag2d_km,
+            submit_wrf_smag_km_bc,
+        )
         n_mass = nz * ny * nx
         # Match CUDA's carrying-buffer reuse: these deformation fields live
         # through the u/v stress launches and are overwritten afterward.
@@ -1336,9 +1339,14 @@ def launch_wrf_smag2d_km(state: DomainState, cfg: RunConfig,
             state, (nz, ny, nx + 1), mass_shape, "smag_ru")
         d12 = _wrf_smag_prefix_view(
             state, (nz, ny + 1, nx), mass_shape, "smag_rv")
+        submit_wrf_smag_deform(state, cfg, d11, d22, d12, time_t=time_t)
         submit_wrf_smag2d_km(
             state, cfg, d11, d22, d12, xkmh, xkhh,
             c_s=cfg.c_s, prandtl=_PRANDTL, time_t=time_t)
+        if _boundary_x(cfg) or _boundary_y(cfg):
+            submit_wrf_smag_km_bc(
+                xkmh, xkhh, boundary_x=_boundary_x(cfg),
+                boundary_y=_boundary_y(cfg))
         return d11, d22, d12
     n_mass = nz * ny * nx
     # WRF deformation tensors are live only through the u/v stress launches.
@@ -2034,6 +2042,25 @@ def refresh_saved_wind_fluxes(state, cfg, ru, rv):
     Run this before small_step_finish overwrites the saved stage fields.
     """
     mux, muy = stage_face_masses(state, cfg, state.total_mu())
+    if getattr(state, "_metal_setup_state", False):
+        # Reuse the production stage coupling kernels, but refresh only
+        # horizontal references. The acoustic mean and saved Omega stay live.
+        nz, ny, nx = state.p.shape
+        context = state._array_module.context
+        context.submit_kernel(
+            "couple_ru",
+            {"u": state.u, "c1h": state.c1h, "c2h": state.c2h,
+             "mux": mux, "msfu": state.msfu, "ru": ru},
+            {"has_msf": int(state.has_msf), "nz": nz, "ny": ny, "nx": nx},
+            exact_policy=WRF_EXACT, grid_size=ru.size)
+        context.submit_kernel(
+            "couple_rv",
+            {"v": state.v, "c1h": state.c1h, "c2h": state.c2h,
+             "muy": muy, "msfv": state.msfv, "rv": rv},
+            {"has_msf": int(state.has_msf), "reciprocal": int(WRF_EXACT),
+             "nz": nz, "ny": ny, "nx": nx},
+            exact_policy=WRF_EXACT, grid_size=rv.size)
+        return
     for wind, muface, msf, flux in ((state.u, mux, state.msfu, ru),
                                     (state.v, muy, state.msfv, rv)):
         kernel = _couple_momentum_kernel(
@@ -2422,7 +2449,7 @@ def _prepare_fixed_tendencies_impl(state: DomainState,
                                state.c2h, "smag_rtke", ""))
         # launch_diff6 takes the state for its Metal launch; the fork's
         # edge-to-edge form takes its work buffer instead.
-        edge = ({"work": _diff6_edge_work(state, cfg)} if to_edge
+        edge = ({"work": _diff6_edge_work(state, cfg), "state": state} if to_edge
                 else {"state": state})
         for f0, _tend, _xk, c1, c2, slot, stag in diff6_rows:
             tmp = state.scratch(f0.shape, temp_slot[stag])
@@ -3013,7 +3040,7 @@ def _diff6_edge_transient_work(nlev: int, ny: int, nx: int,
 def launch_diff6_to_edge(f, tend, mut, c1, c2, factor, dt, opt, stagger="",
                          phb=None, msfu=None, msfv=None, msft=None,
                          slopeopt=0, thresh=0.10, dx=0.0, dy=0.0,
-                         bnd_x=False, bnd_y=False, work=None) -> None:
+                         bnd_x=False, bnd_y=False, work=None, state=None) -> None:
     """ADD the NOAA WRFV3.9 fork's sixth-order tendency for one field.
 
     The fork's sixth_order_diffusion (HRRR v4.1.21 WRFV3.9
@@ -3042,6 +3069,13 @@ def launch_diff6_to_edge(f, tend, mut, c1, c2, factor, dt, opt, stagger="",
     dereferences it), and an omitted map factor is written as identity
     straight into its padded plane.
     """
+    from woof.metal.array import MetalArray
+    if isinstance(f, MetalArray):
+        from woof.metal.diff6_family import submit_diff6_to_edge
+        return submit_diff6_to_edge(
+            state, f, tend, mut, c1, c2, factor=factor, dt=dt, opt=opt,
+            stagger=stagger, phb=phb, msfu=msfu, msfv=msfv, msft=msft,
+            slopeopt=slopeopt, thresh=thresh, dx=dx, dy=dy, work=work)
     del bnd_x, bnd_y
     nlev, nys, nxs = f.shape
     nx = nxs - 1 if stagger == "x" else nxs
@@ -3168,7 +3202,7 @@ def apply_diff6(state: DomainState, cfg: RunConfig) -> None:
         targets += [(getattr(state, name + "0"), getattr(state, name), "",
                      state.c1h, state.c2h, chm, "diff6_m", "smag_r" + name)
                     for name in names]
-    edge = ({"work": _diff6_edge_work(state, cfg)} if to_edge
+    edge = ({"work": _diff6_edge_work(state, cfg), "state": state} if to_edge
             else {"state": state})
     for f0, f, stag, c1, c2, chmf, slot, normalization_slot in targets:
         tendf = state.scratch(f0.shape, slot)
