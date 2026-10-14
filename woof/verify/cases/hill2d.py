@@ -45,6 +45,8 @@ from pathlib import Path
 
 import numpy as np
 
+OUTPUT_REQUIREMENTS = ("matplotlib", "netCDF4")
+
 from woof.config import RunConfig
 from woof.core import constants as c
 from woof.core.grid import (BaseState, VerticalCoord, make_base_state,
@@ -96,7 +98,8 @@ def sounding(z) -> np.ndarray:
     return 300.0 * np.exp(N_BV ** 2 * np.asarray(z, dtype=np.float64) / c.G)
 
 
-def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState):
+def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState, *,
+          array_module=None):
     """Balanced terrain-following state with uniform flow U.
 
     The surface w gets the kinematic BC and the column is filled with the
@@ -106,10 +109,18 @@ def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState):
     from woof.core.dycore import set_w_surface
     from woof.core.state import init_at_rest
 
-    state = init_at_rest(cfg, coord, base, terrain_z=base.terrain_z)
+    state = init_at_rest(cfg, coord, base, terrain_z=base.terrain_z,
+                         array_module=array_module)
     state.u[...] = U_BAR
     set_w_surface(state, cfg)
-    state.w[1:] = state.w[0][None] * (state.znw[1:, None, None] ** 2)
+    if getattr(state, "_metal_setup_state", False):
+        from woof.verify.metal_adapter import as_host
+        w = as_host(state.w)
+        znw = as_host(state.znw)
+        w[1:] = w[0][None] * znw[1:, None, None] ** 2
+        state.w[...] = state._array_module.asarray(w)
+    else:
+        state.w[1:] = state.w[0][None] * (state.znw[1:, None, None] ** 2)
     return state
 
 
@@ -201,12 +212,12 @@ def _plot(x, zh, wh, w_ana, path: Path) -> None:
     plt.close(fig)
 
 
-def run(outdir: Path | None = None) -> dict:
+def _run(outdir: Path | None = None, *, array_module=None) -> dict:
     """Build the case, integrate 10 h, time-average the last hour as the
     steady state, return gate metrics; with an ``outdir``, also write the
     w cross-section PNG and ``wrfout_hill2d.nc`` (a frame every
     ``cfg.output_interval_s``)."""
-    import cupy as cp
+    from woof.verify.metal_adapter import metric_module
 
     from woof.core.dycore import run_steps, stability_report
     from woof.core.terrain import bell_hill
@@ -215,7 +226,8 @@ def run(outdir: Path | None = None) -> dict:
     coord = make_vertical_coord(cfg.nz)
     base = make_base_state(coord, sounding, p_surf=cfg.p_surf, ztop=cfg.ztop,
                            terrain_z=bell_hill(cfg))
-    state = build(cfg, coord, base)
+    state = build(cfg, coord, base, array_module=array_module)
+    cp = metric_module(state)
 
     writer = None
     if outdir is not None:
@@ -270,3 +282,10 @@ def run(outdir: Path | None = None) -> dict:
     if outdir is not None:
         _plot(x, zh, wh, w_ana, outdir / "hill2d_w.png")
     return metrics
+
+
+def run(outdir: Path | None = None, *, backend: str = "cuda") -> dict:
+    """Run the supplied experiment on the explicitly selected backend."""
+    from woof.verify.metal_adapter import CaseBackend
+    with CaseBackend(backend) as selected:
+        return _run(outdir, array_module=selected.arrays)

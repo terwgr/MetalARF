@@ -355,7 +355,7 @@ def make_config(*, nx=96, ny=96, nz=64, dx=100.0, ztop=2400.0, dt=0.5,
         tke_budget=tke_budget, restart_interval_s=restart_interval_s)
 
 
-def build(cfg: RunConfig, seed: int = 0):
+def build(cfg: RunConfig, seed: int = 0, *, array_module=None):
     """Balanced moist state at rest with the seeded theta perturbation on
     the lowest four levels (README.les: "A random perturbation is imposed
     initially on the mean temperature field at the lowest four grid
@@ -384,7 +384,9 @@ def build(cfg: RunConfig, seed: int = 0):
         pert[:4] = 0.1 * rng.standard_normal((4, cfg.ny, cfg.nx))
         return pert
 
-    return init_moist_balanced(cfg, coord, base, qv_of_z, thp_func=thp_func)
+    return init_moist_balanced(cfg, coord, base, qv_of_z,
+                               thp_func=thp_func,
+                               array_module=array_module)
 
 
 def _array_module(a):
@@ -399,6 +401,11 @@ def _array_module(a):
         import cupy
         return cupy
     return np
+
+
+def _as_host(a):
+    from woof.verify.metal_adapter import as_host
+    return as_host(a)
 
 
 def _qvs(t_k, p_pa):
@@ -460,9 +467,9 @@ def _sgs_flux(field, khv, fnm, fnp, phi, nz):
 def _column_mass(state) -> float:
     """Domain-mean total dry column mass (periodic: no lateral flux, so this
     is the exact-conservation observable).  The dry case's observable."""
-    import cupy as cp
-    return float(cp.asnumpy(
-        (state.mub2d + state.mup).astype(cp.float64).mean()))
+    xp = _array_module(state.mup)
+    return float(_as_host(
+        (state.mub2d + state.mup).astype(xp.float64).mean()))
 
 
 def _layer_dry_mass(state):
@@ -473,11 +480,11 @@ def _layer_dry_mass(state):
     ``-(MU+MUB)*DNW/g`` -- the weight ``score_moist_les.py:180-185`` builds
     the oracle's liquid-water path from.
     """
-    import cupy as cp
-    mu = (state.mub2d + state.mup)[None].astype(cp.float64)
-    chm = (state.c1h[:, None, None].astype(cp.float64) * mu
-           + state.c2h[:, None, None].astype(cp.float64))
-    return chm * (-state.dnw[:, None, None].astype(cp.float64)) / const.G
+    xp = _array_module(state.mup)
+    mu = (state.mub2d + state.mup)[None].astype(xp.float64)
+    chm = (state.c1h[:, None, None].astype(xp.float64) * mu
+           + state.c2h[:, None, None].astype(xp.float64))
+    return chm * (-state.dnw[:, None, None].astype(xp.float64)) / const.G
 
 
 def _moist_slab_profiles(state, cfg) -> dict:
@@ -492,14 +499,14 @@ def _moist_slab_profiles(state, cfg) -> dict:
     (``core/kernels/smag2d.cu:1383-1386``), so the diagnostic reports the
     branch the run actually took.
     """
-    import cupy as cp
+    xp = _array_module(state.qv)
 
     nz = cfg.nz
-    th = state.total_theta().astype(cp.float64)
-    qv = state.qv.astype(cp.float64)
-    qc = state.qc.astype(cp.float64)
-    qr = state.qr.astype(cp.float64)
-    p_full = state.p.astype(cp.float64)
+    th = state.total_theta().astype(xp.float64)
+    qv = state.qv.astype(xp.float64)
+    qc = state.qc.astype(xp.float64)
+    qr = state.qr.astype(xp.float64)
+    p_full = state.p.astype(xp.float64)
     t_k = th * (p_full / const.P0) ** const.RCP
 
     # theta_v, both conventions, so a convention disagreement between the
@@ -511,40 +518,40 @@ def _moist_slab_profiles(state, cfg) -> dict:
     def slab(a):
         return a.mean(axis=(1, 2))
 
-    wm = 0.5 * (state.w[:-1] + state.w[1:]).astype(cp.float64)
+    wm = 0.5 * (state.w[:-1] + state.w[1:]).astype(xp.float64)
     wp = wm - slab(wm)[:, None, None]
 
     out = {}
     for tag, fld in (("load", thv_load), ("novload", thv_nov)):
         fp = fld - slab(fld)[:, None, None]
-        out["wthv_res_" + tag] = cp.asnumpy(slab(wp * fp))
-    out["wqv_res"] = cp.asnumpy(slab(wp * (qv - slab(qv)[:, None, None])))
+        out["wthv_res_" + tag] = _as_host(slab(wp * fp))
+    out["wqv_res"] = _as_host(slab(wp * (qv - slab(qv)[:, None, None])))
 
     khv = state.existing_scratch("smag_khv")
     if khv is not None:
-        khv = khv.astype(cp.float64)
+        khv = khv.astype(xp.float64)
     phb = state.phb
     phi = ((phb if phb.ndim == 3 else phb[:, None, None])
-           + state.php).astype(cp.float64)
-    fnm = state.fnm.astype(cp.float64)
-    fnp = state.fnp.astype(cp.float64)
-    out["wthv_sgs_load"] = cp.asnumpy(
+           + state.php).astype(xp.float64)
+    fnm = state.fnm.astype(xp.float64)
+    fnp = state.fnp.astype(xp.float64)
+    out["wthv_sgs_load"] = _as_host(
         _sgs_flux(thv_load, khv, fnm, fnp, phi, nz))
-    out["wthv_sgs_novload"] = cp.asnumpy(
+    out["wthv_sgs_novload"] = _as_host(
         _sgs_flux(thv_nov, khv, fnm, fnp, phi, nz))
-    out["wqv_sgs"] = cp.asnumpy(_sgs_flux(qv, khv, fnm, fnp, phi, nz))
+    out["wqv_sgs"] = _as_host(_sgs_flux(qv, khv, fnm, fnp, phi, nz))
 
-    out["qv"] = cp.asnumpy(slab(qv))
-    out["qc"] = cp.asnumpy(slab(qc))
-    out["qr"] = cp.asnumpy(slab(qr))
-    out["theta"] = cp.asnumpy(slab(th))
-    out["thetav"] = cp.asnumpy(slab(thv_load))
+    out["qv"] = _as_host(slab(qv))
+    out["qc"] = _as_host(slab(qc))
+    out["qr"] = _as_host(slab(qr))
+    out["theta"] = _as_host(slab(th))
+    out["thetav"] = _as_host(slab(thv_load))
 
     qvs = _qvs(t_k, p_full)
     engaged = (qv >= qvs) | (qc >= QC_CR)
-    out["n2_moist_frac"] = cp.asnumpy(engaged.mean(axis=(1, 2)))
-    out["sat_frac"] = cp.asnumpy((qv >= qvs).mean(axis=(1, 2)))
-    out["cloud_frac"] = cp.asnumpy((qc >= QC_CR).mean(axis=(1, 2)))
+    out["n2_moist_frac"] = _as_host(engaged.mean(axis=(1, 2)))
+    out["sat_frac"] = _as_host((qv >= qvs).mean(axis=(1, 2)))
+    out["cloud_frac"] = _as_host((qc >= QC_CR).mean(axis=(1, 2)))
 
     dm = _layer_dry_mass(state)
     out["lwp"] = float((qc * dm).sum(axis=0).mean())
@@ -554,12 +561,12 @@ def _moist_slab_profiles(state, cfg) -> dict:
 
     e_sgs = np.zeros(nz)
     if getattr(state, "tke", None) is not None:
-        e_sgs = cp.asnumpy(state.tke.astype(cp.float64).mean(axis=(1, 2)))
+        e_sgs = _as_host(state.tke.astype(xp.float64).mean(axis=(1, 2)))
     out["e_sgs"] = e_sgs
 
     rain = state.existing_scratch("mp_rainnc")
     out["rainnc"] = 0.0 if rain is None else float(
-        rain.astype(cp.float64).mean())
+        rain.astype(xp.float64).mean())
     return out
 
 
@@ -738,21 +745,48 @@ def _lwp_trend_pct_per_h(t_seconds, lwp, window_s: float) -> float | None:
     return 100.0 * slope * 3600.0 / mean
 
 
-def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
-               window_min: float, progress=None) -> dict:
-    import cupy as cp
+_METRIC_FIELDS = ("u", "v", "w", "thp", "thb", "phb", "php", "fnm",
+                  "fnp", "mub2d", "mup", "dnw", "c1h", "c2h", "qv",
+                  "qc", "qr", "p")
 
+
+def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
+               window_min: float, progress=None, *,
+               backend: str = "cuda") -> dict:
+    if backend not in ("cuda", "metal"):
+        raise ValueError(f"unknown cloud-topped CBL backend: {backend!r}")
+    if backend == "metal" and (
+            cfg.sf_sfclay_physics != 0 or cfg.specified or cfg.open_x
+            or cfg.open_y):
+        raise NotImplementedError(
+            "Metal cloud-topped CBL currently supports the prescribed "
+            "periodic smoke setup")
+    from woof.verify.metal_adapter import CaseBackend, host_state, is_metal
     from woof.core.dycore import run_steps, stability_report
 
-    state = build(cfg, seed=seed)
+    with CaseBackend(backend) as selected:
+        native_state = build(cfg, seed=seed, array_module=selected.arrays)
+        state = (host_state(native_state, _METRIC_FIELDS
+                            + (("tke",) if cfg.km_opt == 2 else ()))
+                 if is_metal(native_state) else native_state)
+        return _integrate_active(cfg, seed, sample_every_s, window_min,
+                                 progress, native_state, state, backend,
+                                 run_steps, stability_report, host_state)
+
+
+def _integrate_active(cfg, seed, sample_every_s, window_min, progress,
+                      native_state, state, backend, run_steps,
+                      stability_report, host_state):
     z = state.height_half()
-    z_mass = np.asarray(cp.asnumpy(z) if hasattr(z, "get") else z, float)
+    z_mass = np.asarray(_as_host(z), float)
     if z_mass.ndim == 3:
         z_mass = z_mass.mean(axis=(1, 2))
+    from woof.verify.metal_adapter import metric_module
+    xp = metric_module(state)
     phb = state.phb
     phi0 = ((phb if phb.ndim == 3 else phb[:, None, None])
-            + state.php).astype(cp.float64)
-    z_w = cp.asnumpy(phi0.mean(axis=(1, 2)) / const.G).astype(np.float64)
+            + state.php).astype(xp.float64)
+    z_w = _as_host(phi0.mean(axis=(1, 2)) / const.G).astype(np.float64)
 
     n_total = int(round(cfg.run_seconds / cfg.dt))
     n_chunk = max(int(round(sample_every_s / cfg.dt)), 1)
@@ -765,13 +799,16 @@ def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
     done = 0
     while done < n_total:
         n = min(n_chunk, n_total - done)
-        run_steps(state, cfg, n)
+        run_steps(native_state, cfg, n)
         done += n
-        rep = stability_report(state, cfg)
+        rep = stability_report(native_state, cfg)
         nan = nan or bool(rep["nan"])
         if rep["cfl"] is not None:
             cfl_max = max(cfl_max, float(rep["cfl"]))
         w_max = max(w_max, float(rep["w_max"]))
+        if backend == "metal":
+            state = host_state(native_state, _METRIC_FIELDS
+                               + (("tke",) if cfg.km_opt == 2 else ()))
         prof = _moist_slab_profiles(state, cfg)
         prof["t_seconds"] = done * cfg.dt
         prof["w_max"] = float(rep["w_max"])
@@ -781,6 +818,9 @@ def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
         if nan:
             break
     wall = time.monotonic() - wall0
+    if backend == "metal":
+        state = host_state(native_state, _METRIC_FIELDS
+                           + (("tke",) if cfg.km_opt == 2 else ()))
     mass1 = _column_mass(state)
 
     t_seconds = np.array([s["t_seconds"] for s in samples], dtype=np.float64)
@@ -807,9 +847,13 @@ def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
             first_cloud = float(s["t_seconds"])
             break
 
-    vram = _vram_fields(
-        pool_used_bytes=cp.get_default_memory_pool().used_bytes,
-        device_free_total=cp.cuda.runtime.memGetInfo)
+    if backend == "cuda":
+        import cupy as cp
+        vram = _vram_fields(
+            pool_used_bytes=cp.get_default_memory_pool().used_bytes,
+            device_free_total=cp.cuda.runtime.memGetInfo)
+    else:
+        vram = {"vram_pool_gib": None, "vram_device_gib": None}
 
     metrics = {
         "nan": nan,
@@ -913,7 +957,7 @@ def _write_outputs(result, cfg, outdir: Path, tag: str) -> None:
         encoding="utf-8")
 
 
-def run(outdir: Path | None = None) -> dict:
+def run(outdir: Path | None = None, *, backend: str = "cuda") -> dict:
     """VERIFY smoke: small grid, 15 simulated minutes, validity gates.
 
     ztop and nz keep the inversion and the cloud layer inside the domain --
@@ -921,7 +965,8 @@ def run(outdir: Path | None = None) -> dict:
     """
     cfg = make_config(nx=48, ny=48, nz=48, dx=100.0, ztop=2400.0,
                       dt=0.5, minutes=15.0)
-    result = _integrate(cfg, seed=0, sample_every_s=60.0, window_min=5.0)
+    result = _integrate(cfg, seed=0, sample_every_s=60.0, window_min=5.0,
+                        backend=backend)
     metrics = dict(result["metrics"])
     metrics["nan"] = bool(metrics["nan"])
     if outdir is not None:

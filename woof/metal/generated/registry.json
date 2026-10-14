@@ -9557,14 +9557,14 @@
       ],
       "cuda_source": "woof/core/kernels/smag2d.cu",
       "cuda_symbol": "wrf_calc_n2",
-      "layout_hash": "896894d876b2d18a7eecceffedf18bf13b3f6a9edaa42099bccaf397c7101d43",
-      "layout_version": 1,
+      "layout_hash": "9cf5153750223a4a987c094a1501a7baf240cc54a16a53b2d573d7e7b94891f2",
+      "layout_version": 2,
       "metal_source": "woof/metal/shaders/smag2d_alternates_fragment.metal",
       "module": "smag2d_family",
       "name": "wrf_calc_n2",
-      "parameter_size": 60,
-      "resource_count": 18,
-      "shader_hash": "25adb684f0b051c9b78d848a856f5929600a58885e68bd7537621823adf4dfc3",
+      "parameter_size": 68,
+      "resource_count": 20,
+      "shader_hash": "e1712032fade99b89533fd75853e3704c232add1e831630aad4884142634ab68",
       "threads_per_group": 128
     },
     {
@@ -9596,7 +9596,7 @@
       "name": "wrf_smag3d_km",
       "parameter_size": 76,
       "resource_count": 22,
-      "shader_hash": "25adb684f0b051c9b78d848a856f5929600a58885e68bd7537621823adf4dfc3",
+      "shader_hash": "e1712032fade99b89533fd75853e3704c232add1e831630aad4884142634ab68",
       "threads_per_group": 128
     },
     {
@@ -13336,6 +13336,54 @@
       "resource_count": 4,
       "shader_hash": "0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_boundary_mass_tendency_flat",
+      "layout_hash": "decee53fe246ede35c4a1c90a3c26804122efe95303c7b84d24a71d5fd02a35f",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/case_boundary_mass_flux.metal",
+      "module": "case_boundary_mass_flux",
+      "name": "case_boundary_mass_flux",
+      "parameter_size": 36,
+      "resource_count": 11,
+      "shader_hash": "ce9bc5bf7e45e561b590f4bc6ac530c568e523f2094932049d16ec4d23c77c5b",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/verify/sase_case_math.py",
+      "cuda_symbol": "column_stable_cooling",
+      "layout_hash": "6928b6cec4a46d78204131b5e80734e6ac80b12458ac5e5825987c604fcef291",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/gabls_column.metal",
+      "module": "gabls_column",
+      "name": "gabls_column_step",
+      "parameter_size": 12,
+      "resource_count": 10,
+      "shader_hash": "e4a438cafa25bec15b93734b7f08d177ff70ce8c089e6902ded34e2c9bec204d",
+      "threads_per_group": 1
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/verify/sase_case_math.py",
+      "cuda_symbol": "column_stable_cooling",
+      "layout_hash": "746a7d0c1f65360ff22e41c7bf61f6b33bbe9194b4efd0d2a188b9a83727edd3",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/gabls_column.metal",
+      "module": "gabls_column",
+      "name": "gabls_column_finish",
+      "parameter_size": 4,
+      "resource_count": 9,
+      "shader_hash": "e4a438cafa25bec15b93734b7f08d177ff70ce8c089e6902ded34e2c9bec204d",
+      "threads_per_group": 1
     }
   ],
   "schema": "woof-metal-registry-v1"

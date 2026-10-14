@@ -175,7 +175,7 @@ def make_config(*, nx=96, ny=96, nz=64, dx=100.0, ztop=2400.0, dt=0.5,
         tke_budget=tke_budget, restart_interval_s=restart_interval_s)
 
 
-def build(cfg: RunConfig, seed: int = 0):
+def build(cfg: RunConfig, seed: int = 0, *, array_module=None):
     """State at rest with seeded random theta perturbations on the lowest
     four levels (README.les: "A random perturbation is imposed initially
     on the mean temperature field at the lowest four grid levels").
@@ -206,15 +206,21 @@ def build(cfg: RunConfig, seed: int = 0):
         return pert
 
     if not cfg.moist:
-        return _wall(init_theta_perturbation(cfg, coord, base, thp_func),
+        return _wall(init_theta_perturbation(
+            cfg, coord, base, thp_func, array_module=array_module),
                      cfg)
+
+    if array_module is not None and cfg.sf_sfclay_physics != 0:
+        raise NotImplementedError(
+            "Metal CBL smoke supports prescribed surface fluxes; the MOST "
+            "surface setup requires native surface-driver initialization")
 
     from woof.core.moist import init_moist_balanced
     from woof.core.physics import initialize_physics
     state = init_moist_balanced(
         cfg, coord, base,
         lambda z: 0.005 * np.exp(-np.asarray(z, float) / 2000.0),
-        thp_func=thp_func)
+        thp_func=thp_func, array_module=array_module)
     if cfg.sf_sfclay_physics != 0:
         initialize_physics(state, cfg, landmask=0.0, tsk=300.0,
                            mavail=1.0)
@@ -267,21 +273,23 @@ def _spec_zone_is_flow_dependent(field, spec_zone: int) -> bool:
 def _column_mass(state) -> float:
     """Domain-mean total dry column mass (periodic: no lateral flux, so
     this is the exact-conservation observable)."""
-    import cupy as cp
-    return float(cp.asnumpy(
-        (state.mub2d + state.mup).astype(cp.float64).mean()))
+    from woof.verify.metal_adapter import as_host, metric_module
+    xp = metric_module(state)
+    return float(as_host(
+        (state.mub2d + state.mup).astype(xp.float64).mean()))
 
 
 def _slab_profiles(state, cfg) -> dict:
     """Horizontal-slab statistics: theta, resolved w'th', resolved TKE,
     and the SGS heat flux -Kh_v * dtheta/dz on w levels."""
-    import cupy as cp
+    from woof.verify.metal_adapter import as_host, metric_module
+    xp = metric_module(state)
     thb = state.thb
     th = (thb if thb.ndim == 3 else thb[:, None, None]) + state.thp
-    th = th.astype(cp.float64)
-    wm = 0.5 * (state.w[:-1] + state.w[1:]).astype(cp.float64)
-    uc = state.u[:, :, :cfg.nx].astype(cp.float64)
-    vc = state.v[:, :cfg.ny, :].astype(cp.float64)
+    th = th.astype(xp.float64)
+    wm = 0.5 * (state.w[:-1] + state.w[1:]).astype(xp.float64)
+    uc = state.u[:, :, :cfg.nx].astype(xp.float64)
+    vc = state.v[:, :cfg.ny, :].astype(xp.float64)
 
     def slab(a):
         return a.mean(axis=(1, 2))
@@ -299,30 +307,30 @@ def _slab_profiles(state, cfg) -> dict:
     e_sgs = np.zeros(cfg.nz)
     e_sgs_volume = 0.0
     if getattr(state, "tke", None) is not None:
-        e64 = state.tke.astype(cp.float64)
-        e_sgs = cp.asnumpy(e64.mean(axis=(1, 2)))
+        e64 = state.tke.astype(xp.float64)
+        e_sgs = as_host(e64.mean(axis=(1, 2)))
         e_sgs_volume = float(e64.mean())
 
     # SGS down-gradient flux on interior w levels from the live K field.
     khv = state.existing_scratch("smag_khv")
     wth_sgs = np.zeros(cfg.nz + 1)
     if khv is not None:
-        khv = khv.astype(cp.float64)
+        khv = khv.astype(xp.float64)
         phb = state.phb
         phi = ((phb if phb.ndim == 3 else phb[:, None, None])
-               + state.php).astype(cp.float64)
-        fnm = state.fnm.astype(cp.float64)
-        fnp = state.fnp.astype(cp.float64)
+               + state.php).astype(xp.float64)
+        fnm = state.fnm.astype(xp.float64)
+        fnp = state.fnp.astype(xp.float64)
         for kw in range(1, cfg.nz):
             rdz = 2.0 * 9.81 / (phi[kw + 1] - phi[kw - 1])
             k_w = fnm[kw] * khv[kw] + fnp[kw] * khv[kw - 1]
             flux = -k_w * (th[kw] - th[kw - 1]) * rdz
-            wth_sgs[kw] = float(flux.mean())
+            wth_sgs[kw] = float(as_host(flux.mean()))
     return {
-        "theta": cp.asnumpy(th_bar),
-        "wth_res": cp.asnumpy(wth_res),
+        "theta": as_host(th_bar),
+        "wth_res": as_host(wth_res),
         "wth_sgs": wth_sgs,
-        "tke_res": cp.asnumpy(tke_res),
+        "tke_res": as_host(tke_res),
         "e_sgs": e_sgs,
         "e_sgs_volume": e_sgs_volume,
     }
@@ -334,15 +342,41 @@ def _zi_from_flux(profile_total, z_mass) -> float:
     return float(z_mass[min(k, len(z_mass) - 1)])
 
 
-def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
-               progress=None) -> dict:
-    import cupy as cp
+_METRIC_FIELDS = ("u", "v", "w", "thp", "thb", "phb", "php", "fnm",
+                  "fnp", "mub2d", "mup", "dnw", "c1h", "c2h")
 
+
+def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
+               progress=None, *, backend: str = "cuda") -> dict:
+    from woof.verify.metal_adapter import (CaseBackend, host_state,
+                                            is_metal)
+    if backend not in ("cuda", "metal"):
+        raise ValueError(f"unknown CBL backend: {backend!r}")
+    if backend == "metal" and (
+            cfg.sf_sfclay_physics != 0 or cfg.specified or cfg.open_x
+            or cfg.open_y):
+        raise NotImplementedError(
+            "Metal CBL currently supports the prescribed periodic smoke; "
+            "MOST and specified-wall variants need their native drivers")
     from woof.core.dycore import run_steps, stability_report
 
-    state = build(cfg, seed=seed)
+    with CaseBackend(backend) as selected:
+        native_state = build(cfg, seed=seed, array_module=selected.arrays)
+        state = (host_state(native_state, _METRIC_FIELDS
+                            + (("tke",) if cfg.km_opt == 2 else ()))
+                 if is_metal(native_state) else native_state)
+
+        return _integrate_active(cfg, seed, sample_every_s, progress,
+                                 native_state, state, backend, run_steps,
+                                 stability_report, host_state)
+
+
+def _integrate_active(cfg, seed, sample_every_s, progress, native_state,
+                      state, backend, run_steps, stability_report,
+                      host_state):
     z = state.height_half()
-    z_mass = np.asarray(cp.asnumpy(z) if hasattr(z, "get") else z, float)
+    from woof.verify.metal_adapter import as_host
+    z_mass = np.asarray(as_host(z), float)
     if z_mass.ndim == 3:
         z_mass = z_mass.mean(axis=(1, 2))
 
@@ -357,24 +391,31 @@ def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
     done = 0
     while done < n_total:
         n = min(n_chunk, n_total - done)
-        run_steps(state, cfg, n)
+        run_steps(native_state, cfg, n)
         done += n
-        rep = stability_report(state, cfg)
+        rep = stability_report(native_state, cfg)
         nan = nan or bool(rep["nan"])
         if rep["cfl"] is not None:
             cfl_max = max(cfl_max, float(rep["cfl"]))
         w_max = max(w_max, float(rep["w_max"]))
+        if backend == "metal":
+            state = host_state(native_state, _METRIC_FIELDS
+                               + (("tke",) if cfg.km_opt == 2 else ()))
         prof = _slab_profiles(state, cfg)
         prof["t_seconds"] = done * cfg.dt
         prof["w_max"] = float(rep["w_max"])
         prof["cfl"] = rep["cfl"]
-        prof["budget"] = tke_budget.drain(state, cfg)
+        prof["budget"] = tke_budget.drain(native_state, cfg)
         samples.append(prof)
         if progress is not None:
             progress(done, n_total, rep)
         if nan:
             break
     wall = time.monotonic() - wall0
+
+    if backend == "metal":
+        state = host_state(native_state, _METRIC_FIELDS
+                           + (("tke",) if cfg.km_opt == 2 else ()))
 
     last = samples[-1]
     total_flux = last["wth_res"].copy()
@@ -408,14 +449,19 @@ def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
     # occupy the minority of the area -- a plume field, not noise).
     k_low = int(np.argmin(np.abs(z_mass - 0.3 * max(zi, z_mass[1]))))
     wm = 0.5 * (state.w[k_low] + state.w[k_low + 1])
-    updraft_fraction = float((cp.asnumpy(wm) > 0.0).mean())
+    from woof.verify.metal_adapter import as_host
+    updraft_fraction = float((as_host(wm) > 0.0).mean())
 
     # Two VRAM figures with opposite screen classifications -- the
     # per-process pool figure is screened, the device-wide figure is
     # environmental and excluded (see ENVIRONMENTAL_FIELDS).
-    vram = _vram_fields(
-        pool_used_bytes=cp.get_default_memory_pool().used_bytes,
-        device_free_total=cp.cuda.runtime.memGetInfo)
+    if backend == "cuda":
+        import cupy as cp
+        vram = _vram_fields(
+            pool_used_bytes=cp.get_default_memory_pool().used_bytes,
+            device_free_total=cp.cuda.runtime.memGetInfo)
+    else:
+        vram = {"vram_pool_gib": None, "vram_device_gib": None}
 
     metrics = {
         "nan": nan,
@@ -470,7 +516,7 @@ def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
         "tke_spec_zone_flow_dependent": (
             None if not (cfg.specified and cfg.km_opt == 2)
             else _spec_zone_is_flow_dependent(
-                cp.asnumpy(state.tke), cfg.spec_zone)),
+                as_host(state.tke), cfg.spec_zone)),
         "wall_seconds": wall,
         "steps": done,
         "steps_per_second": done / wall if wall > 0 else None,
@@ -491,11 +537,12 @@ def _integrate(cfg: RunConfig, seed: int, sample_every_s: float,
             "state": state, "budgets": budgets}
 
 
-def run(outdir: Path | None = None) -> dict:
+def run(outdir: Path | None = None, *, backend: str = "cuda") -> dict:
     """VERIFY smoke: small grid, 15 simulated minutes, validity gates."""
     cfg = make_config(nx=48, ny=48, nz=40, dx=100.0, ztop=2000.0,
                       dt=0.5, minutes=15.0)
-    result = _integrate(cfg, seed=0, sample_every_s=60.0)
+    result = _integrate(cfg, seed=0, sample_every_s=60.0,
+                        backend=backend)
     metrics = dict(result["metrics"])
     metrics["nan"] = bool(metrics["nan"])
     if outdir is not None:
@@ -507,7 +554,7 @@ def run(outdir: Path | None = None) -> dict:
 
 
 def _write_outputs(result, cfg, outdir: Path, tag: str) -> None:
-    import cupy as cp
+    from woof.verify.metal_adapter import as_host
     samples = result["samples"]
     arrays = {
         "z_mass": result["z_mass"],
@@ -524,7 +571,7 @@ def _write_outputs(result, cfg, outdir: Path, tag: str) -> None:
     zi = result["metrics"]["zi_m"]
     z_mass = result["z_mass"]
     k_low = int(np.argmin(np.abs(z_mass - 0.3 * max(zi, z_mass[1]))))
-    arrays["w_slab_final"] = cp.asnumpy(
+    arrays["w_slab_final"] = as_host(
         0.5 * (state.w[k_low] + state.w[k_low + 1])).astype(np.float32)
     arrays["w_slab_height_m"] = np.array([z_mass[k_low]])
     # Term-by-term TKE budget series: one (nsample, nz) plane per term plus

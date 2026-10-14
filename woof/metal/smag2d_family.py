@@ -220,22 +220,27 @@ def submit_wrf_smag2d_km(state, cfg, d11, d22, d12, xkmh, xkhh, *,
 def submit_wrf_calc_n2(state, cfg, bn2, *, time_t=False):
     """Submit the WRF buoyancy-frequency input used by alternate closures.
 
-    The Python route is ready for the corresponding source/signature
-    fragment; until that is integrated the runtime reports the missing
-    Metal function instead of falling through to the CUDA dispatcher.
+    The source/signature fragment mirrors the dry and moist branches of
+    WRF's calculate_N2. Optional condensate fields are bound to the benign
+    ``alt`` buffer when absent, with explicit presence flags matching the
+    CUDA call.
     """
     if WRF_EXACT:
         raise NotImplementedError("Metal wrf_calc_n2 exact path is not ported")
-    if state.qv is not None:
-        raise NotImplementedError(
-            "Metal wrf_calc_n2 source fragment currently admits dry profiles")
     arrays, params, (nz, ny, nx) = _wrf_common(state, cfg, time_t=time_t)
     suffix = "0" if time_t else ""
+    moist = state.qv is not None
+    has_qc = moist and state.qc is not None
+    has_qi = moist and getattr(state, "qi", None) is not None
     arrays.update({
         "thp": getattr(state, "thp" + suffix), "thb": state.thb,
-        "p": state.p, "bn2": bn2,
+        "p": state.p,
+        "qc": getattr(state, "qc" + suffix) if has_qc else state.alt,
+        "qi": getattr(state, "qi" + suffix) if has_qi else state.alt,
+        "bn2": bn2,
     })
-    params.update(thb3d=int(state.thb.ndim == 3))
+    params.update(thb3d=int(state.thb.ndim == 3),
+                  has_qc=int(has_qc), has_qi=int(has_qi))
     return _submit("wrf_calc_n2", arrays, params, nz * ny * nx)
 
 

@@ -151,6 +151,49 @@ cloudy outputs intentionally change after the band-index correction.
 Issue #7's Vermont CUDA comparison remains outstanding. Admission, smoke
 success and execution capsules alone do not certify numerical agreement.
 
+## Idealized verification cases
+
+Run a case with `woof verify CASE --backend metal`. Omitting `--backend`
+retains the default CUDA route. Add `--outdir OUT` to write case plots and
+NetCDF output; omitting it computes metrics only.
+
+| Case | Duration |
+|---|---|
+| `straka` | 900 seconds |
+| `igw` | 3,000 seconds |
+| `hill2d` | 10 hours |
+| `wk82` | 2 hours |
+| `moist_bubble` | 1 hour |
+| `cbl_dry` | 2 hours |
+| `convective_boundary_layer` | 15 minutes |
+| `cloud_topped_boundary_layer` | 15 minutes |
+| `gabls1` | 9 hours |
+
+These runners retain the case configurations, initial conditions and gate
+bounds. Regional cases use the native Metal engine; GABLS1 uses its separate
+single-column protocol with software binary64 prognostics. The two LES cases
+cover their small-grid smoke configurations. Unsupported optional modes,
+including `tke_budget=1`, remain subject to Metal admission restrictions.
+
+WK82 preserves WOOF's configuration, metric definitions and thirteen gate
+bounds on both backends. Its snapshot geometry measures the two strongest
+updraft cores at 60, 90 and 120 minutes, classified by their projection onto
+the right normal of the initial shear. These snapshots describe the changing
+core population.
+
+Separate `tracked_*` diagnostics follow fixed opposite-rotation identities.
+Lineage compares advected prior rotation-supporting cells with complete
+current updraft components. Ambiguous continuations retain all admissible
+paths and conservative separation bounds. Lost, merged, reversed or capped
+paths fail the tracked measurement, leaving subsequent tracked separation
+unavailable. Weak confidence may persist between analysis times; required
+analysis times need confident identities. A different surviving core never
+replaces a lost identity. The mass-closure diagnostic independently observes
+lateral acoustic fluxes.
+
+The command returns zero when all case gates pass. Passing case gates does
+not establish field-by-field equivalence with CUDA or WRF.
+
 ## Metal memory and environment
 
 Before allocating forecast state, Metal estimates device use against the

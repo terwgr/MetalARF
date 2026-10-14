@@ -30,6 +30,8 @@ from woof.metal.bundle_integrity import BUNDLE_SCHEMA, metal_source_provenance
 
 
 SHADER = ROOT / "woof" / "metal" / "shaders" / "rk_bookkeeping.metal"
+CASE_BOUNDARY_MASS_FLUX_SHADER = ROOT / "woof" / "metal" / "shaders" / "case_boundary_mass_flux.metal"
+GABLS_COLUMN_SHADER = ROOT / "woof" / "metal" / "shaders" / "gabls_column.metal"
 ACOUSTIC_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_coefficients.metal"
 ACOUSTIC_CALC_CQ_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_calc_cq.metal"
 ACOUSTIC_UV_SHADER = ROOT / "woof" / "metal" / "shaders" / "acoustic_advance_uv.metal"
@@ -768,6 +770,8 @@ def build(output: Path) -> dict:
         physics_column_airs = []
         noahmp_glacier_air = None
         for name, source in (
+                ("gabls_column", GABLS_COLUMN_SHADER),
+                ("case_boundary_mass_flux", CASE_BOUNDARY_MASS_FLUX_SHADER),
                 ("kf_column_family", KF_COLUMN_FAMILY_SHADER),
                 ("kf_output_validation", KF_OUTPUT_VALIDATION_SHADER),
                 ("morrison_family", MORRISON_FAMILY_SHADER),

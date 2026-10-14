@@ -53,6 +53,8 @@ from pathlib import Path
 
 import numpy as np
 
+OUTPUT_REQUIREMENTS = ("matplotlib", "netCDF4")
+
 from woof.config import RunConfig
 from woof.core import constants as c
 from woof.core.grid import (BaseState, VerticalCoord, make_base_state,
@@ -94,7 +96,21 @@ def default_config() -> RunConfig:
                      case="moist_bubble")
 
 
-def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState):
+def _thp_func(cfg: RunConfig):
+    """The quarter_ss thermal shared by CUDA and Metal initialization."""
+    def thp_func(x, z):
+        xrad = x[None, None, :] / BUBBLE_RADIUS
+        zrad = (z[:, None, None] - BUBBLE_ZC) / BUBBLE_ZC
+        rad = np.sqrt(xrad ** 2 + zrad ** 2)
+        thp = np.where(rad <= 1.0,
+                       BUBBLE_DELT * np.cos(0.5 * np.pi * rad) ** 2, 0.0)
+        return np.broadcast_to(thp, (cfg.nz, cfg.ny, cfg.nx))
+
+    return thp_func
+
+
+def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState, *,
+          array_module=None):
     """Balanced moist WK82 state with the 3 K quarter_ss thermal.
 
     The base state carries the WK82 theta profile; ``init_moist_balanced``
@@ -104,16 +120,9 @@ def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState):
     """
     from woof.core.moist import init_moist_balanced
 
-    def thp_func(x, z):
-        xrad = x[None, None, :] / BUBBLE_RADIUS
-        zrad = (z[:, None, None] - BUBBLE_ZC) / BUBBLE_ZC
-        rad = np.sqrt(xrad ** 2 + zrad ** 2)
-        thp = np.where(rad <= 1.0,
-                       BUBBLE_DELT * np.cos(0.5 * np.pi * rad) ** 2, 0.0)
-        return np.broadcast_to(thp, (cfg.nz, cfg.ny, cfg.nx))
-
     return init_moist_balanced(cfg, coord, base,
-                               lambda z: wk82_sounding(z)[1], thp_func)
+                               lambda z: wk82_sounding(z)[1],
+                               _thp_func(cfg), array_module=array_module)
 
 
 def _dry_mass(state) -> float:
@@ -132,6 +141,34 @@ def _water_mass(state, rain_kgm2: float = 0.0) -> float:
            + state.c2h[:, None, None].astype(cp.float64))
     dnw = state.dnw[:, None, None].astype(cp.float64)
     return float(cp.sum(qtot * chm * (-dnw)) / c.G) + rain_kgm2
+
+
+def _dry_mass_metal(state) -> float:
+    """FP32 dry-mass addition followed by the original FP64 reduction."""
+    from woof.verify.metal_adapter import host_state
+
+    fields = host_state(state, ("mub2d", "mup"))
+    mass = np.asarray(fields.mub2d, dtype=np.float32) + np.asarray(
+        fields.mup, dtype=np.float32)
+    return float(np.sum(mass.astype(np.float64), dtype=np.float64))
+
+
+def _water_mass_metal(state, rain_kgm2: float = 0.0) -> float:
+    """Water budget in the original eta measure using host readback arrays."""
+    from woof.verify.metal_adapter import host_state
+
+    fields = host_state(state, ("qv", "qc", "qr", "mub2d", "mup",
+                                "c1h", "c2h", "dnw"))
+    qtot = (np.asarray(fields.qv, dtype=np.float32)
+            + np.asarray(fields.qc, dtype=np.float32)
+            + np.asarray(fields.qr, dtype=np.float32)).astype(np.float64)
+    mass = (np.asarray(fields.mub2d, dtype=np.float32)
+            + np.asarray(fields.mup, dtype=np.float32)).astype(np.float64)
+    chm = (np.asarray(fields.c1h, dtype=np.float64)[:, None, None] * mass[None]
+           + np.asarray(fields.c2h, dtype=np.float64)[:, None, None])
+    layer = -np.asarray(fields.dnw, dtype=np.float64)[:, None, None]
+    return float(np.sum(qtot * chm * layer, dtype=np.float64) / c.G
+                 + rain_kgm2)
 
 
 def _plot(thp, qc, qr, x, z, path: Path) -> None:
@@ -162,7 +199,7 @@ def _plot(thp, qc, qr, x, z, path: Path) -> None:
     plt.close(fig)
 
 
-def run(outdir: Path | None = None) -> dict:
+def _run_cuda(outdir: Path | None = None) -> dict:
     """Build the case, integrate 1 h, return the gate metrics; with an
     ``outdir``, also write the theta'/qc/qr PNG and
     ``wrfout_moist_bubble.nc`` (a frame every ``cfg.output_interval_s``,
@@ -243,3 +280,88 @@ def run(outdir: Path | None = None) -> dict:
               cp.asnumpy(state.qr).astype(np.float64)[:, 0, :],
               x, z, outdir / "moist_bubble.png")
     return metrics
+
+
+def _run_metal(outdir: Path | None = None) -> dict:
+    """Run the same Kessler setup with native Metal-backed DomainState."""
+    from woof.config import validate_run_config
+    from woof.core.dycore import run_steps, stability_report
+    from woof.verify.metal_adapter import CaseBackend, as_host
+
+    cfg = validate_run_config(default_config())
+    coord = make_vertical_coord(cfg.nz)
+    base = make_base_state(coord, lambda z: wk82_sounding(z)[0],
+                           p_surf=cfg.p_surf, ztop=cfg.ztop)
+    out_path = Path(outdir) if outdir is not None else None
+    if out_path is not None:
+        out_path.mkdir(parents=True, exist_ok=True)
+
+    with CaseBackend("metal") as backend:
+        state = build(cfg, coord, base, array_module=backend.arrays)
+        mass0 = _dry_mass_metal(state)
+        water0 = _water_mass_metal(state)
+        rainnc = state.scratch((cfg.ny, cfg.nx), "mp_rainnc")
+        writer = None
+        if out_path is not None:
+            from woof.io.wrfout import WrfoutWriter, state_frame, wrf_time_str
+
+            writer = WrfoutWriter(out_path / "wrfout_moist_bubble.nc",
+                                  nx=cfg.nx, ny=cfg.ny, nz=cfg.nz,
+                                  dx=cfg.dx, dy=cfg.dy,
+                                  title="woof moist Kessler bubble")
+
+        def write_frame(t_s: float) -> None:
+            writer.write_frame(
+                wrf_time_str(t_s), state_frame(state)
+                | {"RAINNC": as_host(rainnc)})
+
+        n_total = int(round(cfg.run_seconds / cfg.dt))
+        n_frame = max(int(round(cfg.output_interval_s / cfg.dt)), 1)
+        w_max = qc_max = qr_max = 0.0
+        try:
+            if writer is not None:
+                write_frame(0.0)
+            for n in range(1, n_total + 1):
+                run_steps(state, cfg, n=1)
+                w_max = max(w_max, float(as_host(state.w).max()))
+                qc_max = max(qc_max, float(as_host(state.qc).max()))
+                qr_max = max(qr_max, float(as_host(state.qr).max()))
+                if writer is not None and n % n_frame == 0:
+                    write_frame(n * cfg.dt)
+        finally:
+            if writer is not None:
+                writer.close()
+
+        report = stability_report(state, cfg)
+        rain_host = as_host(rainnc)
+        rain_sum = float(np.sum(rain_host.astype(np.float64), dtype=np.float64)) \
+            * c.RHOWATER / 1000.0
+        finite = all(np.isfinite(as_host(q)).all()
+                     for q in (state.qv, state.qc, state.qr))
+        metrics = {
+            "nan": bool(report["nan"] or not finite),
+            "w_max": w_max,
+            "qc_max": qc_max,
+            "qr_max": qr_max,
+            "rain_mm": float(rain_host.max()),
+            "mass_drift": abs(_dry_mass_metal(state) - mass0) / mass0,
+            "water_drift": abs(_water_mass_metal(state, rain_sum) - water0) / water0,
+        }
+
+        if out_path is not None:
+            x = (np.arange(cfg.nx) + 0.5) * cfg.dx - 0.5 * cfg.nx * cfg.dx
+            _plot(as_host(state.thp).astype(np.float64)[:, 0, :],
+                  as_host(state.qc).astype(np.float64)[:, 0, :],
+                  as_host(state.qr).astype(np.float64)[:, 0, :],
+                  x, as_host(state.height_half()),
+                  out_path / "moist_bubble.png")
+    return metrics
+
+
+def run(outdir: Path | None = None, *, backend: str = "cuda") -> dict:
+    """Run the Kessler bubble using CUDA by default or native Metal."""
+    if backend == "cuda":
+        return _run_cuda(outdir)
+    if backend == "metal":
+        return _run_metal(outdir)
+    raise ValueError(f"unknown moist_bubble backend: {backend!r}")

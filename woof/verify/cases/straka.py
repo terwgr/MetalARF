@@ -20,6 +20,8 @@ from pathlib import Path
 
 import numpy as np
 
+OUTPUT_REQUIREMENTS = ("matplotlib", "netCDF4")
+
 from woof.config import RunConfig
 from woof.core import constants as c
 from woof.core.grid import (BaseState, VerticalCoord, make_base_state,
@@ -52,7 +54,8 @@ def sounding(z) -> np.ndarray:
     return np.full_like(np.asarray(z, dtype=np.float64), 300.0)
 
 
-def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState):
+def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState, *,
+          array_module=None):
     """At-rest state carrying the Straka cold blob, hydrostatically balanced.
 
     Temperature perturbation T' = -15 K * (cos(pi*L) + 1)/2 inside the
@@ -72,7 +75,8 @@ def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState):
         thp = t_pert / exner_b[:, None, None]
         return np.broadcast_to(thp, (cfg.nz, cfg.ny, cfg.nx))
 
-    return init_theta_perturbation(cfg, coord, base, thp_func)
+    return init_theta_perturbation(cfg, coord, base, thp_func,
+                                       array_module=array_module)
 
 
 def _front_km(th_sfc: np.ndarray, x: np.ndarray) -> float:
@@ -117,17 +121,18 @@ def _plot(thp_xz: np.ndarray, x: np.ndarray, z: np.ndarray,
     plt.close(fig)
 
 
-def run(outdir: Path | None = None) -> dict:
+def _run(outdir: Path | None = None, *, array_module=None) -> dict:
     """Build the case, integrate to t = 900 s, return the gate metrics;
     with an ``outdir``, write a wrfout frame every ``cfg.output_interval_s``."""
-    import cupy as cp
+    from woof.verify.metal_adapter import metric_module
 
     from woof.core.dycore import run_steps, stability_report
 
     cfg = default_config()
     coord = make_vertical_coord(cfg.nz)
     base = make_base_state(coord, sounding, p_surf=cfg.p_surf, ztop=cfg.ztop)
-    state = build(cfg, coord, base)
+    state = build(cfg, coord, base, array_module=array_module)
+    cp = metric_module(state)
 
     n_total = int(round(cfg.run_seconds / cfg.dt))
     if outdir is None:
@@ -167,3 +172,10 @@ def run(outdir: Path | None = None) -> dict:
     if outdir is not None:
         _plot(thp[:, 0, :], x, z, outdir / "straka_t900.png")
     return metrics
+
+
+def run(outdir: Path | None = None, *, backend: str = "cuda") -> dict:
+    """Run the supplied experiment on the explicitly selected backend."""
+    from woof.verify.metal_adapter import CaseBackend
+    with CaseBackend(backend) as selected:
+        return _run(outdir, array_module=selected.arrays)

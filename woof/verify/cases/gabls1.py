@@ -279,7 +279,7 @@ def boundary_layer_depth(z_face, uw, vw, uw_sfc, vw_sfc) -> float:
 
 def run(outdir=None, *, additive_dissipation: bool = False,
         stable_dissipation: bool = False,
-        nz: int = NZ) -> dict[str, float]:
+        nz: int = NZ, backend: str = "cuda") -> dict[str, float]:
     """Integrate the prescribed column and return the gate metrics.
 
     The scored quantities are averaged over the final hour exactly as
@@ -290,10 +290,17 @@ def run(outdir=None, *, additive_dissipation: bool = False,
     """
     from woof.verify import sase_case_math as sase_ref
 
+    if backend not in ("cuda", "metal"):
+        raise ValueError(f"unknown gabls1 backend: {backend!r}")
+
     dz, z = grid(nz)
     steps = int(round(RUN_SECONDS / DT))
     avg_steps = int(round(AVERAGE_SECONDS / DT))
-    out = sase_ref.column_stable_cooling(
+    column_runner = sase_ref.column_stable_cooling
+    if backend == "metal":
+        from woof.verify.metal_gabls import column_stable_cooling
+        column_runner = column_stable_cooling
+    out = column_runner(
         GEO_U, GEO_V, FCOR, int(nz), dz, sounding(z), DT, steps,
         THETA_SURFACE_0, COOLING_RATE_K_PER_HOUR / 3600.0, z0=Z0,
         e_init=initial_energy(z),
@@ -345,14 +352,16 @@ def run(outdir=None, *, additive_dissipation: bool = False,
     return metrics
 
 
-def compare(outdir=None, *, legs=("head", "additive")) -> dict:
+def compare(outdir=None, *, legs=("head", "additive"),
+            backend: str = "cuda") -> dict:
     """Score several closure configurations on the identical case."""
     report: dict[str, object] = {
         "gates": dict(GATES), "les_reference": dict(LES_REFERENCE),
         "scm_ensemble": dict(SCM_ENSEMBLE_DEPTH_M), "legs": {}}
     for leg in legs:
         metrics = run(outdir, additive_dissipation=(leg == "additive"),
-                      stable_dissipation=(leg == "stable"))
+                      stable_dissipation=(leg == "stable"),
+                      backend=backend)
         passed = all(lo <= metrics[name] <= hi
                      for name, (lo, hi) in GATES.items())
         report["legs"][leg] = {"metrics": metrics, "pass": bool(passed)}
@@ -360,7 +369,7 @@ def compare(outdir=None, *, legs=("head", "additive")) -> dict:
 
 
 def main(argv=None) -> int:
-    """``python -m woof.verify.cases.gabls1 [--out DIR] [LEG...]``"""
+    """``python -m woof.verify.cases.gabls1 [--out DIR] [--backend B] [LEG...]``"""
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -368,8 +377,10 @@ def main(argv=None) -> int:
                         default=["head", "additive"],
                         choices=["head", "additive", "stable"])
     parser.add_argument("--out", default=None)
+    parser.add_argument("--backend", choices=("cuda", "metal"),
+                        default="cuda")
     args = parser.parse_args(argv)
-    report = compare(args.out, legs=tuple(args.legs))
+    report = compare(args.out, legs=tuple(args.legs), backend=args.backend)
     print(json.dumps(report, indent=2, sort_keys=True, default=float))
     return 0 if all(entry["pass"]
                     for entry in report["legs"].values()) else 1

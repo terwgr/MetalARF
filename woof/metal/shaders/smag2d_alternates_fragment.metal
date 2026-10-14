@@ -1,8 +1,51 @@
-// Source fragment included after the shared WRF grid/deformation helpers.
-// Typed bindings are generated from smag2d_alternates_fragment.json. This
-// fragment deliberately supports the dry profile only; the caller refuses
-// moist states until the moist N2 branches are translated.
+// WRF dry and moist buoyancy-frequency source fragment. Resources and
+// parameters are declared in smag2d_alternates_fragment.json.
 #include "smag2d_alternates_fragment_bindings.metalh"
+
+static inline float wrf_n2_theta(constant WrfCalcN2Resources &r,
+                                 constant WrfCalcN2Params &p,
+                                 int k, int j, int i) {
+    const ulong h=sm2_i3(k,j,i,p.ny,p.nx);
+    return (p.thb3d?r.thb[h]:r.thb[k])+r.thp[h];
+}
+
+static inline float wrf_n2_qtot(constant WrfCalcN2Resources &r,
+                                constant WrfCalcN2Params &p,
+                                int k, int j, int i) {
+    const ulong h=sm2_i3(k,j,i,p.ny,p.nx);
+    float qt=p.moist?r.qv[h]:0.0f;
+    if(p.has_qc) qt+=r.qc[h];
+    if(p.has_qi) qt+=r.qi[h];
+    return qt;
+}
+
+static inline float wrf_n2_qv(constant WrfCalcN2Resources &r,
+                              constant WrfCalcN2Params &p,
+                              int k, int j, int i) {
+    return p.moist?r.qv[sm2_i3(k,j,i,p.ny,p.nx)]:0.0f;
+}
+
+static inline float wrf_n2_temp(float theta, float pressure) {
+    return theta*pow(pressure/100000.0f,287.0f/1004.5f);
+}
+
+static inline float wrf_n2_qvs(float temperature, float pressure) {
+    const float tc=temperature-273.15f;
+    const float es=1000.0f*0.6112f*exp(17.67f*tc/(temperature-29.65f));
+    return (287.0f/461.6f)*es/(pressure-es);
+}
+
+static inline float wrf_n2_coefa(float theta, float temperature, float qv) {
+    const float xlvqv=2.5e6f*qv;
+    return (1.0f+(xlvqv/287.0f)/temperature)
+        /(1.0f+((2.5e6f*xlvqv/1004.5f)/461.6f)
+                     /temperature/temperature)/theta;
+}
+
+static inline float wrf_n2_thetae(float theta, float temperature,
+                                  float qvs) {
+    return theta*(1.0f+(2.5e6f*qvs/1004.5f)/temperature);
+}
 
 kernel void wrf_calc_n2(constant WrfCalcN2Resources &r [[buffer(0)]],
                         constant WrfCalcN2Params &p [[buffer(1)]],
@@ -16,23 +59,82 @@ kernel void wrf_calc_n2(constant WrfCalcN2Resources &r [[buffer(0)]],
     const WrfSmagGrid q=wrf_sm2_grid(r,p);
     const int ke=(k==p.nz-1&&p.nz>1)?p.nz-2:k;
     const ulong h=sm2_i3(ke,j,i,p.ny,p.nx);
-    const float base_c=p.thb3d?r.thb[h]:r.thb[ke];
-    const float th_c=base_c+r.thp[h];
+    const float th_c=wrf_n2_theta(r,p,ke,j,i);
+    const float p_c=r.p[h];
+    const float t_c=wrf_n2_temp(th_c,p_c);
+    const float qv_c=wrf_n2_qv(r,p,ke,j,i);
+    const float qc_c=(p.moist&&p.has_qc)?r.qc[h]:0.0f;
+    const float tc=t_c-273.15f;
+    const float esc=1000.0f*0.6112f*exp(17.67f*tc/(t_c-29.65f));
+    const float qvs_c=(287.0f/461.6f)*esc/(p_c-esc);
+    const bool saturated=p.moist&&(qv_c>=qvs_c||qc_c>=1.0e-5f);
     float value;
     if(ke>0){
-        const float dz=1.0f/wrf_sm2_rdz(q,ke,j,i)
-                      +1.0f/wrf_sm2_rdz(q,ke+1,j,i);
+        const float tmpdz=1.0f/wrf_sm2_rdz(q,ke,j,i)
+                         +1.0f/wrf_sm2_rdz(q,ke+1,j,i);
         const ulong hp=sm2_i3(ke+1,j,i,p.ny,p.nx);
         const ulong hm=sm2_i3(ke-1,j,i,p.ny,p.nx);
-        const float bp=p.thb3d?r.thb[hp]:r.thb[ke+1];
-        const float bm=p.thb3d?r.thb[hm]:r.thb[ke-1];
-        const float th_p=bp+r.thp[hp],th_m=bm+r.thp[hm];
-        value=9.81f*((th_p-th_m)/th_c/dz);
+        const float th_p=wrf_n2_theta(r,p,ke+1,j,i);
+        const float th_m=wrf_n2_theta(r,p,ke-1,j,i);
+        const float qtot_p=wrf_n2_qtot(r,p,ke+1,j,i);
+        const float qtot_m=wrf_n2_qtot(r,p,ke-1,j,i);
+        if(saturated){
+            const float t_p=wrf_n2_temp(th_p,r.p[hp]);
+            const float t_m=wrf_n2_temp(th_m,r.p[hm]);
+            const float thetaep1=wrf_n2_thetae(
+                th_p,t_p,wrf_n2_qvs(t_p,r.p[hp]));
+            const float thetaem1=wrf_n2_thetae(
+                th_m,t_m,wrf_n2_qvs(t_m,r.p[hm]));
+            value=9.81f*(wrf_n2_coefa(th_c,t_c,qv_c)
+                         *(thetaep1-thetaem1)/tmpdz
+                         -(qtot_p-qtot_m)/tmpdz);
+        }else{
+            const float qv_p=wrf_n2_qv(r,p,ke+1,j,i);
+            const float qv_m=wrf_n2_qv(r,p,ke-1,j,i);
+            value=9.81f*((th_p-th_m)/th_c/tmpdz
+                         +1.61f*(qv_p-qv_m)/tmpdz
+                         -(qtot_p-qtot_m)/tmpdz);
+        }
     }else{
         const ulong h1=sm2_i3(1,j,i,p.ny,p.nx);
-        const float b1=p.thb3d?r.thb[h1]:r.thb[1];
-        const float th1=b1+r.thp[h1];
-        value=9.81f*((th1-th_c)/th_c/wrf_sm2_rdzw(q,0,j,i));
+        const ulong h2=sm2_i3(2,j,i,p.ny,p.nx);
+        const float th1=wrf_n2_theta(r,p,1,j,i);
+        const float qtot_sfc=p.cf1*wrf_n2_qtot(r,p,0,j,i)
+                             +p.cf2*wrf_n2_qtot(r,p,1,j,i)
+                             +p.cf3*wrf_n2_qtot(r,p,2,j,i);
+        const float qtot_p=wrf_n2_qtot(r,p,1,j,i);
+        if(saturated){
+            const float tmpdz=1.0f/wrf_sm2_rdz(q,1,j,i)
+                             +0.5f/wrf_sm2_rdzw(q,0,j,i);
+            const float th2=wrf_n2_theta(r,p,2,j,i);
+            const float t1=wrf_n2_temp(th1,r.p[h1]);
+            const float t2=wrf_n2_temp(th2,r.p[h2]);
+            const float z0=wrf_sm2_phi(q,0,j,i)/9.81f;
+            const float z1=0.5f*(wrf_sm2_phi(q,0,j,i)
+                                 +wrf_sm2_phi(q,1,j,i))/9.81f;
+            const float z2=0.5f*(wrf_sm2_phi(q,1,j,i)
+                                 +wrf_sm2_phi(q,2,j,i))/9.81f;
+            const float w1=(z0-z2)/(z1-z2),w2=1.0f-w1;
+            const float p8w0=w1*p_c+w2*r.p[h1];
+            const float t8w0=w1*t_c+w2*t1;
+            const float theta_sfc=t8w0/pow(p8w0/100000.0f,287.0f/1004.5f);
+            const float qvs_sfc=p.cf1*qvs_c
+                +p.cf2*wrf_n2_qvs(t1,r.p[h1])
+                +p.cf3*wrf_n2_qvs(t2,r.p[h2]);
+            const float thetaesfc=wrf_n2_thetae(theta_sfc,t8w0,qvs_sfc);
+            value=9.81f*(wrf_n2_coefa(th_c,t_c,qv_c)
+                         *(wrf_n2_thetae(th1,t1,wrf_n2_qvs(t1,r.p[h1]))
+                           -thetaesfc)/tmpdz
+                         -(qtot_p-qtot_sfc)/tmpdz);
+        }else{
+            const float qv_sfc=p.cf1*wrf_n2_qv(r,p,0,j,i)
+                              +p.cf2*wrf_n2_qv(r,p,1,j,i)
+                              +p.cf3*wrf_n2_qv(r,p,2,j,i);
+            const float tmpdz=1.0f/wrf_sm2_rdzw(q,0,j,i);
+            value=9.81f*((th1-th_c)/th_c/tmpdz
+                         +1.61f*(wrf_n2_qv(r,p,1,j,i)-qv_sfc)/tmpdz
+                         -(qtot_p-qtot_sfc)/tmpdz);
+        }
     }
     r.bn2[flat]=value;
 }
