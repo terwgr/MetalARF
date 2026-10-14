@@ -95,8 +95,13 @@ kernel void advance_mu_th(constant AdvanceMuThResources &r [[buffer(0)]],
                  + q.rdy * ((r.c1h[k] * mun + r.c2h[k]) * r.v[vn] / msfv_n
                          - (r.c1h[k] * mus + r.c2h[k]) * r.v[vs] / msfv_s);
         } else {
-            dvr = q.rdx * ((r.c1h[k] * mue + r.c2h[k]) * r.u[ue] - (r.c1h[k] * muw + r.c2h[k]) * r.u[uw])
-                 + q.rdy * ((r.c1h[k] * mun + r.c2h[k]) * r.v[vn] - (r.c1h[k] * mus + r.c2h[k]) * r.v[vs]);
+            // The reference contracts the east/north products, after rounding
+            // the west/south products. A subtraction permits either choice.
+            float west = (r.c1h[k] * muw + r.c2h[k]) * r.u[uw];
+            float south = (r.c1h[k] * mus + r.c2h[k]) * r.v[vs];
+            float du = fma(r.c1h[k] * mue + r.c2h[k], r.u[ue], -west);
+            float dv = fma(r.c1h[k] * mun + r.c2h[k], r.v[vn], -south);
+            dvr = q.rdx * du + q.rdy * dv;
         }
         float map_area = mc * mc;
         dmdt_pp += r.dnw[k] * (map_area * dvp);
@@ -133,7 +138,14 @@ kernel void advance_mu_th(constant AdvanceMuThResources &r [[buffer(0)]],
         ulong uw = mu_idx3(k, j, i, q.ny, nxf), ue = uw + 1;
         ulong vs = mu_idx3(k, j, i, q.ny + 1, q.nx), vn = vs + ulong(q.nx);
         float dvp = q.rdx * (r.u_pp[ue] - r.u_pp[uw]) + q.rdy * (r.v_pp[vn] - r.v_pp[vs]);
-        wwk = wwk - (r.dnw[k] * (r.c1h[k] * (dmdt_pp + rmu) + mc * mc * dvp)) / mc;
+        if (q.mapped) {
+            wwk = wwk - (r.dnw[k] * (r.c1h[k] * (dmdt_pp + rmu) + mc * mc * dvp)) / mc;
+        } else {
+            // Dividing by a runtime unit map factor would round the product
+            // before the subtraction, unlike the flat-grid recurrence.
+            float div = r.c1h[k] * (dmdt_pp + rmu) + dvp;
+            wwk = fma(-r.dnw[k], div, wwk);
+        }
         r.ww_pp[ulong(kk) * st + c] = wwk;
     }
 #endif
