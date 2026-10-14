@@ -2,21 +2,21 @@
   "abi_version": 65543,
   "files": {
     "libwoof_metal.dylib": {
-      "sha256": "8861d1a2b18bfd85ff6fc36d06735872444b7f2bfbf70af2e891d0d58d3c398e",
+      "sha256": "aa250bb1cc0568b4f23a027b56e5d6153f62babc8c095cd81ddbbfb898d7d806",
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "216630d406a0edf5194890101049107c69ebe4cac96f0a6410a48c7c1171c1bc",
-      "size": 11078890
+      "sha256": "97eb1b3d52570f9b7650038b6196aa575d14c7e47d53a562871018298f34e8a0",
+      "size": 11090874
     },
     "woof_exact.metallib": {
-      "sha256": "3be3c4f298d014f6b09baa387d4e8fb9037b69ac4fb9bdcff18f41713a7fdcec",
-      "size": 6930578
+      "sha256": "0778a3ea9c727ec376885bba1d943434f5ebad5280df289e5628a2b0cd37b413",
+      "size": 6942546
     }
   },
   "implementation_file_count": 880,
-  "implementation_sha256": "b066936db2ce6db9e3d5c244dc481c71824ed4ffd97f06e4ebb2f1a89df49b12",
-  "metal_inputs_sha256": "a448d3e5ab8d3cfbbd88400d5ac4c460c0cd4d09875e7ae235f9aebff1e34e91",
+  "implementation_sha256": "83d927746acb554ea0d046246711972b9fe0ca9adde326b7319dcd86333d07ac",
+  "metal_inputs_sha256": "2cbbf25fbeb0536b9b12727bbb6ebb6d94def4f43f8580ff9263003644a261d3",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -148,8 +148,8 @@
         "size": 2677
       },
       "woof/metal/shaders/diagnostics_calc_p_alpha.metal": {
-        "sha256": "2a636ab57c37b7ff42c9b84ce3293481283e6d9b24a9731ddf3ae3e7fa2da6d3",
-        "size": 2271
+        "sha256": "0687002fa2c26f0ed2ad998b170e19045c8a5b194fa6e8bb530c3a513a107306",
+        "size": 2659
       },
       "woof/metal/shaders/diagnostics_log1pf.metalh": {
         "sha256": "11f7297a2eaca6bb48ee3817722f7f04e6ed02fe419c6a0d05336ff1dafc65fc",
@@ -2944,6 +2944,6 @@
         "size": 296
       }
     },
-    "sha256": "a448d3e5ab8d3cfbbd88400d5ac4c460c0cd4d09875e7ae235f9aebff1e34e91"
+    "sha256": "2cbbf25fbeb0536b9b12727bbb6ebb6d94def4f43f8580ff9263003644a261d3"
   }
 }

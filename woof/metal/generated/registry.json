@@ -639,7 +639,7 @@
       "name": "diagnostics_calc_p_alpha",
       "parameter_size": 44,
       "resource_count": 21,
-      "shader_hash": "2a636ab57c37b7ff42c9b84ce3293481283e6d9b24a9731ddf3ae3e7fa2da6d3",
+      "shader_hash": "0687002fa2c26f0ed2ad998b170e19045c8a5b194fa6e8bb530c3a513a107306",
       "threads_per_group": 128
     },
     {

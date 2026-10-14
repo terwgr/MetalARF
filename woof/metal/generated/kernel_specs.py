@@ -303,7 +303,7 @@ DIAGNOSTICS_CALC_P_ALPHA_SHAPES = (('al', (('nz', 'ny', 'nx'),)), ('alb', (('nz'
 DIAGNOSTICS_CALC_P_ALPHA_PARAM_FIELDS = [('p_top', 'ctypes.c_float'), ('hypso', 'ctypes.c_int32'), ('moist', 'ctypes.c_int32'), ('base3d', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j0', 'ctypes.c_int32'), ('i0', 'ctypes.c_int32'), ('nyw', 'ctypes.c_int32'), ('nxw', 'ctypes.c_int32')]
 DIAGNOSTICS_CALC_P_ALPHA_THREADS_PER_GROUP = 128
 DIAGNOSTICS_CALC_P_ALPHA_LAYOUT_HASH = 'c1ef3586b38dcf7a4c8351e66910a59d7d06a6437b6c1054d6881a7cc7e2aa45'
-DIAGNOSTICS_CALC_P_ALPHA_SHADER_HASH = '2a636ab57c37b7ff42c9b84ce3293481283e6d9b24a9731ddf3ae3e7fa2da6d3'
+DIAGNOSTICS_CALC_P_ALPHA_SHADER_HASH = '0687002fa2c26f0ed2ad998b170e19045c8a5b194fa6e8bb530c3a513a107306'
 
 DIFF6_RESOURCES = (('f', 'float', 'read'), ('tend', 'float', 'read_write'), ('mut', 'float', 'read'), ('c1', 'float', 'read'), ('c2', 'float', 'read'), ('phb', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('msft', 'float', 'read'))
 DIFF6_ACCESS = ('read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
