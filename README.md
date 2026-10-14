@@ -127,6 +127,10 @@ run it before and after a change to the Metal path.
 
 ## Documentation
 
+Nine idealized cases support `woof verify CASE --backend metal`; see the
+[backend guide](docs/public/BACKENDS.md#idealized-verification-cases) for case
+names and durations.
+
 - `docs/public/`: the CLI manual, physics, hardware guidance and data sources.
   The [code verification record](docs/public/VERIFICATION.md) documents
   historical WRF v4.6.1 comparisons and their configuration and coverage

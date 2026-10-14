@@ -96,6 +96,16 @@
           "bn2",
           "float",
           "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
@@ -219,6 +229,20 @@
             "ny",
             "nx"
           ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
         ]
       },
       "parameters": [
@@ -281,10 +305,18 @@
         [
           "thb3d",
           "int32"
+        ],
+        [
+          "has_qc",
+          "int32"
+        ],
+        [
+          "has_qi",
+          "int32"
         ]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": [
         "default"
       ]

@@ -1,0 +1,180 @@
+{
+  "kernels": [
+    {
+      "name": "case_boundary_mass_flux",
+      "module": "case_boundary_mass_flux",
+      "source": "woof/metal/shaders/case_boundary_mass_flux.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_boundary_mass_tendency_flat",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "u_pp",
+          "float",
+          "read"
+        ],
+        [
+          "v_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mu",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "dnw",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "u_pp": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v_pp": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mu": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "dnw": [
+          [
+            "nz"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "nedge"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nedge",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

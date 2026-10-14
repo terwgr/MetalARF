@@ -502,6 +502,8 @@ def build_parser(*, render_only: bool = False) -> argparse.ArgumentParser:
         "verify", help="run a benchmark or code-verification case and check its gates")
     ver.add_argument("case", choices=sorted(_CASES),
                      help="benchmark or code-verification case to run (no observation scoring)")
+    ver.add_argument("--backend", choices=("cuda", "metal"), default="cuda",
+                     help="verification backend (default: cuda)")
     ver.add_argument("--outdir", type=Path, default=None, metavar="OUT",
                      help="directory for the PNG and wrfout NetCDF output "
                           "(omit to compute metrics only)")
@@ -854,7 +856,10 @@ def _dispatch_argv(argv: list[str] | None = None) -> int:
                 # The normal simulation-stage refusal owns malformed or
                 # missing prepared roots; do not mask it with a CuPy gate.
                 pass
-        if not _spends_nothing and not metal_prepared_sim and not metal_prepared_ensemble:
+        metal_verify = (args.command == "verify"
+                        and getattr(args, "backend", "cuda") == "metal")
+        if (not _spends_nothing and not metal_prepared_sim
+                and not metal_prepared_ensemble and not metal_verify):
             capabilities.require_for_command(args.command)
         # --no-memory-gate reaches every process this command starts: the
         # forecast stage `go` runs, the worker `run` supervises, the runner
@@ -1186,7 +1191,24 @@ def _dispatch(args) -> int:
         return 0
 
     if args.command == "verify":
-        metrics = _CASES[args.case].run(outdir=args.outdir)
+        runner = _CASES[args.case].run
+        if args.backend == "metal":
+            import inspect
+            if "backend" not in inspect.signature(runner).parameters:
+                print(f"woof verify: case {args.case!r} does not support Metal", file=sys.stderr)
+                return 2
+            if args.outdir is not None:
+                capabilities.require("woof verify", *tuple(
+                    capabilities.requirement_for_module(name)
+                    for name in getattr(_CASES[args.case],
+                                        "OUTPUT_REQUIREMENTS", ("matplotlib",))))
+            try:
+                metrics = runner(outdir=args.outdir, backend="metal")
+            except NotImplementedError as exc:
+                print(f"woof verify: {exc}", file=sys.stderr)
+                return 2
+        else:
+            metrics = runner(outdir=args.outdir)
         # List-valued metrics are time series (wk82 w_max_hist) that would
         # swamp the terminal; gates only ever bound scalars.
         print({k: v for k, v in metrics.items() if not isinstance(v, list)})

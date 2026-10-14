@@ -137,7 +137,7 @@ def sounding(z) -> np.ndarray:
 
 
 def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState, *,
-          seed: int = 20260801):
+          seed: int = 20260801, array_module=None):
     """At rest apart from a light uniform wind; no theta perturbation.
 
     The boundary layer is driven entirely by the surface contrast, so
@@ -152,31 +152,38 @@ def build(cfg: RunConfig, coord: VerticalCoord, base: BaseState, *,
     partition sweep below builds its seed ensembles (campaign spec
     2026-08-02, I1 "through the case's existing perturbation path").
     """
-    import cupy as cp
-
     from woof.core.state import init_at_rest
 
-    state = init_at_rest(cfg, coord, base)
+    state = init_at_rest(cfg, coord, base, array_module=array_module)
     rng = np.random.default_rng(int(seed))
     field = np.full(tuple(state.u.shape), U_INITIAL, dtype=np.float64)
     field += 0.01 * rng.standard_normal(field.shape)
     field[:, :, -1] = field[:, :, 0]                    # periodic seam
-    state.u[...] = cp.asarray(field, dtype=state.u.dtype)
+    if array_module is None:
+        import cupy as cp
+        xp = cp
+    else:
+        xp = array_module
+    state.u[...] = xp.asarray(field, dtype=state.u.dtype)
     return state
 
 
-def _profiles(state, cfg) -> dict[str, np.ndarray]:
+def _profiles(state, cfg, *, host: bool = False) -> dict[str, np.ndarray]:
     """Horizontally averaged column profiles, host-side FP64."""
-    import cupy as cp
+    if host:
+        asnumpy = np.asarray
+    else:
+        import cupy as cp
+        asnumpy = cp.asnumpy
 
     def mean(field):
-        return np.asarray(cp.asnumpy(field), dtype=np.float64).mean(
+        return np.asarray(asnumpy(field), dtype=np.float64).mean(
             axis=(1, 2))
 
     theta = mean(state.thp) + np.asarray(
-        cp.asnumpy(state.thb), dtype=np.float64).reshape(-1)[:cfg.nz]
-    phb = np.asarray(cp.asnumpy(state.phb), dtype=np.float64)
-    php = np.asarray(cp.asnumpy(state.php), dtype=np.float64)
+        asnumpy(state.thb), dtype=np.float64).reshape(-1)[:cfg.nz]
+    phb = np.asarray(asnumpy(state.phb), dtype=np.float64)
+    php = np.asarray(asnumpy(state.php), dtype=np.float64)
     phi = phb.reshape(-1, 1, 1) + php if phb.ndim == 1 else phb + php
     z_face = phi.mean(axis=(1, 2)) / 9.81
     z = 0.5 * (z_face[:-1] + z_face[1:])
@@ -221,13 +228,55 @@ def _metrics(initial, final, cfg) -> dict[str, float]:
             "surface_heat_consistency": consistency}
 
 
-def run(outdir=None, *, bl_pbl_physics: int = 1) -> dict[str, float]:
+def _run_metal(outdir, bl_pbl_physics: int) -> dict[str, float]:
+    """Run the same CBL with a native Metal DomainState and dycore."""
+    from woof.core.physics import initialize_physics
+    from woof.core.dycore import run_steps
+    from woof.verify.metal_adapter import CaseBackend, host_state
+
+    cfg = default_config(bl_pbl_physics)
+    coord = make_vertical_coord(cfg.nz)
+    base = make_base_state(coord, sounding, p_surf=cfg.p_surf,
+                           ztop=cfg.ztop)
+
+    with CaseBackend("metal") as backend:
+        state = build(cfg, coord, base, array_module=backend.arrays)
+        # Keep the established CUDA initializer as the surface authority.
+        # It is backend-aware via state._array_module, so this follows the
+        # same TSK, land mask and default land roughness on Metal.
+        initialize_physics(state, cfg, landmask=1.0, tsk=TSK)
+        initial_names = ["thp", "thb", "phb", "php", "u", "v"]
+        if bl_pbl_physics in (900, 11):
+            initial_names.append("e_sgs")
+        initial_host = host_state(state, initial_names)
+        initial = _profiles(initial_host, cfg, host=True)
+        run_steps(state, cfg, int(round(RUN_SECONDS / cfg.dt)))
+        final_host = host_state(state, initial_names)
+        final = _profiles(final_host, cfg, host=True)
+
+    metrics = _metrics(initial, final, cfg)
+    if outdir is not None:
+        outdir = Path(outdir)
+        outdir.mkdir(parents=True, exist_ok=True)
+        np.savez(outdir / f"cbl_dry_{int(bl_pbl_physics)}.npz",
+                 **{f"initial_{k}": v for k, v in initial.items()},
+                 **{f"final_{k}": v for k, v in final.items()})
+    return metrics
+
+
+def run(outdir=None, *, bl_pbl_physics: int = 1,
+        backend: str = "cuda") -> dict[str, float]:
     """Integrate one closure and return its gate metrics.
 
     With ``outdir`` the horizontally averaged initial and final profiles
     are written beside the metrics as ``cbl_dry_<selector>.npz`` so a
     caller can plot the pair without re-running.
     """
+    if backend == "metal":
+        return _run_metal(outdir, int(bl_pbl_physics))
+    if backend != "cuda":
+        raise ValueError(f"unknown cbl_dry backend: {backend!r}")
+
     from woof.core.dycore import run_steps
     from woof.core.physics import initialize_physics
 
@@ -250,7 +299,8 @@ def run(outdir=None, *, bl_pbl_physics: int = 1) -> dict[str, float]:
     return metrics
 
 
-def compare(outdir=None, *, schemes=(1,)) -> dict[str, object]:
+def compare(outdir=None, *, schemes=(1,),
+            backend: str = "cuda") -> dict[str, object]:
     """Run several closures on the identical case and return both sets.
 
     Differences are RETURNED, never reduced to a verdict: this case
@@ -260,7 +310,8 @@ def compare(outdir=None, *, schemes=(1,)) -> dict[str, object]:
     """
     results: dict[str, object] = {"gates": dict(GATES), "schemes": {}}
     for selector in schemes:
-        metrics = run(outdir, bl_pbl_physics=int(selector))
+        metrics = run(outdir, bl_pbl_physics=int(selector),
+                      backend=backend)
         passed = all(
             (lo is None or metrics[name] >= lo)
             and (hi is None or metrics[name] <= hi)

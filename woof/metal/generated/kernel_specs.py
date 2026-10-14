@@ -4689,13 +4689,13 @@ WDM6_COLUMN_THREADS_PER_GROUP = 32
 WDM6_COLUMN_LAYOUT_HASH = 'c607adfe1bedc7b6baf88c15d29f927462e046f5dd1be2904545caaee22e1061'
 WDM6_COLUMN_SHADER_HASH = 'd57265f4582fa1acb7d471b23264ea6633bb52db169a17c96791a7272d13c5b7'
 
-WRF_CALC_N2_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('php', 'float', 'read'), ('phb', 'float', 'read'), ('alt', 'float', 'read'), ('qv', 'float', 'read'), ('msft', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('fnm', 'float', 'read'), ('fnp', 'float', 'read'), ('dn', 'float', 'read'), ('dnw', 'float', 'read'), ('thp', 'float', 'read'), ('thb', 'float', 'read'), ('p', 'float', 'read'), ('bn2', 'float', 'read_write'))
-WRF_CALC_N2_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
-WRF_CALC_N2_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('bn2', (('nz', 'ny', 'nx'),)), ('dn', (('nz',),)), ('dnw', (('nz',),)), ('fnm', (('nz',),)), ('fnp', (('nz',),)), ('msft', (('ny', 'nx'),)), ('msfu', (('ny', 'nx+1'),)), ('msfv', (('ny+1', 'nx'),)), ('p', (('nz', 'ny', 'nx'),)), ('phb', (('nz+1',), ('nz+1', 'ny', 'nx'))), ('php', (('nz+1', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('thb', (('nz',), ('nz', 'ny', 'nx'))), ('thp', (('nz', 'ny', 'nx'),)), ('u', (('nz', 'ny', 'nx+1'),)), ('v', (('nz', 'ny+1', 'nx'),)), ('w', (('nz+1', 'ny', 'nx'),)))
-WRF_CALC_N2_PARAM_FIELDS = [('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dx', 'ctypes.c_float'), ('dy', 'ctypes.c_float'), ('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('moist', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('phb3d', 'ctypes.c_int32'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32'), ('thb3d', 'ctypes.c_int32')]
+WRF_CALC_N2_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('php', 'float', 'read'), ('phb', 'float', 'read'), ('alt', 'float', 'read'), ('qv', 'float', 'read'), ('msft', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('fnm', 'float', 'read'), ('fnp', 'float', 'read'), ('dn', 'float', 'read'), ('dnw', 'float', 'read'), ('thp', 'float', 'read'), ('thb', 'float', 'read'), ('p', 'float', 'read'), ('bn2', 'float', 'read_write'), ('qc', 'float', 'read'), ('qi', 'float', 'read'))
+WRF_CALC_N2_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read', 'read')
+WRF_CALC_N2_SHAPES = (('u', (('nz', 'ny', 'nx+1'),)), ('v', (('nz', 'ny+1', 'nx'),)), ('w', (('nz+1', 'ny', 'nx'),)), ('php', (('nz+1', 'ny', 'nx'),)), ('phb', (('nz+1',), ('nz+1', 'ny', 'nx'))), ('alt', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('msft', (('ny', 'nx'),)), ('msfu', (('ny', 'nx+1'),)), ('msfv', (('ny+1', 'nx'),)), ('fnm', (('nz',),)), ('fnp', (('nz',),)), ('dn', (('nz',),)), ('dnw', (('nz',),)), ('thp', (('nz', 'ny', 'nx'),)), ('thb', (('nz',), ('nz', 'ny', 'nx'))), ('p', (('nz', 'ny', 'nx'),)), ('bn2', (('nz', 'ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)))
+WRF_CALC_N2_PARAM_FIELDS = [('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dx', 'ctypes.c_float'), ('dy', 'ctypes.c_float'), ('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('moist', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('phb3d', 'ctypes.c_int32'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32'), ('thb3d', 'ctypes.c_int32'), ('has_qc', 'ctypes.c_int32'), ('has_qi', 'ctypes.c_int32')]
 WRF_CALC_N2_THREADS_PER_GROUP = 128
-WRF_CALC_N2_LAYOUT_HASH = '896894d876b2d18a7eecceffedf18bf13b3f6a9edaa42099bccaf397c7101d43'
-WRF_CALC_N2_SHADER_HASH = '25adb684f0b051c9b78d848a856f5929600a58885e68bd7537621823adf4dfc3'
+WRF_CALC_N2_LAYOUT_HASH = '9cf5153750223a4a987c094a1501a7baf240cc54a16a53b2d573d7e7b94891f2'
+WRF_CALC_N2_SHADER_HASH = 'e1712032fade99b89533fd75853e3704c232add1e831630aad4884142634ab68'
 
 WRF_SMAG2D_KM_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('php', 'float', 'read'), ('phb', 'float', 'read'), ('alt', 'float', 'read'), ('qv', 'float', 'read'), ('msft', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('fnm', 'float', 'read'), ('fnp', 'float', 'read'), ('dn', 'float', 'read'), ('dnw', 'float', 'read'), ('d11', 'float', 'read'), ('d22', 'float', 'read'), ('d12', 'float', 'read'), ('xkmh', 'float', 'read_write'), ('xkhh', 'float', 'read_write'))
 WRF_SMAG2D_KM_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -4711,7 +4711,7 @@ WRF_SMAG3D_KM_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('bn2', (('nz', 'ny', 'n
 WRF_SMAG3D_KM_PARAM_FIELDS = [('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dx', 'ctypes.c_float'), ('dy', 'ctypes.c_float'), ('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('moist', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('phb3d', 'ctypes.c_int32'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32'), ('c_s', 'ctypes.c_float'), ('prandtl', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('mix_upper_bound', 'ctypes.c_float'), ('isotropic', 'ctypes.c_int32')]
 WRF_SMAG3D_KM_THREADS_PER_GROUP = 128
 WRF_SMAG3D_KM_LAYOUT_HASH = '7a6d0438deff6066c8f10e0e5fd85fbf1df1ca86192331c0641c857ac753b060'
-WRF_SMAG3D_KM_SHADER_HASH = '25adb684f0b051c9b78d848a856f5929600a58885e68bd7537621823adf4dfc3'
+WRF_SMAG3D_KM_SHADER_HASH = 'e1712032fade99b89533fd75853e3704c232add1e831630aad4884142634ab68'
 
 WRF_SMAG_DEFORM_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('php', 'float', 'read'), ('phb', 'float', 'read'), ('alt', 'float', 'read'), ('qv', 'float', 'read'), ('msft', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('fnm', 'float', 'read'), ('fnp', 'float', 'read'), ('dn', 'float', 'read'), ('dnw', 'float', 'read'), ('d11', 'float', 'read_write'), ('d22', 'float', 'read_write'), ('d12', 'float', 'read_write'))
 WRF_SMAG_DEFORM_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
@@ -6560,3 +6560,27 @@ UPPER_WIND_LIMITER_PARAM_FIELDS = [('dts', 'ctypes.c_float'), ('hdepth', 'ctypes
 UPPER_WIND_LIMITER_THREADS_PER_GROUP = 128
 UPPER_WIND_LIMITER_LAYOUT_HASH = 'e94e018a2f2137a1df78d722eaf12f8cfeb2533ce858ceab40d3912690b40566'
 UPPER_WIND_LIMITER_SHADER_HASH = '0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f'
+
+CASE_BOUNDARY_MASS_FLUX_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('u_pp', 'float', 'read'), ('v_pp', 'float', 'read'), ('mu', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('dnw', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('out', 'float', 'read_write'))
+CASE_BOUNDARY_MASS_FLUX_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+CASE_BOUNDARY_MASS_FLUX_SHAPES = (('u', (('nz', 'ny', 'nx+1'),)), ('v', (('nz', 'ny+1', 'nx'),)), ('u_pp', (('nz', 'ny', 'nx+1'),)), ('v_pp', (('nz', 'ny+1', 'nx'),)), ('mu', (('ny', 'nx'),)), ('c1h', (('nz',),)), ('c2h', (('nz',),)), ('dnw', (('nz',),)), ('msfu', (('ny', 'nx+1'),)), ('msfv', (('ny+1', 'nx'),)), ('out', (('nz', 'nedge'),)))
+CASE_BOUNDARY_MASS_FLUX_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nedge', 'ctypes.c_int32'), ('has_msf', 'ctypes.c_int32'), ('open_x', 'ctypes.c_int32'), ('open_y', 'ctypes.c_int32'), ('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float')]
+CASE_BOUNDARY_MASS_FLUX_THREADS_PER_GROUP = 128
+CASE_BOUNDARY_MASS_FLUX_LAYOUT_HASH = 'decee53fe246ede35c4a1c90a3c26804122efe95303c7b84d24a71d5fd02a35f'
+CASE_BOUNDARY_MASS_FLUX_SHADER_HASH = 'ce9bc5bf7e45e561b590f4bc6ac530c568e523f2094932049d16ec4d23c77c5b'
+
+GABLS_COLUMN_STEP_RESOURCES = (('z', 'uint64', 'read'), ('c', 'uint64', 'read'), ('u', 'uint64', 'read_write'), ('v', 'uint64', 'read_write'), ('theta', 'uint64', 'read_write'), ('e', 'uint64', 'read_write'), ('kv', 'uint64', 'read_write'), ('kface', 'uint64', 'read_write'), ('skin', 'uint64', 'read_write'), ('series', 'uint64', 'read_write'))
+GABLS_COLUMN_STEP_ACCESS = ('read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+GABLS_COLUMN_STEP_SHAPES = (('z', (('nz',),)), ('c', ((26,),)), ('u', (('nz',),)), ('v', (('nz',),)), ('theta', (('nz',),)), ('e', (('nz',),)), ('kv', (('nz',),)), ('kface', (('nz-1',),)), ('skin', ((1,),)), ('series', (('steps', 4),)))
+GABLS_COLUMN_STEP_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('steps', 'ctypes.c_int32'), ('step_index', 'ctypes.c_int32')]
+GABLS_COLUMN_STEP_THREADS_PER_GROUP = 1
+GABLS_COLUMN_STEP_LAYOUT_HASH = '6928b6cec4a46d78204131b5e80734e6ac80b12458ac5e5825987c604fcef291'
+GABLS_COLUMN_STEP_SHADER_HASH = 'e4a438cafa25bec15b93734b7f08d177ff70ce8c089e6902ded34e2c9bec204d'
+
+GABLS_COLUMN_FINISH_RESOURCES = (('u', 'uint64', 'read'), ('v', 'uint64', 'read'), ('theta', 'uint64', 'read'), ('e', 'uint64', 'read'), ('z', 'uint64', 'read'), ('c', 'uint64', 'read'), ('kv', 'uint64', 'read_write'), ('kface', 'uint64', 'read_write'), ('stress', 'uint64', 'read_write'))
+GABLS_COLUMN_FINISH_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
+GABLS_COLUMN_FINISH_SHAPES = (('u', (('nz',),)), ('v', (('nz',),)), ('theta', (('nz',),)), ('e', (('nz',),)), ('z', (('nz',),)), ('c', ((26,),)), ('kv', (('nz',),)), ('kface', (('nz-1',),)), ('stress', (('nz-1', 3),)))
+GABLS_COLUMN_FINISH_PARAM_FIELDS = [('nz', 'ctypes.c_int32')]
+GABLS_COLUMN_FINISH_THREADS_PER_GROUP = 1
+GABLS_COLUMN_FINISH_LAYOUT_HASH = '746a7d0c1f65360ff22e41c7bf61f6b33bbe9194b4efd0d2a188b9a83727edd3'
+GABLS_COLUMN_FINISH_SHADER_HASH = 'e4a438cafa25bec15b93734b7f08d177ff70ce8c089e6902ded34e2c9bec204d'

@@ -1,0 +1,248 @@
+{
+  "kernels": [
+    {
+      "name": "gabls_column_step",
+      "module": "gabls_column",
+      "source": "woof/metal/shaders/gabls_column.metal",
+      "cuda_source": "woof/verify/sase_case_math.py",
+      "cuda_symbol": "column_stable_cooling",
+      "resources": [
+        [
+          "z",
+          "uint64",
+          "read"
+        ],
+        [
+          "c",
+          "uint64",
+          "read"
+        ],
+        [
+          "u",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "v",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "theta",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "e",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "kv",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "kface",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "skin",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "series",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "z": [
+          [
+            "nz"
+          ]
+        ],
+        "c": [
+          [
+            26
+          ]
+        ],
+        "u": [
+          [
+            "nz"
+          ]
+        ],
+        "v": [
+          [
+            "nz"
+          ]
+        ],
+        "theta": [
+          [
+            "nz"
+          ]
+        ],
+        "e": [
+          [
+            "nz"
+          ]
+        ],
+        "kv": [
+          [
+            "nz"
+          ]
+        ],
+        "kface": [
+          [
+            "nz-1"
+          ]
+        ],
+        "skin": [
+          [
+            1
+          ]
+        ],
+        "series": [
+          [
+            "steps",
+            4
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "steps",
+          "int32"
+        ],
+        [
+          "step_index",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gabls_column_finish",
+      "module": "gabls_column",
+      "source": "woof/metal/shaders/gabls_column.metal",
+      "cuda_source": "woof/verify/sase_case_math.py",
+      "cuda_symbol": "column_stable_cooling",
+      "resources": [
+        [
+          "u",
+          "uint64",
+          "read"
+        ],
+        [
+          "v",
+          "uint64",
+          "read"
+        ],
+        [
+          "theta",
+          "uint64",
+          "read"
+        ],
+        [
+          "e",
+          "uint64",
+          "read"
+        ],
+        [
+          "z",
+          "uint64",
+          "read"
+        ],
+        [
+          "c",
+          "uint64",
+          "read"
+        ],
+        [
+          "kv",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "kface",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "stress",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz"
+          ]
+        ],
+        "v": [
+          [
+            "nz"
+          ]
+        ],
+        "theta": [
+          [
+            "nz"
+          ]
+        ],
+        "e": [
+          [
+            "nz"
+          ]
+        ],
+        "z": [
+          [
+            "nz"
+          ]
+        ],
+        "c": [
+          [
+            26
+          ]
+        ],
+        "kv": [
+          [
+            "nz"
+          ]
+        ],
+        "kface": [
+          [
+            "nz-1"
+          ]
+        ],
+        "stress": [
+          [
+            "nz-1",
+            3
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

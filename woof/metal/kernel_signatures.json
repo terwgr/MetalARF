@@ -94081,76 +94081,11 @@
       "threads_per_group": 32
     },
     {
-      "arithmetic_policies": [
-        "default"
-      ],
+      "name": "wrf_calc_n2",
+      "module": "smag2d_family",
+      "source": "woof/metal/shaders/smag2d_alternates_fragment.metal",
       "cuda_source": "woof/core/kernels/smag2d.cu",
       "cuda_symbol": "wrf_calc_n2",
-      "layout_version": 1,
-      "module": "smag2d_family",
-      "name": "wrf_calc_n2",
-      "parameters": [
-        [
-          "rdx",
-          "float32"
-        ],
-        [
-          "rdy",
-          "float32"
-        ],
-        [
-          "dx",
-          "float32"
-        ],
-        [
-          "dy",
-          "float32"
-        ],
-        [
-          "cf1",
-          "float32"
-        ],
-        [
-          "cf2",
-          "float32"
-        ],
-        [
-          "cf3",
-          "float32"
-        ],
-        [
-          "moist",
-          "int32"
-        ],
-        [
-          "nz",
-          "int32"
-        ],
-        [
-          "ny",
-          "int32"
-        ],
-        [
-          "nx",
-          "int32"
-        ],
-        [
-          "phb3d",
-          "int32"
-        ],
-        [
-          "boundary_x",
-          "int32"
-        ],
-        [
-          "boundary_y",
-          "int32"
-        ],
-        [
-          "thb3d",
-          "int32"
-        ]
-      ],
       "resources": [
         [
           "u",
@@ -94241,109 +94176,19 @@
           "bn2",
           "float",
           "read_write"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
-        "alt": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "bn2": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "dn": [
-          [
-            "nz"
-          ]
-        ],
-        "dnw": [
-          [
-            "nz"
-          ]
-        ],
-        "fnm": [
-          [
-            "nz"
-          ]
-        ],
-        "fnp": [
-          [
-            "nz"
-          ]
-        ],
-        "msft": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "msfu": [
-          [
-            "ny",
-            "nx+1"
-          ]
-        ],
-        "msfv": [
-          [
-            "ny+1",
-            "nx"
-          ]
-        ],
-        "p": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "phb": [
-          [
-            "nz+1"
-          ],
-          [
-            "nz+1",
-            "ny",
-            "nx"
-          ]
-        ],
-        "php": [
-          [
-            "nz+1",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qv": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "thb": [
-          [
-            "nz"
-          ],
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "thp": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
         "u": [
           [
             "nz",
@@ -94364,10 +94209,197 @@
             "ny",
             "nx"
           ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "alt": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "dn": [
+          [
+            "nz"
+          ]
+        ],
+        "dnw": [
+          [
+            "nz"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "bn2": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
         ]
       },
-      "source": "woof/metal/shaders/smag2d_alternates_fragment.metal",
-      "threads_per_group": 128
+      "parameters": [
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ],
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "cf1",
+          "float32"
+        ],
+        [
+          "cf2",
+          "float32"
+        ],
+        [
+          "cf3",
+          "float32"
+        ],
+        [
+          "moist",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "phb3d",
+          "int32"
+        ],
+        [
+          "boundary_x",
+          "int32"
+        ],
+        [
+          "boundary_y",
+          "int32"
+        ],
+        [
+          "thb3d",
+          "int32"
+        ],
+        [
+          "has_qc",
+          "int32"
+        ],
+        [
+          "has_qi",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 2,
+      "arithmetic_policies": [
+        "default"
+      ]
     },
     {
       "arithmetic_policies": [
@@ -133689,6 +133721,426 @@
       "arithmetic_policies": [
         "default",
         "wrf-exact"
+      ]
+    },
+    {
+      "name": "case_boundary_mass_flux",
+      "module": "case_boundary_mass_flux",
+      "source": "woof/metal/shaders/case_boundary_mass_flux.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_boundary_mass_tendency_flat",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "u_pp",
+          "float",
+          "read"
+        ],
+        [
+          "v_pp",
+          "float",
+          "read"
+        ],
+        [
+          "mu",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "dnw",
+          "float",
+          "read"
+        ],
+        [
+          "msfu",
+          "float",
+          "read"
+        ],
+        [
+          "msfv",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "u_pp": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v_pp": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "mu": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "dnw": [
+          [
+            "nz"
+          ]
+        ],
+        "msfu": [
+          [
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "msfv": [
+          [
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nz",
+            "nedge"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "nedge",
+          "int32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "rdx",
+          "float32"
+        ],
+        [
+          "rdy",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gabls_column_step",
+      "module": "gabls_column",
+      "source": "woof/metal/shaders/gabls_column.metal",
+      "cuda_source": "woof/verify/sase_case_math.py",
+      "cuda_symbol": "column_stable_cooling",
+      "resources": [
+        [
+          "z",
+          "uint64",
+          "read"
+        ],
+        [
+          "c",
+          "uint64",
+          "read"
+        ],
+        [
+          "u",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "v",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "theta",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "e",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "kv",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "kface",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "skin",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "series",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "z": [
+          [
+            "nz"
+          ]
+        ],
+        "c": [
+          [
+            26
+          ]
+        ],
+        "u": [
+          [
+            "nz"
+          ]
+        ],
+        "v": [
+          [
+            "nz"
+          ]
+        ],
+        "theta": [
+          [
+            "nz"
+          ]
+        ],
+        "e": [
+          [
+            "nz"
+          ]
+        ],
+        "kv": [
+          [
+            "nz"
+          ]
+        ],
+        "kface": [
+          [
+            "nz-1"
+          ]
+        ],
+        "skin": [
+          [
+            1
+          ]
+        ],
+        "series": [
+          [
+            "steps",
+            4
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "steps",
+          "int32"
+        ],
+        [
+          "step_index",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "gabls_column_finish",
+      "module": "gabls_column",
+      "source": "woof/metal/shaders/gabls_column.metal",
+      "cuda_source": "woof/verify/sase_case_math.py",
+      "cuda_symbol": "column_stable_cooling",
+      "resources": [
+        [
+          "u",
+          "uint64",
+          "read"
+        ],
+        [
+          "v",
+          "uint64",
+          "read"
+        ],
+        [
+          "theta",
+          "uint64",
+          "read"
+        ],
+        [
+          "e",
+          "uint64",
+          "read"
+        ],
+        [
+          "z",
+          "uint64",
+          "read"
+        ],
+        [
+          "c",
+          "uint64",
+          "read"
+        ],
+        [
+          "kv",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "kface",
+          "uint64",
+          "read_write"
+        ],
+        [
+          "stress",
+          "uint64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz"
+          ]
+        ],
+        "v": [
+          [
+            "nz"
+          ]
+        ],
+        "theta": [
+          [
+            "nz"
+          ]
+        ],
+        "e": [
+          [
+            "nz"
+          ]
+        ],
+        "z": [
+          [
+            "nz"
+          ]
+        ],
+        "c": [
+          [
+            26
+          ]
+        ],
+        "kv": [
+          [
+            "nz"
+          ]
+        ],
+        "kface": [
+          [
+            "nz-1"
+          ]
+        ],
+        "stress": [
+          [
+            "nz-1",
+            3
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 1,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
       ]
     }
   ],

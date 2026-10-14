@@ -537,6 +537,11 @@ class MetalContext:
         if not isinstance(label, str) or not label.strip():
             raise ValueError("deferred Metal sequence label must be non-empty")
         with self._enqueue_lock:
+            if not self.batch_kernel_calls:
+                # Preserve sequence exclusion while submitting each kernel
+                # separately for synchronous verification.
+                yield
+                return
             if getattr(self._kernel_batch_local, "active", None) is not None:
                 raise RuntimeError("nested deferred Metal sequences are unsupported")
             batch = {"label": label.strip(), "calls": [], "chunk": 0}

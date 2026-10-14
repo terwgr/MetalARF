@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add native Metal runners for nine idealized verification cases and an
+  independent lateral boundary-flux diagnostic.
+- Add persistent WK82 storm-identity diagnostics with conservative separation
+  bounds while preserving WOOF's snapshot-based qualification on both backends.
+
 - Correct Metal Coriolis momentum coupling and separately rounded binary64
   exponential, logarithm and power helpers.
 - Verify packaged runtime and shader-library contents before loading, with

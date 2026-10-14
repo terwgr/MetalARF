@@ -619,6 +619,9 @@ def boundary_mass_tendency(state: DomainState, cfg: RunConfig) -> float:
     Reading the result synchronizes the device; call
     :func:`boundary_mass_tendency_device` from a hot loop instead.
     """
+    if getattr(state, "_metal_setup_state", False):
+        from woof.metal.mass_flux_observer import boundary_mass_tendency as metal_flux
+        return metal_flux(state, cfg)
     return float(boundary_mass_tendency_device(state, cfg))
 
 

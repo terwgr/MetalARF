@@ -1200,7 +1200,7 @@ def _apply_specified_scalar_flow_boundaries(state, cfg, ru, rv, held_lbc):
 
 def init_moist_balanced(cfg: RunConfig, coord: VerticalCoord,
                         base: BaseState, qv_func,
-                        thp_func=None) -> DomainState:
+                        thp_func=None, *, array_module=None) -> DomainState:
     """Discretely balanced moist at-rest state (+ optional theta bubble).
 
     Transcribed from WRF v4.6.1 ``module_initialize_ideal.F`` (the
@@ -1231,7 +1231,7 @@ def init_moist_balanced(cfg: RunConfig, coord: VerticalCoord,
         raise NotImplementedError(
             "init_moist_balanced supports flat base states only")
     nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
-    s = init_at_rest(cfg, coord, base)
+    s = init_at_rest(cfg, coord, base, array_module=array_module)
 
     z = s.height_half()                                # (nz,)
     x = (np.arange(nx) + 0.5) * cfg.dx - 0.5 * nx * cfg.dx
@@ -1276,9 +1276,11 @@ def init_moist_balanced(cfg: RunConfig, coord: VerticalCoord,
             ((c1h[k] * mub + c2h[k]) + c1h[k] * mup) * al[k]
             + (c1h[k] * mup) * base.alb[k])
 
-    s.thp[...] = cp.asarray(thp, dtype=DTYPE)
-    s.php[...] = cp.asarray(php, dtype=DTYPE)
-    s.qv[...] = cp.asarray(qv3, dtype=DTYPE)
+    from woof.core.state import _state_array_module
+    xp = _state_array_module(s)
+    s.thp[...] = xp.asarray(thp, dtype=DTYPE)
+    s.php[...] = xp.asarray(php, dtype=DTYPE)
+    s.qv[...] = xp.asarray(qv3, dtype=DTYPE)
     # Idealized cases always use hypsometric_opt=1, regardless of namelist
     # setting (WRF share/input_wrf.F:1038); the php recurrence above is the
     # opt-1 discrete hydrostatic inversion, so the default key matches.
