@@ -3,18 +3,22 @@
 #include "../generated/ysu_validate_outputs_bindings.metalh"
 #include "soft_binary32.metalh"
 #include "soft_binary64.metalh"
+#include "pressure_power.metalh"
 using namespace metal;
 
 // Ordinary WRF v4.6.1 YSU column, with the topo_wind arm (p.topo = 1:
 // ysu_topo.cuh / bl_ysu.F90:1254-1314 and :1402-1408). The BEP variant is
 // absent from this entry point and is rejected by the Python dispatcher.
 // Source operation order follows woof/core/kernels/ysu.cu / bl_ysu.F90.
-#pragma clang fp contract(off)
+// The ordinary CUDA YSU kernel permits multiply-add contraction (the
+// recorded NVRTC options do not disable fmad). Preserve that policy here.
+#pragma clang fp contract(fast)
 
 constant float YSU_G=9.81f, YSU_RD=287.0f, YSU_RV=461.6f;
 constant float YSU_CP=1004.5f, YSU_XLV=2.5e6f;
 constant float YSU_RCP=0.2857142984867096f;
-constant float YSU_EP2=0.6217157244682312f;
+// Match CUDA EP2 (RD/RV), including cloudy top-down mixing.
+constant float YSU_EP2=YSU_RD/YSU_RV;
 constant uint YSU_SLOTS=18u, YSU_LANES=32u;
 
 struct YsuCol { device float *p; };
@@ -306,7 +310,7 @@ kernel void ysu_column(
         float bfxpbl=yrndiv(-.15f*yget(thv,0),YSU_G)*wm3/hpbl,dthv=ymax(yget(thv,kt+1)-yget(thv,kt),tmin);
         we=ymax(bfxpbl/dthv,-sqrt(wm2));
         if(ts&&kpbl<nz&&r.qc[kt*st+col]+r.qi[kt*st+col]>1.0e-5f){cloudflg=true;
-            float ptop=r.p_interface[(kt+1)*st+col],templ=yget(thli,kt)*pow(yrndiv(ptop,100000.0f),YSU_RCP);
+            float ptop=r.p_interface[(kt+1)*st+col],templ=yget(thli,kt)*fp32_pressure_power(ptop,100000.0f,YSU_RCP);
             float rvls=100.0f*6.112f*exp(17.67f*(templ-273.16f)/(templ-29.65f))*(YSU_EP2/ptop);
             float qsum=r.qv[kt*st+col]+r.qc[kt*st+col];
             float temps=templ+(qsum-rvls)/(YSU_CP/YSU_XLV+YSU_EP2*YSU_XLV*rvls/(YSU_RD*templ*templ));

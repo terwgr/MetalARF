@@ -48312,52 +48312,11 @@
       ]
     },
     {
-      "arithmetic_policies": [
-        "default"
-      ],
+      "name": "pd_fluxes",
+      "module": "moist_pd",
+      "source": "woof/metal/shaders/moist_pd.metal",
       "cuda_source": "woof/core/kernels/pd_advection.cu",
       "cuda_symbol": "pd_fluxes",
-      "layout_version": 1,
-      "module": "moist_pd",
-      "name": "pd_fluxes",
-      "parameters": [
-        [
-          "dx",
-          "float32"
-        ],
-        [
-          "dy",
-          "float32"
-        ],
-        [
-          "dt",
-          "float32"
-        ],
-        [
-          "has_msf",
-          "int32"
-        ],
-        [
-          "open_x",
-          "int32"
-        ],
-        [
-          "open_y",
-          "int32"
-        ],
-        [
-          "nz",
-          "int32"
-        ],
-        [
-          "ny",
-          "int32"
-        ],
-        [
-          "nx",
-          "int32"
-        ]
-      ],
       "resources": [
         [
           "q",
@@ -48451,80 +48410,6 @@
         ]
       ],
       "shapes": {
-        "c1h": [
-          [
-            "nz"
-          ]
-        ],
-        "c2h": [
-          [
-            "nz"
-          ]
-        ],
-        "fnm": [
-          [
-            "nz"
-          ]
-        ],
-        "fnp": [
-          [
-            "nz"
-          ]
-        ],
-        "fxc": [
-          [
-            "nz",
-            "ny",
-            "nx+1"
-          ]
-        ],
-        "fxl": [
-          [
-            "nz",
-            "ny",
-            "nx+1"
-          ]
-        ],
-        "fyc": [
-          [
-            "nz",
-            "ny+1",
-            "nx"
-          ]
-        ],
-        "fyl": [
-          [
-            "nz",
-            "ny+1",
-            "nx"
-          ]
-        ],
-        "fzc": [
-          [
-            "nz+1",
-            "ny",
-            "nx"
-          ]
-        ],
-        "fzl": [
-          [
-            "nz+1",
-            "ny",
-            "nx"
-          ]
-        ],
-        "msft": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "mut": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
         "q": [
           [
             "nz",
@@ -48537,11 +48422,6 @@
             "nz",
             "ny",
             "nx"
-          ]
-        ],
-        "rdnw": [
-          [
-            "nz"
           ]
         ],
         "ru": [
@@ -48564,10 +48444,134 @@
             "ny",
             "nx"
           ]
+        ],
+        "mut": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "c1h": [
+          [
+            "nz"
+          ]
+        ],
+        "c2h": [
+          [
+            "nz"
+          ]
+        ],
+        "rdnw": [
+          [
+            "nz"
+          ]
+        ],
+        "fnm": [
+          [
+            "nz"
+          ]
+        ],
+        "fnp": [
+          [
+            "nz"
+          ]
+        ],
+        "msft": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "fxl": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "fxc": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "fyl": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fyc": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "fzl": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "fzc": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
         ]
       },
-      "source": "woof/metal/shaders/moist_pd.metal",
-      "threads_per_group": 128
+      "parameters": [
+        [
+          "dx",
+          "float32"
+        ],
+        [
+          "dy",
+          "float32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "has_msf",
+          "int32"
+        ],
+        [
+          "open_x",
+          "int32"
+        ],
+        [
+          "open_y",
+          "int32"
+        ],
+        [
+          "vorder",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
     },
     {
       "arithmetic_policies": [
@@ -133471,6 +133475,220 @@
         "software-complex128",
         "fp32-output",
         "software-libm-approximation-unverified"
+      ]
+    },
+    {
+      "name": "diff6_edge_pad",
+      "module": "diff6_family",
+      "source": "woof/metal/shaders/diff6_family.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "_edge_pad_into",
+      "resources": [
+        [
+          "src",
+          "float32",
+          "read"
+        ],
+        [
+          "dst",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "nlev",
+            "ny",
+            "nx"
+          ],
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dst": [
+          [
+            "nlev",
+            "ny+7",
+            "nx+7"
+          ],
+          [
+            "ny+7",
+            "nx+7"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "diff6_edge_crop_add",
+      "module": "diff6_family",
+      "source": "woof/metal/shaders/diff6_family.metal",
+      "cuda_source": "woof/core/dycore.py",
+      "cuda_symbol": "launch_diff6_to_edge",
+      "resources": [
+        [
+          "padded",
+          "float32",
+          "read"
+        ],
+        [
+          "tend",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "padded": [
+          [
+            "nlev",
+            "ny+7",
+            "nx+7"
+          ]
+        ],
+        "tend": [
+          [
+            "nlev",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "upper_wind_limiter",
+      "module": "acoustic_advance_w_phi",
+      "source": "woof/metal/shaders/acoustic_advance_w_phi.metal",
+      "cuda_source": "woof/core/kernels/upper_wind_limiter.cu",
+      "cuda_symbol": "upper_wind_limiter",
+      "resources": [
+        [
+          "u",
+          "float32",
+          "read_write"
+        ],
+        [
+          "v",
+          "float32",
+          "read_write"
+        ],
+        [
+          "php",
+          "float32",
+          "read"
+        ],
+        [
+          "phb",
+          "float32",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx+1"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny+1",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "hdepth",
+          "float32"
+        ],
+        [
+          "base3d",
+          "int32"
+        ],
+        [
+          "zone",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default",
+        "wrf-exact"
       ]
     }
   ],

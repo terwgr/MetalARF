@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 #include "noah_sfcdiags_bindings.metalh"
+#include "pressure_power.metalh"
 
 using namespace metal;
 
@@ -40,7 +41,6 @@ kernel void noah_sfcdiags(
     const float temperature = t_active ? heated : ts;
     r.t2_a[c] = temperature;
 
-    const float exner_base = p.p0 / ps;
-    const float exner = pow(exner_base, p.rcp);
+    const float exner = fp32_pressure_power(p.p0, ps, p.rcp);
     r.th2_a[c] = temperature * exner;
 }

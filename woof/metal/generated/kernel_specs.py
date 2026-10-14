@@ -87,7 +87,7 @@ ADVANCE_W_PHI_SHAPES = (('a', (('nz+1', 'ny', 'nx'),)), ('al_pp', (('nz', 'ny', 
 ADVANCE_W_PHI_PARAM_FIELDS = [('moist_cq', 'ctypes.c_int32'), ('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dtau', 'ctypes.c_float'), ('epssm', 'ctypes.c_float'), ('dampmag', 'ctypes.c_float'), ('zdamp', 'ctypes.c_float'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32'), ('spec_zone', 'ctypes.c_int32'), ('base3d', 'ctypes.c_int32'), ('top_lid', 'ctypes.c_int32'), ('mapped', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 ADVANCE_W_PHI_THREADS_PER_GROUP = 128
 ADVANCE_W_PHI_LAYOUT_HASH = '3fc28bed1b5f6310fb8cc51d1b1bc0a23c3f3a50a15cd32655fe2a0346758194'
-ADVANCE_W_PHI_SHADER_HASH = '4471092aba8735e2c05b9fa887a3a938c922a4eb4412746262af5c04676ff744'
+ADVANCE_W_PHI_SHADER_HASH = '0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f'
 
 APPLY_EMDIV_RESOURCES = (('u_pp', 'float', 'read_write'), ('v_pp', 'float', 'read_write'), ('mudf', 'float', 'read'), ('mu_pp', 'float', 'read'), ('mu_prev', 'float', 'read_write'), ('c1h', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'))
 APPLY_EMDIV_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read', 'read')
@@ -215,7 +215,7 @@ CORIOLIS_CURVATURE_SHAPES = (('c1f', (('nz+1',),)), ('c2f', (('nz+1',),)), ('cos
 CORIOLIS_CURVATURE_PARAM_FIELDS = [('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('reradius', 'ctypes.c_float'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 CORIOLIS_CURVATURE_THREADS_PER_GROUP = 128
 CORIOLIS_CURVATURE_LAYOUT_HASH = 'ab87fc77bf54fcada44c42549b739545a1441bbccdfa5bf8d0a2062d75c44d16'
-CORIOLIS_CURVATURE_SHADER_HASH = '566c9cb486146bddd2a3fe92cf7aa5e295814564410d58c9f1136e1cf668539e'
+CORIOLIS_CURVATURE_SHADER_HASH = '2669eec78104b57c97ea796fc8269eed1de70706a0fc0cde4d42cd6dfb8629a1'
 
 COUPLE_FACES_RESOURCES = (('mass_u', 'float', 'read'), ('mass_v', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('ru', 'float', 'read_write'), ('rv', 'float', 'read_write'))
 COUPLE_FACES_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -311,7 +311,7 @@ DIFF6_SHAPES = (('c1', (('nlev',),)), ('c2', (('nlev',),)), ('f', (('nlev', 'nys
 DIFF6_PARAM_FIELDS = [('coef', 'ctypes.c_float'), ('mono', 'ctypes.c_int32'), ('slopeopt', 'ctypes.c_int32'), ('dzthr_x', 'ctypes.c_float'), ('dzthr_y', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nys', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nxs', 'ctypes.c_int32'), ('variant', 'ctypes.c_int32'), ('wstag', 'ctypes.c_int32'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32')]
 DIFF6_THREADS_PER_GROUP = 128
 DIFF6_LAYOUT_HASH = '9f82c5670abc48b1dfdabd761c839cbf0146f387bf0d646de19b5fcd0c537983'
-DIFF6_SHADER_HASH = '2c90cdb3062bb78d30dee2c7a2cc1384fd589dc043d709f7f2343f9222f7369d'
+DIFF6_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
 
 DIFF6_SEAM_U_RESOURCES = (('f', 'float', 'read'), ('tend', 'float', 'read_write'), ('mut', 'float', 'read'), ('c1', 'float', 'read'), ('c2', 'float', 'read'), ('phb', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('msft', 'float', 'read'))
 DIFF6_SEAM_U_ACCESS = ('read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -319,7 +319,7 @@ DIFF6_SEAM_U_SHAPES = (('c1', (('nlev',),)), ('c2', (('nlev',),)), ('f', (('nlev
 DIFF6_SEAM_U_PARAM_FIELDS = [('coef', 'ctypes.c_float'), ('mono', 'ctypes.c_int32'), ('slopeopt', 'ctypes.c_int32'), ('dzthr_x', 'ctypes.c_float'), ('dzthr_y', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('h0', 'ctypes.c_int32'), ('h1', 'ctypes.c_int32'), ('boundary_cross', 'ctypes.c_int32')]
 DIFF6_SEAM_U_THREADS_PER_GROUP = 128
 DIFF6_SEAM_U_LAYOUT_HASH = 'aacaf278ff4e0387c3dab2db9846f06d678abf4b6c5cfaa43c089dabad372ac8'
-DIFF6_SEAM_U_SHADER_HASH = '2c90cdb3062bb78d30dee2c7a2cc1384fd589dc043d709f7f2343f9222f7369d'
+DIFF6_SEAM_U_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
 
 DIFF6_SEAM_V_RESOURCES = (('f', 'float', 'read'), ('tend', 'float', 'read_write'), ('mut', 'float', 'read'), ('c1', 'float', 'read'), ('c2', 'float', 'read'), ('phb', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('msft', 'float', 'read'))
 DIFF6_SEAM_V_ACCESS = ('read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -327,7 +327,7 @@ DIFF6_SEAM_V_SHAPES = (('c1', (('nlev',),)), ('c2', (('nlev',),)), ('f', (('nlev
 DIFF6_SEAM_V_PARAM_FIELDS = [('coef', 'ctypes.c_float'), ('mono', 'ctypes.c_int32'), ('slopeopt', 'ctypes.c_int32'), ('dzthr_x', 'ctypes.c_float'), ('dzthr_y', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('h0', 'ctypes.c_int32'), ('h1', 'ctypes.c_int32'), ('boundary_cross', 'ctypes.c_int32')]
 DIFF6_SEAM_V_THREADS_PER_GROUP = 128
 DIFF6_SEAM_V_LAYOUT_HASH = '0c5cea3f1e23d0ea490f5c71b30b79a571409ffcd5a63a0814acb1ed71845d07'
-DIFF6_SEAM_V_SHADER_HASH = '2c90cdb3062bb78d30dee2c7a2cc1384fd589dc043d709f7f2343f9222f7369d'
+DIFF6_SEAM_V_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
 
 DUDHIA_SHORTWAVE_COLUMNS_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qr', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('dz', 'float', 'read'), ('exner', 'float', 'read'), ('cosine_zenith', 'float', 'read'), ('albedo', 'float', 'read'), ('heating', 'float', 'read_write'), ('swdown', 'float', 'read_write'), ('gsw', 'float', 'read_write'), ('coszen', 'float', 'read_write'))
 DUDHIA_SHORTWAVE_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1775,7 +1775,7 @@ NOAH_CHECK_SOIL_CATEGORIES_SHAPES = (('isltyp', (('ny', 'nx'),)), ('status', ((1
 NOAH_CHECK_SOIL_CATEGORIES_PARAM_FIELDS = [('slcats', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NOAH_CHECK_SOIL_CATEGORIES_THREADS_PER_GROUP = 64
 NOAH_CHECK_SOIL_CATEGORIES_LAYOUT_HASH = '7df709187712fdb59f12ab8221d7fa3db03d75969455593c7e437d550f95c606'
-NOAH_CHECK_SOIL_CATEGORIES_SHADER_HASH = 'f8e243afc4d00a092556595f2360e3dd8c19bfa51c665b0c9ee8126b8c2912b7'
+NOAH_CHECK_SOIL_CATEGORIES_SHADER_HASH = '6551cd4c8dca0c6950a2db29323d95a281830f451e15486a6041d2cc234a7285'
 
 NOAH_COLUMN_RESOURCES = (('ivgtyp', 'int32', 'read'), ('isltyp', 'int32', 'read'), ('psfc', 'float', 'read'), ('sfcprs', 'float', 'read'), ('sfctmp', 'float', 'read'), ('qv1', 'float', 'read'), ('qgh', 'float', 'read'), ('dz8w1', 'float', 'read'), ('glw', 'float', 'read'), ('swdown', 'float', 'read'), ('rainbl', 'float', 'read'), ('sr', 'float', 'read'), ('chs', 'float', 'read'), ('cqs2', 'float', 'read'), ('chs2', 'float', 'read_write'), ('rib', 'float', 'read'), ('vegfra', 'float', 'read'), ('shdmin', 'float', 'read'), ('shdmax', 'float', 'read'), ('tmn', 'float', 'read'), ('xland', 'float', 'read'), ('xice', 'float', 'read'), ('snoalb', 'float', 'read'), ('embck', 'float', 'read'), ('tsk', 'float', 'read_write'), ('hfx', 'float', 'read_write'), ('qfx', 'float', 'read_write'), ('lh', 'float', 'read_write'), ('grdflx', 'float', 'read_write'), ('qsfc', 'float', 'read_write'), ('canwat', 'float', 'read_write'), ('snow', 'float', 'read_write'), ('snowc', 'float', 'read_write'), ('snowh', 'float', 'read_write'), ('albedo', 'float', 'read_write'), ('albbck', 'float', 'read_write'), ('emiss', 'float', 'read_write'), ('znt', 'float', 'read_write'), ('z0', 'float', 'read_write'), ('snotime', 'float', 'read_write'), ('lai', 'float', 'read_write'), ('smstav', 'float', 'read_write'), ('smstot', 'float', 'read_write'), ('sfcrunoff', 'float', 'read_write'), ('udrunoff', 'float', 'read_write'), ('acsnow', 'float', 'read_write'), ('acsnom', 'float', 'read_write'), ('snopcx', 'float', 'read_write'), ('potevp', 'float', 'read_write'), ('noahres', 'float', 'read_write'), ('reslin', 'float', 'read_write'), ('chklowq', 'float', 'read_write'), ('smois', 'float', 'read_write'), ('tslb', 'float', 'read_write'), ('sh2o', 'float', 'read_write'), ('smcrel', 'float', 'read_write'), ('ebal', 'int32', 'read_write'), ('vegtbl', 'float', 'read'), ('soiltbl', 'float', 'read'), ('genp', 'float', 'read'), ('dzs', 'float', 'read'))
 NOAH_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read')
@@ -1783,7 +1783,7 @@ NOAH_COLUMN_SHAPES = (('acsnom', (('ny', 'nx'),)), ('acsnow', (('ny', 'nx'),)), 
 NOAH_COLUMN_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('lucats', 'ctypes.c_int32'), ('slcats', 'ctypes.c_int32'), ('isurban', 'ctypes.c_int32'), ('isice', 'ctypes.c_int32'), ('xice_threshold', 'ctypes.c_float'), ('itimestep', 'ctypes.c_int32'), ('frpcpn', 'ctypes.c_int32'), ('usemonalb', 'ctypes.c_int32'), ('rdlai2d', 'ctypes.c_int32'), ('opt_thcnd', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NOAH_COLUMN_THREADS_PER_GROUP = 64
 NOAH_COLUMN_LAYOUT_HASH = 'bf302af5b3bd42d8a4ab4246d7af214d5dbc3b4c127a01dac46b90eb789797c4'
-NOAH_COLUMN_SHADER_HASH = 'f8e243afc4d00a092556595f2360e3dd8c19bfa51c665b0c9ee8126b8c2912b7'
+NOAH_COLUMN_SHADER_HASH = '6551cd4c8dca0c6950a2db29323d95a281830f451e15486a6041d2cc234a7285'
 
 NOAH_FORCING_RESOURCES = (('p_if0_a', 'float', 'read'), ('p_if1_a', 'float', 'read'), ('temperature0_a', 'float', 'read'), ('qv0_a', 'float', 'read'), ('dz0_a', 'float', 'read'), ('br_a', 'float', 'read'), ('sr_scheme_a', 'float', 'read'), ('pending_a', 'float', 'read'), ('sfcprs_a', 'float', 'read_write'), ('sfctmp_a', 'float', 'read_write'), ('qv1_a', 'float', 'read_write'), ('dz8w1_a', 'float', 'read_write'), ('rib_a', 'float', 'read_write'), ('sr_a', 'float', 'read_write'), ('rainbl_a', 'float', 'read_write'))
 NOAH_FORCING_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1799,7 +1799,7 @@ NOAH_INITIALIZE_SH2O_SHAPES = (('isltyp', (('ny', 'nx'),)), ('sh2o', ((4, 'ny', 
 NOAH_INITIALIZE_SH2O_PARAM_FIELDS = [('slcats', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NOAH_INITIALIZE_SH2O_THREADS_PER_GROUP = 64
 NOAH_INITIALIZE_SH2O_LAYOUT_HASH = '7375dc237156607c5bf51d22bf4d116ca21360a70166320dcb181848d3c3a4f2'
-NOAH_INITIALIZE_SH2O_SHADER_HASH = 'f8e243afc4d00a092556595f2360e3dd8c19bfa51c665b0c9ee8126b8c2912b7'
+NOAH_INITIALIZE_SH2O_SHADER_HASH = '6551cd4c8dca0c6950a2db29323d95a281830f451e15486a6041d2cc234a7285'
 
 NOAH_RAIN_ADD_RESOURCES = (('rainbl_a', 'float', 'read_write'), ('pending_a', 'float', 'read'))
 NOAH_RAIN_ADD_ACCESS = ('read_write', 'read')
@@ -1823,7 +1823,7 @@ NOAH_SFCDIAGS_SHAPES = (('chs2_a', (('ny', 'nx'),)), ('cqs2_a', (('ny', 'nx'),))
 NOAH_SFCDIAGS_PARAM_FIELDS = [('rd', 'ctypes.c_float'), ('cp_air', 'ctypes.c_float'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('active_floor', 'ctypes.c_float'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 NOAH_SFCDIAGS_THREADS_PER_GROUP = 128
 NOAH_SFCDIAGS_LAYOUT_HASH = 'f77144922f443297e5d04337548680355601736b70e849290f95159026bb0751'
-NOAH_SFCDIAGS_SHADER_HASH = 'd8a19a7f4753d187e2862f8c8d16e5d28f425a168a5429ee43c893c1ab6573c3'
+NOAH_SFCDIAGS_SHADER_HASH = '8ec5752cb5d95f95fcc6da64c9d9fc209f27da0fce1879cb5d087aae8c19c176'
 
 NOAH_SR_FROM_TEMPERATURE_RESOURCES = (('temperature_a', 'float', 'read'), ('sr_a', 'float', 'read_write'))
 NOAH_SR_FROM_TEMPERATURE_ACCESS = ('read', 'read_write')
@@ -2443,11 +2443,11 @@ P3_SED_RAIN_SHADER_HASH = 'a8e236864e6cb1ed84ba597b8ecea3150396b9ba6635622abc9d5
 
 PD_FLUXES_RESOURCES = (('q', 'float', 'read'), ('q0', 'float', 'read'), ('ru', 'float', 'read'), ('rv', 'float', 'read'), ('rw', 'float', 'read'), ('mut', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('rdnw', 'float', 'read'), ('fnm', 'float', 'read'), ('fnp', 'float', 'read'), ('msft', 'float', 'read'), ('fxl', 'float', 'read_write'), ('fxc', 'float', 'read_write'), ('fyl', 'float', 'read_write'), ('fyc', 'float', 'read_write'), ('fzl', 'float', 'read_write'), ('fzc', 'float', 'read_write'))
 PD_FLUXES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
-PD_FLUXES_SHAPES = (('c1h', (('nz',),)), ('c2h', (('nz',),)), ('fnm', (('nz',),)), ('fnp', (('nz',),)), ('fxc', (('nz', 'ny', 'nx+1'),)), ('fxl', (('nz', 'ny', 'nx+1'),)), ('fyc', (('nz', 'ny+1', 'nx'),)), ('fyl', (('nz', 'ny+1', 'nx'),)), ('fzc', (('nz+1', 'ny', 'nx'),)), ('fzl', (('nz+1', 'ny', 'nx'),)), ('msft', (('ny', 'nx'),)), ('mut', (('ny', 'nx'),)), ('q', (('nz', 'ny', 'nx'),)), ('q0', (('nz', 'ny', 'nx'),)), ('rdnw', (('nz',),)), ('ru', (('nz', 'ny', 'nx+1'),)), ('rv', (('nz', 'ny+1', 'nx'),)), ('rw', (('nz+1', 'ny', 'nx'),)))
-PD_FLUXES_PARAM_FIELDS = [('dx', 'ctypes.c_float'), ('dy', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('open_x', 'ctypes.c_int32'), ('open_y', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+PD_FLUXES_SHAPES = (('q', (('nz', 'ny', 'nx'),)), ('q0', (('nz', 'ny', 'nx'),)), ('ru', (('nz', 'ny', 'nx+1'),)), ('rv', (('nz', 'ny+1', 'nx'),)), ('rw', (('nz+1', 'ny', 'nx'),)), ('mut', (('ny', 'nx'),)), ('c1h', (('nz',),)), ('c2h', (('nz',),)), ('rdnw', (('nz',),)), ('fnm', (('nz',),)), ('fnp', (('nz',),)), ('msft', (('ny', 'nx'),)), ('fxl', (('nz', 'ny', 'nx+1'),)), ('fxc', (('nz', 'ny', 'nx+1'),)), ('fyl', (('nz', 'ny+1', 'nx'),)), ('fyc', (('nz', 'ny+1', 'nx'),)), ('fzl', (('nz+1', 'ny', 'nx'),)), ('fzc', (('nz+1', 'ny', 'nx'),)))
+PD_FLUXES_PARAM_FIELDS = [('dx', 'ctypes.c_float'), ('dy', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('open_x', 'ctypes.c_int32'), ('open_y', 'ctypes.c_int32'), ('vorder', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 PD_FLUXES_THREADS_PER_GROUP = 128
-PD_FLUXES_LAYOUT_HASH = 'b5dbadca19407bb5e1330270b8f4064dafe2d4ed60260994853a7c9e4bfe55c2'
-PD_FLUXES_SHADER_HASH = 'b7725d051ceb58c22b6c5d4d90c0d4b612eb4fc8d9c667bdfa8dd94318abf5bf'
+PD_FLUXES_LAYOUT_HASH = 'b84faff27f5b8349aefc4772c6e02fd0c13f736621fb48c7b2fb90c5c999af3e'
+PD_FLUXES_SHADER_HASH = 'e72a91381557c57daf6290cd53b98a51341a86b273e2e295e7d01bc029e8f247'
 
 PD_RENORM_APPLY_RESOURCES = (('q0', 'float', 'read'), ('mu_old', 'float', 'read'), ('fxl', 'float', 'read'), ('fxc', 'float', 'read'), ('fyl', 'float', 'read'), ('fyc', 'float', 'read'), ('fzl', 'float', 'read'), ('fzc', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('rdnw', 'float', 'read'), ('msft', 'float', 'read'), ('tend', 'float', 'read_write'))
 PD_RENORM_APPLY_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -2455,7 +2455,7 @@ PD_RENORM_APPLY_SHAPES = (('c1h', (('nz',),)), ('c2h', (('nz',),)), ('fxc', (('n
 PD_RENORM_APPLY_PARAM_FIELDS = [('dx_inv', 'ctypes.c_float'), ('dy_inv', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('open_x', 'ctypes.c_int32'), ('open_y', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 PD_RENORM_APPLY_THREADS_PER_GROUP = 128
 PD_RENORM_APPLY_LAYOUT_HASH = '2f401159630992d1361f3a6e1931f19259915e509668b4082b4abad64a911fda'
-PD_RENORM_APPLY_SHADER_HASH = 'b7725d051ceb58c22b6c5d4d90c0d4b612eb4fc8d9c667bdfa8dd94318abf5bf'
+PD_RENORM_APPLY_SHADER_HASH = 'e72a91381557c57daf6290cd53b98a51341a86b273e2e295e7d01bc029e8f247'
 
 PHYSICS_ATMOSPHERE_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('p', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qr', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('qh', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('dnw', 'float', 'read'), ('total_mu', 'float', 'read'), ('alt', 'float', 'read'), ('theta', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read_write'), ('p_interface', 'float', 'read_write'), ('exner', 'float', 'read_write'), ('u_mass', 'float', 'read_write'), ('v_mass', 'float', 'read_write'), ('z_interface', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('rho', 'float', 'read_write'))
 PHYSICS_ATMOSPHERE_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2463,7 +2463,7 @@ PHYSICS_ATMOSPHERE_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('c1h', (('
 PHYSICS_ATMOSPHERE_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('has_qv', 'ctypes.c_int32'), ('has_qc', 'ctypes.c_int32'), ('has_qr', 'ctypes.c_int32'), ('has_qi', 'ctypes.c_int32'), ('has_qs', 'ctypes.c_int32'), ('has_qg', 'ctypes.c_int32'), ('has_qh', 'ctypes.c_int32'), ('p_top', 'ctypes.c_float')]
 PHYSICS_ATMOSPHERE_PREPARE_THREADS_PER_GROUP = 128
 PHYSICS_ATMOSPHERE_PREPARE_LAYOUT_HASH = 'ca32bf72ea65711afc7a762d886375b7ed4298eaab3091f96d8e90286b34b6b0'
-PHYSICS_ATMOSPHERE_PREPARE_SHADER_HASH = 'abdf5ad88c131f30d0ac217aeddf63dc537bb0edd4e8fb0aeca3f88ef11a242a'
+PHYSICS_ATMOSPHERE_PREPARE_SHADER_HASH = 'd462aa7ce811b8847c4d2acc03db5cf9e17fe37e50c923e11eb5b988890746c7'
 
 RAYLEIGH_DAMP_RESOURCES = (('f', 'float', 'read_write'), ('rdamp', 'float', 'read'))
 RAYLEIGH_DAMP_ACCESS = ('read_write', 'read')
@@ -3335,7 +3335,7 @@ SFCLAY_COLUMN_SHAPES = (('br', (('ny', 'nx'),)), ('cd', (('ny', 'nx'),)), ('cda'
 SFCLAY_COLUMN_PARAM_FIELDS = [('dx', 'ctypes.c_float'), ('option', 'ctypes.c_int32'), ('isfflx', 'ctypes.c_int32'), ('isftcflx', 'ctypes.c_int32'), ('iz0tlnd', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 SFCLAY_COLUMN_THREADS_PER_GROUP = 128
 SFCLAY_COLUMN_LAYOUT_HASH = 'aa1707b8a5b13c08c66639ce37e395410cc39a323780f7324d494c68cb0a72d0'
-SFCLAY_COLUMN_SHADER_HASH = 'ec1c5bfeebdbc98aa950d1b01b2bac0c5142e26992976bb521c6d9c4788c8296'
+SFCLAY_COLUMN_SHADER_HASH = '022ef564dbc143561548b03db94f604942608f2e59796ff7e6ee6c4f6d6f01b3'
 
 SHINHONG_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('p', 'float', 'read'), ('p_interface', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('tke', 'float', 'read'), ('psfc', 'float', 'read'), ('znt', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('wspd', 'float', 'read'), ('br', 'float', 'read'), ('psim', 'float', 'read'), ('psih', 'float', 'read'), ('xland', 'float', 'read'), ('u10', 'float', 'read'), ('v10', 'float', 'read'), ('corf', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dtheta', 'float', 'read_write'), ('dqv', 'float', 'read_write'), ('dqc', 'float', 'read_write'), ('dqi', 'float', 'read_write'), ('exch_h', 'float', 'read_write'), ('tke_out', 'float', 'read_write'), ('el', 'float', 'read_write'), ('hpbl', 'float', 'read_write'), ('wstar', 'float', 'read_write'), ('delta', 'float', 'read_write'), ('kpbl', 'int32', 'read_write'), ('ws', 'float', 'read_write'))
 SHINHONG_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3567,7 +3567,7 @@ THOMPSON_AA_COLD_NETWORK_SHAPES = (('cloud_to_ice_mass', (('37', '100', '45', '5
 THOMPSON_AA_COLD_NETWORK_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32'), ('wrf39', 'ctypes.c_int32')]
 THOMPSON_AA_COLD_NETWORK_THREADS_PER_GROUP = 64
 THOMPSON_AA_COLD_NETWORK_LAYOUT_HASH = '153c20d14c1d1e0726b6a51bd74fe94a6efc56af9503e801ce4dd6b74381dea6'
-THOMPSON_AA_COLD_NETWORK_SHADER_HASH = '58a55550854b77805e06601e23c4611d2f1e4fdd59db1bf9a97bb6cd39e24d9e'
+THOMPSON_AA_COLD_NETWORK_SHADER_HASH = 'f621544f97b2393f4bbebe459a77a92ee4e8b697240d238380848b1691e467c7'
 
 THOMPSON_AA_EFFECTIVE_RADIUS_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('nc', 'float', 'read'), ('qi', 'float', 'read'), ('ni', 'float', 'read'), ('qs', 'float', 'read'), ('effc', 'float', 'read_write'), ('effi', 'float', 'read_write'), ('effs', 'float', 'read_write'))
 THOMPSON_AA_EFFECTIVE_RADIUS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
@@ -3615,7 +3615,7 @@ THOMPSON_AA_NCTEN_BALANCE_SHAPES = (('density', (('any_1d',),)), ('nc_entry', ((
 THOMPSON_AA_NCTEN_BALANCE_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_AA_NCTEN_BALANCE_THREADS_PER_GROUP = 128
 THOMPSON_AA_NCTEN_BALANCE_LAYOUT_HASH = 'fb076b4418adb2267ea15891f7e917a1a9548534391bb2d62b64c61a486a954f'
-THOMPSON_AA_NCTEN_BALANCE_SHADER_HASH = 'affb31701047e8d77c54a4f94c4ee4970cc6e3cb81a0764b2cec694c182a752a'
+THOMPSON_AA_NCTEN_BALANCE_SHADER_HASH = '254468a343d74a2dd6606e1ff683e4fb10647e2fd616c1d45763445c071ca4cb'
 
 THOMPSON_AA_PROFILE_HEIGHT_RESOURCES = (('phb', 'float', 'read'), ('php', 'float', 'read'), ('z8w', 'float', 'read_write'))
 THOMPSON_AA_PROFILE_HEIGHT_ACCESS = ('read', 'read', 'read_write')
@@ -3687,7 +3687,7 @@ THOMPSON_AA_WARM_SOURCE_NETWORK_SHAPES = (('graupel_melt_marker', (('n',), ('any
 THOMPSON_AA_WARM_SOURCE_NETWORK_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32'), ('wrf39', 'ctypes.c_int32')]
 THOMPSON_AA_WARM_SOURCE_NETWORK_THREADS_PER_GROUP = 128
 THOMPSON_AA_WARM_SOURCE_NETWORK_LAYOUT_HASH = 'c2e3fc8c119ef2619389d29c1b45f1f79744e66b5e8ad597cece6177bce3e7ab'
-THOMPSON_AA_WARM_SOURCE_NETWORK_SHADER_HASH = 'affb31701047e8d77c54a4f94c4ee4970cc6e3cb81a0764b2cec694c182a752a'
+THOMPSON_AA_WARM_SOURCE_NETWORK_SHADER_HASH = '254468a343d74a2dd6606e1ff683e4fb10647e2fd616c1d45763445c071ca4cb'
 
 THOMPSON_AA_WORKING_CLOUD_RESOURCES = (('qc', 'float', 'read'), ('qcten', 'float', 'read'), ('nc', 'float', 'read'), ('ncten', 'float', 'read'), ('rho', 'float', 'read'), ('rc_work', 'float', 'read_write'), ('nc_work_m3', 'float', 'read_write'), ('l_qc_out', 'int32', 'read_write'))
 THOMPSON_AA_WORKING_CLOUD_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
@@ -3711,7 +3711,7 @@ THOMPSON_ADAPTER_ENTRY_SHAPES = (('graupel_number_per_kg', (('nz', 'ny', 'nx'),)
 THOMPSON_ADAPTER_ENTRY_PARAM_FIELDS = [('size', 'ctypes.c_int32'), ('columns', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_ADAPTER_ENTRY_THREADS_PER_GROUP = 256
 THOMPSON_ADAPTER_ENTRY_LAYOUT_HASH = 'bdf02670c660e65cd55d98e47cece917aec21ad714c3cfb1b3280bfd0696bcf9'
-THOMPSON_ADAPTER_ENTRY_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_ADAPTER_ENTRY_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_ADAPTER_FINISH_RESOURCES = (('temperature', 'float', 'read'), ('pii', 'float', 'read'), ('th', 'float', 'read_write'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'), ('rainncv', 'float', 'read'), ('snowncv', 'float', 'read'), ('graupelncv', 'float', 'read'), ('sr', 'float', 'read_write'))
 THOMPSON_ADAPTER_FINISH_ACCESS = ('read', 'read', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read_write')
@@ -3719,7 +3719,7 @@ THOMPSON_ADAPTER_FINISH_SHAPES = (('graupelncv', (('ny', 'nx'),)), ('h_diabatic'
 THOMPSON_ADAPTER_FINISH_PARAM_FIELDS = [('limit', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('no_mp_heating', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('columns', 'ctypes.c_int32'), ('size', 'ctypes.c_int32')]
 THOMPSON_ADAPTER_FINISH_THREADS_PER_GROUP = 256
 THOMPSON_ADAPTER_FINISH_LAYOUT_HASH = '77f4f594242daa035e1eefda34f6621873a81cf86bdbe611f26efe5ac81f2ad6'
-THOMPSON_ADAPTER_FINISH_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_ADAPTER_FINISH_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_ADAPTER_MASKS_RESOURCES = (('qr', 'float', 'read'), ('qg', 'float', 'read'), ('entry_graupel', 'float', 'read'), ('rain_columns', 'float', 'read_write'), ('graupel_columns', 'float', 'read_write'))
 THOMPSON_ADAPTER_MASKS_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
@@ -3727,7 +3727,7 @@ THOMPSON_ADAPTER_MASKS_SHAPES = (('entry_graupel', (('nz', 'ny', 'nx'),)), ('gra
 THOMPSON_ADAPTER_MASKS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('columns', 'ctypes.c_int32')]
 THOMPSON_ADAPTER_MASKS_THREADS_PER_GROUP = 32
 THOMPSON_ADAPTER_MASKS_LAYOUT_HASH = 'd77e42a81be0c8c2da6cbec58d279ad2c71b3b7a3a1d4a184ad6d33a36a69fd7'
-THOMPSON_ADAPTER_MASKS_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_ADAPTER_MASKS_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_ADAPTER_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('th', 'float', 'read_write'), ('pii', 'float', 'read'), ('temperature', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('saved_theta', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('entry_graupel', 'float', 'read_write'), ('warm_entry', 'float', 'read_write'), ('graupelncv', 'float', 'read_write'), ('micro_columns', 'float', 'read_write'))
 THOMPSON_ADAPTER_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3735,7 +3735,7 @@ THOMPSON_ADAPTER_PREPARE_SHAPES = (('dz', (('nz', 'ny', 'nx'),)), ('entry_graupe
 THOMPSON_ADAPTER_PREPARE_PARAM_FIELDS = [('gravity', 'ctypes.c_float'), ('size', 'ctypes.c_int32'), ('columns', 'ctypes.c_int32'), ('thb_full', 'ctypes.c_int32'), ('phb_full', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_ADAPTER_PREPARE_THREADS_PER_GROUP = 256
 THOMPSON_ADAPTER_PREPARE_LAYOUT_HASH = 'dc3e9fb57a95eb0dda5e3e8e95a161c42b4adb06dfd326f6bb2aa229aad6d092'
-THOMPSON_ADAPTER_PREPARE_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_ADAPTER_PREPARE_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_FINALIZE_RESOURCES = (('qg', 'float', 'read_write'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('graupel_number_per_kg', 'float', 'read_write'))
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_FINALIZE_ACCESS = ('read_write', 'read', 'read', 'read', 'read_write')
@@ -3743,7 +3743,7 @@ THOMPSON_CLASSIC_GRAUPEL_NUMBER_FINALIZE_SHAPES = (('graupel_number_per_kg', (('
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_FINALIZE_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_FINALIZE_THREADS_PER_GROUP = 256
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_FINALIZE_LAYOUT_HASH = 'bc4230c50032e302516805f4d696e81df1ba6cd9b0fa616c9fc8d2fa31f6e043'
-THOMPSON_CLASSIC_GRAUPEL_NUMBER_FINALIZE_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_CLASSIC_GRAUPEL_NUMBER_FINALIZE_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_INIT_RESOURCES = (('qg', 'float', 'read'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('graupel_number_per_kg', 'float', 'read_write'))
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_INIT_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -3751,7 +3751,7 @@ THOMPSON_CLASSIC_GRAUPEL_NUMBER_INIT_SHAPES = (('graupel_number_per_kg', (('any_
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_INIT_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_INIT_THREADS_PER_GROUP = 256
 THOMPSON_CLASSIC_GRAUPEL_NUMBER_INIT_LAYOUT_HASH = '7430c01c6d03e1984dc9b101d66cd4f078047d44786a1d1d2a805930431b51c2'
-THOMPSON_CLASSIC_GRAUPEL_NUMBER_INIT_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_CLASSIC_GRAUPEL_NUMBER_INIT_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLOUD_SATURATION_ADJUST_RESOURCES = (('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'))
 THOMPSON_CLOUD_SATURATION_ADJUST_ACCESS = ('read_write', 'read', 'read_write', 'read_write')
@@ -3759,7 +3759,7 @@ THOMPSON_CLOUD_SATURATION_ADJUST_SHAPES = (('pressure', (('any_1d',), ('ny', 'nx
 THOMPSON_CLOUD_SATURATION_ADJUST_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_CLOUD_SATURATION_ADJUST_THREADS_PER_GROUP = 256
 THOMPSON_CLOUD_SATURATION_ADJUST_LAYOUT_HASH = '0aba9893b7d41a1e56b0ce32d35a9cd73f4c118785693b6557785d701a8a1987'
-THOMPSON_CLOUD_SATURATION_ADJUST_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_CLOUD_SATURATION_ADJUST_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_DENSITY_MARKER_RESOURCES = (('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('reference_density', 'float', 'read_write'), ('condensation_marker', 'float', 'read_write'))
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_DENSITY_MARKER_ACCESS = ('read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3767,7 +3767,7 @@ THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_DENSITY_MARKER_SHAPES = (('condensation
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_DENSITY_MARKER_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_DENSITY_MARKER_THREADS_PER_GROUP = 256
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_DENSITY_MARKER_LAYOUT_HASH = '61e296a131923f494f2f36b2fff0326290a648f0a0385bef2240c04c2a61f526'
-THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_DENSITY_MARKER_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_DENSITY_MARKER_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_MARKER_ONLY_RESOURCES = (('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('condensation_marker', 'float', 'read_write'))
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_MARKER_ONLY_ACCESS = ('read_write', 'read', 'read_write', 'read_write', 'read_write')
@@ -3775,7 +3775,7 @@ THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_MARKER_ONLY_SHAPES = (('condensation_ma
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_MARKER_ONLY_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_MARKER_ONLY_THREADS_PER_GROUP = 256
 THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_MARKER_ONLY_LAYOUT_HASH = '60f81fb1f47c1a7d420f32116854ac0a89f4aaf7a3a55d71dd5205c77cdf5c88'
-THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_MARKER_ONLY_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_CLOUD_SATURATION_ADJUST_HISTORY_MARKER_ONLY_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_DENSITY_RESOURCES = (('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('reference_density', 'float', 'read_write'))
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_DENSITY_ACCESS = ('read_write', 'read', 'read_write', 'read_write', 'read_write')
@@ -3783,7 +3783,7 @@ THOMPSON_CLOUD_SATURATION_ADJUST_WITH_DENSITY_SHAPES = (('pressure', (('any_1d',
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_DENSITY_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_DENSITY_THREADS_PER_GROUP = 256
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_DENSITY_LAYOUT_HASH = '12c14802ea7ab19290053f9976e4b44a657dc6914f1d2e50c84c24bef3a1ae06'
-THOMPSON_CLOUD_SATURATION_ADJUST_WITH_DENSITY_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_CLOUD_SATURATION_ADJUST_WITH_DENSITY_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_HISTORY_RESOURCES = (('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('reference_density', 'float', 'read_write'), ('reference_temperature', 'float', 'read_write'), ('condensation_marker', 'float', 'read_write'))
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_HISTORY_ACCESS = ('read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3791,7 +3791,7 @@ THOMPSON_CLOUD_SATURATION_ADJUST_WITH_HISTORY_SHAPES = (('condensation_marker', 
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_HISTORY_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_HISTORY_THREADS_PER_GROUP = 256
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_HISTORY_LAYOUT_HASH = '3bd1ba95603043b8c19b9c9a5a1f2fcd16831b367d368b611a29fe2d9bdbaa55'
-THOMPSON_CLOUD_SATURATION_ADJUST_WITH_HISTORY_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_CLOUD_SATURATION_ADJUST_WITH_HISTORY_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_PRESENCE_RESOURCES = (('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('reference_density', 'float', 'read_write'), ('reference_temperature', 'float', 'read_write'), ('condensation_marker', 'float', 'read_write'), ('cloud_presence', 'float', 'read_write'))
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_PRESENCE_ACCESS = ('read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3799,7 +3799,7 @@ THOMPSON_CLOUD_SATURATION_ADJUST_WITH_PRESENCE_SHAPES = (('cloud_presence', (('a
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_PRESENCE_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_PRESENCE_THREADS_PER_GROUP = 256
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_PRESENCE_LAYOUT_HASH = '7f0b664f6ffcbfad9a9013134a8f86023be47921cac5e1c87087e1b2e18318a4'
-THOMPSON_CLOUD_SATURATION_ADJUST_WITH_PRESENCE_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_CLOUD_SATURATION_ADJUST_WITH_PRESENCE_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_STATE_RESOURCES = (('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('reference_density', 'float', 'read_write'), ('reference_temperature', 'float', 'read_write'))
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_STATE_ACCESS = ('read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3807,7 +3807,7 @@ THOMPSON_CLOUD_SATURATION_ADJUST_WITH_STATE_SHAPES = (('pressure', (('any_1d',),
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_STATE_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_STATE_THREADS_PER_GROUP = 256
 THOMPSON_CLOUD_SATURATION_ADJUST_WITH_STATE_LAYOUT_HASH = '0c78679d123eb6724e3885ee871e9ea63a5747c2d00558917139c4f7ada075a2'
-THOMPSON_CLOUD_SATURATION_ADJUST_WITH_STATE_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_CLOUD_SATURATION_ADJUST_WITH_STATE_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_CLOUD_SEDIMENT_WITH_DENSITY_AND_MASKS_RESOURCES = (('qc', 'float', 'read_write'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('reference_density', 'float', 'read'), ('rain_active_columns', 'float', 'read'), ('cloud_active_columns', 'float', 'read'), ('vertical_velocity', 'float', 'read'), ('dz', 'float', 'read'))
 THOMPSON_CLOUD_SEDIMENT_WITH_DENSITY_AND_MASKS_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -3831,7 +3831,7 @@ THOMPSON_EXNER_POWER_SHAPES = (('exner', (('any_1d',), ('ny', 'nx'), ('nz', 'ny'
 THOMPSON_EXNER_POWER_PARAM_FIELDS = [('size', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('reference_pressure', 'ctypes.c_float'), ('exponent', 'ctypes.c_float')]
 THOMPSON_EXNER_POWER_THREADS_PER_GROUP = 256
 THOMPSON_EXNER_POWER_LAYOUT_HASH = 'eac447643fdefb6034ac2ee7df13ecf1928bf547aec03fb418251e583915815a'
-THOMPSON_EXNER_POWER_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_EXNER_POWER_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_FINAL_PHASE_CLEANUP_WITH_COLUMNS_RESOURCES = (('qc', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('micro_columns', 'float', 'read'))
 THOMPSON_FINAL_PHASE_CLEANUP_WITH_COLUMNS_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read')
@@ -3847,7 +3847,7 @@ THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_SHAPES = (('cloud_to_ice_mass', ((9157500,),
 THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('track_graupel_number', 'ctypes.c_int32'), ('include_snow_rime_conversion', 'ctypes.c_int32'), ('include_cold_rain', 'ctypes.c_int32'), ('include_cold_cloud', 'ctypes.c_int32')]
 THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_THREADS_PER_GROUP = 64
 THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_LAYOUT_HASH = 'e65a900820538b8613619d50047b131feb4b0d41d8c3d9c3fd57d0cf001fe6f5'
-THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_SHADER_HASH = '72ff79f75ab24a060360e2b9be12f2e25f2ae408f87349c92e92bcdc74860eb3'
+THOMPSON_FROZEN_VAPOR_CLOUD_NETWORK_SHADER_HASH = '9c7b3420bff1ce618d79ac21c7cb27d4e66f6ab01abd43e641893a79f0cdcd24'
 
 THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_RESOURCES = (('entry_active', 'float', 'read'), ('qg', 'float', 'read'), ('active_columns', 'float', 'read_write'))
 THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_ACCESS = ('read', 'read', 'read_write')
@@ -3855,7 +3855,7 @@ THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_SHAPES = (('active_columns', (('ny', 'nx'),
 THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_THREADS_PER_GROUP = 32
 THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_LAYOUT_HASH = 'e8640af4ae130c82fe9ed06e8aa73d2501f9e7c2bb5a1cf37023802f9fc5c0c5'
-THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_GRAUPEL_FALLOUT_COLUMN_MASK_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_GRAUPEL_SEDIMENT_WITH_DENSITY_COLUMN_MASK_SHADOW_RESOURCES = (('qg', 'float', 'read_write'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('reference_density', 'float', 'read'), ('dz', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('graupelnc', 'float', 'read_write'), ('graupelncv', 'float', 'read_write'), ('active_columns', 'float', 'read'), ('graupel_number_shadow', 'float', 'read_write'))
 THOMPSON_GRAUPEL_SEDIMENT_WITH_DENSITY_COLUMN_MASK_SHADOW_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write')
@@ -3871,7 +3871,7 @@ THOMPSON_HYDROMETEOR_COLUMN_MASK_SHAPES = (('active_columns', (('ny', 'nx'),)), 
 THOMPSON_HYDROMETEOR_COLUMN_MASK_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_HYDROMETEOR_COLUMN_MASK_THREADS_PER_GROUP = 32
 THOMPSON_HYDROMETEOR_COLUMN_MASK_LAYOUT_HASH = '3c4a56197be1085921d419e850bff595a94ca0528547ef5240555f1b96f619e4'
-THOMPSON_HYDROMETEOR_COLUMN_MASK_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_HYDROMETEOR_COLUMN_MASK_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_ICE_SEDIMENTATION_ACTIVE_ICE_RESOURCES = (('qi', 'float', 'read'), ('ni', 'float', 'read'), ('reference_density', 'float', 'read'), ('density', 'float', 'read'), ('ice_mass', 'float', 'read_write'), ('ice_number', 'float', 'read_write'), ('mass_velocity', 'float', 'read_write'), ('number_velocity', 'float', 'read_write'), ('active_marker', 'float', 'read_write'))
 THOMPSON_ICE_SEDIMENTATION_ACTIVE_ICE_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3919,7 +3919,7 @@ THOMPSON_MICROPHYSICS_COLUMNS_SHAPES = (('micro_columns', (('ny', 'nx'),)), ('pr
 THOMPSON_MICROPHYSICS_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_MICROPHYSICS_COLUMNS_THREADS_PER_GROUP = 32
 THOMPSON_MICROPHYSICS_COLUMNS_LAYOUT_HASH = '0b4bbcc6cc920dceccc602d841cfbc29b9990edc3e62fb74e7968d08749a4c4f'
-THOMPSON_MICROPHYSICS_COLUMNS_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_MICROPHYSICS_COLUMNS_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_RAIN_EVAPORATION_WITH_DENSITY_HISTORY_AND_PRESENCE_RESOURCES = (('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('reference_density', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read'), ('source_density', 'float', 'read'), ('condensation_marker', 'float', 'read'))
 THOMPSON_RAIN_EVAPORATION_WITH_DENSITY_HISTORY_AND_PRESENCE_ACCESS = ('read_write', 'read_write', 'read_write', 'read', 'read_write', 'read_write', 'read', 'read', 'read')
@@ -3951,7 +3951,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_SHAPES = (('cloud_state', (('any_1d',),)), (
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LAYOUT_HASH = '22f9d5e8b94d8e36c2021153b87848e1859661ffda8e6e8bb4690c73d5d00030'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3959,7 +3959,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_LAYOUT_HASH = '0d5f794ad442257243d3efe6dfc17a69c7e2ee0fe215a38a41eb1e0bdab5dc6f'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_APPLY_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3967,7 +3967,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_SHAPES = (('cloud_state', (('any_1d
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_LAYOUT_HASH = 'b94339b4bb322d59f51cac19247e33e00208c39fb7410d23e349e4451d469d01'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_FINALIZE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3975,7 +3975,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_SHAPES = (('cloud_state', (('any_1d',
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_LAYOUT_HASH = '20e7fcb1aff9dc0bdb4baedb6d3e85ac41d1b4f8cdc1a6c09aa19ffe0a77d722'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_LIMITS_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3983,7 +3983,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_SHAPES = (('cloud_state', (('any_1d',),
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_LAYOUT_HASH = '40d1f238b4d916c2ad52b42c8fa4079306ea3e41e12eeaee9d4f9b8b4f137c08'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_MELT_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('collision_rates', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read_write')
@@ -3991,7 +3991,7 @@ THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_THREADS_PER_GROUP = 64
 THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_LAYOUT_HASH = 'a6514abac743c41a450a89e845f517b794f842f356684056367f29f5ca3fbe36'
-THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_FROZEN_SOURCE_NETWORK_VAPOR_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SATURATION_ADJUST_RESOURCES = (('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'))
 THOMPSON_WARM_SATURATION_ADJUST_ACCESS = ('read_write', 'read', 'read_write', 'read_write')
@@ -3999,7 +3999,7 @@ THOMPSON_WARM_SATURATION_ADJUST_SHAPES = (('pressure', (('any_1d',), ('ny', 'nx'
 THOMPSON_WARM_SATURATION_ADJUST_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 THOMPSON_WARM_SATURATION_ADJUST_THREADS_PER_GROUP = 256
 THOMPSON_WARM_SATURATION_ADJUST_LAYOUT_HASH = '11bdeb7a2ab17954b855ff1bf6908ce45e729aee3489a707dd112a5f54b8c056'
-THOMPSON_WARM_SATURATION_ADJUST_SHADER_HASH = '393117f11adf349409dca92ed0d4d9df0ccf7c9d72f81f30fe2cf82414b99e6b'
+THOMPSON_WARM_SATURATION_ADJUST_SHADER_HASH = 'b98e2ab52a5cea17ada41cf0753b185427b5095f8408e99c0385422717088119'
 
 THOMPSON_WARM_SOURCE_CLOUD_RATES_RESOURCES = (('qc', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('graupel_number_per_kg', 'float', 'read'), ('graupel_melt_marker', 'float', 'read'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('rain_cloud_efficiency', 'float64_bits', 'read'), ('wet_bulb', 'float', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_SOURCE_CLOUD_RATES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -4007,7 +4007,7 @@ THOMPSON_WARM_SOURCE_CLOUD_RATES_SHAPES = (('cloud_state', (('any_1d',),)), ('gr
 THOMPSON_WARM_SOURCE_CLOUD_RATES_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_CLOUD_RATES_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_CLOUD_RATES_LAYOUT_HASH = '5a7eaaf9280a8f7df9977b225a48764a186f27a19cc32e550cc45c6f8dd89ec5'
-THOMPSON_WARM_SOURCE_CLOUD_RATES_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_CLOUD_RATES_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_COLLISION_RATES_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('graupel_number_per_kg', 'float', 'read'), ('graupel_melt_marker', 'float', 'read'), ('wet_bulb', 'float', 'read'), ('tcs_racs1', 'float64_bits', 'read'), ('tmr_racs1', 'float64_bits', 'read'), ('tcs_racs2', 'float64_bits', 'read'), ('tmr_racs2', 'float64_bits', 'read'), ('tcr_sacr1', 'float64_bits', 'read'), ('tms_sacr1', 'float64_bits', 'read'), ('tcr_sacr2', 'float64_bits', 'read'), ('tms_sacr2', 'float64_bits', 'read'), ('tnr_racs1', 'float64_bits', 'read'), ('tnr_racs2', 'float64_bits', 'read'), ('tnr_sacr1', 'float64_bits', 'read'), ('tnr_sacr2', 'float64_bits', 'read'), ('tcg_racg', 'float64_bits', 'read'), ('tmr_racg', 'float64_bits', 'read'), ('tcr_gacr', 'float64_bits', 'read'), ('tnr_racg', 'float64_bits', 'read'), ('tnr_gacr', 'float64_bits', 'read'), ('collision_rates', 'float64_bits', 'read_write'))
 THOMPSON_WARM_SOURCE_COLLISION_RATES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -4015,7 +4015,7 @@ THOMPSON_WARM_SOURCE_COLLISION_RATES_SHAPES = (('collision_rates', (('any_1d',),
 THOMPSON_WARM_SOURCE_COLLISION_RATES_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_COLLISION_RATES_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_COLLISION_RATES_LAYOUT_HASH = 'f02991e6cd3d31b318d06240cf07480a704d15c5bd970fad13feb4ae6221169c'
-THOMPSON_WARM_SOURCE_COLLISION_RATES_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_COLLISION_RATES_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_ACCESS = ('read_write',)
@@ -4023,7 +4023,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_SHAPES = (('cloud_state', (('any_1d
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_LAYOUT_HASH = '7650ff64dd4c125d816e6b33db588f7a9f84b3f1b75cafeb2a5335c0ea76b4c4'
-THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_CLOUD_RATE_BASE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_ACCESS = ('read_write',)
@@ -4031,7 +4031,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_LAYOUT_HASH = '666d56ee3aebf3708b5fc5db050f43da0f715765be7bbd8081359654ee7cc1bb'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_POLY_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_ACCESS = ('read_write',)
@@ -4039,7 +4039,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_SHAPES = (('cloud_state', (('any_1
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_LAYOUT_HASH = 'b7eb8b98fededb289d5830e8803f32cfb18ba35f0a87dc11172ce13327da3354'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_RATIONAL_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_ACCESS = ('read_write',)
@@ -4047,7 +4047,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_SHAPES = (('cloud_state', (('any_1d',
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_LAYOUT_HASH = '4040788e120340cc8c6a3fe66e20ffe592d2166c43ed542e72f242a1790dcf4b'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_SCALE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_ACCESS = ('read_write',)
@@ -4055,7 +4055,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_LAYOUT_HASH = 'c89c82963d66607fb8d08fb1084b87c66af2fc9d1599773e7c7edacca5973d56'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_T_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_ACCESS = ('read_write',)
@@ -4063,7 +4063,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_LAYOUT_HASH = '253ea2a1307889be69d7882cb902c1750bdd675fcd745393a129dec0adae6ffb'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_U_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_ACCESS = ('read_write',)
@@ -4071,7 +4071,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_LAYOUT_HASH = '07b38340ff967cc652ec4dc9fd2a70ebc3868ff296514cc7b11f2ed19e9f0898'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_V_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_ACCESS = ('read_write',)
@@ -4079,7 +4079,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_LAYOUT_HASH = 'df9e9c8a290275c81198f418d5121e9c3925bff7b0def9018dd52deee0d9d6e6'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_W_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_ACCESS = ('read_write',)
@@ -4087,7 +4087,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_SHAPES = (('cloud_state', (('any_1d',),))
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_LAYOUT_HASH = 'fc19a02c8bc69366f67719d3aa3dfcba4f46f5ffeb3e00b2cfee47ac08cbe357'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_EXP_Z_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_ACCESS = ('read_write',)
@@ -4095,7 +4095,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_SHAPES = (('cloud_state'
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_LAYOUT_HASH = 'aca9c58cc7338532da3c852d1105bb045487aee11af55dc642f877a8e2d2d46f'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_PRODUCT_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_ACCESS = ('read_write',)
@@ -4103,7 +4103,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_SHAPES = (('cloud_state', ((
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_LAYOUT_HASH = '53a9c56e35f235c3c92f3b257cef7bcea46cbeaaa81cb47a1953cac1c728df1a'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_COMPENSATE_SUM_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_ACCESS = ('read_write',)
@@ -4111,7 +4111,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_LAYOUT_HASH = '8c7958954bbc4413b960935a0e6fe0c048cc5917631533aef6a23be77ca0b4d0'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_POLY_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_ACCESS = ('read_write',)
@@ -4119,7 +4119,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_SHAPES = (('cloud_state', (('any_1d'
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_LAYOUT_HASH = '93dcf3e051f9c26c17531fd991379f77fa45b61b2e5ca8e1f34442bbd0319926'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_LOG_REDUCE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_ACCESS = ('read_write',)
@@ -4127,7 +4127,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_SHAPES = (('cloud_state', (('any_1d',)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_LAYOUT_HASH = 'b45480347791a659210621742e0809147a3040f9f84a46c7e3a65219df23fa95'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_MULTIPLY_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_RESOURCES = (('cloud_state', 'float64_bits', 'read_write'),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_ACCESS = ('read_write',)
@@ -4135,7 +4135,7 @@ THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_SHAPES = (('cloud_state', (('any_1d',),)
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_LAYOUT_HASH = 'f76d27b528885100ba90789e6ce559f405e32a2744d41ee9d2186decebd07942'
-THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_GRAUPEL_POW_SQUARE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_RESOURCES = (('snow_cloud_efficiency', 'float64_bits', 'read'), ('cloud_state', 'float64_bits', 'read_write'))
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_ACCESS = ('read', 'read_write')
@@ -4143,7 +4143,7 @@ THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_SHAPES = (('cloud_state', (('any_1d',),)), 
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_LAYOUT_HASH = 'c535cf1288dec625eba3ca5134a70021f982061d195f51689a8c5b7b0c690d22'
-THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_SNOW_CLOUD_RATE_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 THOMPSON_WARM_SOURCE_WET_BULB_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('graupel_melt_marker', 'float', 'read'), ('wet_bulb', 'float', 'read_write'))
 THOMPSON_WARM_SOURCE_WET_BULB_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -4151,7 +4151,7 @@ THOMPSON_WARM_SOURCE_WET_BULB_SHAPES = (('graupel_melt_marker', (('any_1d',),)),
 THOMPSON_WARM_SOURCE_WET_BULB_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_WARM_SOURCE_WET_BULB_THREADS_PER_GROUP = 64
 THOMPSON_WARM_SOURCE_WET_BULB_LAYOUT_HASH = 'ba892523a2246a0a84137f198f07710aea3c6efdd4aef2c9153b2654a107c02a'
-THOMPSON_WARM_SOURCE_WET_BULB_SHADER_HASH = '8d6f7be854a28bc47400906fd26fb5287f2c32010b76223a7e916e3f158d6b24'
+THOMPSON_WARM_SOURCE_WET_BULB_SHADER_HASH = '081d550fe4051d7a5a822305ea8d82b95f81a080450a766cf970a823608fa3d7'
 
 TOTAL_THETA_RESOURCES = (('thp', 'float', 'read'), ('thb', 'float', 'read'), ('theta', 'float', 'read_write'))
 TOTAL_THETA_ACCESS = ('read', 'read', 'read_write')
@@ -4903,7 +4903,7 @@ WSM6_COLUMN_SHAPES = (('den', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx')
 WSM6_COLUMN_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('hail_opt', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 WSM6_COLUMN_THREADS_PER_GROUP = 32
 WSM6_COLUMN_LAYOUT_HASH = '081a60e13f12430bfee93f9bcfa5e27b6d6adeec301fc8eb3d29db6ac9498afb'
-WSM6_COLUMN_SHADER_HASH = '6dfdc89ce798e640fb104ec171b141c6f9a4ddde2f4d34f55b609964c796441f'
+WSM6_COLUMN_SHADER_HASH = 'b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff'
 
 WSM6_FINISH_RESOURCES = (('theta', 'float', 'read'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -4911,7 +4911,7 @@ WSM6_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('theta', (('nz', '
 WSM6_FINISH_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('no_mp_heating', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float')]
 WSM6_FINISH_THREADS_PER_GROUP = 128
 WSM6_FINISH_LAYOUT_HASH = '9756e7a0c13f5614b5e6f84d9c852d3778a87c5ba4a5aa5a137fcc39826f914e'
-WSM6_FINISH_SHADER_HASH = '6dfdc89ce798e640fb104ec171b141c6f9a4ddde2f4d34f55b609964c796441f'
+WSM6_FINISH_SHADER_HASH = 'b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff'
 
 WSM6_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('p', 'float', 'read'), ('alt', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('theta', 'float', 'read_write'), ('den', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('z8w', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4919,7 +4919,7 @@ WSM6_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('den', (('nz', 'ny', 'nx
 WSM6_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nzi', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 WSM6_PREPARE_THREADS_PER_GROUP = 128
 WSM6_PREPARE_LAYOUT_HASH = '81f6fca3462936ba1f3a8ef197f0db323053cff947f4843f0d23a7c254f02245'
-WSM6_PREPARE_SHADER_HASH = '6dfdc89ce798e640fb104ec171b141c6f9a4ddde2f4d34f55b609964c796441f'
+WSM6_PREPARE_SHADER_HASH = 'b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff'
 
 YSU_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('p', 'float', 'read'), ('p_interface', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('rthraten', 'float', 'read'), ('psfc', 'float', 'read'), ('znt', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('wspd', 'float', 'read'), ('br', 'float', 'read'), ('psim', 'float', 'read'), ('psih', 'float', 'read'), ('xland', 'float', 'read'), ('u10', 'float', 'read'), ('v10', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dtheta', 'float', 'read_write'), ('dqv', 'float', 'read_write'), ('dqc', 'float', 'read_write'), ('dqi', 'float', 'read_write'), ('exch_h', 'float', 'read_write'), ('exch_m', 'float', 'read_write'), ('hpbl', 'float', 'read_write'), ('kpbl', 'int32', 'read_write'), ('wstar', 'float', 'read_write'), ('delta', 'float', 'read_write'), ('topdown_radsum', 'float', 'read_write'), ('wstar3_2', 'float', 'read_write'), ('cloudflg', 'int32', 'read_write'), ('ws', 'float', 'read_write'), ('ctopo', 'float', 'read'), ('ctopo2', 'float', 'read'), ('u10o', 'float', 'read_write'), ('v10o', 'float', 'read_write'))
 YSU_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read_write')
@@ -4927,7 +4927,7 @@ YSU_COLUMN_SHAPES = (('br', (('ny', 'nx'),)), ('cloudflg', (('ny', 'nx'),)), ('c
 YSU_COLUMN_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('wskp', 'ctypes.c_int32'), ('col0', 'ctypes.c_int32'), ('tilecol', 'ctypes.c_int32'), ('ws_count', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('ysu_topdown_pblmix', 'ctypes.c_int32'), ('topo', 'ctypes.c_int32')]
 YSU_COLUMN_THREADS_PER_GROUP = 32
 YSU_COLUMN_LAYOUT_HASH = '6f6123b947f737c71fd394d9babdec1584b71e6ff3a847abfd90dbad40d240c3'
-YSU_COLUMN_SHADER_HASH = 'd0951b036697e8b17de9f2c00ed70b6846e60a2e4631a48bdf1b525211060eeb'
+YSU_COLUMN_SHADER_HASH = '2737e49fb95e392b742fe2ea0c61f4abaa3c3139758aa989627f4b047e166ada'
 
 YSU_VALIDATE_OUTPUTS_RESOURCES = (('du', 'float', 'read'), ('dv', 'float', 'read'), ('dtheta', 'float', 'read'), ('dqv', 'float', 'read'), ('dqc', 'float', 'read'), ('dqi', 'float', 'read'), ('exch_h', 'float', 'read'), ('exch_m', 'float', 'read'), ('hpbl', 'float', 'read'), ('wstar', 'float', 'read'), ('delta', 'float', 'read'), ('topdown_radsum', 'float', 'read'), ('wstar3_2', 'float', 'read'), ('status', 'uint32', 'read_write'))
 YSU_VALIDATE_OUTPUTS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -4935,7 +4935,7 @@ YSU_VALIDATE_OUTPUTS_SHAPES = (('delta', (('ny', 'nx'),)), ('dqc', (('nz', 'ny',
 YSU_VALIDATE_OUTPUTS_PARAM_FIELDS = [('nfloat', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32')]
 YSU_VALIDATE_OUTPUTS_THREADS_PER_GROUP = 128
 YSU_VALIDATE_OUTPUTS_LAYOUT_HASH = '1d9fa1c67f18ae94a1e44c0744d10b8993d66f3e98540af4e9aec0b379755482'
-YSU_VALIDATE_OUTPUTS_SHADER_HASH = 'd0951b036697e8b17de9f2c00ed70b6846e60a2e4631a48bdf1b525211060eeb'
+YSU_VALIDATE_OUTPUTS_SHADER_HASH = '2737e49fb95e392b742fe2ea0c61f4abaa3c3139758aa989627f4b047e166ada'
 
 ZERO_SUMFLUX_RESOURCES = (('ru_m', 'float', 'read_write'), ('rv_m', 'float', 'read_write'), ('ww_m', 'float', 'read_write'))
 ZERO_SUMFLUX_ACCESS = ('read_write', 'read_write', 'read_write')
@@ -6536,3 +6536,27 @@ REFL10CM_WDM6_COLUMN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_
 REFL10CM_WDM6_COLUMN_THREADS_PER_GROUP = 32
 REFL10CM_WDM6_COLUMN_LAYOUT_HASH = '263dac6e30a1cbf29556af44dd61ff52ae909d55762f20fed1851ccea6c39587'
 REFL10CM_WDM6_COLUMN_SHADER_HASH = 'e959f3f02da525c448ca7b7695c37aa5bb9f9f25e85568d5b07bb147cceb9c23'
+
+DIFF6_EDGE_PAD_RESOURCES = (('src', 'float32', 'read'), ('dst', 'float32', 'read_write'))
+DIFF6_EDGE_PAD_ACCESS = ('read', 'read_write')
+DIFF6_EDGE_PAD_SHAPES = (('src', (('nlev', 'ny', 'nx'), ('ny', 'nx'))), ('dst', (('nlev', 'ny+7', 'nx+7'), ('ny+7', 'nx+7'))))
+DIFF6_EDGE_PAD_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+DIFF6_EDGE_PAD_THREADS_PER_GROUP = 128
+DIFF6_EDGE_PAD_LAYOUT_HASH = '758bef6f4768a3c6d2afece4701c74b5403eef4ebbf8d601e8bd2768a78eeb69'
+DIFF6_EDGE_PAD_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
+
+DIFF6_EDGE_CROP_ADD_RESOURCES = (('padded', 'float32', 'read'), ('tend', 'float32', 'read_write'))
+DIFF6_EDGE_CROP_ADD_ACCESS = ('read', 'read_write')
+DIFF6_EDGE_CROP_ADD_SHAPES = (('padded', (('nlev', 'ny+7', 'nx+7'),)), ('tend', (('nlev', 'ny', 'nx'),)))
+DIFF6_EDGE_CROP_ADD_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+DIFF6_EDGE_CROP_ADD_THREADS_PER_GROUP = 128
+DIFF6_EDGE_CROP_ADD_LAYOUT_HASH = '6a3c3c8ae62eda49f28fdd55266fc0dccdc41d507e04245b85830b3b527125d1'
+DIFF6_EDGE_CROP_ADD_SHADER_HASH = '68c3227456f6886c91c0677a78873b0a9c291d5eb576a4d21385262aee8b54f8'
+
+UPPER_WIND_LIMITER_RESOURCES = (('u', 'float32', 'read_write'), ('v', 'float32', 'read_write'), ('php', 'float32', 'read'), ('phb', 'float32', 'read'))
+UPPER_WIND_LIMITER_ACCESS = ('read_write', 'read_write', 'read', 'read')
+UPPER_WIND_LIMITER_SHAPES = (('u', (('nz', 'ny', 'nx+1'),)), ('v', (('nz', 'ny+1', 'nx'),)), ('php', (('nz+1', 'ny', 'nx'),)), ('phb', (('nz+1',), ('nz+1', 'ny', 'nx'))))
+UPPER_WIND_LIMITER_PARAM_FIELDS = [('dts', 'ctypes.c_float'), ('hdepth', 'ctypes.c_float'), ('base3d', 'ctypes.c_int32'), ('zone', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+UPPER_WIND_LIMITER_THREADS_PER_GROUP = 128
+UPPER_WIND_LIMITER_LAYOUT_HASH = 'e94e018a2f2137a1df78d722eaf12f8cfeb2533ce858ceab40d3912690b40566'
+UPPER_WIND_LIMITER_SHADER_HASH = '0cc7337808517176cac3479034975d0c785b40928025d6ca3bf5074156c68d9f'

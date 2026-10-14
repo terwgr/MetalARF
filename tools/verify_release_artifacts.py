@@ -534,12 +534,15 @@ def main(argv: list[str] | None = None) -> int:
             metal = json.loads(metal_payload)
             assert hashlib.sha256(metal_payload).hexdigest() == \
                 darwin.metal["manifest_sha256"]
-            assert metal.get("schema") == "woof-metal-bundle-v1"
+            assert metal.get("schema") == "woof-metal-bundle-v2"
             assert metal.get("platform") == bridge_assets.DARWIN_PLATFORM
             assert metal.get("minimum_os") == "14.0"
             assert metal.get("abi_version") == darwin.metal["abi_version"]
-            assert metal.get("source_commit") == args.source_rev
-            assert metal.get("source_commit") == darwin.metal["source_commit"]
+            from woof.metal.bundle_integrity import metal_source_provenance
+            expected_source = metal_source_provenance(repo or REPO_ROOT)
+            assert metal.get("source_provenance") == expected_source
+            assert metal.get("metal_inputs_sha256") == expected_source["sha256"]
+            assert metal.get("metal_inputs_sha256") == darwin.metal["source_inputs_sha256"]
             assert metal.get("implementation_sha256") == \
                 darwin.metal["implementation_sha256"]
             assert metal.get("implementation_file_count") == \

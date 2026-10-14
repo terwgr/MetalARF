@@ -35,6 +35,12 @@ shaders after changing them, not to use the prebuilt bundle. The PyPI package
 currently keeps that distribution name and upstream version, so package
 metadata alone does not identify the fork. Record the clone's commit
 (`git rev-parse HEAD`) with the run; an editable install points to that clone.
+The imported module and editable-install metadata must both identify the
+intended clone. To inspect the module origin, run:
+
+```sh
+python -c 'from pathlib import Path; import woof.metal; print(Path(woof.metal.__file__).resolve())'
+```
 
 Choose the backend on the public forecast command:
 
@@ -59,18 +65,22 @@ The selectors below come from `METAL_FAMILY_CAPS` in
 [`woof/core/physics.py`](../../woof/core/physics.py). They describe caller
 availability at this source revision. They are not a list of numerically
 verified combinations; config validation and coupling restrictions still
-apply.
+apply. Admission establishes that a configuration passes the checked gates;
+execution establishes that it runs. Numerical agreement is limited to the
+particular inputs, fields and tolerances compared.
 
+<!-- metal-capabilities:start -->
 | Family | Selectors listed by Metal admission |
 |---|---|
 | Microphysics (`mp_physics`) | 0, 1, 6, 8, 9, 10, 16, 18, 28, 50 |
 | PBL (`bl_pbl_physics`) | 0, 1, 2, 5, 9, 11, 900 |
-| MYNN source form (`bl_mynn_version`) | `wrf_461`, `gsd_41` |
+| MYNN source form (`bl_mynn_version`) | `gsd_41`, `wrf_461` |
 | Surface layer (`sf_sfclay_physics`) | 0, 1, 2, 5, 91 |
 | Land surface (`sf_surface_physics`) | 0, 2, 3, 4 |
 | Cumulus (`cu_physics`) | 0, 1, 3, 16 |
 | Radiation (LW, SW) | (0, 0), (0, 1), (1, 1), (4, 0), (4, 4) |
 | Urban (`sf_urban_physics`) | 0, 1, 2, 3 |
+<!-- metal-capabilities:end -->
 
 Important restrictions from `METAL_KNOWN_CONFLICTS` and the dynamics gate:
 
@@ -92,6 +102,12 @@ The runtime checks in [physics](../../woof/core/physics.py) and
 [dynamics](../../woof/core/dycore.py) are authoritative for the exact selected
 options. A selector appearing in this table does not mean every coupling
 or public command can execute it.
+
+Metal smoke commands return status 0 for finite executed rows or expected
+configuration refusals, status 1 for crashes, nonfinite rows or incomplete
+inner deadlines, and status 124 for parent timeouts. Pairwise and suite
+commands propagate child failures. An expected refusal means the
+configuration did not execute.
 
 `tools/metal_combo_smoke.py` labels finite executed rows `ok`; preflight
 `ok` means initialization gates resolved without device execution. Neither

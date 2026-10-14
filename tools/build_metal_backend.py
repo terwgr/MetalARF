@@ -26,7 +26,7 @@ if str(ROOT) not in sys.path:
 
 from woof import bridge_assets
 from tools.metal_abi import canonical_metal_abi_version
-from woof.metal.bundle_integrity import metal_source_sha256
+from woof.metal.bundle_integrity import BUNDLE_SCHEMA, metal_source_provenance
 
 
 SHADER = ROOT / "woof" / "metal" / "shaders" / "rk_bookkeeping.metal"
@@ -1048,6 +1048,7 @@ def build(output: Path) -> dict:
                 ("topo_radiation_family", TOPO_RADIATION_SHADER),
                 ("terrain_drag_family", TERRAIN_DRAG_SHADER),
                 ("rrtmg_legacy_sw_family", ROOT / "woof/metal/shaders/rrtmg_legacy_sw_family.metal"),
+                ("swint_fragment", ROOT / "woof/metal/shaders/swint_fragment.metal"),
                 ("rrtmg_aer3_sw_optics", ROOT / "woof/metal/shaders/rrtmg_aer3_sw_optics.metal"),
                 ("wrf_w_cfl_stat", ROOT / "woof/metal/shaders/wrf_w_cfl_stat.metal"),
                 ("thompson_aerosol_warm_family", THOMPSON_AEROSOL_WARM_SHADER),
@@ -1232,7 +1233,7 @@ def build(output: Path) -> dict:
     _run(["install_name_tool", "-id", "@rpath/libwoof_metal.dylib",
           str(runtime_path)])
 
-    source_commit, implementation_sha256, implementation_file_count = \
+    _build_commit, implementation_sha256, implementation_file_count = \
         _implementation_provenance()
     files = {}
     for path in (runtime_path, default_library_path, exact_library_path):
@@ -1240,13 +1241,14 @@ def build(output: Path) -> dict:
             "size": path.stat().st_size,
             "sha256": _sha256(path),
         }
+    source_provenance = metal_source_provenance(ROOT)
     manifest = {
-        "schema": "woof-metal-bundle-v1",
+        "schema": BUNDLE_SCHEMA,
         "abi_version": abi_version,
         "platform": "darwin-arm64",
         "minimum_os": "14.0",
-        "source_commit": source_commit,
-        "metal_inputs_sha256": metal_source_sha256(ROOT),
+        "source_provenance": source_provenance,
+        "metal_inputs_sha256": source_provenance["sha256"],
         "implementation_sha256": implementation_sha256,
         "implementation_file_count": implementation_file_count,
         "files": files,

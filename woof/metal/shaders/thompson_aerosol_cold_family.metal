@@ -141,7 +141,7 @@ inline float cold_clamp_nc(float x) {
 inline float cold_rslf(float pressure, float temp) {
     const float x = cold_fmax(-80.0f, cold_sub(temp, 273.16f));
     float es = -0.0000000000000321582393f;
-    es = cold_add(0.0000000000379534310f, cold_mul(x, es));
+    es = cold_add(0.379534310e-11f, cold_mul(x, es));
     es = cold_add(0.00000000702620698f, cold_mul(x, es));
     es = cold_add(0.00000203154182f, cold_mul(x, es));
     es = cold_add(0.000299291081f, cold_mul(x, es));

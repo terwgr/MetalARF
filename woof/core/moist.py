@@ -342,7 +342,8 @@ def launch_pd_fluxes(q, q0, ru, rv, rw, mut, coord, dx, dy, dt,
         return submit_pd_fluxes(
             q, q0, ru, rv, rw, mut, coord, dx, dy, dt,
             fxl, fxc, fyl, fyc, fzl, fzc, msft=msft,
-            has_msf=has_msf, open_x=open_x, open_y=open_y)
+            has_msf=has_msf, open_x=open_x, open_y=open_y,
+            vorder=vorder)
     if msft is None:
         msft = cp.ones((ny, nx), dtype=DTYPE)
     kern = get_kernel("pd_advection", "pd_fluxes")
@@ -749,7 +750,8 @@ def _advance_scalars_stage_metal(state, cfg, ru, rv, ww, dt_eff, final, *,
             launch_pd_fluxes(
                 q, q0_eff, ru, rv, ww_explicit, mu, state, cfg.dx, cfg.dy, dt_eff,
                 *bufs, msft=state.msft, has_msf=state.has_msf,
-                open_x=boundary_x, open_y=boundary_y)
+                open_x=boundary_x, open_y=boundary_y,
+                vorder=vertical_orders(cfg)[0])
             launch_pd_renorm_apply(
                 q0_eff, mu0, *bufs, tend=tend, coord=state,
                 dx=cfg.dx, dy=cfg.dy, dt=dt_eff,
@@ -765,7 +767,7 @@ def _advance_scalars_stage_metal(state, cfg, ru, rv, ww, dt_eff, final, *,
                 q, ru, rv, ww_explicit, tend, state, cfg.dx, cfg.dy,
                 open_x=boundary_x, open_y=boundary_y,
                 msf=state.msft, has_msf=state.has_msf,
-                spec=boundary_forced)
+                spec=boundary_forced, vorder=vertical_orders(cfg)[0])
             if implicit is not None:
                 _ieva_scalar(state, tend, q0, implicit, mu0, mu, dt_eff)
         _update_scalar_in_place(

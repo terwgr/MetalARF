@@ -1,6 +1,7 @@
 #include <metal_stdlib>
 #include "pd_fluxes_bindings.metalh"
 #include "pd_renorm_apply_bindings.metalh"
+#include "soft_binary64.metalh"
 using namespace metal;
 
 // Ordinary FP32 transcription of pd_advection.cu. Keep contraction disabled
@@ -29,6 +30,10 @@ static inline float f3h(float a,float b,float c,float d,float v) {
     return (v*(7.0f*(c+b)-(d+a))
       -abs(v)*(3.0f*(c-b)-(d-a)))/12.0f;
 }
+static inline float f5v(float a,float b,float c,float d,float e,float f,float v) {
+    return (v*(37.0f*(d+c)-8.0f*(e+b)+(f+a))
+      +abs(v)*(10.0f*(d-c)-5.0f*(e-b)+(f-a)))/60.0f;
+}
 static inline float upwind(float a,float b,float cr) {
     return 0.5f*min(1.0f,cr+abs(cr))*a
          + 0.5f*max(-1.0f,cr-abs(cr))*b;
@@ -39,6 +44,13 @@ static inline float zhigh(constant PdFluxesResources &r, int k, int j,
     if (k==1 || k==p.nz-1)
         return vel*(r.fnm[k]*r.q[cidx(k,j,i,p.ny,p.nx)]
                    +r.fnp[k]*r.q[cidx(k-1,j,i,p.ny,p.nx)]);
+    if (p.vorder==5 && k>=3 && k<=p.nz-3)
+        return f5v(r.q[cidx(k-3,j,i,p.ny,p.nx)],
+                   r.q[cidx(k-2,j,i,p.ny,p.nx)],
+                   r.q[cidx(k-1,j,i,p.ny,p.nx)],
+                   r.q[cidx(k,j,i,p.ny,p.nx)],
+                   r.q[cidx(k+1,j,i,p.ny,p.nx)],
+                   r.q[cidx(k+2,j,i,p.ny,p.nx)],vel);
     return f3(r.q[cidx(k-2,j,i,p.ny,p.nx)],
               r.q[cidx(k-1,j,i,p.ny,p.nx)],
               r.q[cidx(k,j,i,p.ny,p.nx)],
@@ -112,6 +124,27 @@ kernel void pd_fluxes(constant PdFluxesResources &r [[buffer(0)]],
             const float muf=r.c1h[k]*r.mut[ulong(j)*p.nx+i]+r.c2h[k];
             const float cr=vel*p.dt/(dz*muf);
             fl=muf*(dz/p.dt)*upwind(r.q0[cidx(k-1,j,i,p.ny,p.nx)],r.q0[cidx(k,j,i,p.ny,p.nx)],cr);
+            const float sl_dz=2.0f/(r.rdnw[k]+r.rdnw[k-1]);
+            const float sl_cr=((vel*p.dt)/sl_dz)/muf;
+            if (p.vorder==5 && k>1 && k<p.nz-1
+                && (sl_cr>1.0f || sl_cr< -1.0f)) {
+                int shift=int(floor(abs(sl_cr)));
+                if (sl_cr<0.0f) shift=-shift;
+                const int low=(k==p.nz-2)?-2:-3;
+                const int high=(k==2)?2:3;
+                shift=clamp(shift,low,high);
+                const int first=(sl_cr>1.0f)?k-shift:k;
+                const int last=(sl_cr>1.0f)?k-1:k-shift-1;
+                float sum=0.0f;
+                for (int level=first; level<=last; ++level)
+                    sum=sum+r.q0[cidx(level,j,i,p.ny,p.nx)];
+                // The source rounds vel*sum in binary32, then divides in
+                // binary64 and rounds the result back to binary32.
+                const uint product_bits=as_type<uint>(vel*sum);
+                const ulong numerator=soft64_from_f32_bits(product_bits);
+                const ulong denominator=soft64_from_f32_bits(as_type<uint>(abs(sl_cr)));
+                fl=as_type<float>(soft64_to_f32_bits(soft64_div(numerator,denominator)));
+            }
             fc=zhigh(r,k,j,i,vel,p)-fl;
         }
         r.fzl[cidx(k,j,i,p.ny,p.nx)]=fl; r.fzc[cidx(k,j,i,p.ny,p.nx)]=fc;
