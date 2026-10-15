@@ -24,8 +24,10 @@ static inline float gfk_exp(float x) { return as_type<float>(soft_gfk_exp(as_typ
 static inline float gfk_pow(float x, float y) { return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(y))); }
 static inline float gfk_d2f_rn(ulong x) { return as_type<float>(soft64_to_f32_bits(x)); }
 
+// The bundle is precompiled, so it is built at the Metal ceiling of 128
+// levels; woof.core.gf sizes the Metal workspace to the same stride.
 #ifndef GF_KMAX
-#define GF_KMAX 40
+#define GF_KMAX 128
 #endif
 // 1-based level arrays: slot 0 exists and is never read (the reference's
 // _a(nz)).  The +8 pad keeps get_inversion_layers' k_inv bookkeeping and
