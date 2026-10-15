@@ -337,6 +337,13 @@ def apply(state: DomainState, cfg: RunConfig, dt: float, *,
                 state.qv, state.qr, state.nr, state.qs, state.ns,
                 state.qg, state.ng, theta, pii, state.p, refl,
                 morr_rimed_ice=cfg.morr_rimed_ice, tables=radar_tables)
+            if ring_slices is not None:
+                # The reflectivity kernel evaluates every column; WRF's
+                # ring value is zero, as the generic ring guard pins it.
+                from woof.core.microphysics import _metal_ring_copy
+                zero_source = state.scratch((1,), "mp_ring_zero_source")
+                for slc in ring_slices:
+                    _metal_ring_copy(refl, zero_source, slc, direction=2)
             stash_refl_10cm(state, refl)
         submit_morrison_finish(state,theta,dt=dt,mp_tend_lim=cfg.mp_tend_lim,
                               no_mp_heating=bool(cfg.no_mp_heating),
