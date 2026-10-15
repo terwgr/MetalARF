@@ -300,7 +300,12 @@ def validate_native_gf_result(result, state) -> None:
             raise FloatingPointError(f"{label} contains a non-finite value")
 
 
-def gf_workspace_floats(nz: int, columns: int) -> int:
+#: ``GF_KMAX`` of the precompiled Metal shader.
+GF_METAL_KMAX = 128
+
+
+def gf_workspace_floats(nz: int, columns: int, *,
+                        capacity: int | None = None) -> int:
     """Workspace floats for ``columns`` columns in flight at this ``nz``.
 
     Rounded up to whole blocks: gf.cu interleaves the workspace by LANE
@@ -308,7 +313,8 @@ def gf_workspace_floats(nz: int, columns: int) -> int:
     unit of allocation is one block's region, not one column's.
     """
     blocks = (int(columns) + GF_BLOCK - 1) // GF_BLOCK
-    return blocks * GFWS_SLOTS * (gf_kernel_capacity(nz) + 9) * GF_BLOCK
+    kmax = gf_kernel_capacity(nz) if capacity is None else int(capacity)
+    return blocks * GFWS_SLOTS * (kmax + 9) * GF_BLOCK
 
 
 def gf_tile_columns(fn, ncol: int) -> int:
@@ -589,8 +595,12 @@ class GrellFreitas:
                          "rucuten", "rvcuten")
         }
         rainc = module.zeros(surface_shape, dtype=DTYPE)
+        if nz > GF_METAL_KMAX:
+            raise NotImplementedError(
+                f"Metal GF supports at most {GF_METAL_KMAX} levels, got {nz}")
         workspace = module.zeros(
-            (gf_workspace_floats(nz, ncol),), dtype=DTYPE)
+            (gf_workspace_floats(nz, ncol, capacity=GF_METAL_KMAX),),
+            dtype=DTYPE)
         dx_column = getattr(self._driver, "gf_dx_column", None)
         if dx_column is not None:
             dx_flat = use_array(dx_column, "gf_dx_column", surface_shape)
