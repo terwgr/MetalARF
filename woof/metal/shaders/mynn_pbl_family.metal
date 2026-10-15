@@ -818,11 +818,11 @@ kernel void mynn_level2_columns(
         const float dqz = mynn_f32_div(
             mynn_f32_sub(r.qw[idx], r.qw[prev]), dzk);
         const float vtt = mynn_f32_add(
-            mynn_f32_add(1.0f, mynn_f32_mul(0.0f, abk)),
-            mynn_f32_mul(0.0f, afk));
+            mynn_f32_add(1.0f, mynn_f32_mul(r.vt[idx], abk)),
+            mynn_f32_mul(r.vt[prev], afk));
         const float vqq = mynn_f32_add(
-            mynn_f32_add(tv0, mynn_f32_mul(0.0f, abk)),
-            mynn_f32_mul(0.0f, afk));
+            mynn_f32_add(tv0, mynn_f32_mul(r.vq[idx], abk)),
+            mynn_f32_mul(r.vq[prev], afk));
         const float dtq = mynn_f32_add(mynn_f32_mul(vtt, dtz),
                                        mynn_f32_mul(vqq, dqz));
         const float level_gh = mynn_f32_negate(mynn_f32_mul(dtq, gtr));

@@ -603,8 +603,8 @@ def submit_mynn_level2_pairs(context, dz_a, u_a, v_a, thl_a, qw_a, vt_a,
                    {"n": count}, count, experimental)
 
 
-def submit_mynn_level2_columns(context, dz, u, v, thl, qw, dtl, dqw, dtv,
-                               gm, gh, sm, sh, *, nz: int, ncol: int,
+def submit_mynn_level2_columns(context, dz, u, v, thl, qw, vt, vq, dtl, dqw,
+                               dtv, gm, gh, sm, sh, *, nz: int, ncol: int,
                                experimental=False):
     """Experimentally evaluate MYNN level-2 closure column by column.
 
@@ -622,11 +622,12 @@ def submit_mynn_level2_columns(context, dz, u, v, thl, qw, dtl, dqw, dtv,
     nz, ncol = int(nz), int(ncol)
     if nz < 2:
         raise ValueError("MYNN level-2 closure requires nz >= 2")
-    names = ("dz", "u", "v", "thl", "qw", "dtl", "dqw", "dtv",
+    names = ("dz", "u", "v", "thl", "qw", "vt", "vq", "dtl", "dqw", "dtv",
              "gm", "gh", "sm", "sh")
     arrays = tuple(_reshape_fp32(array, name, (nz, ncol))
                    for array, name in zip(
-                       (dz, u, v, thl, qw, dtl, dqw, dtv, gm, gh, sm, sh),
+                       (dz, u, v, thl, qw, vt, vq, dtl, dqw, dtv, gm, gh,
+                        sm, sh),
                        names))
     return _submit(context, "mynn_level2_columns", dict(zip(names, arrays)),
                    {"nz": nz, "ncol": ncol}, ncol, experimental)

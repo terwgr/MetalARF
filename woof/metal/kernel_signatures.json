@@ -30572,6 +30572,16 @@
           "read"
         ],
         [
+          "vt",
+          "float",
+          "read"
+        ],
+        [
+          "vq",
+          "float",
+          "read"
+        ],
+        [
           "dtl",
           "float",
           "read_write"
@@ -30675,6 +30685,18 @@
           ]
         ],
         "v": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vt": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vq": [
           [
             "nz",
             "ncol"
@@ -134141,6 +134163,133 @@
       "layout_version": 1,
       "arithmetic_policies": [
         "default"
+      ]
+    },
+    {
+      "name": "refl10cm_wsm6_column",
+      "module": "wsm6_reflectivity",
+      "source": "woof/metal/shaders/wsm6_reflectivity.metal",
+      "cuda_source": "woof/core/kernels/refl.cu",
+      "cuda_symbol": "refl10cm_wsm6_column",
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "refl",
+          "float",
+          "read_write"
+        ],
+        [
+          "tables",
+          "uint64",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qr": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qg": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "refl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tables": [
+          [
+            295
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "software-binary64",
+        "software-complex128",
+        "fp32-output",
+        "software-libm-approximation-unverified"
       ]
     }
   ],
