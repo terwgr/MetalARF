@@ -1975,9 +1975,10 @@ def mynn_bl_driver_metal(
                                 if (bl_mynn_version == "gsd_41"
                                     or bl_mynn_mixlength == 2)
                                 else submit_mynn_initialize_default)
+        # module_bl_mynn.F:795 seeds with vapor, not total water.
         initialize_submitter(context, layers["dz"], zw, layers["u"],
-            layers["v"], thl, sqw, layers["th"], zero, zero, sm_in,
-            sh_in, qke_seed, scalars["rmol"], scalars["ust"],
+            layers["v"], thl, layers["sqv"], layers["th"], zero, zero,
+            sm_in, sh_in, qke_seed, scalars["rmol"], scalars["ust"],
             pblh_out, seed_scale, layers["el"], layers["qke"], layers["tsq"],
             layers["qsq"], layers["cov"], layers["sm"], layers["sh"],
             init_scratch, nz=nz, ncol=ncol, initialize_qke=True,
