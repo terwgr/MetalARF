@@ -109,10 +109,8 @@ def run_lw_prepared(context, prepared, coefficients):
             if parameter in {"laytrop", "fs", "isv", "taug", "fracs"}:
                 kwargs[parameter] = locals()[parameter]
             elif parameter == "wx":
-                wx_value = (wx_h if function.__name__ in {
-                    "submit_taugb5", "submit_taugb6", "submit_taugb8"
-                } else wx_h.reshape(-1))
-                kwargs[parameter] = upload(wx_value)
+                # Column amounts scaled by INATM, not the prepared ratios.
+                kwargs[parameter] = wx
             elif parameter == "chi_mls":
                 kwargs[parameter] = coeff("ref/chi_mls", fortran=True)
             elif parameter == "oneminus":
