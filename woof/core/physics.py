@@ -2795,13 +2795,17 @@ class PhysicsDriver:
             self.cu_expiring = None
             self.cu_rates = None
         self.pbl_raw_rates = {}
-        self.gf_rthdynten = None
-        self.gf_rqvdynten = None
-        self.gf_rthblten = None
-        self.gf_rqvblten = None
+        arrays = MetalArrayModule(self.state._array_module.context)
+        # The cumulus forcing lanes, bound as on the CUDA driver.
+        self.gf_rthdynten = getattr(self.state, "rthften", None)
+        self.gf_rqvdynten = getattr(self.state, "rqvften", None)
+        forced = cfg.cu_physics in CUMULUS_ADVECTIVE_FORCING_SCHEMES
+        self.gf_rthblten = (arrays.zeros(self.state.p.shape, dtype=DTYPE)
+                            if forced else None)
+        self.gf_rqvblten = (arrays.zeros(self.state.p.shape, dtype=DTYPE)
+                            if forced else None)
         self.gf_dx_column = None
         self.ysu_nan_guard_fires = 0
-        arrays = MetalArrayModule(self.state._array_module.context)
         self.rthratenlw = arrays.zeros(self.state.p.shape, dtype=DTYPE)
         self.rthratensw = arrays.zeros(self.state.p.shape, dtype=DTYPE)
         for name, value in fields.items():
