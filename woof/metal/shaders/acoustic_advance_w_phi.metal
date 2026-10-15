@@ -11,10 +11,10 @@ constant float WOOF_GRAVITY = 9.81f;
 
 // NOAA WRFV3.9 advance_w's saved-wind limiter. One thread owns a
 // column; qq's descending recurrence must not be parallelized by level.
-#pragma clang fp contract(off)
 kernel void upper_wind_limiter(constant UpperWindLimiterResources &r [[buffer(0)]],
                               constant UpperWindLimiterParams &p [[buffer(1)]],
                               uint col [[thread_position_in_grid]]) {
+#pragma clang fp contract(off)
     if (col>=uint(p.ny)*uint(p.nx)) return;
     const int j=int(col/uint(p.nx)), i=int(col%uint(p.nx));
     if (i<p.zone || i>=p.nx-p.zone || j<p.zone || j>=p.ny-p.zone) return;

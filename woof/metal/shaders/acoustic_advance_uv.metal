@@ -115,6 +115,8 @@ kernel void advance_uv(constant AdvanceUvResources &r [[buffer(0)]],
             r.u_pp[uix] += q.dtau * (r.ru_t[uix] - dpxy);
 #endif
     } else if (j < q.ny) {
+        // The CUDA fallback rounds the tendency multiply before adding.
+#pragma clang fp contract(off)
         const ulong uix = (ulong(k) * ulong(q.ny) + ulong(j))
                         * ulong(nxf) + ulong(i);
         r.u_pp[uix] = r.u_pp[uix] + q.dtau * r.ru_t[uix];
@@ -141,6 +143,8 @@ kernel void advance_uv(constant AdvanceUvResources &r [[buffer(0)]],
             r.v_pp[vix] += q.dtau * (r.rv_t[vix] - dpxy);
 #endif
     } else if (i < q.nx) {
+        // The CUDA fallback rounds the tendency multiply before adding.
+#pragma clang fp contract(off)
         const ulong vix = (ulong(k) * ulong(nyf) + ulong(j))
                         * ulong(q.nx) + ulong(i);
         r.v_pp[vix] = r.v_pp[vix] + q.dtau * r.rv_t[vix];
