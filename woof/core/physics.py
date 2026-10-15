@@ -8208,11 +8208,11 @@ def _initialize_metal_sfclay_without_cupy(
                 mminlu=landuse_dataset))
         if not isinstance(noah_params, NoahParams):
             raise TypeError("Metal Noah requires the canonical NoahParams bundle")
-    if int(cfg.bl_pbl_physics) in (1, 11):
-        # YSU and Shin-Hong publish these diagnostics/tendencies every due
+    if int(cfg.bl_pbl_physics) in (1, 5, 11):
+        # YSU, MYNN and Shin-Hong publish these diagnostics every due
         # call; valid cold-start storage keeps the shared driver/history
         # path defined before their first call.
-        host_fields["kpbl"] = np.zeros(shape, dtype=np.int32)
+        host_fields.setdefault("kpbl", np.zeros(shape, dtype=np.int32))
         host_fields["exch_h"] = np.zeros(state.p.shape, dtype=DTYPE)
         host_fields["exch_m"] = np.zeros(state.p.shape, dtype=DTYPE)
     if int(getattr(cfg, "alb_sol", 0)) == 1:
