@@ -3409,9 +3409,10 @@ static inline void mynn_dmp_mf_body(constant Resources &r,
             mf_cf = mynn_f32_max2(mf_cf, mynn_f32_mul(
                 mynn_f32_sub(landsea, 1.5f) >= 0.0f ? 1.2f : 1.8f, aup));
             mf_cf = mynn_f32_min2(mf_cf, mynn_f32_mul(5.0f, aup));
-            DMP_L(qc_bl, k) = mynn_f32_mul(
-                DMP_L(edmf_qc, k) * aup > 5.0e-5f ? 1.86f : 1.18f,
-                DMP_L(edmf_qc, k) * aup);
+            const float qc_plume = mynn_f32_mul(qcp, aup);
+            DMP_L(qc_bl, k) = qc_plume > 5.0e-5f
+                ? mynn_f32_sub(mynn_f32_mul(1.86f, qc_plume), 2.2e-5f)
+                : mynn_f32_mul(1.18f, qc_plume);
             DMP_L(cldfra_bl, k) = mf_cf;
             q1 = mynn_f32_max2(q1, -2.25f);
             float fng = q1 >= 1.0f ? 1.0f :
