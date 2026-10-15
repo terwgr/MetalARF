@@ -13,8 +13,8 @@ constant uint ESAT_BITS[28] = {
     0x3F00C69Cu,0x3D1A8D72u,0x3AA632DDu,0x37CFD543u,0x34A15DEFu,0x3114557Bu,0x2CFAE738u
 };
 constant float B_ZERO=0.0f, B_ONE=1.0f, B_TWO=2.0f, B_VKC=0.4f;
-constant float B_TFRZ=273.16f, B_SB=5.67032e-8f, B_GRAV=9.80616f;
-constant float B_CPAIR=1004.64f, B_MPE=3.0e-7f;
+constant float B_TFRZ=273.16f, B_SB=5.67e-8f, B_GRAV=9.80616f;
+constant float B_CPAIR=1004.64f, B_MPE=1.0e-6f;
 constant float B_P50=50.0f, B_N50=-50.0f, B_P9=0.9f, B_N5=-5.0f;
 constant float B_P622=0.622f, B_P378=0.378f, B_QUARTER=0.25f;
 
@@ -24,6 +24,8 @@ static inline float esat(int base,float t){
     y=as_type<float>(ESAT_BITS[base+2])+t*y; y=as_type<float>(ESAT_BITS[base+1])+t*y;
     return 100.0f*(as_type<float>(ESAT_BITS[base])+t*y);
 }
+static inline float p3f(float x){return (x*x)*x;}
+static inline float p4f(float x){float t=x*x;return t*t;}
 static inline float minf(float a,float b){return a<b?a:b;}
 static inline float maxf(float a,float b){return a>b?a:b;}
 struct Sfc {float moz,fm,fh,fm2,fh2,fv,cm,ch,ch2;int flips;};
@@ -36,7 +38,7 @@ static inline void sfcdif(thread Sfc &s,int it,float ts,float rho,float h,float 
     if(it==1){s.fv=0.0f;s.moz=0.0f;}else{
         float tv=(1.0f+0.61f*q)*ts;
         float t=(((B_VKC*(B_GRAV/tv))*h)/(rho*B_CPAIR));if(fabs(t)<=B_MPE)t=B_MPE;
-        mol=-pow(s.fv,3.0f)/t;s.moz=minf((zl-zp)/mol,1.0f);moz2=minf((2.0f+z0h)/mol,1.0f);
+        mol=-p3f(s.fv)/t;s.moz=minf((zl-zp)/mol,1.0f);moz2=minf((2.0f+z0h)/mol,1.0f);
     }
     if(old*s.moz<0.0f)s.flips++;
     if(s.flips>=2){s.moz=s.fm=s.fh=moz2=s.fm2=s.fh2=0.0f;}
@@ -77,16 +79,16 @@ kernel void noahmp_bare_flux(constant NoahmpBareFluxResources &r [[buffer(0)]],
         float t=minf(B_P50,maxf(B_N50,tgb-B_TFRZ)),destg;
         if(t>0.0f){estg=esat(0,t);destg=esat(14,t);}else{estg=esat(7,t);destg=esat(21,t);}
         csh=(rho*B_CPAIR)/rah;cev=((rho*B_CPAIR)/gamma)/(rsurf+raw);
-        irb=cir*pow(tgb,4.0f)-emg*lwdn;shb=csh*(tgb-sfctmp);evb=cev*(estg*rhsur-eair);
+        irb=cir*p4f(tgb)-emg*lwdn;shb=csh*(tgb-sfctmp);evb=cev*(estg*rhsur-eair);
         ghb=cgh*(tgb-r.in[lay+7ul+ulong(kk)]);
-        float b=sag-irb-shb-evb-ghb+pahb,cir4t3=4.0f*cir*pow(tgb,3.0f);
+        float b=sag-irb-shb-evb-ghb+pahb,cir4t3=4.0f*cir*p3f(tgb);
         float a=cir4t3+csh+cev*destg+cgh,dtg=b/a;
         irb+=cir4t3*dtg;shb+=csh*dtg;evb+=cev*destg*dtg;ghb+=cgh*dtg;
         tgb+=dtg;h=csh*(tgb-sfctmp);
         t=minf(B_P50,maxf(B_N50,tgb-B_TFRZ));estg=t>0.0f?esat(0,t):esat(7,t);
         float er=estg*rhsur;qsfc=(B_P622*er)/(psfc-B_P378*er);
     }
-    if(snowh>0.05f&&tgb>B_TFRZ){tgb=B_TFRZ;irb=cir*pow(tgb,4.0f)-emg*lwdn;shb=csh*(tgb-sfctmp);evb=cev*(estg*rhsur-eair);ghb=sag+pahb-(irb+shb+evb);}
+    if(snowh>0.05f&&tgb>B_TFRZ){tgb=B_TFRZ;irb=cir*p4f(tgb)-emg*lwdn;shb=csh*(tgb-sfctmp);evb=cev*(estg*rhsur-eair);ghb=sag+pahb-(irb+shb+evb);}
     float taux=-((rho*s.cm*ur)*uu),tauy=-((rho*s.cm*ur)*vv);
     float ehb2=(s.fv*B_VKC)/(log((2.0f+z0h)/z0h)-s.fh2),cq=ehb2,t2m,q2;
     if(ehb2<1.0e-5f){t2m=tgb;q2=qsfc;}else{t2m=tgb-((shb/(rho*B_CPAIR))/ehb2);q2=qsfc-((evb/(lathea*rho))*(1.0f/cq+rsurf));}
