@@ -89,12 +89,13 @@ static inline void wphi_diagnose_p(constant AdvanceWPhiResources &r,
                        / (chm * (300.0f + th_ref)) - al);
 #else
         float th_ref = r.thb[q.base3d ? h : ulong(k)] + r.thp[h];
-        float al = -(r.alt[h] * (r.c1h[k] * r.mu_pp[column])
-                    + r.rdnw[k] * (r.ph_pp[h + st] - r.ph_pp[h])) / chm;
+        float mass = r.c1h[k] * r.mu_pp[column];
+        float volume = fma(r.alt[h], mass,
+                           r.rdnw[k] * (r.ph_pp[h + st] - r.ph_pp[h]));
+        float al = -volume / chm;
         r.al_pp[h] = al;
         r.p_pp[h] = r.c2a[h]
-                  * (r.alt[h] * (r.th_pp[h]
-                       - r.c1h[k] * r.mu_pp[column] * th_ref)
+                  * (r.alt[h] * fma(-mass, th_ref, r.th_pp[h])
                        / (chm * th_ref) - al);
 #endif
     }
@@ -223,7 +224,21 @@ kernel void advance_w_phi(constant AdvanceWPhiResources &r [[buffer(0)]],
                      - r.c1f[k] * muave);
         }
 #else
-        if (q.moist_cq) {
+        if (!q.mapped && !q.moist_cq) {
+            // Preserve the flat, dry solver's contraction graph. Runtime
+            // unit map factors otherwise introduce extra rounded products.
+            float upper_p = r.c2a[h] * r.rdnw[k] / denom;
+            float lower_p = r.c2a[hm] * r.rdnw[k-1] / denom_prev;
+            float dp = fma(-lower_p, dph_dn, upper_p * dph_up);
+            float pressure_coefficient = 0.5f * q.dtau * WOOF_GRAVITY * r.rdn[k];
+            float forcing = fma(pressure_coefficient, dp, q.dtau * r.rw_t[f]);
+            float upper_b = r.c2a[h] * r.alt[h];
+            float lower_b = r.c2a[hm] * r.alt[hm];
+            float db = fma(upper_b, t2_up, -lower_b * t2_dn);
+            float buoyancy = fma(r.rdn[k], db, -r.c1f[k] * muave);
+            forcing = fma(q.dtau * WOOF_GRAVITY, buoyancy, forcing);
+            r.w_pp[f] += forcing;
+        } else if (q.moist_cq) {
             r.w_pp[f] += q.dtau * r.rw_t[f]
                 + (msf_inv * r.cqw[f]) * pressure_term
                 + q.dtau * WOOF_GRAVITY * msf_inv

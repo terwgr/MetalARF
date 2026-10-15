@@ -75,9 +75,11 @@ static inline float pgrad_face(constant AdvanceUvResources &r,
     if (q.base3d)
         dphp += 0.5f * ((r.phb[a] + r.phb[a + st])
                       - (r.phb[b] + r.phb[b + st]));
-    result += rd * dphp * (r.rdnw[k] * (dpn_up - dpn_dn)
-                           - 0.5f * r.c1h[k]
-                               * (r.mu_pp[cB] + r.mu_pp[cA]));
+    // Accumulate the vertical term into the rounded horizontal term.
+    // Implicit contraction can instead fuse the horizontal product.
+    const float vertical = r.rdnw[k] * (dpn_up - dpn_dn)
+                         - 0.5f * r.c1h[k] * (r.mu_pp[cB] + r.mu_pp[cA]);
+    result = fma(rd * dphp, vertical, result);
 #endif
     return result;
 }

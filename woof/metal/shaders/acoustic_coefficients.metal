@@ -83,17 +83,32 @@ kernel void calc_coefs(
         float cc;
         if (q.moist_cq) {
             const float cq = cqw[idx];
+#if GPUWM_WRF_EXACT
             b = 1.0f + cq * cof * rdn[k]
                 * (rdnw[k] * c2a[idx] / (chm_k * cfm_k)
                    + rdnw[k - 1] * c2a[ulong(k - 1) * st + column]
                      / (chm_km * cfm_k));
+#else
+            b = fma(cq * cof * rdn[k],
+                    rdnw[k] * c2a[idx] / (chm_k * cfm_k)
+                    + rdnw[k - 1] * c2a[ulong(k - 1) * st + column]
+                      / (chm_km * cfm_k), 1.0f);
+#endif
             cc = -cq * cof * rdn[k] * rdnw[k] * c2a[idx]
                / (chm_k * cfm_kp);
         } else {
+#if GPUWM_WRF_EXACT
             b = 1.0f + cof * rdn[k]
                 * (rdnw[k] * c2a[idx] / (chm_k * cfm_k)
                    + rdnw[k - 1] * c2a[ulong(k - 1) * st + column]
                      / (chm_km * cfm_k));
+#else
+            // Keep the ordinary diagonal's multiply-add as one rounding.
+            b = fma(cof * rdn[k],
+                    rdnw[k] * c2a[idx] / (chm_k * cfm_k)
+                    + rdnw[k - 1] * c2a[ulong(k - 1) * st + column]
+                      / (chm_km * cfm_k), 1.0f);
+#endif
             cc = -cof * rdn[k] * rdnw[k] * c2a[idx]
                / (chm_k * cfm_kp);
         }

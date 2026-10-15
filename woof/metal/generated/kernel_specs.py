@@ -39,7 +39,7 @@ ADVANCE_MU_TH_SHAPES = (('c1h', (('nz',),)), ('c2h', (('nz',),)), ('dnw', (('nz'
 ADVANCE_MU_TH_PARAM_FIELDS = [('write_mudf', 'ctypes.c_int32'), ('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dtau', 'ctypes.c_float'), ('base3d', 'ctypes.c_int32'), ('mapped', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('open_x', 'ctypes.c_int32'), ('open_y', 'ctypes.c_int32'), ('spec_zone', 'ctypes.c_int32')]
 ADVANCE_MU_TH_THREADS_PER_GROUP = 128
 ADVANCE_MU_TH_LAYOUT_HASH = '015eb99bcca74ec3073aa2b4b29625888a0e94310fe0428af7e37dd1c43c7acb'
-ADVANCE_MU_TH_SHADER_HASH = 'de5d62d1cae250208ad2a2d1408278af57baf123f384f9d94d91bb9ef8e40cf1'
+ADVANCE_MU_TH_SHADER_HASH = '134653188db8846339052611b49c32cdb7fe8f146d7bbd9763025c61e9989ab3'
 
 ADVANCE_STAGE_THETA_RESOURCES = (('thp', 'float', 'read_write'), ('thp0', 'float', 'read'), ('rth_t', 'float', 'read'), ('thb', 'float', 'read'), ('mub2d', 'float', 'read'), ('mup0', 'float', 'read'), ('mup', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('msft', 'float', 'read'))
 ADVANCE_STAGE_THETA_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -79,7 +79,7 @@ ADVANCE_UV_SHAPES = (('al_pp', (('nz', 'ny', 'nx'),)), ('alt', (('nz', 'ny', 'nx
 ADVANCE_UV_PARAM_FIELDS = [('moist_cq', 'ctypes.c_int32'), ('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('top_lid', 'ctypes.c_int32'), ('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dtau', 'ctypes.c_float'), ('smdiv', 'ctypes.c_float'), ('spec_zone', 'ctypes.c_int32'), ('base3d', 'ctypes.c_int32'), ('radiative_x', 'ctypes.c_int32'), ('radiative_y', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 ADVANCE_UV_THREADS_PER_GROUP = 128
 ADVANCE_UV_LAYOUT_HASH = '4f14a35de01ad7af7479940f143a1c1fdd6aabdd9db87c3657b33b9c836ae875'
-ADVANCE_UV_SHADER_HASH = '9f45a5d9dd30994a6acdba67143ae4a611473ca0df3a29f139dd434f40e4f15a'
+ADVANCE_UV_SHADER_HASH = 'abec9a218251104442ec3be4c6633278cf1865a52fd062a5ac71004a6b54bb7c'
 
 ADVANCE_W_PHI_RESOURCES = (('w_pp', 'float', 'read_write'), ('ph_pp', 'float', 'read_write'), ('rw_t', 'float', 'read'), ('rph_t', 'float', 'read'), ('ww_pp', 'float', 'read'), ('mu_pp', 'float', 'read'), ('mu_pp_old', 'float', 'read'), ('th_pp', 'float', 'read'), ('th_pp_old', 'float', 'read'), ('thp', 'float', 'read'), ('thb', 'float', 'read'), ('php', 'float', 'read'), ('phb', 'float', 'read'), ('alt', 'float', 'read'), ('c2a', 'float', 'read'), ('a', 'float', 'read'), ('alpha', 'float', 'read'), ('gam', 'float', 'read'), ('mup', 'float', 'read'), ('u_pp', 'float', 'read'), ('v_pp', 'float', 'read'), ('w_ref', 'float', 'read'), ('ht', 'float', 'read'), ('rdn', 'float', 'read'), ('rdnw', 'float', 'read'), ('fnm', 'float', 'read'), ('fnp', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('mub2d', 'float', 'read'), ('cqw', 'float', 'read'), ('p_pp', 'float', 'read_write'), ('al_pp', 'float', 'read_write'), ('msft', 'float', 'read'))
 ADVANCE_W_PHI_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read')
@@ -87,7 +87,7 @@ ADVANCE_W_PHI_SHAPES = (('a', (('nz+1', 'ny', 'nx'),)), ('al_pp', (('nz', 'ny', 
 ADVANCE_W_PHI_PARAM_FIELDS = [('moist_cq', 'ctypes.c_int32'), ('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dtau', 'ctypes.c_float'), ('epssm', 'ctypes.c_float'), ('dampmag', 'ctypes.c_float'), ('zdamp', 'ctypes.c_float'), ('boundary_x', 'ctypes.c_int32'), ('boundary_y', 'ctypes.c_int32'), ('spec_zone', 'ctypes.c_int32'), ('base3d', 'ctypes.c_int32'), ('top_lid', 'ctypes.c_int32'), ('mapped', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 ADVANCE_W_PHI_THREADS_PER_GROUP = 128
 ADVANCE_W_PHI_LAYOUT_HASH = '3fc28bed1b5f6310fb8cc51d1b1bc0a23c3f3a50a15cd32655fe2a0346758194'
-ADVANCE_W_PHI_SHADER_HASH = '65a9650829a16b844f4cacac5e5d0625c1cf4e1daea1363531bd95424fcb28ba'
+ADVANCE_W_PHI_SHADER_HASH = '317bcb1cc29e2a17a1479d156ca73416841ba2f8dbadad38a27abbd600d8a4e5'
 
 APPLY_EMDIV_RESOURCES = (('u_pp', 'float', 'read_write'), ('v_pp', 'float', 'read_write'), ('mudf', 'float', 'read'), ('mu_pp', 'float', 'read'), ('mu_prev', 'float', 'read_write'), ('c1h', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'))
 APPLY_EMDIV_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read', 'read')
@@ -6559,7 +6559,7 @@ UPPER_WIND_LIMITER_SHAPES = (('u', (('nz', 'ny', 'nx+1'),)), ('v', (('nz', 'ny+1
 UPPER_WIND_LIMITER_PARAM_FIELDS = [('dts', 'ctypes.c_float'), ('hdepth', 'ctypes.c_float'), ('base3d', 'ctypes.c_int32'), ('zone', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 UPPER_WIND_LIMITER_THREADS_PER_GROUP = 128
 UPPER_WIND_LIMITER_LAYOUT_HASH = 'e94e018a2f2137a1df78d722eaf12f8cfeb2533ce858ceab40d3912690b40566'
-UPPER_WIND_LIMITER_SHADER_HASH = '65a9650829a16b844f4cacac5e5d0625c1cf4e1daea1363531bd95424fcb28ba'
+UPPER_WIND_LIMITER_SHADER_HASH = '317bcb1cc29e2a17a1479d156ca73416841ba2f8dbadad38a27abbd600d8a4e5'
 
 CASE_BOUNDARY_MASS_FLUX_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('u_pp', 'float', 'read'), ('v_pp', 'float', 'read'), ('mu', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('dnw', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('out', 'float', 'read_write'))
 CASE_BOUNDARY_MASS_FLUX_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
