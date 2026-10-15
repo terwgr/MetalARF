@@ -124,13 +124,10 @@ def apply(state: DomainState, cfg: RunConfig, dt: float, *,
         if WRF_EXACT:
             raise NotImplementedError(
                 "Metal WSM6 does not implement WRF exact-D arithmetic")
-        if refl_10cm_due:
-            raise NotImplementedError(
-                "Metal WSM6 reflectivity diagnostics are not implemented")
         # Validate all route-limited parameters before preparation writes
         # h_diabatic or allocates the family's scratch fields.
         _validate_metal_call(state, cfg, dt)
-        return _apply_metal(state, cfg, dt)
+        return _apply_metal(state, cfg, dt, refl_10cm_due=refl_10cm_due)
     if cp is None:
         raise RuntimeError("CPU WSM6 execution requires CuPy; use a Metal state")
     thb = state.thb if state.thb.ndim == 3 else state.thb[:, None, None]
@@ -176,7 +173,8 @@ def apply(state: DomainState, cfg: RunConfig, dt: float, *,
         graupelnc=graupelnc, graupelncv=graupelncv)
 
 
-def _apply_metal(state: DomainState, cfg: RunConfig, dt: float):
+def _apply_metal(state: DomainState, cfg: RunConfig, dt: float, *,
+                 refl_10cm_due: bool = False):
     """Device-resident WSM6 preparation, column physics, and heating finish."""
     from woof.core.microphysics import MicrophysicsDiagnostics
     from woof.metal.wsm6_family import (
@@ -204,6 +202,17 @@ def _apply_metal(state: DomainState, cfg: RunConfig, dt: float):
         rho, pii, state.p, dz, rainnc, rainncv, snownc, snowncv,
         graupelnc, graupelncv, sr, dt, effc=state.effc,
         effi=state.effi, effs=state.effs, hail_opt=cfg.wsm6_hail_opt)
+    if refl_10cm_due:
+        from woof.metal.refl_family import submit_refl_temperature_product
+        from woof.metal.wsm6_reflectivity import launch_refl10cm_wsm6
+        from woof.core.refl import stash_refl_10cm
+        temperature = state.scratch(shape, "refl_t")
+        refl = state.scratch(shape, "refl_10cm")
+        submit_refl_temperature_product(theta, pii, temperature)
+        launch_refl10cm_wsm6(
+            state.qv, state.qr, state.qs, state.qg, temperature, state.p,
+            refl, hail_opt=cfg.wsm6_hail_opt)
+        stash_refl_10cm(state, refl)
     submit_wsm6_finish(state, theta=theta, dt=dt,
                        mp_tend_lim=cfg.mp_tend_lim,
                        no_mp_heating=bool(cfg.no_mp_heating))
