@@ -435,10 +435,12 @@ kernel void kf_column(constant KfColumnResources &r [[buffer(0)]],
         float sum_t = 0.0f, sum_q = 0.0f, sum_z = 0.0f, sum_p = 0.0f;
         for (int k = candidate; k < top; ++k) {
             int index = k * ncol + column;
-            sum_t += dp[k] * temperature[index];
-            sum_q += dp[k] * qenv[k];
-            sum_z += dp[k] * z[k];
-            sum_p += dp[k] * pressure[index];
+            // CUDA contracts these accumulations; the trigger compares
+            // the mean temperature at single-ulp margins.
+            sum_t = fma(dp[k], temperature[index], sum_t);
+            sum_q = fma(dp[k], qenv[k], sum_q);
+            sum_z = fma(dp[k], z[k], sum_z);
+            sum_p = fma(dp[k], pressure[index], sum_p);
         }
         float tm = sum_t / sum_dp;
         float qm = sum_q / sum_dp;
