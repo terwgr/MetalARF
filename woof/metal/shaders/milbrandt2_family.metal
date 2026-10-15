@@ -116,7 +116,7 @@ kernel void milbrandt2_prelim(
     if (qi > 1.0e-14f && ny_ < 1.0e-3f) {
         ny_ = max(2.0f * 1.0e-3f, my2_N_Cooper(t));
     } else if (qi <= 1.0e-14f || (qi < 1.0e-6f && tmp2 < 0.80f)) {
-        tmp3 = max(0.0f, qi); q = q + tmp3; t = t - 0.334e+6f * tmp3;
+        tmp3 = max(0.0f, qi); q = q + tmp3; t = t - r.ck[7] * tmp3;
         qi = 0.0f; ny_ = 0.0f;
     }
     if (qn > 1.0e-14f && nn < 1.0e-3f) {
@@ -125,7 +125,7 @@ kernel void milbrandt2_prelim(
              * pow(r.ck[98] * r.ck[107] * r.ck[26] * de * qn,
                    (1.0f + 0.0f) * r.ck[93]);
     } else if (qn <= 1.0e-14f || (qn < 1.0e-6f && tmp2 < 0.80f)) {
-        tmp3 = max(0.0f, qn); q = q + tmp3; t = t - 0.334e+6f * tmp3;
+        tmp3 = max(0.0f, qn); q = q + tmp3; t = t - r.ck[7] * tmp3;
         qn = 0.0f; nn = 0.0f;
     }
     if (qg > 1.0e-14f && ng < 1.0e-3f) {
@@ -133,7 +133,7 @@ kernel void milbrandt2_prelim(
              * pow(r.ck[118] * r.ck[123] * de * qg * r.ck[20],
                    (1.0f + 0.0f) / (4.0f + 0.0f));
     } else if (qg <= 1.0e-14f || (qg < 1.0e-6f && tmp2 < 0.80f)) {
-        tmp3 = max(0.0f, qg); q = q + tmp3; t = t - 0.334e+6f * tmp3;
+        tmp3 = max(0.0f, qg); q = q + tmp3; t = t - r.ck[7] * tmp3;
         qg = 0.0f; ng = 0.0f;
     }
     if (qh > 1.0e-14f && nh < 1.0e-3f) {
@@ -141,7 +141,7 @@ kernel void milbrandt2_prelim(
              * pow(r.ck[136] * r.ck[140] * de * qh * r.ck[22],
                    (1.0f + 0.0f) / (4.0f + 0.0f));
     } else if (qh <= 1.0e-14f || (qh < 1.0e-6f && tmp2 < 0.80f)) {
-        tmp3 = max(0.0f, qh); q = q + tmp3; t = t - 0.334e+6f * tmp3;
+        tmp3 = max(0.0f, qh); q = q + tmp3; t = t - r.ck[7] * tmp3;
         qh = 0.0f; nh = 0.0f;
     }
     r.T[gid] = t; r.Q[gid] = q;
@@ -390,12 +390,12 @@ static inline void my2_sediment_column(constant R &r, constant P &p, int col) {
         float qn = QNc[o], nn = NNc[o];
         if (qn > 1.0e-14f && nn > 1.0e-3f) {
             float t1 = 1.0f / nn;
-            float iLAMs = max(1.0e-10f, exp((1.0f / r.ck[27]) * log(DEc[o] * qn * t1 * r.ck[108])));
+            float iLAMs = max(1.0e-10f, exp(r.ck[27] * log(DEc[o] * qn * t1 * r.ck[108])));
             t1 = min(nn / iLAMs, 1.0e+8f);
             nn = pow(t1, r.ck[25] / (1.0f + r.ck[25]))
                  * pow(r.ck[108] * DEc[o] * qn, 1.0f / (1.0f + r.ck[25]));
             t1 = 1.0f / nn;
-            iLAMs = max(1.0e-10f, exp((1.0f / r.ck[27]) * log(DEc[o] * qn * t1 * r.ck[108])));
+            iLAMs = max(1.0e-10f, exp(r.ck[27] * log(DEc[o] * qn * t1 * r.ck[108])));
             const float t2 = 1.0f / iLAMs;
             const float t4 = 0.6f * 500.0f;
             const float t5 = 2.0f * t4;
