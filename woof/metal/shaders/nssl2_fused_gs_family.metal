@@ -18,6 +18,7 @@ struct Nssl64 {
     operator float() const { return as_type<float>(soft64_to_f32_bits(bits)); }
     operator int() const { return soft64_to_i32_rz(bits).value; }
 };
+static inline Nssl64 nssl64_bits(ulong b) { Nssl64 x; x.bits = b; return x; }
 static inline Nssl64 operator+(Nssl64 a, Nssl64 b) { Nssl64 x; x.bits=soft64_add(a.bits,b.bits); return x; }
 static inline Nssl64 operator+(Nssl64 a, float b) { return a + Nssl64(b); }
 static inline Nssl64 operator+(float a, Nssl64 b) { return Nssl64(a) + b; }
@@ -295,20 +296,20 @@ static inline Nssl64 wrf_gamma_dp(Nssl64 x)
     Nssl64 y = x;
     const Nssl64 tmp0 = x + 5.5;
     const Nssl64 tmp = (x + 0.5) * log(tmp0) - tmp0;
-    Nssl64 series = 1.000000000190015;
+    Nssl64 series = nssl64_bits(0x3ff00000000d0ec7ul);
     y += 1.0;
-    series += 76.18009172947146 / y;
+    series += nssl64_bits(0x40530b869f76170aul) / y;
     y += 1.0;
-    series += -86.50532032941677 / y;
+    series += nssl64_bits(0xc055a0572b143656ul) / y;
     y += 1.0;
-    series += 24.01409824083091 / y;
+    series += nssl64_bits(0x4038039bf13b4cc6ul) / y;
     y += 1.0;
-    series += -1.231739572450155 / y;
+    series += nssl64_bits(0xbff3b5348dcdcc8cul) / y;
     y += 1.0;
-    series += 0.1208650973866179e-2 / y;
+    series += nssl64_bits(0x3f53cd7319ec12d8ul) / y;
     y += 1.0;
-    series += -0.5395239384953e-5 / y;
-    return exp(tmp + log(2.5066282746310005 * series / x));
+    series += nssl64_bits(0xbed6a1181c0e9888ul) / y;
+    return exp(tmp + log(nssl64_bits(0x40040d931ff62706ul) * series / x));
 }
 
 static inline float nssl_tgamma(float x) { return (float)wrf_gamma_dp(Nssl64(x)); }
@@ -317,9 +318,9 @@ static inline float wrf_gamma_lookup(float argument)
 {
     const int index = (int)(100.0 * (Nssl64)argument);
     const float delta = (float)(
-        (Nssl64)argument - 0.01 * (Nssl64)index);
-    const Nssl64 lower = wrf_gamma_dp(0.01 * (Nssl64)index);
-    const Nssl64 upper = wrf_gamma_dp(0.01 * (Nssl64)(index + 1));
+        (Nssl64)argument - nssl64_bits(0x3f847ae147ae147bul) * (Nssl64)index);
+    const Nssl64 lower = wrf_gamma_dp(nssl64_bits(0x3f847ae147ae147bul) * (Nssl64)index);
+    const Nssl64 upper = wrf_gamma_dp(nssl64_bits(0x3f847ae147ae147bul) * (Nssl64)(index + 1));
     return (float)(lower + (upper - lower) * (Nssl64)delta * 100.0);
 }
 
@@ -625,19 +626,19 @@ static inline void diagnose_warm(
     if (s.qc > QC_MIN && cloud_number > 1000.0f
             && s.temperature > 237.15f) {
         const float ccmxd = (float)(
-            0.1 * (Nssl64)cloud_number * (Nssl64)dt_inverse);
+            nssl64_bits(0x3fb999999999999aul) * (Nssl64)cloud_number * (Nssl64)dt_inverse);
         const float collision = 2.0f * 9.44e15f
             * (cloud_number * cloud_number)
             * (cloud_volume * cloud_volume);
         r->cautn = (float)fmax(Nssl64(0.0f), (Nssl64)fmin(ccmxd, collision));
-        if (rb > 7.51e-6) {
+        if (rb > nssl64_bits(0x3edf7fcd14c635aful)) {
             const Nssl64 t2s = (Nssl64)3.72f /
-                ((Nssl64)1.0e6f * (rb - 7.500e-6)
+                ((Nssl64)1.0e6f * (rb - nssl64_bits(0x3edf75104d551d69ul))
                  * (Nssl64)rho * (Nssl64)s.qc);
             r->qrcnw = (float)fmax(Nssl64(0.0f), xl2p / (t2s * (Nssl64)rho));
             r->crcnw = (float)fmax(
                 0.0, fmin(3.5e9 * xl2p / t2s, 0.5f * (Nssl64)r->cautn));
-            if ((Nssl64)(s.qr * rho) > 1.2 * xl2p
+            if ((Nssl64)(s.qr * rho) > nssl64_bits(0x3ff3333333333333ul) * xl2p
                     && rain_number > CXMIN && s.qr > 0.0f) {
                 r->crcnw = rain_number / s.qr * r->qrcnw;
             }
@@ -647,10 +648,11 @@ static inline void diagnose_warm(
 
     // Rain collection of cloud water and cloud number.
     if (s.qc > QC_MIN && s.qr > QR_MIN) {
-        Nssl64 initiation_radius = 41.0e-6;
-        if (rb > 3.51e-6) {
+        Nssl64 initiation_radius = nssl64_bits(0x3f057eed45e9185dul);
+        if (rb > nssl64_bits(0x3ecd71aae8209043ul)) {
             initiation_radius = fmax(
-                Nssl64(41.0e-6f), 6.3e-4 / (1.0e6 * (rb - 3.5e-6)));
+                nssl64_bits(0x3f057eed45e9185dul),
+                nssl64_bits(0x3f44a4d2b2bfdb4dul) / (1.0e6 * (rb - nssl64_bits(0x3ecd5c31593e5fb7ul))));
         }
         const float rain_radius = 0.5f * rain_diameter;
         if ((Nssl64)rain_radius > initiation_radius) {
@@ -670,7 +672,7 @@ static inline void diagnose_warm(
             }
             r->qracw = fmin(
                 r->qracw,
-                (float)(0.1 * (Nssl64)s.qc * (Nssl64)dt_inverse));
+                (float)(nssl64_bits(0x3fb999999999999aul) * (Nssl64)s.qc * (Nssl64)dt_inverse));
             if (!(r->qracw > 0.0f)) r->cracw = 0.0f;
         }
     }
@@ -729,7 +731,7 @@ static inline void diagnose_warm(
             growth * rain_number * ventilation * capacitance, 0.0f);
         r->qrcev = fmax(
             r->qrcev,
-            -(float)(0.1 * (Nssl64)s.qr * (Nssl64)dt_inverse));
+            -(float)(nssl64_bits(0x3fb999999999999aul) * (Nssl64)s.qr * (Nssl64)dt_inverse));
         if (r->qrcev < 0.0f) {
             r->crcev = (rain_number / s.qr) * r->qrcev;
         }
@@ -1583,7 +1585,7 @@ static inline void diagnose_snow_aggregation(
     const float dt_inverse = (float)(1.0 / (Nssl64)dt);
     r->csacs = fmin(
         raw,
-        (float)(0.1 * (Nssl64)s.ns * (Nssl64)dt_inverse));
+        (float)(nssl64_bits(0x3fb999999999999aul) * (Nssl64)s.ns * (Nssl64)dt_inverse));
 }
 
 static inline float liquid_heat_capacity(float temperature) {

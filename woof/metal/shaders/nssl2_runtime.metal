@@ -19,8 +19,8 @@ kernel void nssl2_runtime_prepare(
     r.rho[idx] = 1.0f / r.alt[idx];
     r.pii[idx] = pow(r.pressure[idx] / p.p0, p.rcp);
     r.h_diabatic[idx] = th;
-    const float z0 = (phb0 + r.php[p.phb_3d ? idx : k]) / p.gravity;
-    const float z1 = (phb1 + r.php[p.phb_3d ? idx + uint(p.ncol) : k + 1u]) / p.gravity;
+    const float z0 = (phb0 + r.php[idx]) / p.gravity;
+    const float z1 = (phb1 + r.php[idx + uint(p.ncol)]) / p.gravity;
     r.dz[idx] = z1 - z0;
 }
 
