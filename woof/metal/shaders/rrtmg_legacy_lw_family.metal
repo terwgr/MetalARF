@@ -1028,7 +1028,7 @@ kernel void rrtmg_legacy_lw_taugb4(
     const float oneminus = p.oneminus;
     const float ref_a = r.chi_mls[0ul + 7ul * 10ul] / r.chi_mls[1ul + 7ul * 10ul];
     const float ref_b = r.chi_mls[2ul + 7ul * 12ul] / r.chi_mls[1ul + 7ul * 12ul];
-    const ulong outbase = cell * 140ul + 37ul;
+    const ulong outbase = cell * 140ul + 38ul;
     const int ng = 14;
     if (lay <= laytrop) {
         const float colh2o = r.fs[2ul * fss + cell];
@@ -1122,7 +1122,7 @@ kernel void rrtmg_legacy_lw_taugb3(
     const float selffac = r.fs[26ul * fss + cell], selffrac = r.fs[27ul * fss + cell];
     const float forfac = r.fs[28ul * fss + cell], forfrac = r.fs[29ul * fss + cell];
     const float minorfrac = r.fs[30ul * fss + cell];
-    const ulong outbase = cell * 140ul + 21ul;
+    const ulong outbase = cell * 140ul + 22ul;
     const int ng = 16;
     const float refrat_planck_a = r.chi_mls[0ul + 7ul * 8ul] / r.chi_mls[1ul + 7ul * 8ul];
     const float refrat_planck_b = r.chi_mls[0ul + 7ul * 12ul] / r.chi_mls[1ul + 7ul * 12ul];
@@ -1238,7 +1238,7 @@ kernel void rrtmg_legacy_lw_taugb5(
     const float refrat_m_a=r.chi_mls[0ul+7ul*6ul]/r.chi_mls[1ul+7ul*6ul];
     const ulong wxbase=ulong(col)*4ul*ulong(nl)+ulong(lay-1);
     const float wx=r.wx[wxbase];
-    const ulong outbase=cell*140ul+51ul;
+    const ulong outbase=cell*140ul+52ul;
     const int ng=16;
     if (lay<=laytrop) {
         const float colh2o=r.fs[2ul*fss+cell];
@@ -1317,7 +1317,7 @@ kernel void rrtmg_legacy_lw_taugb6(
     const ulong wx2=ulong(col)*4ul*ulong(nl)+ulong(nl)+ulong(lay-1);
     const ulong wx3=ulong(col)*4ul*ulong(nl)+2ul*ulong(nl)+ulong(lay-1);
     const float cfc11=r.wx[wx2],cfc12x=r.wx[wx3];
-    const ulong outbase=cell*140ul+67ul;
+    const ulong outbase=cell*140ul+68ul;
     const int ng=8;
     if(lay<=laytrop) {
         const float chi=colco2/coldry;
@@ -1375,7 +1375,7 @@ kernel void rrtmg_legacy_lw_taugb7(
     const float selffac=r.fs[26ul*fss+cell],selffrac=r.fs[27ul*fss+cell];
     const float forfac=r.fs[28ul*fss+cell],forfrac=r.fs[29ul*fss+cell];
     const float minorfrac=r.fs[30ul*fss+cell];
-    const ulong outbase=cell*140ul+75ul;
+    const ulong outbase=cell*140ul+76ul;
     const int ng=12;
     if(lay<=laytrop) {
         const float refrat=r.chi_mls[0ul+7ul*2ul]/r.chi_mls[2ul+7ul*2ul];
@@ -1431,7 +1431,7 @@ kernel void rrtmg_legacy_lw_taugb7(
             float tmaj=fac00*r.absb[b0];tmaj=tmaj+fac10*r.absb[b0+1ul];
             tmaj=tmaj+fac01*r.absb[b1];tmaj=tmaj+fac11*r.absb[b1+1ul];
             float tau=colo3*tmaj;tau=tau+adjcol*absco2;
-            if(ig>=6) {
+            if(ig>=6&&ig<=11) {
                 const float scale[6]={0.92f,0.88f,1.07f,1.1f,0.99f,0.855f};
                 tau=tau*scale[ig-6];
             }
@@ -1463,7 +1463,7 @@ kernel void rrtmg_legacy_lw_taugb8(
     const ulong wx3=ulong(col)*4ul*ulong(nl)+2ul*ulong(nl)+ulong(lay-1);
     const ulong wx4=ulong(col)*4ul*ulong(nl)+3ul*ulong(nl)+ulong(lay-1);
     const float cfc12x=r.wx[wx3],cfc22x=r.wx[wx4];
-    const ulong outbase=cell*140ul+87ul;
+    const ulong outbase=cell*140ul+88ul;
     const int ng=8;
     const float chi=colco2/coldry;
     const float ratio=(1.0e20f*chi)/r.chi_mls[1ul+7ul*ulong(jp)];
@@ -1530,7 +1530,7 @@ kernel void rrtmg_legacy_lw_taugb9(
     const float fac10=r.fs[12ul*fss+cell],fac11=r.fs[13ul*fss+cell];
     const float selffac=r.fs[26ul*fss+cell],selffrac=r.fs[27ul*fss+cell];
     const float forfac=r.fs[28ul*fss+cell],forfrac=r.fs[29ul*fss+cell],minorfrac=r.fs[30ul*fss+cell];
-    const ulong outbase=cell*140ul+95ul;
+    const ulong outbase=cell*140ul+96ul;
     const int ng=12;
     const float chi_n2o=coln2o/coldry;
     const float ratio=(1.0e20f*chi_n2o)/r.chi_mls[3ul+7ul*ulong(jp)];
@@ -1598,7 +1598,7 @@ kernel void rrtmg_legacy_lw_taugb14(
     const int indself=r.isv[3ul*iss+cell],indfor=r.isv[4ul*iss+cell];
     const float colco2=r.fs[3ul*fss+cell],fac00=r.fs[10ul*fss+cell];
     const float fac01=r.fs[11ul*fss+cell],fac10=r.fs[12ul*fss+cell],fac11=r.fs[13ul*fss+cell];
-    const ulong outbase=cell*140ul+133ul;
+    const ulong outbase=cell*140ul+134ul;
     const int ng=2;
     if(lay<=laytrop) {
         const int ind0=((jp-1)*5+(jt-1))+1,ind1=(jp*5+(jt1-1))+1;
@@ -1646,7 +1646,7 @@ kernel void rrtmg_legacy_lw_taugb15(
     const float forfac=r.fs[28ul*fss+cell],forfrac=r.fs[29ul*fss+cell];
     const float minorfrac=r.fs[30ul*fss+cell];
     const float scalen2=r.fs[9ul*fss+cell]*r.fs[31ul*fss+cell];
-    const ulong outbase=cell*140ul+135ul;
+    const ulong outbase=cell*140ul+136ul;
     const int ng=2;
     if(lay<=laytrop) {
         const float refrat=r.chi_mls[3ul]/r.chi_mls[1ul];
@@ -1703,7 +1703,7 @@ kernel void rrtmg_legacy_lw_taugb13(
     const float selffac=r.fs[26ul*fss+cell],selffrac=r.fs[27ul*fss+cell];
     const float forfac=r.fs[28ul*fss+cell],forfrac=r.fs[29ul*fss+cell];
     const float minorfrac=r.fs[30ul*fss+cell];
-    const ulong outbase=cell*140ul+129ul;
+    const ulong outbase=cell*140ul+130ul;
     const int ng=4;
     if(lay<=laytrop) {
         const float refratp=r.chi_mls[28ul]/r.chi_mls[31ul];
@@ -1781,7 +1781,7 @@ kernel void rrtmg_legacy_lw_taugb16(
     const float colh2o=r.fs[2ul*fss+cell],colch4=r.fs[7ul*fss+cell];
     const float fac00=r.fs[10ul*fss+cell],fac01=r.fs[11ul*fss+cell];
     const float fac10=r.fs[12ul*fss+cell],fac11=r.fs[13ul*fss+cell];
-    const ulong outbase=cell*140ul+137ul;
+    const ulong outbase=cell*140ul+138ul;
     const int ng=2;
     if(lay<=laytrop) {
         const float refratp=r.chi_mls[35ul]/r.chi_mls[40ul];
