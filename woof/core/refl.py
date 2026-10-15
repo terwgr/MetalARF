@@ -442,6 +442,10 @@ def launch_refl10cm_kessler(qv, qr, t, p, refl) -> None:
 def launch_refl10cm_wsm6(qv, qr, qs, qg, t, p, refl, *,
                           hail_opt: int = 0) -> None:
     """One CUDA thread per column: WRF ``refl10cm_wsm6`` into dBZ."""
+    from woof.metal.array import MetalArray
+    if isinstance(refl, MetalArray):
+        from woof.metal.wsm6_reflectivity import launch_refl10cm_wsm6 as launch_metal
+        return launch_metal(qv, qr, qs, qg, t, p, refl, hail_opt=hail_opt)
     shape = refl.shape
     if len(shape) != 3:
         raise ValueError(f"refl fields must be 3-D, got {shape}")

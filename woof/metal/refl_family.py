@@ -192,4 +192,5 @@ def submit_refl10cm_thompson(*args, **kwargs):
 
 
 def submit_refl10cm_wsm6(*args, **kwargs):
-    raise NotImplementedError("Metal WSM6 reflectivity remains unsupported")
+    from .wsm6_reflectivity import launch_refl10cm_wsm6
+    return launch_refl10cm_wsm6(*args, **kwargs)

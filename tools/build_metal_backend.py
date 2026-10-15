@@ -152,6 +152,7 @@ MILBRANDT2_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "milbrandt2_fam
 MILBRANDT2_FIELDS_SHADER = ROOT / "woof" / "metal" / "shaders" / "milbrandt2_fields.metal"
 MILBRANDT2_ZET_SHADER = ROOT / "woof" / "metal" / "shaders" / "milbrandt2_zet.metal"
 WDM6_REFLECTIVITY_SHADER = ROOT / "woof" / "metal" / "shaders" / "wdm6_reflectivity.metal"
+WSM6_REFLECTIVITY_SHADER = ROOT / "woof" / "metal" / "shaders" / "wsm6_reflectivity.metal"
 NOAHMP_DRIVER_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "noahmp_driver_family.metal"
 NOAHMP_SFLX_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "noahmp_sflx_family.metal"
 NOAHMP_LEAVES_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "noahmp_leaves_family.metal"
@@ -777,6 +778,7 @@ def build(output: Path) -> dict:
                 ("morrison_family", MORRISON_FAMILY_SHADER),
                 ("mp_zero_out", MP_ZERO_OUT_SHADER),
                 ("morrison_refl", MORRISON_REFL_SHADER),
+                ("wsm6_reflectivity", WSM6_REFLECTIVITY_SHADER),
                 ("refl_family", REFL_FAMILY_SHADER),
                 ("noah_mosaic_family", NOAH_MOSAIC_SHADER),
                 ("milbrandt2_family", MILBRANDT2_FAMILY_SHADER),
