@@ -1807,10 +1807,17 @@ def launch_wrf_smag2d_vertical(
     if getattr(state, "_metal_setup_state", False):
         from woof.metal.smag2d_family import (
             submit_wrf_smag_vd, submit_wrf_smag_surface,
+            submit_wrf_smag_vd_scalar,
         )
+        vertical_km = km if kmv is None else kmv
         for stagger, tendency in (("u", ru), ("v", rv), ("w", rw)):
-            submit_wrf_smag_vd(state, cfg, km, tendency,
+            submit_wrf_smag_vd(state, cfg, vertical_km, tendency,
                                stagger=stagger, time_t=time_t)
+        if khv is not None and scalar_rows:
+            for field, tendency, full_theta in scalar_rows:
+                submit_wrf_smag_vd_scalar(
+                    state, cfg, field, khv, tendency,
+                    full_theta=full_theta, time_t=time_t)
         fields = (state.physics.fields
                   if state.physics is not None
                   and hasattr(state.physics, "fields") else {})
