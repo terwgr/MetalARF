@@ -2,6 +2,7 @@
 #include "diagnostics_calc_p_alpha_bindings.metalh"
 using namespace metal;
 #include "diagnostics_log1pf.metalh"
+#include "pressure_power.metalh"
 
 static inline ulong d_idx(uint k, uint j, uint i, uint ny, uint nx) {
     return (ulong(k) * ny + j) * nx + i;
@@ -49,6 +50,11 @@ kernel void diagnostics_calc_p_alpha(
         }
         r.alt[h] = a;
         r.al[h] = ap;
-        r.p[h] = 1.0e5f * pow((287.0f * th) / (1.0e5f * a), 1.4f);
+        // A low bias in native pow feeds back into pressure gradients at
+        // every RK stage, including small-amplitude gravity-wave states.
+        // Keep normalization and storage in FP32 and use the same bounded
+        // software-binary64 power as the surface pressure/Exner consumers.
+        r.p[h] = 1.0e5f * fp32_pressure_power(287.0f * th,
+                                             1.0e5f * a, 1.4f);
     }
 }

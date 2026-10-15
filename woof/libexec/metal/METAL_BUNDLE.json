@@ -2,21 +2,21 @@
   "abi_version": 65543,
   "files": {
     "libwoof_metal.dylib": {
-      "sha256": "8861d1a2b18bfd85ff6fc36d06735872444b7f2bfbf70af2e891d0d58d3c398e",
+      "sha256": "448b4cdb2944811f28b873ac09202295146f5a6f94231df9f1b11d3a98068567",
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "216630d406a0edf5194890101049107c69ebe4cac96f0a6410a48c7c1171c1bc",
-      "size": 11078890
+      "sha256": "da31f8f1f6a70a99a48bf577e6612a812b23ba8588cf2753802fb6f963c92d98",
+      "size": 11115050
     },
     "woof_exact.metallib": {
-      "sha256": "3be3c4f298d014f6b09baa387d4e8fb9037b69ac4fb9bdcff18f41713a7fdcec",
-      "size": 6930578
+      "sha256": "7403d0e0e92a03925d8fbe23fe4e5aea370424a0284da7c9babee6f3906ab157",
+      "size": 6966722
     }
   },
   "implementation_file_count": 880,
-  "implementation_sha256": "b066936db2ce6db9e3d5c244dc481c71824ed4ffd97f06e4ebb2f1a89df49b12",
-  "metal_inputs_sha256": "a448d3e5ab8d3cfbbd88400d5ac4c460c0cd4d09875e7ae235f9aebff1e34e91",
+  "implementation_sha256": "c508291ec474fb0b97e49f7832777e9508e028cab124a514c06a8b823839e5f6",
+  "metal_inputs_sha256": "d30dd93a238a1044ce4ea22939dce2d8c49ad1bce066c3bef4203cc904587fb4",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -148,8 +148,8 @@
         "size": 2677
       },
       "woof/metal/shaders/diagnostics_calc_p_alpha.metal": {
-        "sha256": "2a636ab57c37b7ff42c9b84ce3293481283e6d9b24a9731ddf3ae3e7fa2da6d3",
-        "size": 2271
+        "sha256": "0687002fa2c26f0ed2ad998b170e19045c8a5b194fa6e8bb530c3a513a107306",
+        "size": 2659
       },
       "woof/metal/shaders/diagnostics_log1pf.metalh": {
         "sha256": "11f7297a2eaca6bb48ee3817722f7f04e6ed02fe419c6a0d05336ff1dafc65fc",
@@ -764,8 +764,8 @@
         "size": 5055
       },
       "woof/metal/shaders/kessler_family.metal": {
-        "sha256": "accec79d876ddcef1932a1aff965e34971d3260d4eab414566b85bc94eb17613",
-        "size": 7722
+        "sha256": "881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94",
+        "size": 7805
       },
       "woof/metal/shaders/kf_column_family.metal": {
         "sha256": "250d34ace43304607a72bccbc18c895b3d83dd7a270cbf6e7b051200b735222d",
@@ -2944,6 +2944,6 @@
         "size": 296
       }
     },
-    "sha256": "a448d3e5ab8d3cfbbd88400d5ac4c460c0cd4d09875e7ae235f9aebff1e34e91"
+    "sha256": "d30dd93a238a1044ce4ea22939dce2d8c49ad1bce066c3bef4203cc904587fb4"
   }
 }

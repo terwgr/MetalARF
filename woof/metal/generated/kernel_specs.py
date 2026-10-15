@@ -303,7 +303,7 @@ DIAGNOSTICS_CALC_P_ALPHA_SHAPES = (('al', (('nz', 'ny', 'nx'),)), ('alb', (('nz'
 DIAGNOSTICS_CALC_P_ALPHA_PARAM_FIELDS = [('p_top', 'ctypes.c_float'), ('hypso', 'ctypes.c_int32'), ('moist', 'ctypes.c_int32'), ('base3d', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j0', 'ctypes.c_int32'), ('i0', 'ctypes.c_int32'), ('nyw', 'ctypes.c_int32'), ('nxw', 'ctypes.c_int32')]
 DIAGNOSTICS_CALC_P_ALPHA_THREADS_PER_GROUP = 128
 DIAGNOSTICS_CALC_P_ALPHA_LAYOUT_HASH = 'c1ef3586b38dcf7a4c8351e66910a59d7d06a6437b6c1054d6881a7cc7e2aa45'
-DIAGNOSTICS_CALC_P_ALPHA_SHADER_HASH = '2a636ab57c37b7ff42c9b84ce3293481283e6d9b24a9731ddf3ae3e7fa2da6d3'
+DIAGNOSTICS_CALC_P_ALPHA_SHADER_HASH = '0687002fa2c26f0ed2ad998b170e19045c8a5b194fa6e8bb530c3a513a107306'
 
 DIFF6_RESOURCES = (('f', 'float', 'read'), ('tend', 'float', 'read_write'), ('mut', 'float', 'read'), ('c1', 'float', 'read'), ('c2', 'float', 'read'), ('phb', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('msft', 'float', 'read'))
 DIFF6_ACCESS = ('read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -1303,7 +1303,7 @@ KESSLER_COLUMN_SHAPES = (('dz8w', (('nz', 'ny', 'nx'),)), ('pii', (('nz', 'ny', 
 KESSLER_COLUMN_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('svp1', 'ctypes.c_float'), ('svp2', 'ctypes.c_float'), ('svp3', 'ctypes.c_float'), ('svpt0', 'ctypes.c_float'), ('xlv', 'ctypes.c_float'), ('cp', 'ctypes.c_float'), ('rhowater', 'ctypes.c_float'), ('ep2', 'ctypes.c_float')]
 KESSLER_COLUMN_THREADS_PER_GROUP = 128
 KESSLER_COLUMN_LAYOUT_HASH = 'c66b054978dbbe0e548c6b122916957d07c2faad31d5bb6cbfcc0fbb19130b6e'
-KESSLER_COLUMN_SHADER_HASH = 'accec79d876ddcef1932a1aff965e34971d3260d4eab414566b85bc94eb17613'
+KESSLER_COLUMN_SHADER_HASH = '881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94'
 
 KESSLER_FINISH_RESOURCES = (('t', 'float', 'read'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 KESSLER_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -1311,7 +1311,7 @@ KESSLER_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('t', (('nz', 'n
 KESSLER_FINISH_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float'), ('no_mp_heating', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 KESSLER_FINISH_THREADS_PER_GROUP = 128
 KESSLER_FINISH_LAYOUT_HASH = '0e55c238cace347946a166e1c3c7d2d57b58099f50977add3113d3b0647ec325'
-KESSLER_FINISH_SHADER_HASH = 'accec79d876ddcef1932a1aff965e34971d3260d4eab414566b85bc94eb17613'
+KESSLER_FINISH_SHADER_HASH = '881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94'
 
 KESSLER_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('p', 'float', 'read'), ('alt', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('t', 'float', 'read_write'), ('rho', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('z', 'float', 'read_write'), ('dz8w', 'float', 'read_write'), ('z_interface', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 KESSLER_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1319,7 +1319,7 @@ KESSLER_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('dz8w', (('nz', 'ny',
 KESSLER_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 KESSLER_PREPARE_THREADS_PER_GROUP = 128
 KESSLER_PREPARE_LAYOUT_HASH = 'c4994fdb43be8979f7537c0efc0970462eafd08c87692bd3b80407fdd6f1864a'
-KESSLER_PREPARE_SHADER_HASH = 'accec79d876ddcef1932a1aff965e34971d3260d4eab414566b85bc94eb17613'
+KESSLER_PREPARE_SHADER_HASH = '881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94'
 
 KF_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('temperature', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('pressure', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('w', 'float', 'read'), ('temperature_table', 'float', 'read'), ('qsat_table', 'float', 'read'), ('thetae_base', 'float', 'read'), ('log_ratio', 'float', 'read'), ('rthcuten', 'float', 'read_write'), ('rqvcuten', 'float', 'read_write'), ('rqccuten', 'float', 'read_write'), ('rqicuten', 'float', 'read_write'), ('rqrcuten', 'float', 'read_write'), ('rqscuten', 'float', 'read_write'), ('rainc', 'float', 'read_write'), ('pratec', 'float', 'read_write'), ('triggered', 'int32', 'read_write'), ('cape_before', 'float', 'read_write'), ('cape_after', 'float', 'read_write'), ('closure_time', 'float', 'read_write'), ('nca_seconds', 'float', 'read_write'), ('shallow_out', 'int32', 'read_write'), ('cloud_base', 'int32', 'read_write'), ('cloud_top_out', 'int32', 'read_write'), ('updraft_out', 'float', 'read_write'), ('downdraft_out', 'float', 'read_write'), ('workspace', 'float', 'read_write'))
 KF_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')

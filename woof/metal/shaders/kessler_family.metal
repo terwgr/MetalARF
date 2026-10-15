@@ -4,6 +4,7 @@
 #include "kessler_finish_bindings.metalh"
 
 using namespace metal;
+#include "pressure_power.metalh"
 
 #pragma clang fp contract(off)
 
@@ -112,7 +113,8 @@ kernel void kessler_column(constant KesslerColumnResources &r [[buffer(0)]],
         qrk = fmax(qrk + qrprod, 0.0f);
 
         const float temp = piik * tk;
-        const float pressure = 1.0e5f * pow(piik, 1004.0f / 287.0f);
+        const float pressure = 1.0e5f * fp32_pressure_power(
+            piik, 1.0f, 1004.0f / 287.0f);
         const float gam = 2.5e6f / (1004.0f * piik);
         const float es = 1000.0f * p.svp1
             * exp(p.svp2 * (temp - p.svpt0) / (temp - p.svp3));
@@ -161,7 +163,7 @@ kernel void kessler_prepare(constant KesslerPrepareResources &r [[buffer(0)]],
         r.t[idx] = theta;
         r.h_diabatic[idx] = theta;
         r.rho[idx] = 1.0f / r.alt[idx];
-        r.pii[idx] = pow(r.p[idx] / p.p0, p.rcp);
+        r.pii[idx] = fp32_pressure_power(r.p[idx], p.p0, p.rcp);
     }
     for (uint k = 0; k < nz + 1; ++k) {
         const ulong idx = kessler_index(k, cell, stride);
