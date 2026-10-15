@@ -1036,6 +1036,23 @@ def capture_advective_theta_forcing(state: DomainState) -> None:
     state.rthften[...] = rate
 
 
+def _clear_metal_forcing_ring(state: DomainState, cfg, rate) -> None:
+    """Zero an exported advective rate on the specified boundary ring.
+
+    WRF computes no scalar advection there, so RTHFTEN/RQVFTEN are zero on
+    that ring; the transport tendency holds only its vertical flux term.
+    """
+    if rate is None:
+        return
+    from woof.core.microphysics import _metal_ring_copy, _ring_guard_slices
+    slices = _ring_guard_slices(state, cfg)
+    if slices is None:
+        return
+    zero_source = state.scratch((1,), "mp_ring_zero_source")
+    for slc in slices:
+        _metal_ring_copy(rate, zero_source, slc, direction=2)
+
+
 def add_h_diabatic_tendency(state: DomainState) -> None:
     """Fold held heating with every eager FP32 operation boundary retained."""
     if getattr(state, "_metal_setup_state", False):
@@ -4496,6 +4513,8 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
             # matches the once-per-step capture convention h_diabatic and
             # the qv lateral tendency already use.
             capture_advective_theta_forcing(state)
+            if getattr(state, "_metal_setup_state", False):
+                _clear_metal_forcing_ring(state, cfg, state.rthften)
         if physics_tendencies is not None:
             physics_tendencies.add_to_slow(state)
         if cfg.mp_physics != 0:                       # WRF rk_addtend_dry's

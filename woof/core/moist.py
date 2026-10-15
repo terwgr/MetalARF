@@ -770,6 +770,8 @@ def _advance_scalars_stage_metal(state, cfg, ru, rv, ww, dt_eff, final, *,
                 spec=boundary_forced, vorder=vertical_orders(cfg)[0])
             if implicit is not None:
                 _ieva_scalar(state, tend, q0, implicit, mu0, mu, dt_eff)
+            if export_advective_forcing and name == "qv":
+                _capture_advective_qv_forcing_metal(state, cfg, tend, mu0)
         _update_scalar_in_place(
             q, q_update0, tend, state.c1h, state.c2h, mu0, mu, dt_eff,
             msft=(state.msft if state.has_msf else None),
@@ -783,6 +785,30 @@ def _advance_scalars_stage_metal(state, cfg, ru, rv, ww, dt_eff, final, *,
         _apply_specified_scalar_flow_boundaries(
             state, cfg, ru, rv,
             {*held_lbc, *recomputed_lbc})
+
+
+def _capture_advective_qv_forcing_metal(state: DomainState, cfg, tend,
+                                        mu0) -> None:
+    """Metal :func:`_capture_advective_qv_forcing`.
+
+    WRF computes no scalar advection on the specified boundary ring, so its
+    ``RQVFTEN`` is zero there; the ring is cleared rather than exporting the
+    vertical flux term alone.
+    """
+    if getattr(state, "rqvften", None) is None:
+        return
+    nz, ny, nx = tend.shape
+    zero_mup = state.scratch((ny, nx), "moist_rqvften_zero_mup")
+    zero_mup.fill(0.0)
+    state._array_module.context.submit_kernel(
+        "glue_capture_theta_forcing",
+        {"rth": tend, "mub": mu0, "mup": zero_mup, "c1": state.c1h,
+         "c2": state.c2h, "msft": state.msft, "dst": state.rqvften},
+        {"n": tend.size, "ncol": ny * nx,
+         "mapped": int(bool(state.has_msf)), "nz": nz, "ny": ny, "nx": nx},
+        exact_policy=False, grid_size=tend.size)
+    from woof.core.dycore import _clear_metal_forcing_ring
+    _clear_metal_forcing_ring(state, cfg, state.rqvften)
 
 
 def _capture_advective_qv_forcing(state: DomainState, tend, mu0) -> None:
