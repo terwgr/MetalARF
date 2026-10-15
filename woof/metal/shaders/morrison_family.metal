@@ -945,8 +945,8 @@ kernel void morrison_prepare_fields(
     const uint above=idx+ncol;
     r.theta[idx]=r.thb[p.thb_full?idx:k]+r.thp[idx];
     r.pii[idx]=pow(r.pressure[idx]/p.p0,p.rcp);
-    const float zb=(r.phb[p.phb_full?idx:k]+r.php[p.phb_full?idx:k])/p.gravity;
-    const float za=(r.phb[p.phb_full?above:k+1]+r.php[p.phb_full?above:k+1])/p.gravity;
+    const float zb=(r.phb[p.phb_full?idx:k]+r.php[idx])/p.gravity;
+    const float za=(r.phb[p.phb_full?above:k+1]+r.php[above])/p.gravity;
     r.dz[idx]=za-zb;
     r.h_diabatic[idx]=r.thb[p.thb_full?idx:k]+r.thp[idx];
 }
