@@ -364,6 +364,8 @@ def run_new_tiedtke(owner, *, atmosphere, fields, state, cfg):
                         stage="ntiedtke_gather_surface", full_ncol=ncol,
                         start=lo, count=count, width=width, levels=0)
         pipeline.llo3_mask.fill(np.int32(0))
+        # Each chunk reduces its own llo3, as reduce_llo3 does on CUDA.
+        pipeline.scalars["llo3"] = np.int32(-1)
         pipeline.run_chunk(chunk_index)
         for name, target in out_lev.items():
             _scatter_chunk(pipeline.w.bind(name, 0), target,
