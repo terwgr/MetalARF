@@ -1244,6 +1244,16 @@
           "read"
         ],
         [
+          "vt",
+          "float",
+          "read"
+        ],
+        [
+          "vq",
+          "float",
+          "read"
+        ],
+        [
           "dtl",
           "float",
           "write"
@@ -1305,6 +1315,18 @@
           ]
         ],
         "qw": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vt": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vq": [
           [
             "nz",
             "ncol"

@@ -2040,8 +2040,9 @@ def mynn_bl_driver_metal(
     level2["sm"][...] = layers["sm"]
     level2["sh"][...] = layers["sh"]
     submit_mynn_level2_columns(context, layers["dz"], layers["u"],
-        layers["v"], thl, sqw, *(level2[name] for name in
-        ("dtl", "dqw", "dtv", "gm", "gh", "sm", "sh")),
+        layers["v"], thl, sqw, plumes.vt, plumes.vq,
+        *(level2[name] for name in
+          ("dtl", "dqw", "dtv", "gm", "gh", "sm", "sh")),
         nz=nz, ncol=ncol, experimental=True)
     length = {name: slot(f"length_{name}", L) for name in
               ("el", "qkw", "qtke", "thetaw", "elblavg", "dlu", "dld")}
