@@ -62,7 +62,7 @@ static inline float vf_sf2(float a){float t=a+273.16f;return 1.0f+exp((-2.2e5f+7
 static inline void vf_stomata(device const float *p,float mpe,float apar,float foln,float tv,float ei,float ea,float sfctmp,float sfcprs,float fveg,float o2,float co2,float igs,float btran,float rb,thread float &rs,thread float &psn){
   float c3=p[3],apar_scale=apar/vf_max(fveg,1.0e-6f),cf=(sfcprs/(8.314f*sfctmp))*1.0e6f;rs=(1.0f/p[10])*cf;psn=0.0f;if(apar_scale<=0.0f)return;
   float fnf=vf_min(foln/vf_max(mpe,p[13]),1.0f),tc=tv-VF_TFRZ,ppf=4.6f*apar_scale,j=ppf*p[12];
-  float kc=p[4]*vf_sf1(p[5],tc),ko=p[6]*vf_sf1(p[7],tc),awc=kc*(1.0f+o2/ko),cp=((0.5f*kc*ko)/o2)*0.21f;
+  float kc=p[4]*vf_sf1(p[5],tc),ko=p[6]*vf_sf1(p[7],tc),awc=kc*(1.0f+o2/ko),cp=(((0.5f*kc)/ko)*o2)*0.21f;
   float vcmx=((p[9]/vf_sf2(tc))*fnf*btran)*vf_sf1(p[8],tc),ci=(0.7f*co2*c3)+(0.4f*co2*(1.0f-c3));
   float rlb=rb/cf,cea=vf_max((0.25f*ei*c3)+(0.40f*ei*(1.0f-c3)),vf_min(ea,ei));
   for(int it=0;it<3;++it){float wj=(((vf_max(ci-cp,0.0f)*j)/(ci+2.0f*cp))*c3)+(j*(1.0f-c3));
@@ -96,9 +96,9 @@ kernel void noahmp_vegeflux_flux(
   float vaie=vf_min(6.0f,vai),laisune=vf_min(6.0f,laisun),laishae=vf_min(6.0f,laisha);
   float esatw,esati,dsatw,dsati,t=vf_tdc(tg);vf_esat_all(t,esatw,esati,dsatw,dsati);float estg=t>0.0f?esatw:esati;
   qsfc=(0.622f*eair)/(psfc-0.378f*eair);
-  float hcan=p[1],uc=(ur*log(((hcan-zpd)-z0m)/z0m))/log(zlvl/z0m);
+  float hcan=p[1],uc=(ur*log(((hcan-zpd)+z0m)/z0m))/log(zlvl/z0m);
   float air=-(emv*(1.0f+(1.0f-emv)*(1.0f-emg))*lwdn)-(emv*emg*VF_SB*vf_p4(tg));
-  float cir=(2.0f-emv*(1.0f-emg)-emv)*VF_SB;
+  float cir=((2.0f-emv*(1.0f-emg))*emv)*VF_SB;
   float cah=0.0f,cvh=0.0f,rahg=1.0f,rawg=1.0f,z0h=z0m,shc=0.0f,evc=0.0f,tr=0.0f,irc=0.0f,canhs=0.0f;
   for(int it=1;it<=20;++it){
     z0h=z0m;float z0hg=z0mg;vf_sfcdif(it,sfctmp,rho,h,qair,zlvl,zpd,z0m,z0h,ur,mpe,s);

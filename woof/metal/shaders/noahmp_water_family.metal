@@ -538,8 +538,8 @@ static inline void winfil(device const float *p,float dt,thread const float *zso
 static inline void wsrt(device const float *p,thread const float *zsoil,float pddum,thread const float *etrani,float qseva,thread const float *smc,thread const float *fcr,thread float *rhstt,thread float *ai,thread float *bi,thread float *ci,thread float &qdrain,thread float *wcnd){
  float wdf[4],smx[4],denom[4],ddz[4],dsmdz[4],wflux[4];for(int k=0;k<4;k++){wdf[k]=wdf1(smc[k],fcr[k],p[k],p[8+k],p[16+k],p[12+k],wcnd[k]);smx[k]=smc[k];ddz[k]=dsmdz[k]=0.0f;}qdrain=0.0f;
  for(int k=0;k<4;k++){if(k==0){denom[k]=-zsoil[k];float tmp=-zsoil[k+1];ddz[k]=2.0f/tmp;dsmdz[k]=2.0f*(smx[k]-smx[k+1])/tmp;wflux[k]=(((wdf[k]*dsmdz[k]+wcnd[k])-pddum)+etrani[k])+qseva;}
- else if(k<3){denom[k]=zsoil[k-1]-zsoil[k];float tmp=zsoil[k-1]-zsoil[k+1];ddz[k]=2.0f/tmp;dsmdz[k]=2.0f*(smx[k]-smx[k+1])/tmp;wflux[k]=(((wdf[k]*dsmdz[k]+wcnd[k])-wdf[k-1]*dsmdz[k-1]-wcnd[k-1])-etrani[k]);}
- else{denom[k]=zsoil[k-1]-zsoil[k];qdrain=p[22]*wcnd[k];wflux[k]=(-wdf[k-1]*dsmdz[k-1]-wcnd[k-1]-etrani[k])+qdrain;}}
+ else if(k<3){denom[k]=zsoil[k-1]-zsoil[k];float tmp=zsoil[k-1]-zsoil[k+1];ddz[k]=2.0f/tmp;dsmdz[k]=2.0f*(smx[k]-smx[k+1])/tmp;wflux[k]=(((wdf[k]*dsmdz[k]+wcnd[k])-wdf[k-1]*dsmdz[k-1]-wcnd[k-1])+etrani[k]);}
+ else{denom[k]=zsoil[k-1]-zsoil[k];qdrain=p[22]*wcnd[k];wflux[k]=(-wdf[k-1]*dsmdz[k-1]-wcnd[k-1]+etrani[k])+qdrain;}}
  for(int k=0;k<4;k++){if(k==0){ai[k]=0.0f;bi[k]=wdf[k]*ddz[k]/denom[k];ci[k]=-bi[k];}else if(k<3){ai[k]=-(wdf[k-1]*ddz[k-1]/denom[k]);ci[k]=-(wdf[k]*ddz[k]/denom[k]);bi[k]=-(ai[k]+ci[k]);}else{ai[k]=-(wdf[k-1]*ddz[k-1]/denom[k]);ci[k]=0.0f;bi[k]=-(ai[k]+ci[k]);}rhstt[k]=wflux[k]/(-denom[k]);}
 }
 static inline float wsstep(device const float *p,float dt,thread const float *dz,thread const float *sice,thread float *sh2o,thread float *ai,thread float *bi,thread float *ci,thread float *rhstt,thread float *smc){
