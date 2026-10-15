@@ -7878,7 +7878,9 @@ def _initialize_metal_sfclay_without_cupy(
         ruc_params = RucRuntimeParameters(
             dataset_identifier=landuse_dataset,
             seaice_albedo_default=cfg.seaice_albedo_default,
-            num_soil_layers=n_soil)
+            num_soil_layers=n_soil,
+            rdlai2d=bool(cfg.rdlai2d),
+            fractional_seaice=int(cfg.fractional_seaice))
 
         # Preserve the prepared category-first fractions on the no-CuPy
         # Metal route. The regular initializer validates these against the

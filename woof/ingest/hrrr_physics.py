@@ -316,13 +316,17 @@ def initialize_prepared_physics(
         driver.fields["v10"][...] = xp.asarray(
             0.5 * (near_surface_host["V10"][:-1]
                    + near_surface_host["V10"][1:]), dtype=np.float32)
-        if driver.noah_params is not None:
+        # Each land model carries its own subset of these fields.
+        if "snoalb" in driver.fields:
             driver.fields["snoalb"][...] = xp.asarray(
                 surface_snow_albedo(cfg, static, driver.noah_params),
                 dtype=np.float32)
+        if "lai" in driver.fields:
             driver.fields["lai"][...] = xp.asarray(lai, dtype=np.float32)
+        if "shdmin" in driver.fields:
             driver.fields["shdmin"][...] = xp.asarray(
                 100.0 * static["GREENFRAC"].min(axis=0), dtype=np.float32)
+        if "shdmax" in driver.fields:
             driver.fields["shdmax"][...] = xp.asarray(
                 100.0 * static["GREENFRAC"].max(axis=0), dtype=np.float32)
         return driver
