@@ -1881,7 +1881,7 @@ class RRTMGLegacyRadiation:
         self.update_count += 1
         return RadiationResult(
             rthratenlw=xp.asarray(rate),
-            rthratensw=xp.asarray(sw_rate.reshape(ny, nx, nz).transpose(2, 0, 1)),
+            rthratensw=xp.asarray(sw_rate.reshape(nz, ny, nx)),
             swdown=xp.asarray(swdown.reshape(ny, nx)),
             glw=xp.asarray(glw), gsw=xp.asarray(gsw.reshape(ny, nx)),
             coszen=xp.asarray(coszen.reshape(ny, nx)), olr=xp.asarray(olr),
