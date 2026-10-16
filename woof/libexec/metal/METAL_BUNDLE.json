@@ -2,21 +2,21 @@
   "abi_version": 65543,
   "files": {
     "libwoof_metal.dylib": {
-      "sha256": "40c823d470fd31ab25ceaf17812afa2abc630c789addc1311d1e84a3428f96d5",
+      "sha256": "6c3e7f528b44f97f1a8dd87e2ff91f0179ccadbb05fc7d859235529977168dc2",
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "0c74efeade93a631fb9bea724ade0852f709ecccb0da700abdc950fbf788bc40",
-      "size": 11145188
+      "sha256": "a5291443c957982a4a7fff4d23c60d9d946e24dccaa3e4512570910780f20293",
+      "size": 11149915
     },
     "woof_exact.metallib": {
       "sha256": "38581b76ce1d9d322f53e059ac140dcc0aae0e20e6be77480b08b0d5523a09a2",
       "size": 6966722
     }
   },
-  "implementation_file_count": 883,
-  "implementation_sha256": "f987ea77f1f41277c42db40135b44862b2903d4d48f3efdb3dc8ebf2091b1868",
-  "metal_inputs_sha256": "b7212e646f7147aa1174b695a0280232bac5c777a7d36f11406aeaffe9bcf86b",
+  "implementation_file_count": 884,
+  "implementation_sha256": "f7e4e4741b5063a204e050daad951d420bf2919feccc6b70d68c95780d75851c",
+  "metal_inputs_sha256": "0a1c101c53dbf16cbb14e49a31c5ceb6b30063e23797cb0df19808f00d66ec3c",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "88c8cefe23b24d2344a8a9663d81d6dfecc5d4978c957a06698ff63fc3239289",
-        "size": 2233523
+        "sha256": "5354c1ad479efcbc8f61f7db5abeabd0acba1c53d959871f04a019f1f87c1e09",
+        "size": 2234265
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
@@ -116,8 +116,8 @@
         "size": 688
       },
       "woof/metal/shaders/bandwidth_family.metal": {
-        "sha256": "6aa7a59ea9f67bcac2a69b5b70158a5fd0b1c571856e283c6ef68ca6e65b5915",
-        "size": 1323
+        "sha256": "fab2cccdca6e1fdf22e49dfacb1ea68c1a7d54078eb8165401d6718bda7e5374",
+        "size": 1817
       },
       "woof/metal/shaders/bound_tke_fragment.metal": {
         "sha256": "63ce62853ba7f441ef7a8183c1ad087c4fe0aa58082eae777988548da9596eef",
@@ -1999,6 +1999,10 @@
         "sha256": "56fca2e0c20d8aad8a95aa8e55bf394c25f32f9d7cedc84b257cf5fd1d057bc0",
         "size": 1037
       },
+      "woof/metal/signature_fragments/glue_add_positive.json": {
+        "sha256": "a16a4dad3540a281ac5263423009adbd9ba704f487608df624d20a8e7968d832",
+        "size": 764
+      },
       "woof/metal/signature_fragments/health_family.json": {
         "sha256": "8b529e7882528c935b5a31cad2e9da3ae78d2c172dde3eabfc8f30d236efefa3",
         "size": 2915
@@ -2952,6 +2956,6 @@
         "size": 296
       }
     },
-    "sha256": "b7212e646f7147aa1174b695a0280232bac5c777a7d36f11406aeaffe9bcf86b"
+    "sha256": "0a1c101c53dbf16cbb14e49a31c5ceb6b30063e23797cb0df19808f00d66ec3c"
   }
 }

@@ -134291,6 +134291,48 @@
         "fp32-output",
         "software-libm-approximation-unverified"
       ]
+    },
+    {
+      "name": "glue_add_positive",
+      "module": "bandwidth_glue",
+      "source": "woof/metal/shaders/bandwidth_family.metal",
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "resources": [
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "n"
+          ]
+        ],
+        "dst": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
     }
   ],
   "schema": "woof-metal-kernel-signatures-v1"

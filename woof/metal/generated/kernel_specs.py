@@ -903,7 +903,7 @@ GLUE_ADD_SHAPES = (('dst', (('n',),)), ('src', (('n',),)))
 GLUE_ADD_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 GLUE_ADD_THREADS_PER_GROUP = 128
 GLUE_ADD_LAYOUT_HASH = '5058459c00702bf2c12818c51b4123e3187bc4200ec1f9196aa4bfc1e0039b7d'
-GLUE_ADD_SHADER_HASH = '6aa7a59ea9f67bcac2a69b5b70158a5fd0b1c571856e283c6ef68ca6e65b5915'
+GLUE_ADD_SHADER_HASH = 'fab2cccdca6e1fdf22e49dfacb1ea68c1a7d54078eb8165401d6718bda7e5374'
 
 GLUE_CAPTURE_THETA_FORCING_RESOURCES = (('rth', 'float', 'read'), ('mub', 'float', 'read'), ('mup', 'float', 'read'), ('c1', 'float', 'read'), ('c2', 'float', 'read'), ('msft', 'float', 'read'), ('dst', 'float', 'read_write'))
 GLUE_CAPTURE_THETA_FORCING_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -911,7 +911,7 @@ GLUE_CAPTURE_THETA_FORCING_SHAPES = (('c1', (('nz',),)), ('c2', (('nz',),)), ('d
 GLUE_CAPTURE_THETA_FORCING_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('mapped', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 GLUE_CAPTURE_THETA_FORCING_THREADS_PER_GROUP = 128
 GLUE_CAPTURE_THETA_FORCING_LAYOUT_HASH = '561601a79d3d938b50880ca206ce893489e686e02d046cde12bf2a15eb8a9ce9'
-GLUE_CAPTURE_THETA_FORCING_SHADER_HASH = '6aa7a59ea9f67bcac2a69b5b70158a5fd0b1c571856e283c6ef68ca6e65b5915'
+GLUE_CAPTURE_THETA_FORCING_SHADER_HASH = 'fab2cccdca6e1fdf22e49dfacb1ea68c1a7d54078eb8165401d6718bda7e5374'
 
 HEALTH_FINAL_RESOURCES = (('partial', 'float', 'read'), ('result', 'float', 'read_write'))
 HEALTH_FINAL_ACCESS = ('read', 'read_write')
@@ -6592,3 +6592,11 @@ REFL10CM_WSM6_COLUMN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_
 REFL10CM_WSM6_COLUMN_THREADS_PER_GROUP = 32
 REFL10CM_WSM6_COLUMN_LAYOUT_HASH = '443dbcd81754ad8b4feb62f1536f880fc1f45eb1aecc9815028896243fcfc8c7'
 REFL10CM_WSM6_COLUMN_SHADER_HASH = 'fe3a8967da6e0c9b00fa491349676a0f6568d613788a099020005aca9e744fd4'
+
+GLUE_ADD_POSITIVE_RESOURCES = (('src', 'float', 'read'), ('dst', 'float', 'read_write'))
+GLUE_ADD_POSITIVE_ACCESS = ('read', 'read_write')
+GLUE_ADD_POSITIVE_SHAPES = (('src', (('n',),)), ('dst', (('n',),)))
+GLUE_ADD_POSITIVE_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
+GLUE_ADD_POSITIVE_THREADS_PER_GROUP = 128
+GLUE_ADD_POSITIVE_LAYOUT_HASH = '988c096930d35c9929738d572ecfe671e92c0c32c07f331fb2ca48731d2f7318'
+GLUE_ADD_POSITIVE_SHADER_HASH = 'fab2cccdca6e1fdf22e49dfacb1ea68c1a7d54078eb8165401d6718bda7e5374'
