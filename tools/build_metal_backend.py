@@ -166,6 +166,7 @@ NOAHMP_GLACIER_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "noahmp_gla
 MYNN_PBL_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "mynn_pbl_family.metal"
 MYJPBL_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "myjpbl_family.metal"
 MYJSFC_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "myjsfc_family.metal"
+MYJURB_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "myjurb_family.metal"
 NTIEDTKE_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "ntiedtke_family.metal"
 GF_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "gf_family.metal"
 NSSL2_FUSED_GS_SHADER = ROOT / "woof" / "metal" / "shaders" / "nssl2_fused_gs_family.metal"
@@ -803,6 +804,7 @@ def build(output: Path) -> dict:
                 ("mynn_pbl_family", MYNN_PBL_FAMILY_SHADER),
                 ("myjpbl_family", MYJPBL_FAMILY_SHADER),
                 ("myjsfc_family", MYJSFC_FAMILY_SHADER),
+                ("myjurb_family", MYJURB_FAMILY_SHADER),
                 ("ntiedtke_family", NTIEDTKE_FAMILY_SHADER),
                 ("shinhong_column", SHINHONG_COLUMN_SHADER),
                 ("gf_family", GF_FAMILY_SHADER),

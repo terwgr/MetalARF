@@ -333,6 +333,9 @@ def build_class_tables_metal(params, context) -> dict:
     q_num = module.asarray(np.full((nurbm,), 4, dtype=np.int32))
     albedo_error = module.zeros((nurbm,), dtype=np.int32)
     submit_bep_bem_albedo(context, p_num, q_num, albwin, albedo_error)
+    if albedo_error.to_numpy().any():
+        raise BepBemError(
+            "BEM window albedo (bb_albwindow) did not converge")
 
     z_u = module.asarray(
         np.arange(NZ_UM + 1, dtype=np.float32) * np.float32(DZ_U))
@@ -1940,15 +1943,16 @@ def init_state(state, params, *, tlayer0, tsurface0, tdeep0, smois,
     context.submit_kernel(
         "urban_bem_view_inputs_fragment",
         {"utype": utype.view((ncol,), byte_offset=utype.byte_offset),
-         "street_direction_table": dxy_table.view((NDM * nclasses,)),
-         "street_width_table": width_table.view((NDM * nclasses,)),
-         "z": z.view((z.size,)), "dxy": dxy.view((dxy.size,)),
-         "street_width": street_width.view((street_width.size,)),
-         "error": error.view((error.size,))},
+         "street_direction_table": dxy_table,
+         "street_width_table": width_table,
+         "z": z, "dxy": dxy, "street_width": street_width, "error": error},
         {"ncol": ncol, "nclasses": nclasses, "nd": NDM},
         exact_policy=False, grid_size=ncol * NDM,
         threads_per_group=kernel_specs.URBAN_BEM_VIEW_INPUTS_FRAGMENT_THREADS_PER_GROUP,
     )
+    if error.to_numpy().any():
+        raise BepBemError(
+            "BEM view-factor setup: UTYPE is outside the configured BEM classes")
     state.bem_view_factor_columns = np.arange(ncol, dtype=np.int32)
     state.bem_view_factors = launch_bem_view_factors_metal(
         context, z=module.asarray(z), dxy=module.asarray(dxy),

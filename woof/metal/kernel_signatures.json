@@ -88969,20 +88969,11 @@
       "threads_per_group": 64
     },
     {
-      "arithmetic_policies": [
-        "default"
-      ],
+      "name": "urban_bep_bem_albedo_fragment",
+      "module": "urban_bep_bem_albedo_fragment",
+      "source": "woof/metal/shaders/urban_bep_bem_albedo_fragment.metal",
       "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
       "cuda_symbol": "bb_albwindow",
-      "layout_version": 1,
-      "module": "urban_bep_bem_albedo_fragment",
-      "name": "urban_bep_bem_albedo_fragment",
-      "parameters": [
-        [
-          "ncase",
-          "int32"
-        ]
-      ],
       "resources": [
         [
           "p_num",
@@ -89006,16 +88997,6 @@
         ]
       ],
       "shapes": {
-        "albwin": [
-          [
-            "ncase"
-          ]
-        ],
-        "error": [
-          [
-            "ncase"
-          ]
-        ],
         "p_num": [
           [
             "ncase"
@@ -89025,10 +89006,29 @@
           [
             "ncase"
           ]
+        ],
+        "albwin": [
+          [
+            "ncase"
+          ]
+        ],
+        "error": [
+          [
+            "ncase"
+          ]
         ]
       },
-      "source": "woof/metal/shaders/urban_bep_bem_albedo_fragment.metal",
-      "threads_per_group": 64
+      "parameters": [
+        [
+          "ncase",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
     },
     {
       "arithmetic_policies": [
@@ -102170,60 +102170,11 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": [
-        "default"
-      ],
+      "name": "ysu_column",
+      "module": "ysu_family",
+      "source": "woof/metal/shaders/ysu_column.metal",
       "cuda_source": "woof/core/kernels/ysu.cu",
       "cuda_symbol": "ysu_column",
-      "layout_version": 1,
-      "module": "ysu_family",
-      "name": "ysu_column",
-      "parameters": [
-        [
-          "ncol",
-          "int32"
-        ],
-        [
-          "nx",
-          "int32"
-        ],
-        [
-          "ny",
-          "int32"
-        ],
-        [
-          "nz",
-          "int32"
-        ],
-        [
-          "wskp",
-          "int32"
-        ],
-        [
-          "col0",
-          "int32"
-        ],
-        [
-          "tilecol",
-          "int32"
-        ],
-        [
-          "ws_count",
-          "int32"
-        ],
-        [
-          "dt",
-          "float32"
-        ],
-        [
-          "ysu_topdown_pblmix",
-          "int32"
-        ],
-        [
-          "topo",
-          "int32"
-        ]
-      ],
       "resources": [
         [
           "u",
@@ -102439,63 +102390,204 @@
           "v10o",
           "float",
           "read_write"
+        ],
+        [
+          "a_u_bep",
+          "float",
+          "read"
+        ],
+        [
+          "a_v_bep",
+          "float",
+          "read"
+        ],
+        [
+          "a_t_bep",
+          "float",
+          "read"
+        ],
+        [
+          "a_q_bep",
+          "float",
+          "read"
+        ],
+        [
+          "b_u_bep",
+          "float",
+          "read"
+        ],
+        [
+          "b_v_bep",
+          "float",
+          "read"
+        ],
+        [
+          "b_t_bep",
+          "float",
+          "read"
+        ],
+        [
+          "b_q_bep",
+          "float",
+          "read"
+        ],
+        [
+          "sf_bep",
+          "float",
+          "read"
+        ],
+        [
+          "vl_bep",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
+        "u": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_interface": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "exner": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rthraten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "psfc": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "znt": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ust": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "hfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qfx": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "wspd": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
         "br": [
           [
             "ny",
             "nx"
           ]
         ],
-        "cloudflg": [
+        "psim": [
           [
             "ny",
             "nx"
           ]
         ],
-        "ctopo": [
+        "psih": [
           [
             "ny",
             "nx"
           ]
         ],
-        "ctopo2": [
+        "xland": [
           [
             "ny",
             "nx"
           ]
         ],
-        "delta": [
+        "u10": [
           [
             "ny",
             "nx"
           ]
         ],
-        "dqc": [
+        "v10": [
           [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "dqi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "dqv": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "dtheta": [
-          [
-            "nz",
             "ny",
             "nx"
           ]
@@ -102514,7 +102606,28 @@
             "nx"
           ]
         ],
-        "dz": [
+        "dtheta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dqv": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dqc": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dqi": [
           [
             "nz",
             "ny",
@@ -102535,19 +102648,6 @@
             "nx"
           ]
         ],
-        "exner": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "hfx": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
         "hpbl": [
           [
             "ny",
@@ -102560,141 +102660,19 @@
             "nx"
           ]
         ],
-        "p": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "p_interface": [
-          [
-            "nz+1",
-            "ny",
-            "nx"
-          ]
-        ],
-        "psfc": [
+        "wstar": [
           [
             "ny",
             "nx"
           ]
         ],
-        "psih": [
+        "delta": [
           [
-            "ny",
-            "nx"
-          ]
-        ],
-        "psim": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "qc": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qfx": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "qi": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "qv": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "rthraten": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "theta": [
-          [
-            "nz",
             "ny",
             "nx"
           ]
         ],
         "topdown_radsum": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "u": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "u10": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "u10o": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "ust": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "v": [
-          [
-            "nz",
-            "ny",
-            "nx"
-          ]
-        ],
-        "v10": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "v10o": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "ws": [
-          [
-            "ws_count"
-          ]
-        ],
-        "wspd": [
-          [
-            "ny",
-            "nx"
-          ]
-        ],
-        "wstar": [
           [
             "ny",
             "nx"
@@ -102706,21 +102684,172 @@
             "nx"
           ]
         ],
-        "xland": [
+        "cloudflg": [
           [
             "ny",
             "nx"
           ]
         ],
-        "znt": [
+        "ws": [
           [
+            "ws_count"
+          ]
+        ],
+        "ctopo": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ctopo2": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "u10o": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "v10o": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "a_u_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "a_v_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "a_t_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "a_q_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b_u_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b_v_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b_t_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b_q_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sf_bep": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "vl_bep": [
+          [
+            "nz",
             "ny",
             "nx"
           ]
         ]
       },
-      "source": "woof/metal/shaders/ysu_column.metal",
-      "threads_per_group": 32
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "wskp",
+          "int32"
+        ],
+        [
+          "col0",
+          "int32"
+        ],
+        [
+          "tilecol",
+          "int32"
+        ],
+        [
+          "ws_count",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "ysu_topdown_pblmix",
+          "int32"
+        ],
+        [
+          "topo",
+          "int32"
+        ],
+        [
+          "bep",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
     },
     {
       "arithmetic_policies": [
@@ -153441,6 +153570,667 @@
         ]
       ],
       "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "myjurb_column",
+      "module": "myjurb_family",
+      "source": "woof/metal/shaders/myjurb_family.metal",
+      "cuda_source": "woof/core/kernels/myjurb.cu",
+      "cuda_symbol": "myjurb_column",
+      "resources": [
+        [
+          "dz_a",
+          "float",
+          "read"
+        ],
+        [
+          "u_a",
+          "float",
+          "read"
+        ],
+        [
+          "v_a",
+          "float",
+          "read"
+        ],
+        [
+          "t_a",
+          "float",
+          "read"
+        ],
+        [
+          "th_a",
+          "float",
+          "read"
+        ],
+        [
+          "exner_a",
+          "float",
+          "read"
+        ],
+        [
+          "qv_a",
+          "float",
+          "read"
+        ],
+        [
+          "qc_a",
+          "float",
+          "read"
+        ],
+        [
+          "p_a",
+          "float",
+          "read"
+        ],
+        [
+          "tke_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "psfc_a",
+          "float",
+          "read"
+        ],
+        [
+          "ust_a",
+          "float",
+          "read"
+        ],
+        [
+          "tsk_a",
+          "float",
+          "read"
+        ],
+        [
+          "chklowq_a",
+          "float",
+          "read"
+        ],
+        [
+          "xland_a",
+          "float",
+          "read"
+        ],
+        [
+          "sice_a",
+          "float",
+          "read"
+        ],
+        [
+          "snow_a",
+          "float",
+          "read"
+        ],
+        [
+          "akhs_a",
+          "float",
+          "read"
+        ],
+        [
+          "akms_a",
+          "float",
+          "read"
+        ],
+        [
+          "elflx_a",
+          "float",
+          "read"
+        ],
+        [
+          "uz0_a",
+          "float",
+          "read"
+        ],
+        [
+          "vz0_a",
+          "float",
+          "read"
+        ],
+        [
+          "thz0_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "qz0_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "qsfc_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "ct_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "rublten_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "rvblten_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "rthblten_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqvblten_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqcblten_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "el_myj_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "exch_h_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "exch_m_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "pblh_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "kpbl_a",
+          "int32",
+          "read_write"
+        ],
+        [
+          "mixht_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "a_u_bep",
+          "float",
+          "read"
+        ],
+        [
+          "a_v_bep",
+          "float",
+          "read"
+        ],
+        [
+          "a_t_bep",
+          "float",
+          "read"
+        ],
+        [
+          "a_q_bep",
+          "float",
+          "read"
+        ],
+        [
+          "a_e_bep",
+          "float",
+          "read"
+        ],
+        [
+          "b_u_bep",
+          "float",
+          "read"
+        ],
+        [
+          "b_v_bep",
+          "float",
+          "read"
+        ],
+        [
+          "b_t_bep",
+          "float",
+          "read"
+        ],
+        [
+          "b_q_bep",
+          "float",
+          "read"
+        ],
+        [
+          "b_e_bep",
+          "float",
+          "read"
+        ],
+        [
+          "dlg_bep",
+          "float",
+          "read"
+        ],
+        [
+          "dl_u_bep",
+          "float",
+          "read"
+        ],
+        [
+          "vl_bep",
+          "float",
+          "read"
+        ],
+        [
+          "sf_bep",
+          "float",
+          "read"
+        ],
+        [
+          "frc_urb2d",
+          "float",
+          "read"
+        ],
+        [
+          "ht",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "dz_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "u_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "v_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "th_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "exner_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qv_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "qc_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "tke_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "psfc_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ust_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tsk_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "chklowq_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "xland_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "sice_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "snow_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "akhs_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "akms_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "elflx_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "uz0_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "vz0_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "thz0_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qz0_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "qsfc_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ct_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "rublten_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rvblten_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rthblten_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rqvblten_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "rqcblten_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "el_myj_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "exch_h_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "exch_m_a": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pblh_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "kpbl_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "mixht_a": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "a_u_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "a_v_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "a_t_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "a_q_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "a_e_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b_u_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b_v_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b_t_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b_q_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "b_e_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dlg_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dl_u_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "vl_bep": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "sf_bep": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "frc_urb2d": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ht": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dtturbl",
+          "float32"
+        ],
+        [
+          "flag_bep",
+          "int32"
+        ],
+        [
+          "idiff",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
       "layout_version": 1,
       "arithmetic_policies": [
         "default"

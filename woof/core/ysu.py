@@ -158,9 +158,6 @@ def launch_ysu(u, v, theta, qv, qc, qi, p, p_interface, exner, dz,
     if has_metal:
         if not isinstance(theta, MetalArray):
             raise TypeError("YSU cannot mix Metal and non-Metal arrays")
-        if bep is not None or frc_urb2d is not None:
-            raise NotImplementedError(
-                "Metal YSU admits only the non-BEP column path")
         if (topo is None) != (u10_out is None) or \
                 (u10_out is None) != (v10_out is None):
             raise ValueError("topo_wind YSU needs topo, u10_out and v10_out")
@@ -175,7 +172,7 @@ def launch_ysu(u, v, theta, qv, qc, qi, p, p_interface, exner, dz,
             ust=ust, hfx=hfx, qfx=qfx, wspd=wspd, br=br, psim=psim,
             psih=psih, xland=xland, u10=u10, v10=v10, dt=float(dt),
             ysu_topdown_pblmix=int(ysu_topdown_pblmix), topo=topo,
-            u10_out=u10_out, v10_out=v10_out)
+            u10_out=u10_out, v10_out=v10_out, bep=bep, frc_urb2d=frc_urb2d)
     if cp is None:
         raise RuntimeError("YSU CuPy arrays require CuPy; use MetalArray inputs")
     for name, arr in columns.items():

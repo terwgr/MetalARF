@@ -9093,15 +9093,15 @@
       ],
       "cuda_source": "woof/core/kernels/urban_bep_bem.cu",
       "cuda_symbol": "bb_albwindow",
-      "layout_hash": "30bf4e14dcec24720d509d8b03069434fdd804b60be64fe70ab232467d2d6dbf",
+      "layout_hash": "49b9f9e84c008868609e2aaf5c1965ecf9d27643007a69cdba35362fa156f9dc",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/urban_bep_bem_albedo_fragment.metal",
       "module": "urban_bep_bem_albedo_fragment",
       "name": "urban_bep_bem_albedo_fragment",
       "parameter_size": 4,
       "resource_count": 4,
-      "shader_hash": "84ed4e69305c14749de6d99e9f5b82226939ae50110cb93d2b34223a529e6e54",
-      "threads_per_group": 64
+      "shader_hash": "611933491d0db2aca2b8c185fde608eaa8fb7676601b7ff2ef13906de94f37bf",
+      "threads_per_group": 256
     },
     {
       "arithmetic_policies": [
@@ -10021,14 +10021,14 @@
       ],
       "cuda_source": "woof/core/kernels/ysu.cu",
       "cuda_symbol": "ysu_column",
-      "layout_hash": "6f6123b947f737c71fd394d9babdec1584b71e6ff3a847abfd90dbad40d240c3",
+      "layout_hash": "dda70ee6740294237afcb1073018e4ce934844004ed5b5311bc1889f996b6452",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/ysu_column.metal",
       "module": "ysu_family",
       "name": "ysu_column",
-      "parameter_size": 44,
-      "resource_count": 43,
-      "shader_hash": "2737e49fb95e392b742fe2ea0c61f4abaa3c3139758aa989627f4b047e166ada",
+      "parameter_size": 48,
+      "resource_count": 53,
+      "shader_hash": "e3599ecd8634a81d45f81ddaa47923e6d3e14a842ba85e0197ea799e1e284064",
       "threads_per_group": 32
     },
     {
@@ -10044,7 +10044,7 @@
       "name": "ysu_validate_outputs",
       "parameter_size": 20,
       "resource_count": 14,
-      "shader_hash": "2737e49fb95e392b742fe2ea0c61f4abaa3c3139758aa989627f4b047e166ada",
+      "shader_hash": "e3599ecd8634a81d45f81ddaa47923e6d3e14a842ba85e0197ea799e1e284064",
       "threads_per_group": 128
     },
     {
@@ -15660,6 +15660,22 @@
       "resource_count": 30,
       "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/myjurb.cu",
+      "cuda_symbol": "myjurb_column",
+      "layout_hash": "e417876b4fd2c2f0bd10abee90e9680cd21a66e34e7308b37d06cd3184d77372",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/myjurb_family.metal",
+      "module": "myjurb_family",
+      "name": "myjurb_column",
+      "parameter_size": 28,
+      "resource_count": 53,
+      "shader_hash": "c2a337772ffa8ec42ef441bac47fa3e38ab7b95e43df7502e3f01b7288ed9bd7",
+      "threads_per_group": 128
     }
   ],
   "schema": "woof-metal-registry-v1"

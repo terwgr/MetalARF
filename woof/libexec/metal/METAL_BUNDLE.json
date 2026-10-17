@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "c6e04d76c796898c487b414ce3de3f421c60a4e5ce1c71082149b81faa638634",
-      "size": 12749403
+      "sha256": "b00ba8b728f84824d9031d446dacf9bb5429b27e9fe6bf134714ba64421b879f",
+      "size": 12785566
     },
     "woof_exact.metallib": {
-      "sha256": "9497cdfc7920aa2af1606a00f5e7ef122136aa2b3574ada50f1e4022a14567e2",
-      "size": 8208766
+      "sha256": "1900854492c5eae5d83a74879502f11e388e9dfbc46d4bf9f9636ecca28ad982",
+      "size": 8206318
     }
   },
-  "implementation_file_count": 1152,
-  "implementation_sha256": "42a579f1350debd4fc9e4d39a977a6a5c0d06cf62e7b1a3f03f16d7490a52935",
-  "metal_inputs_sha256": "ad44187b19516c6886832591b49473425ef76f828a7fad30ffc0605a29626044",
+  "implementation_file_count": 1155,
+  "implementation_sha256": "d3cdbdb3db2202d6390460038ab465e8bbe7ae649c8626bf0f2971a25493d249",
+  "metal_inputs_sha256": "91fb9863cf63132ac7b9ee991cce98f4a85aead9eb4eb5e37847a6dc667e5026",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -24,8 +24,8 @@
     "binding": "sha256-build-inputs",
     "files": {
       "tools/build_metal_backend.py": {
-        "sha256": "9d799c0112b30c3f8bd3ec5a0ae89545ed53c33cdafaaf9e998b8bb6fcc096b9",
-        "size": 92711
+        "sha256": "74ba12181163ed81bac8f77b4b8e506a9b89b8b0939ed0c11865070daa72bdc7",
+        "size": 92851
       },
       "tools/generate_metal_kernel_signatures.py": {
         "sha256": "828b6378afd4c24d9925d0b3ed62e5947a4633725264a07bc981132df6e286c4",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "5d9c9eec126c52cd2a275e3a828b34a681c686227d769980a878862bb323f70f",
-        "size": 2561912
+        "sha256": "24736da6b7a263a615bf2dd6e6862e24b8f1c1807cd02570a9b6d09c62a424fe",
+        "size": 2574296
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
@@ -1355,6 +1355,10 @@
         "sha256": "ce246d2fd8618d1efe636390f1c8fa063e99b7a135f0ad00a0bf1121e7fef983",
         "size": 19986
       },
+      "woof/metal/shaders/myjurb_family.metal": {
+        "sha256": "c2a337772ffa8ec42ef441bac47fa3e38ab7b95e43df7502e3f01b7288ed9bd7",
+        "size": 30336
+      },
       "woof/metal/shaders/mynn_pbl_family.metal": {
         "sha256": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
         "size": 198039
@@ -1980,8 +1984,8 @@
         "size": 4915
       },
       "woof/metal/shaders/urban_bep_bem_albedo_fragment.metal": {
-        "sha256": "84ed4e69305c14749de6d99e9f5b82226939ae50110cb93d2b34223a529e6e54",
-        "size": 3196
+        "sha256": "611933491d0db2aca2b8c185fde608eaa8fb7676601b7ff2ef13906de94f37bf",
+        "size": 4248
       },
       "woof/metal/shaders/urban_bep_bem_class_init_fragment.metal": {
         "sha256": "748b7749d1f88d18a9e8c7a91697891486d16cf22cb8be8a2468c2171792e09d",
@@ -2108,8 +2112,8 @@
         "size": 15759
       },
       "woof/metal/shaders/ysu_column.metal": {
-        "sha256": "2737e49fb95e392b742fe2ea0c61f4abaa3c3139758aa989627f4b047e166ada",
-        "size": 29293
+        "sha256": "e3599ecd8634a81d45f81ddaa47923e6d3e14a842ba85e0197ea799e1e284064",
+        "size": 32564
       },
       "woof/metal/shaders/ysu_family.metal": {
         "sha256": "788252edab088a4ed140f097995a70bbad8edc366c986b2f4b477b553149dbf1",
@@ -3263,6 +3267,10 @@
         "sha256": "6ffb0ae231209d21c46f3839747499d00d6738f8e34fca6c46ccb6fd5ac0dc82",
         "size": 10964
       },
+      "woof/metal/signature_fragments/myjurb_family.json": {
+        "sha256": "c91e9834410806d2a79fd955d7b788e7b0610868091d02d39d199bc0f54ec0e5",
+        "size": 4705
+      },
       "woof/metal/signature_fragments/mynn_condensation_gsd41.json": {
         "sha256": "7b87e02aed8abee7c52b03b248540bbd97a2b451f9b05b4db09965391e6bb778",
         "size": 1668
@@ -3908,8 +3916,8 @@
         "size": 1752
       },
       "woof/metal/signature_fragments/urban_bep_bem_family.json": {
-        "sha256": "feb781dfba4c3975cecb121c1c99470012b27cabb8a210f4b08f6087025672f7",
-        "size": 2630
+        "sha256": "318534b1f8d4493a595eaa8780f026ea1c13cc27b25ec91f82e1e7e81ccb7d22",
+        "size": 2631
       },
       "woof/metal/signature_fragments/urban_bep_bem_finalize_fragment.json": {
         "sha256": "8392876cbe0f7733b73cc35dc8d2a4c5ff22101c9c31c3bc922600b3ef0cefe1",
@@ -4012,14 +4020,14 @@
         "size": 2140
       },
       "woof/metal/signature_fragments/ysu_column.json": {
-        "sha256": "56e4106e396ea1cd67e823588664fa54a94dd4492b08f27c3eee5436c634837c",
-        "size": 5256
+        "sha256": "30f1d344dea844f7d698b09502522fe4c7fb4e82b6786bf98ea6167a2711bab6",
+        "size": 6124
       },
       "woof/metal/signature_fragments/ysu_family.json": {
         "sha256": "01616386c7292e8743de3b4c0019f2b251229eed635d9cfa65a5c464b6330cf0",
         "size": 296
       }
     },
-    "sha256": "ad44187b19516c6886832591b49473425ef76f828a7fad30ffc0605a29626044"
+    "sha256": "91fb9863cf63132ac7b9ee991cce98f4a85aead9eb4eb5e37847a6dc667e5026"
   }
 }

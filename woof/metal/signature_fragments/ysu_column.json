@@ -49,7 +49,17 @@
         ["ctopo", "float", "read"],
         ["ctopo2", "float", "read"],
         ["u10o", "float", "read_write"],
-        ["v10o", "float", "read_write"]
+        ["v10o", "float", "read_write"],
+        ["a_u_bep", "float", "read"],
+        ["a_v_bep", "float", "read"],
+        ["a_t_bep", "float", "read"],
+        ["a_q_bep", "float", "read"],
+        ["b_u_bep", "float", "read"],
+        ["b_v_bep", "float", "read"],
+        ["b_t_bep", "float", "read"],
+        ["b_q_bep", "float", "read"],
+        ["sf_bep", "float", "read"],
+        ["vl_bep", "float", "read"]
       ],
       "shapes": {
         "u": [["nz", "ny", "nx"]],
@@ -94,14 +104,24 @@
         "ctopo": [["ny", "nx"]],
         "ctopo2": [["ny", "nx"]],
         "u10o": [["ny", "nx"]],
-        "v10o": [["ny", "nx"]]
+        "v10o": [["ny", "nx"]],
+        "a_u_bep": [["nz", "ny", "nx"]],
+        "a_v_bep": [["nz", "ny", "nx"]],
+        "a_t_bep": [["nz", "ny", "nx"]],
+        "a_q_bep": [["nz", "ny", "nx"]],
+        "b_u_bep": [["nz", "ny", "nx"]],
+        "b_v_bep": [["nz", "ny", "nx"]],
+        "b_t_bep": [["nz", "ny", "nx"]],
+        "b_q_bep": [["nz", "ny", "nx"]],
+        "sf_bep": [["nz+1", "ny", "nx"], ["nz", "ny", "nx"]],
+        "vl_bep": [["nz", "ny", "nx"]]
       },
       "parameters": [
         ["ncol", "int32"], ["nx", "int32"], ["ny", "int32"],
         ["nz", "int32"], ["wskp", "int32"], ["col0", "int32"],
         ["tilecol", "int32"], ["ws_count", "int32"], ["dt", "float32"],
         ["ysu_topdown_pblmix", "int32"],
-        ["topo", "int32"]
+        ["topo", "int32"], ["bep", "int32"]
       ],
       "threads_per_group": 32,
       "layout_version": 1,
@@ -139,7 +159,8 @@
         "status": [[1]]
       },
       "parameters": [
-        ["nfloat", "int32"], ["ncol", "int32"], ["nz", "int32"]
+        ["nfloat", "int32"], ["ny", "int32"], ["nx", "int32"],
+        ["ncol", "int32"], ["nz", "int32"]
       ],
       "threads_per_group": 128,
       "layout_version": 1,

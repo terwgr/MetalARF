@@ -5018,13 +5018,14 @@ class PhysicsDriver:
         state = {name: f[name] for name in MYJ_PBL_INOUT}
         if self.urban is not None and self.urban.pbl_terms is not None:
             if metal_state:
-                # The separate MYJURB column has not been translated yet.
-                # Keep the BEP public route resident by using the integrated
-                # Metal MYJ column while that urban-specific solve is ported.
-                out = myj_pbl_step(
-                    columns, surface, state, f["tke_myj"],
-                    dtturbl=self.bldt_seconds, flqi=flqi,
-                    domain_state=self.state)
+                # WRF sends MYJ through its separate urban routine under
+                # BEP/BEM (module_pbl_driver.F:1444-1492).
+                from woof.metal.myjurb_family import submit_myjurb
+                out = submit_myjurb(self.state, columns, surface, state,
+                                    f["tke_myj"], dtturbl=self.bldt_seconds,
+                                    bep=self.urban.pbl_terms,
+                                    frc_urb2d=f["frc_urb2d"],
+                                    ht=self.state.ht)
             else:
                 # WRF sends CUDA MYJ through its separate urban routine under
                 # BEP/BEM (module_pbl_driver.F:1444-1492).
@@ -5604,9 +5605,11 @@ class PhysicsDriver:
                 raise NotImplementedError(
                     "Metal YSU was reached outside its admitted "
                     "SFCLAY+YSU driver configuration")
-            if self.urban is not None:
-                raise NotImplementedError(
-                    "Metal YSU does not admit urban coupling")
+            # BEP/BEM's drag, heat and TKE sources (bl_ysu.F90 flag_bep arm),
+            # passed only when an urban model produced them, as on CUDA.
+            bep_kw = ({} if self.urban is None or self.urban.pbl_terms is None
+                      else {"bep": self.urban.pbl_terms,
+                            "frc_urb2d": f["frc_urb2d"]})
             # topo_wind: the ctopo-present arm and the hill-top 10 m blend,
             # as the CuPy branch below.
             topo_kw = {}
@@ -5632,7 +5635,8 @@ class PhysicsDriver:
                 wspd=f["wspd"], br=f["br"], psim=f["fm"],
                 psih=f["fh"], xland=f["xland"], u10=f["u10"],
                 v10=f["v10"], dt=self.bldt_seconds,
-                ysu_topdown_pblmix=cfg.ysu_topdown_pblmix, **topo_kw)
+                ysu_topdown_pblmix=cfg.ysu_topdown_pblmix, **bep_kw,
+                **topo_kw)
             if topo_kw:
                 f["u10"][...] = topo_kw["u10_out"]
                 f["v10"][...] = topo_kw["v10_out"]
@@ -8360,7 +8364,7 @@ def _initialize_metal_sfclay_without_cupy(
         noahmp_cold_start(
             fields, params=noahmp_params, dzs=NOAH_LAYER_THICKNESS_M,
             sf_urban_physics=int(getattr(cfg, "sf_urban_physics", 0)))
-        if int(getattr(cfg, "sf_urban_physics", 0)) in (1, 2):
+        if int(getattr(cfg, "sf_urban_physics", 0)) in (1, 2, 3):
             _attach_urban(
                 driver, state, cfg, fields, noahmp_params=noahmp_params,
                 landuse_dataset=landuse_dataset, frc_urb2d=frc_urb2d,

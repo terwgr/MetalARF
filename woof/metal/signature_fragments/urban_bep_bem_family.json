@@ -71,7 +71,7 @@
         "error": [["ncase"]]
       },
       "parameters": [["ncase", "int32"]],
-      "threads_per_group": 64,
+      "threads_per_group": 256,
       "layout_version": 1,
       "arithmetic_policies": ["default"]
     }

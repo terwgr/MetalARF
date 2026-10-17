@@ -167,27 +167,42 @@ class UrbanCoupler:
         2882-2914, Ruiz-Arias et al. 2010 with the Perez air-mass
         correction), on this radiation call's sun.  Zero where the sun is
         down, as the driver zeroes both before every call (:1724-1726).
-        """
-        import cupy as cp
 
-        f4 = cp.float32
-        solar = self.state.solar
-        cosz = cp.asarray(solar.coszen, dtype=f4)
-        swdown = fields["swdown"]
+        On Metal the split is a host computation on this radiation call's
+        surface plane, as the solar geometry it reads already is.
+        """
+        from woof.metal.array import MetalArray
+
+        if isinstance(fields["swdown"], MetalArray):
+            def host(value):
+                return (value.to_numpy() if isinstance(value, MetalArray)
+                        else np.asarray(value, dtype=np.float32))
+            swddif, swddir = self._split(
+                np, host(self.state.solar.coszen), host(fields["swdown"]),
+                host(ht))
+        else:
+            import cupy as cp
+            swddif, swddir = self._split(
+                cp, self.state.solar.coszen, fields["swdown"], ht)
+        fields["swddif"][...] = swddif
+        fields["swddir"][...] = swddir
+
+    def _split(self, xp, coszen, swdown, ht):
+        f4 = xp.float32
+        cosz = xp.asarray(coszen, dtype=f4)
         day = cosz > f4(1.0e-3)
-        c = cp.where(day, cosz, f4(1.0))
-        ioh = f4(solar.solcon) * c
-        kt = swdown / cp.maximum(ioh, f4(1.0e-3))
-        airmass = cp.exp(-cp.asarray(ht, dtype=f4) / f4(8434.5)) / (
-            c + f4(0.50572) * cp.power(
-                cp.arcsin(c) * f4(57.295779513082323) + f4(6.07995),
+        c = xp.where(day, cosz, f4(1.0))
+        ioh = f4(self.state.solar.solcon) * c
+        kt = swdown / xp.maximum(ioh, f4(1.0e-3))
+        airmass = xp.exp(-xp.asarray(ht, dtype=f4) / f4(8434.5)) / (
+            c + f4(0.50572) * xp.power(
+                xp.arcsin(c) * f4(57.295779513082323) + f4(6.07995),
                 f4(-1.6364)))
-        kt = kt / (f4(0.1) + f4(1.031) * cp.exp(
-            f4(-1.4) / (f4(0.9) + f4(9.4) / cp.maximum(airmass, f4(1.0e-3)))))
-        kd = f4(0.952) - f4(1.041) * cp.exp(-cp.exp(f4(2.300) - f4(4.702) * kt))
-        fields["swddif"][...] = cp.where(day, kd * swdown, f4(0.0))
-        fields["swddir"][...] = cp.where(day, (f4(1.0) - kd) * swdown,
-                                         f4(0.0))
+        kt = kt / (f4(0.1) + f4(1.031) * xp.exp(
+            f4(-1.4) / (f4(0.9) + f4(9.4) / xp.maximum(airmass, f4(1.0e-3)))))
+        kd = f4(0.952) - f4(1.041) * xp.exp(-xp.exp(f4(2.300) - f4(4.702) * kt))
+        return (xp.where(day, kd * swdown, f4(0.0)),
+                xp.where(day, (f4(1.0) - kd) * swdown, f4(0.0)))
 
     # -- the LSM handover --------------------------------------------------
     def noah_kernel_args(self) -> dict:

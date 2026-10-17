@@ -50,8 +50,8 @@ def submit_bep_bem_albedo(context, p_num: MetalArray, q_num: MetalArray,
         "urban_bep_bem_albedo_fragment",
         {"p_num": p_num, "q_num": q_num,
          "albwin": albwin, "error": error},
-        {"ncase": ncase}, exact_policy=False, grid_size=ncase,
-        threads_per_group=64)
+        {"ncase": ncase}, exact_policy=False, grid_size=ncase * 256,
+        threads_per_group=256)
 
 
 def launch_bep_bem_albedos_metal(context, nclass: int):

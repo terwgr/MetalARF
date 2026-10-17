@@ -38,6 +38,12 @@ _FLOAT_SURFACE_OUTPUTS = (
 )
 _KERNEL_OUTPUTS = _VOLUME_OUTPUTS + _SURFACE_OUTPUTS
 _VALIDATE_FLOAT_OUTPUTS = _VOLUME_OUTPUTS + _FLOAT_SURFACE_OUTPUTS
+#: WRF's flag_bep source terms in ``ysu_column`` resource order
+#: (woof.core.ysu.YSU_BEP_TERMS). ``sf_bep`` may carry nz+1 levels.
+_BEP_TERMS = (
+    "a_u_bep", "a_v_bep", "a_t_bep", "a_q_bep", "b_u_bep",
+    "b_v_bep", "b_t_bep", "b_q_bep", "sf_bep", "vl_bep",
+)
 _TPG = 32
 _MAX_TILE_COLUMNS = 1024
 _WORKSPACE_SLOTS = 18
@@ -81,13 +87,19 @@ def submit_ysu_column(
     ysu_topdown_pblmix: int = 1,
     topo: tuple[MetalArray, MetalArray] | None = None,
     u10_out: MetalArray | None = None, v10_out: MetalArray | None = None,
+    bep: Mapping[str, MetalArray] | None = None,
+    frc_urb2d: MetalArray | None = None,
 ) -> dict[str, MetalArray]:
-    """Submit ordinary (non-BEP) YSU PBL columns, optionally topo_wind's.
+    """Submit YSU PBL columns, optionally topo_wind's or the BEP arm.
 
     All 23 fields must be contiguous float32 arrays resident in ``context``;
     the interface pressure has ``nz+1`` levels. Outputs follow the established
     ``launch_ysu`` order, with int32 ``kpbl`` and ``cloudflg``. No host
     numerical fallback, transfer, or full-domain YSU workspace is used.
+
+    ``bep`` (sf_urban_physics 2/3) is ``UrbanState.pbl_terms`` and selects
+    WRF's flag_bep arm as ``woof.core.ysu.launch_ysu`` does; ``frc_urb2d`` is
+    shape-checked but not read (ysu.cu's declared rural-drag divergence).
     """
     if WRF_EXACT:
         raise NotImplementedError(
@@ -138,6 +150,28 @@ def submit_ysu_column(
 
     arrays = dict(input_values)
     arrays.update(out)
+    if bep is not None:
+        if topo is not None:
+            raise ValueError(
+                "topo_wind does not combine with the BEP arm: the BEP column "
+                "removes YSU's whole own surface drag, the drag ctopo scales")
+        _validate_array("frc_urb2d", frc_urb2d, context=context,
+                        shape=surface_shape)
+        for name in _BEP_TERMS:
+            value = bep[name]
+            if name == "sf_bep" and isinstance(value, MetalArray) \
+                    and value.shape == (nz + 1, ny, nx):
+                _validate_array(name, value, context=context,
+                                shape=(nz + 1, ny, nx))
+            else:
+                _validate_array(name, value, context=context,
+                                shape=volume_shape)
+            arrays[name] = value
+    elif frc_urb2d is not None:
+        raise ValueError("frc_urb2d is only read with bep")
+    else:
+        # Off, the BEP slots carry an input volume as unread placeholders.
+        arrays.update({name: theta for name in _BEP_TERMS})
     # topo_wind (bl_ysu.F90 ctopo-present arm): ctopo/ctopo2 and the
     # hill-top 10 m blend into u10_out/v10_out.  Off, the slots carry the
     # surface fields as unread placeholders.
@@ -167,6 +201,7 @@ def submit_ysu_column(
                 "dt": float(dt),
                 "ysu_topdown_pblmix": int(bool(ysu_topdown_pblmix)),
                 "topo": int(topo is not None),
+                "bep": int(bep is not None),
             }
             context.submit_kernel(
                 "ysu_column", call_arrays, params, exact_policy=False,

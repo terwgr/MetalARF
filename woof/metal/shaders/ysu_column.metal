@@ -7,8 +7,8 @@
 using namespace metal;
 
 // Ordinary WRF v4.6.1 YSU column, with the topo_wind arm (p.topo = 1:
-// ysu_topo.cuh / bl_ysu.F90:1254-1314 and :1402-1408). The BEP variant is
-// absent from this entry point and is rejected by the Python dispatcher.
+// ysu_topo.cuh / bl_ysu.F90:1254-1314 and :1402-1408) and the flag_bep arm
+// (p.bep = 1: sf_urban_physics 2/3, ysu.cu ysu_column_body<true>).
 // Source operation order follows woof/core/kernels/ysu.cu / bl_ysu.F90.
 // The ordinary CUDA YSU kernel permits multiply-add contraction (the
 // recorded NVRTC options do not disable fmad). Preserve that policy here.
@@ -26,6 +26,11 @@ static inline float yget(YsuCol a, int k) { return a.p[k * int(YSU_LANES)]; }
 static inline void yset(YsuCol a, int k, float x) { a.p[k * int(YSU_LANES)] = x; }
 static inline float yrndiv(float a,float b) {
     return as_type<float>(soft32_div(as_type<uint>(a),as_type<uint>(b)));
+}
+// The BEP forcing products are rounded before the add, as ysu.cu's
+// __fmul_rn keeps NVRTC from fusing them; contraction is on in this file.
+static inline float ymul_rn(float a,float b) {
+    return as_type<float>(soft32_mul(as_type<uint>(a),as_type<uint>(b)));
 }
 static inline float ymin(float a, float b) { return isnan(a) ? a : (a < b ? a : b); }
 static inline float ymax(float a, float b) { return isnan(a) ? a : (a > b ? a : b); }
@@ -169,6 +174,20 @@ static inline void ythomas(YsuCol lower,YsuCol diag,YsuCol upper,
     for(int k=nz-2;k>=0;--k) yset(rhs,k,yget(rhs,k)-yget(gamma,k)*yget(rhs,k+1));
 }
 
+// bl_ysu.F90 tridi2n's f2 arm (ysu.cu ysu_tridi2n_v): the v column pivots on
+// its own diagonal but eliminates with the u solve's gamma.
+static inline void ytridi2n_v(YsuCol lower,YsuCol diag_v,YsuCol gamma_u,
+                              YsuCol rhs,int nz) {
+    float inv=1.0f/yget(diag_v,0); yset(rhs,0,yget(rhs,0)*inv);
+    for(int k=1;k<nz-1;++k){
+        inv=1.0f/(yget(diag_v,k)-yget(lower,k)*yget(gamma_u,k-1));
+        yset(rhs,k,(yget(rhs,k)-yget(lower,k)*yget(rhs,k-1))*inv);
+    }
+    inv=1.0f/(yget(diag_v,nz-1)-yget(lower,nz-1)*yget(gamma_u,nz-2));
+    yset(rhs,nz-1,(yget(rhs,nz-1)-yget(lower,nz-1)*yget(rhs,nz-2))*inv);
+    for(int k=nz-2;k>=0;--k) yset(rhs,k,yget(rhs,k)-yget(gamma_u,k)*yget(rhs,k+1));
+}
+
 // bl_ysu.F90 get_pblh (ysu_topo.cuh ysu_get_pblh), on the column workspace.
 static inline float ysu_get_pblh(YsuCol thv, YsuCol tke, YsuCol zq, int nz, float landsea) {
     const float sbl_lim=200.0f, sbl_damp=400.0f;
@@ -243,9 +262,10 @@ kernel void ysu_column(
     YsuCol rhs{base+(16u*uint(p.wskp))*YSU_LANES+lane};
     YsuCol gamma{base+(17u*uint(p.wskp))*YSU_LANES+lane};
     const int ts=p.ysu_topdown_pblmix;
+    const bool bep=p.bep!=0;
 
     float us=r.ust[col], hf=r.hfx[col], qf=r.qfx[col];
-    if(us==0.0f&&hf==0.0f&&qf==0.0f){
+    if(!bep&&us==0.0f&&hf==0.0f&&qf==0.0f){
         for(int k=0;k<nz;++k){int q=k*st+col;r.du[q]=r.dv[q]=r.dtheta[q]=r.dqv[q]=r.dqc[q]=r.dqi[q]=0.0f;r.exch_h[q]=r.exch_m[q]=0.0f;}
         r.hpbl[col]=r.dz[col];r.kpbl[col]=1;r.wstar[col]=r.delta[col]=0.0f;
         r.topdown_radsum[col]=r.wstar3_2[col]=0.0f;r.cloudflg[col]=0;if(p.topo)ysu_topo_blend_u10(r,r.u[col],r.v[col],col);return;
@@ -359,22 +379,37 @@ kernel void ysu_column(
 
     // Heat diffusion/countergradient system and theta tendency.
     for(int k=0;k<nz;++k){yset(lower,k,0.0f);yset(diag,k,0.0f);yset(upper,k,0.0f);yset(rhs,k,0.0f);}
-    yset(diag,0,1.0f);yset(rhs,0,theta0-300.0f+yrndiv(hf,(YSU_CP/YSU_G))/yget(delp,0)*dt2);
-    for(int k=0;k<nz-1;++k){float dtodsd=dt2/yget(delp,k),dtodsu=dt2/yget(delp,k+1),dsig=r.p[k*st+col]-r.p[(k+1)*st+col],rdz=1.0f/yget(dza,k+1),tem1=dsig*yget(xkzh,k)*rdz;
+    // bl_ysu.F90:1045, bepswitch = 1: YSU's own surface heat flux is a
+    // signed zero; the rural flux enters through b_t_bep(1).
+    yset(diag,0,1.0f);yset(rhs,0,theta0-300.0f+yrndiv(bep?0.0f*hf:hf,(YSU_CP/YSU_G))/yget(delp,0)*dt2);
+    for(int k=0;k<nz-1;++k){float sfk=bep?r.sf_bep[k*st+col]:1.0f;float dtodsd=bep?sfk*dt2/yget(delp,k):dt2/yget(delp,k),dtodsu=bep?sfk*dt2/yget(delp,k+1):dt2/yget(delp,k+1),dsig=r.p[k*st+col]-r.p[(k+1)*st+col],rdz=1.0f/yget(dza,k+1),tem1=dsig*yget(xkzh,k)*rdz;
         if(pblflg&&k+1<kpbl){float flux=tem1*(-hgamt/hpbl-hfxpbl*yget(zfacent,k)/yget(xkzh,k));yset(rhs,k,yget(rhs,k)+dtodsd*flux);yset(rhs,k+1,r.theta[(k+1)*st+col]-300.0f-dtodsu*flux);}
         else if(pblflg&&k+1>=kpbl&&yget(entfac,k)<4.6f){float knew=-we*yget(dza,kpbl-1)*exp(-yget(entfac,k));yset(xkzh,k,yclip(sqrt(ymax(knew*yget(xkzhl,k),0.0f)),xkzminh,xkzmax));yset(rhs,k+1,r.theta[(k+1)*st+col]-300.0f);}
         else yset(rhs,k+1,r.theta[(k+1)*st+col]-300.0f);
-        float dsdz2=dsig*yget(xkzh,k)*rdz*rdz;yset(upper,k,-dtodsd*dsdz2);yset(lower,k+1,-dtodsu*dsdz2);yset(diag,k,yget(diag,k)-yget(upper,k));yset(diag,k+1,1.0f-yget(lower,k+1));}
+        float dsdz2=dsig*yget(xkzh,k)*rdz*rdz;
+        if(bep){float vlk=r.vl_bep[k*st+col];yset(upper,k,-dtodsd*dsdz2/vlk);yset(lower,k+1,-dtodsu*dsdz2/vlk);}
+        else{yset(upper,k,-dtodsd*dsdz2);yset(lower,k+1,-dtodsu*dsdz2);}
+        yset(diag,k,yget(diag,k)-yget(upper,k));yset(diag,k+1,1.0f-yget(lower,k+1));}
+    // bl_ysu.F90:1078-1083: implicit/explicit urban heat forcing.
+    if(bep)for(int k=0;k<nz;++k){int q=k*st+col;yset(diag,k,yget(diag,k)-ymul_rn(r.a_t_bep[q],dt2));yset(rhs,k,yget(rhs,k)+ymul_rn(r.b_t_bep[q],dt2));}
     ythomas(lower,diag,upper,rhs,gamma,nz);
     for(int k=0;k<nz;++k){int q=k*st+col;r.dtheta[q]=(yget(rhs,k)-r.theta[q]+300.0f)*rdt;}
 
     // Vapor matrix reused for cloud water and ice exactly as WRF's tridi2n.
-    for(int k=0;k<nz;++k){yset(lower,k,0.0f);yset(diag,k,0.0f);yset(upper,k,0.0f);yset(rhs,k,0.0f);}yset(diag,0,1.0f);yset(rhs,0,qv0+qf*YSU_G/yget(delp,0)*dt2);
-    for(int k=0;k<nz-1;++k){float ds=dt2/yget(delp,k),du=dt2/yget(delp,k+1),dsig=r.p[k*st+col]-r.p[(k+1)*st+col],rdz=1.0f/yget(dza,k+1),tem1=dsig*yget(xkzq,k)*rdz;
+    for(int k=0;k<nz;++k){yset(lower,k,0.0f);yset(diag,k,0.0f);yset(upper,k,0.0f);yset(rhs,k,0.0f);}yset(diag,0,1.0f);yset(rhs,0,qv0+(bep?0.0f*qf:qf)*YSU_G/yget(delp,0)*dt2);
+    for(int k=0;k<nz-1;++k){float sfk=bep?r.sf_bep[k*st+col]:1.0f;float ds=bep?sfk*dt2/yget(delp,k):dt2/yget(delp,k),du=bep?sfk*dt2/yget(delp,k+1):dt2/yget(delp,k+1),dsig=r.p[k*st+col]-r.p[(k+1)*st+col],rdz=1.0f/yget(dza,k+1),tem1=dsig*yget(xkzq,k)*rdz;
         if(pblflg&&k+1<kpbl){float flux=tem1*(-qfxpbl*yget(zfacent,k)/yget(xkzq,k));yset(rhs,k,yget(rhs,k)+ds*flux);yset(rhs,k+1,r.qv[(k+1)*st+col]-du*flux);}
         else if(pblflg&&k+1>=kpbl&&yget(entfac,k)<4.6f){float knew=-we*yget(dza,kpbl-1)*exp(-yget(entfac,k));yset(xkzq,k,yclip(sqrt(ymax(knew*yget(xkzhl,k),0.0f)),xkzminh,xkzmax));yset(rhs,k+1,r.qv[(k+1)*st+col]);}
-        else yset(rhs,k+1,r.qv[(k+1)*st+col]);float dsdz2=dsig*yget(xkzq,k)*rdz*rdz;yset(upper,k,-ds*dsdz2);yset(lower,k+1,-du*dsdz2);yset(diag,k,yget(diag,k)-yget(upper,k));yset(diag,k+1,1.0f-yget(lower,k+1));}
-    ythomas(lower,diag,upper,rhs,gamma,nz);for(int k=0;k<nz;++k)r.dqv[k*st+col]=(yget(rhs,k)-r.qv[k*st+col])*rdt;
+        else yset(rhs,k+1,r.qv[(k+1)*st+col]);float dsdz2=dsig*yget(xkzq,k)*rdz*rdz;
+        if(bep){float vlk=r.vl_bep[k*st+col];yset(upper,k,-ds*dsdz2/vlk);yset(lower,k+1,-du*dsdz2/vlk);}
+        else{yset(upper,k,-ds*dsdz2);yset(lower,k+1,-du*dsdz2);}
+        yset(diag,k,yget(diag,k)-yget(upper,k));yset(diag,k+1,1.0f-yget(lower,k+1));}
+    // bl_ysu.F90:1164-1168: vapor alone solves with ad - a_q*dt2; cloud water
+    // and ice reuse the unforced diagonal. xkzhl is dead here and holds it.
+    if(bep){for(int k=0;k<nz;++k){int q=k*st+col;yset(xkzhl,k,yget(diag,k)-ymul_rn(r.a_q_bep[q],dt2));yset(rhs,k,yget(rhs,k)+ymul_rn(r.b_q_bep[q],dt2));}
+        ythomas(lower,xkzhl,upper,rhs,gamma,nz);}
+    else ythomas(lower,diag,upper,rhs,gamma,nz);
+    for(int k=0;k<nz;++k)r.dqv[k*st+col]=(yget(rhs,k)-r.qv[k*st+col])*rdt;
     for(int k=0;k<nz;++k)yset(rhs,k,r.qc[k*st+col]);ythomas(lower,diag,upper,rhs,gamma,nz);for(int k=0;k<nz;++k)r.dqc[k*st+col]=(yget(rhs,k)-r.qc[k*st+col])*rdt;
     for(int k=0;k<nz;++k)yset(rhs,k,r.qi[k*st+col]);ythomas(lower,diag,upper,rhs,gamma,nz);for(int k=0;k<nz;++k)r.dqi[k*st+col]=(yget(rhs,k)-r.qi[k*st+col])*rdt;
 
@@ -399,15 +434,27 @@ kernel void ysu_column(
         float vconvnew=0.9f*vconv+1.5f*ymax((pblh_ysu-500.0f)/1000.0f,0.0f),vconvlim=ymin(vconvnew,1.0f);
         yset(diag,0,1.0f+fric*vconvlim+r.ctopo[col]*fric*(1.0f-vconvlim));
     } else yset(diag,0,1.0f+fric);
+    // Declared divergence (ysu.cu): the BEP couple already carries the rural
+    // surface drag in a_u_bep/a_v_bep, so the whole of YSU's own drag is
+    // removed instead of WRF's urban fraction of it.
+    if(bep)yset(diag,0,yget(diag,0)-fric);
     yset(rhs,0,u0);
-    for(int k=0;k<nz-1;++k){float ds=dt2/yget(delp,k),du=dt2/yget(delp,k+1),dsig=r.p[k*st+col]-r.p[(k+1)*st+col],rdz=1.0f/yget(dza,k+1),tem1=dsig*yget(xkzm,k)*rdz;
+    for(int k=0;k<nz-1;++k){float sfk=bep?r.sf_bep[k*st+col]:1.0f;float ds=bep?sfk*dt2/yget(delp,k):dt2/yget(delp,k),du=bep?sfk*dt2/yget(delp,k+1):dt2/yget(delp,k+1),dsig=r.p[k*st+col]-r.p[(k+1)*st+col],rdz=1.0f/yget(dza,k+1),tem1=dsig*yget(xkzm,k)*rdz;
         if(pblflg&&k+1<kpbl){float flux=tem1*(-hgamu/hpbl-ufxpbl*yget(zfacent,k)/yget(xkzm,k));yset(rhs,k,yget(rhs,k)+ds*flux);yset(rhs,k+1,r.u[(k+1)*st+col]-du*flux);}
         else if(pblflg&&k+1>=kpbl&&yget(entfac,k)<4.6f){yset(xkzm,k,yclip(sqrt(ymax(yget(xkzh,k)*yget(xkzml,k),0.0f)),xkzminm,xkzmax));yset(rhs,k+1,r.u[(k+1)*st+col]);}
-        else yset(rhs,k+1,r.u[(k+1)*st+col]);float dsdz2=dsig*yget(xkzm,k)*rdz*rdz;yset(upper,k,-ds*dsdz2);yset(lower,k+1,-du*dsdz2);yset(diag,k,yget(diag,k)-yget(upper,k));yset(diag,k+1,1.0f-yget(lower,k+1));}
+        else yset(rhs,k+1,r.u[(k+1)*st+col]);float dsdz2=dsig*yget(xkzm,k)*rdz*rdz;
+        if(bep){float vlk=r.vl_bep[k*st+col];yset(upper,k,-ds*dsdz2/vlk);yset(lower,k+1,-du*dsdz2/vlk);}
+        else{yset(upper,k,-ds*dsdz2);yset(lower,k+1,-du*dsdz2);}
+        yset(diag,k,yget(diag,k)-yget(upper,k));yset(diag,k+1,1.0f-yget(lower,k+1));}
+    // bl_ysu.F90:1359-1368: entfac is dead after the assembly and holds ad1,
+    // the v diagonal; f2's b_v is added after the v RHS rebuild below.
+    if(bep)for(int k=0;k<nz;++k){int q=k*st+col;yset(entfac,k,yget(diag,k)-ymul_rn(r.a_v_bep[q],dt2));yset(diag,k,yget(diag,k)-ymul_rn(r.a_u_bep[q],dt2));yset(rhs,k,yget(rhs,k)+ymul_rn(r.b_u_bep[q],dt2));}
     ythomas(lower,diag,upper,rhs,gamma,nz);for(int k=0;k<nz;++k)r.du[k*st+col]=(yget(rhs,k)-r.u[k*st+col])*rdt;
     for(int k=0;k<nz;++k)yset(rhs,k,r.v[k*st+col]);
-    for(int k=0;k<nz-1;++k)if(pblflg&&k+1<kpbl){float ds=dt2/yget(delp,k),du=dt2/yget(delp,k+1),dsig=r.p[k*st+col]-r.p[(k+1)*st+col],rdz=1.0f/yget(dza,k+1),tem1=dsig*yget(xkzm,k)*rdz;float flux=tem1*(-hgamv/hpbl-vfxpbl*yget(zfacent,k)/yget(xkzm,k));yset(rhs,k,yget(rhs,k)+ds*flux);yset(rhs,k+1,r.v[(k+1)*st+col]-du*flux);}
-    ythomas(lower,diag,upper,rhs,gamma,nz);for(int k=0;k<nz;++k)r.dv[k*st+col]=(yget(rhs,k)-r.v[k*st+col])*rdt;
+    for(int k=0;k<nz-1;++k)if(pblflg&&k+1<kpbl){float sfk=bep?r.sf_bep[k*st+col]:1.0f;float ds=bep?sfk*dt2/yget(delp,k):dt2/yget(delp,k),du=bep?sfk*dt2/yget(delp,k+1):dt2/yget(delp,k+1),dsig=r.p[k*st+col]-r.p[(k+1)*st+col],rdz=1.0f/yget(dza,k+1),tem1=dsig*yget(xkzm,k)*rdz;float flux=tem1*(-hgamv/hpbl-vfxpbl*yget(zfacent,k)/yget(xkzm,k));yset(rhs,k,yget(rhs,k)+ds*flux);yset(rhs,k+1,r.v[(k+1)*st+col]-du*flux);}
+    if(bep){for(int k=0;k<nz;++k)yset(rhs,k,yget(rhs,k)+ymul_rn(r.b_v_bep[k*st+col],dt2));ytridi2n_v(lower,entfac,gamma,rhs,nz);}
+    else ythomas(lower,diag,upper,rhs,gamma,nz);
+    for(int k=0;k<nz;++k)r.dv[k*st+col]=(yget(rhs,k)-r.v[k*st+col])*rdt;
     r.exch_h[col]=r.exch_m[col]=0.0f;for(int k=1;k<nz;++k){r.exch_h[k*st+col]=yget(xkzh,k-1);r.exch_m[k*st+col]=yget(xkzm,k-1);}
     r.hpbl[col]=hpbl;r.kpbl[col]=kpbl;r.wstar[col]=wstar;r.delta[col]=delta;r.topdown_radsum[col]=topdown_radsum;r.wstar3_2[col]=wstar3_2;r.cloudflg[col]=cloudflg?1:0;
     if(p.topo)ysu_topo_blend_u10(r,u0,v0,col);
