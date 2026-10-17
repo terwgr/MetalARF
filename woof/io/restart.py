@@ -831,6 +831,10 @@ REBUILT_SCRATCH_PREFIXES = (
     # The Metal RUC sea-ice MYNN surface inputs, refilled by
     # submit_mynn_prepare on every call (core/physics.py).
     "mynn_seaice_",
+    # The Metal MYJ PBL outputs (woof/metal/myjpbl_family.py), written in
+    # full by every call; the diagnostics are copied into driver.fields and
+    # the rates are mass-coupled into new arrays before the call returns.
+    "myjpbl_",
     # The km_opt=2 TKE budget's own slots (woof/core/tke_budget.py).  The
     # per-term 3-D fields and the mu totals are rewritten inside every step
     # before anything reads them.  The slab accumulator and its step counter
