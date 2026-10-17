@@ -380,6 +380,20 @@ class DudhiaShortwaveRadiation:
         qi = self._state_field(state, "qi", atmosphere["qi"])
         qs = self._state_field(state, "qs", zero)
         qg = self._state_field(state, "qg", zero)
+        if mynn_bl_cloud_active(
+                getattr(cfg, "bl_pbl_physics", 0), getattr(cfg, "icloud_bl", 0)):
+            qc, qi = qc.copy(), qi.copy()
+            # The merge is pointwise; retain the mass grid's storage order.
+            def merge_view(value):
+                return value.view((nz, ny * nx), byte_offset=value.byte_offset)
+
+            merge_mynn_bl_clouds(
+                merge_view(qc), merge_view(qi), None,
+                qc_bl=merge_view(fields["qc_bl"]),
+                qi_bl=merge_view(fields["qi_bl"]),
+                cldfra_bl=merge_view(fields["cldfra_bl"]),
+                bl_pbl_physics=cfg.bl_pbl_physics, icloud_bl=cfg.icloud_bl,
+                itimestep=wrf_itimestep(state.elapsed_seconds, cfg.dt))
         valid_time = (self.start_time
                       + timedelta(seconds=float(state.elapsed_seconds)))
         radt_minutes = cfg.radt if cfg.radt > 0.0 else cfg.radt_minutes
