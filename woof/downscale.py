@@ -1994,10 +1994,11 @@ def _downscale_main(args, reservation: _OutputReservation,
     # disagreement earns prints exactly once.
     tiles_options = resolve_child_streaming_options(
         child_config, getattr(args, "tiles", None))
-    if getattr(args, "backend", "cuda") == "metal" and tiles_options.enabled:
-        raise OfflineChildContractError(
-            "a Metal downscaled child runs resident; remove [tiles] or "
-            "set its mode off")
+    if getattr(args, "backend", "cuda") == "metal":
+        from woof.offline_child_run import metal_tiles_refusal
+        tiles_refusal = metal_tiles_refusal(tiles_options)
+        if tiles_refusal is not None:
+            raise OfflineChildContractError(tiles_refusal)
     _validate_child_window(cfg.run_seconds, window_seconds)
     archive_frame_count = len(frames)
     frames = _frames_for_child_window(contract, cfg.run_seconds)

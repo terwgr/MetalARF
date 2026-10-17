@@ -152,6 +152,10 @@ def submit_kf_columns(state, *, u, v, temperature, qv, qc, pressure,
     }
     for col0 in range(0, ncol, tile):
         span = min(tile, ncol - col0)
+        if span != tile:
+            # The shader strides the workspace by tile_ncol, so the short
+            # last span takes a workspace of its own width.
+            resources["workspace"] = xp.empty((52, nz, span), dtype=np.float32)
         context.submit_kernel(
             "kf_column", resources,
             {**params_base, "col0": col0, "tile_ncol": span},

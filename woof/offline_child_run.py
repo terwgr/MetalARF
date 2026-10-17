@@ -2282,7 +2282,8 @@ def _output_fields(state, initial, refl_field=None,
 
     if getattr(state, "_metal_setup_state", False):
         def host(array):
-            return array.to_numpy()
+            # A streamed domain hands back planes already folded to the host.
+            return array if isinstance(array, np.ndarray) else array.to_numpy()
     else:
         import cupy as cp
         host = cp.asnumpy
@@ -3054,6 +3055,25 @@ def _interpolation_price(contract, placement, cfg):
         parent_fields=8 + species, child_cfg=cfg)
 
 
+def metal_tiles_refusal(tiles) -> str | None:
+    """Why ``[tiles]`` cannot step a Metal child, or None.
+
+    The Metal rectangle kernels gather pinned tiles from a resident
+    device domain, so only a pinned ``mode = 'on'`` with
+    ``store = 'device'`` is admitted.
+    """
+    if not tiles.enabled:
+        return None
+    if tiles.mode != "on" or tiles.tile_nx is None or tiles.tile_ny is None:
+        return ("Metal tile streaming requires [tiles] mode = 'on' with an "
+                "explicit pinned tile extent")
+    if tiles.store != "device":
+        return ("Metal tile streaming requires [tiles] store = 'device'; "
+                "host-store transfers are not admitted by the Metal "
+                "rectangle kernels")
+    return None
+
+
 def _run(args: argparse.Namespace,
          progress: "_ChildProgress", array_module=None) -> dict[str, object]:
     """Integrate the child; ``array_module`` is a MetalArrayModule on Metal."""
@@ -3348,21 +3368,25 @@ def _run(args: argparse.Namespace,
     # (17,033,346,128 B for a 552x552x49 child on a 15.47 GiB card that the
     # review and a --tiles=auto run both priced at 14,922,267,728 B).
     if metal:
-        # Unified memory: the child runs resident, priced by the Metal gate.
-        if tiles.enabled:
-            raise OfflineChildContractError(
-                "a Metal downscaled child runs resident; remove [tiles] or "
-                "set its mode off")
+        # Unified memory: the child is held resident, priced by the Metal
+        # gate.  A pinned [tiles] block steps it tile by tile through the
+        # Metal rectangle kernels, which gather from that resident domain.
+        tiles_refusal = metal_tiles_refusal(tiles)
+        if tiles_refusal is not None:
+            raise OfflineChildContractError(tiles_refusal)
         from woof.metal import memory_gate as metal_memory
         estimate = metal_memory.estimate_runs([cfg], array_module.context)
         refusal = metal_memory.refusal_text(
             estimate, [(int(cfg.nx), int(cfg.ny), int(cfg.nz))])
         if refusal is not None and not getattr(args, "no_memory_gate", False):
             raise OfflineChildContractError(refusal)
-        streaming_decision = streaming.StreamingDecision(
-            stream=False, reason="a Metal child runs resident")
+        streaming_decision = (
+            streaming.decide(cfg, tiles) if tiles.enabled else
+            streaming.StreamingDecision(
+                stream=False, reason="a Metal child runs resident"))
         streaming_entry = {
-            "mode": "resident", "why": streaming_decision.reason,
+            "mode": "streamed" if streaming_decision.stream else "resident",
+            "why": streaming_decision.reason,
             "basis": "metal-memory-gate",
             "budget_bytes": int(estimate.limit_bytes),
             "peak_envelope_bytes": int(estimate.peak_bytes)}

@@ -57,13 +57,13 @@ Other commands select Metal the same way:
   `woof resume` take the same flag). A `[case_data]` ensemble runs its
   members serially on one Metal context; each member decodes its own
   inputs, and stochastic members stay refused as on every Metal ensemble.
-  Nests must start with the root: a delayed, spawned or moving nest is
-  refused on this route before any output, and the tree is checked against
-  the Metal memory plan first, as `woof go` does.
+  Delayed, spawned and moving nests (scripted `[relocation]` moves,
+  `[relocation.follow]` and per-domain `follow`) run as on CUDA, and the
+  tree is checked against the Metal memory plan first, as `woof go` does.
 - `woof sim --backend metal`; `woof downscale --backend metal` (the parent is
   interpolated on the CPU, a microphysics change converts through the Metal
-  edge kernel, and the child runs resident, so `[tiles]` and `--auto-vram`
-  are refused);
+  edge kernel, and the child is held resident: `[tiles]` steps it under the
+  Metal tiling rule below, and `--auto-vram` is refused);
   `woof hex cycle run --backend metal` (the CUDA contract deck, a CUDA
   kernel self-check, is skipped and recorded as skipped); and `woof stream`
   with `[run] backend = "metal"` in its plan.
