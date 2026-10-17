@@ -30,8 +30,18 @@ _INT = np.dtype(np.int32)
 _U32 = np.dtype(np.uint32)
 
 
+def ruc_workspace_bytes(n: int, *, table_words: int = 0) -> int:
+    """The packed slab, pending rain plane and status allocation."""
+    if type(n) is not int or not 0 <= n <= _I32_MAX:
+        raise ValueError("RUC Metal workspace extent must fit int32")
+    if type(table_words) is not int or table_words < 0:
+        raise ValueError("RUC Metal table extent must be a nonnegative int")
+    words = (TABLE_BASE_UNITS + 1) * max(n, 1) + table_words
+    return max(4, words * 4) + 35 * 8
+
+
 class RucMetalWorkspace:
-    """One per-call packed RUC workspace over a shared Metal buffer."""
+    """The packed RUC workspace retained by one forecast's parameter owner."""
 
     def __init__(self, context, n: int, *, table_words: int = 0):
         if type(n) is not int or not 0 <= n <= _I32_MAX:
@@ -46,7 +56,7 @@ class RucMetalWorkspace:
         self.table_words = table_words
         self.pending_base = self.table_base + table_words
         words = self.pending_base + max(n, 1)
-        self.buffer = context.buffer(max(4, words * 4))
+        self.buffer = context.buffer(ruc_workspace_bytes(n, table_words=table_words) - 35 * 8)
         self.raw = MetalArray(self.buffer, (words,), _U32)
         self.pending_rainbl = self._view(self.pending_base, n, _FLOAT)
         flag_buffer = context.buffer(35 * 8)

@@ -1243,6 +1243,7 @@ class PreparedEnsembleSession:
             if isinstance(result, dict) and result.get("status") not in (None, "PASS"):
                 raise RuntimeError(f"Metal ensemble member {member} returned {result.get('status')}")
             completed.append({"member_id": member, "result": result})
+            release_finished_member(array_module)
         products = self.collector.finish_run()
         self.collector.require_complete()
         manifest = {"schema": "gpuwm-ensemble-run.v1", "status": "PASS",

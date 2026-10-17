@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from math import prod
+from weakref import WeakKeyDictionary
 
 import numpy as np
 
@@ -38,7 +39,7 @@ _OUTPUT_ADMISSIONS = (
     ruc.RUC_DRIVER_COLUMN_STATE + ruc.RUC_DRIVER_PROFILE_STATE
     + _LOCAL_OUTPUTS
 )
-_WORKSPACES = {}
+_WORKSPACES = WeakKeyDictionary()
 _TABLE_NAMES = (
     "ifortbl", "z0tbl", "lemitbl", "pctbl", "laitbl", "bb", "drysmc",
     "hc", "maxsmc", "refsmc", "satpsi", "satdk", "wltsmc", "qtz",
@@ -277,9 +278,13 @@ def step(fields, atmosphere, *, params, precipitation, dt, itimestep,
     xice_threshold = np.float32(params.xice_threshold)
     table_words = sum(array.size for array in tables.values())
     key = (id(context), n, table_words)
-    workspace = _WORKSPACES.get(key)
-    if workspace is None:
-        workspace = _WORKSPACES[key] = RucMetalWorkspace(
+    # Parameter owners live with their forecast, unlike a process-wide
+    # context/shape key. Finished ensemble members release their slabs while
+    # successive calls on the same domain retain the same workspace.
+    owned = _WORKSPACES.setdefault(params, {})
+    workspace = owned.get(key)
+    if workspace is None or workspace.context is not context:
+        workspace = owned[key] = RucMetalWorkspace(
             context, n, table_words=table_words)
     if enabled_spp:
         raw_float = workspace.raw.view(

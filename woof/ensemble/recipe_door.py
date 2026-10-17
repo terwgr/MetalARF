@@ -599,6 +599,7 @@ def admit(plans, *, config, geog_root, case_root, request, options=None,
 
     options = options or {}
     metal_backend = options.get("backend") == "metal"
+    plans = list(plans)
     if not metal_backend:
         capabilities.require(
             f"woof {command}", capabilities.GPU_RUNTIME,
@@ -608,6 +609,23 @@ def admit(plans, *, config, geog_root, case_root, request, options=None,
     try:
         if not metal_backend:
             go_cli._require_forecast_device()
+        if metal_backend and not options.get("no_memory_gate"):
+            from woof.metal import memory_gate as metal_memory
+            from woof.metal.runtime import MetalContext
+
+            if len(plans) != int(request.members):
+                raise RecipeRefusal("Metal memory admission needs every requested member plan")
+            with MetalContext() as context:
+                gate = metal_memory.estimate_ensemble(
+                    [plan.experiment for plan in plans], context)
+            _say(f"Metal memory ({len(plans)} serial members) -- needs about "
+                 f"{gate.peak_bytes / 2**30:.1f} GiB; plan limit "
+                 f"{gate.limit_bytes / 2**30:.1f} GiB")
+            refusal = metal_memory.refusal_text(gate,
+                [(int(domain.run.nx), int(domain.run.ny), int(domain.run.nz))
+                 for domain in plans[0].experiment.domains], ensemble_members=len(plans))
+            if refusal is not None:
+                raise RecipeRefusal(refusal)
         if not metal_backend and not options.get("no_memory_gate"):
             # Once per prepared authority: surface arms share a bank,
             # while different soil layouts retain their own inventory.

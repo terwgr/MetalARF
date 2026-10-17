@@ -4411,9 +4411,7 @@ def _registered_launch(args, *, config: Path, payload: dict) -> int:
         domains = [(int(d.run.nx), int(d.run.ny), int(d.run.nz))
                    for d in exp.domains]
         with MetalContext() as context:
-            estimate = metal_memory.estimate(domains, context,
-                cumulus=[d.run.cu_physics for d in exp.domains],
-                spp_conv=[d.run.spp_conv for d in exp.domains])
+            estimate = metal_memory.estimate_runs([d.run for d in exp.domains], context)
         print(f"go: Metal memory -- needs about "
               f"{estimate.peak_bytes / 2**30:.1f} GiB; plan limit "
               f"{estimate.limit_bytes / 2**30:.1f} GiB")
@@ -5512,9 +5510,8 @@ def _go_prepared_main(args, *, observer=None) -> int:
                     for domain in experiment.domains
                 ]
                 with MetalContext() as context:
-                    estimate = metal_memory.estimate(domains, context,
-                        cumulus=[d.run.cu_physics for d in experiment.domains],
-                        spp_conv=[d.run.spp_conv for d in experiment.domains])
+                    estimate = metal_memory.estimate_runs(
+                        [d.run for d in experiment.domains], context)
                 print("go: Metal memory -- needs about "
                       f"{estimate.peak_bytes / 2**30:.1f} GiB; plan limit "
                       f"{estimate.limit_bytes / 2**30:.1f} GiB")

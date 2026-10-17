@@ -50,6 +50,7 @@ _IMPLEMENTED = frozenset({
     "horiz_mixing", "checkpoint", "restart", "lbc_dir",
     "grid", "static", "convection", "pbl_cadence",
     "local_timestep", "local_timestep_rates", "local_timestep_buffer_rings",
+    "preflight",
 })
 
 
@@ -150,6 +151,8 @@ def run_metal_forecast(arguments: Any) -> int:
     if history_minutes is None:
         raise _refuse("--history-every-minutes is required for --backend metal")
     steps, _ = _schedule(float(hours), int(history_minutes), row.dt_seconds, mesh_name)
+    if _memory_admission(arguments, init, _refuse):
+        return 0
 
     out_raw = getattr(arguments, "out", None)
     if out_raw is None:
@@ -218,6 +221,42 @@ def run_metal_forecast(arguments: Any) -> int:
         history_minutes=int(history_minutes), steps=steps, out=out,
         receipt_path=receipt_path, checkpoint=checkpoint,
         horiz_mixing=horiz_mixing, lbc_paths=lbc_paths)
+
+def _memory_admission(arguments: Any, init: Path, refuse: Any) -> bool:
+    """Refuse a mesh the device cannot hold; True when only a preflight."""
+    import json
+
+    from netCDF4 import Dataset
+
+    from woof.metal.memory_gate import FRACTION_ENV, estimate_hex
+    from woof.metal.runtime import MetalContext
+
+    with Dataset(init, mode="r") as dataset:
+        n_cells = len(dataset.dimensions["nCells"])
+        n_levels = len(dataset.dimensions["nVertLevels"])
+    context = MetalContext()
+    try:
+        estimate = estimate_hex(n_cells, n_levels, context)
+    finally:
+        context.close()
+    if getattr(arguments, "preflight", False):
+        print(json.dumps({
+            "backend": "metal", "cells": n_cells, "levels": n_levels,
+            "estimated_peak_bytes": estimate.peak_bytes,
+            "limit_bytes": estimate.limit_bytes,
+            "fits_device": estimate.fits_device}))
+        if not estimate.fits_device:
+            raise refuse("the estimated Metal memory exceeds the device budget")
+        return True
+    if not estimate.fits_device:
+        raise refuse(
+            f"a {n_cells}-cell, {n_levels}-level Hex physics forecast needs an "
+            f"estimated {estimate.peak_bytes / 2**30:.1f} GiB; the device budget "
+            f"is {estimate.limit_bytes / 2**30:.1f} GiB ({estimate.fraction:.0%} "
+            f"of its {estimate.working_set_bytes / 2**30:.1f} GiB recommended "
+            f"working set). Use a coarser mesh or override with {FRACTION_ENV}.")
+    return False
+
 
 def _run_physics(
     arguments: Any, *, binding_module: Any, mesh_name: str, row: Any,
