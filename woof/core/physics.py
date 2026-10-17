@@ -4382,7 +4382,8 @@ class PhysicsDriver:
                     local_tsk=metal_sea["local_tsk"],
                     sea_tsk=metal_sea["tsk"],
                     sea_mavail=metal_sea["mavail"],
-                    sea_xland=metal_sea["xland"], itimestep=itimestep)
+                    sea_xland=metal_sea["xland"], itimestep=itimestep,
+                    xice_threshold=self.ruc_params.xice_threshold)
                 tsk_local = metal_sea["local_tsk"]
             elif fractional_ruc:
                 # module_surface_driver.F:5402-5421, 5465-5482: the second
@@ -4512,9 +4513,11 @@ class PhysicsDriver:
                         "ust", "wspd", "zol", "ch", "cd", "cda", "ck",
                         "cka", "q2", "t2", "th2", "u10", "ustm", "v10"):
                     submit_mynn_blend(xice=f["xice"], value=f[name],
-                                      sea=f[f"{name}_sea"])
+                                      sea=f[f"{name}_sea"],
+                                      xice_threshold=self.ruc_params.xice_threshold)
                 submit_mynn_blend(xice=f["xice"], value=f["regime"],
-                                  sea=f["regime_sea"], select=True)
+                                  sea=f["regime_sea"], select=True,
+                                  xice_threshold=self.ruc_params.xice_threshold)
             elif fractional_ruc:
                 # module_surface_driver.F:5441-5506.  Force the second call
                 # to open water only on fractional-ice cells and preserve the
@@ -4657,7 +4660,8 @@ class PhysicsDriver:
                 prepare_ruc_sfclay(
                     xice=f["xice"], tsk=f["tsk"],
                     tsk_save=f["tsk_save"], tsk_sea=f["tsk_sea"],
-                    local_tsk=local_tsk, itimestep=itimestep)
+                    local_tsk=local_tsk, itimestep=itimestep,
+                    xice_threshold=self.ruc_params.xice_threshold)
                 launch_sfclay(
                     *metal_surface_inputs[:7], local_tsk, f["pblh"],
                     f["mavail"], f["xland"], f["lakemask"],
@@ -4692,7 +4696,8 @@ class PhysicsDriver:
                             "znt_sea", "ust_sea", "mol_sea", "zol_sea",
                             "flhc_sea", "flqc_sea", "cpm_sea", "cqs2_sea",
                             "chs2_sea", "chs_sea", "qsfc_sea", "qgh_sea",
-                            "hfx_sea", "qfx_sea", "lh_sea")})
+                            "hfx_sea", "qfx_sea", "lh_sea")},
+                    xice_threshold=self.ruc_params.xice_threshold)
                 return
             launch_sfclay(
                 *metal_surface_inputs[:7], f["tsk"],

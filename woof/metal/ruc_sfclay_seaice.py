@@ -26,9 +26,17 @@ def _arrays(values, *, context, shape, label):
                 "on the caller's Metal context")
 
 
+def _threshold(value):
+    value = np.float32(value)
+    if not np.isfinite(value) or not 0.0 < value <= 1.0:
+        raise ValueError("RUC Metal xice_threshold must lie in (0, 1]")
+    return value
+
+
 def submit_prepare(*, xice, tsk, tsk_save, tsk_sea, local_tsk,
-                   itimestep: int) -> None:
-    """Select the RUC ice temperature and apply WRF's early-step SST fix."""
+                   itimestep: int, xice_threshold=0.5) -> None:
+    """Select RUC's ice temperature without changing the held SST."""
+    threshold = _threshold(xice_threshold)
     if type(itimestep) is not int or itimestep < 1:
         raise ValueError("RUC Metal surface timestep is one-based")
     values = {"xice": xice, "tsk": tsk, "tsk_save": tsk_save,
@@ -42,12 +50,13 @@ def submit_prepare(*, xice, tsk, tsk_save, tsk_sea, local_tsk,
         return
     xice.buffer.context.submit_kernel(
         "ruc_sfclay_prepare", values,
-        {"n": n, "itimestep": itimestep}, exact_policy=False,
+        {"n": n, "itimestep": itimestep, "xice_threshold": threshold}, exact_policy=False,
         grid_size=n)
 
 
-def submit_scatter(*, raw, xice, outputs) -> None:
+def submit_scatter(*, raw, xice, outputs, xice_threshold=0.5) -> None:
     """Retain second-call open-water outputs in fractional-ice columns."""
+    threshold = _threshold(xice_threshold)
     if not isinstance(raw, MetalArray) or raw.ndim != 1:
         raise TypeError("RUC Metal SFCLAY workspace must be flat")
     if not isinstance(xice, MetalArray) or xice.ndim != 2:
@@ -66,13 +75,14 @@ def submit_scatter(*, raw, xice, outputs) -> None:
         return
     context.submit_kernel(
         "ruc_sfclay_scatter", {"raw": raw, "xice": xice, **outputs},
-        {"n": n}, exact_policy=False, grid_size=n)
+        {"n": n, "xice_threshold": threshold}, exact_policy=False, grid_size=n)
 
 
 def submit_mynn_prepare(*, xice, tsk, mavail, xland, tsk_sea, znt_sea,
                         local_tsk, sea_tsk, sea_mavail, sea_xland,
-                        itimestep: int) -> None:
+                        itimestep: int, xice_threshold=0.5) -> None:
     """MYNN_SEAICE_WRAPPER's ice TSK and open-water call inputs."""
+    threshold = _threshold(xice_threshold)
     if type(itimestep) is not int or itimestep < 1:
         raise ValueError("MYNN Metal surface timestep is one-based")
     values = {"xice": xice, "tsk": tsk, "mavail": mavail, "xland": xland,
@@ -87,12 +97,14 @@ def submit_mynn_prepare(*, xice, tsk, mavail, xland, tsk_sea, znt_sea,
     if n:
         xice.buffer.context.submit_kernel(
             "mynn_seaice_prepare", values,
-            {"n": n, "itimestep": itimestep}, exact_policy=False,
+            {"n": n, "itimestep": itimestep, "xice_threshold": threshold}, exact_policy=False,
             grid_size=n)
 
 
-def submit_mynn_blend(*, xice, value, sea, select: bool = False) -> None:
+def submit_mynn_blend(*, xice, value, sea, select: bool = False,
+                      xice_threshold=0.5) -> None:
     """Blend (or, for REGIME, select) the open-water call on ice cells."""
+    threshold = _threshold(xice_threshold)
     if not isinstance(xice, MetalArray) or xice.ndim != 2:
         raise TypeError("MYNN Metal xice must be a 2-D MetalArray")
     _arrays({"xice": xice, "value": value, "sea": sea},
@@ -102,7 +114,7 @@ def submit_mynn_blend(*, xice, value, sea, select: bool = False) -> None:
     if n:
         xice.buffer.context.submit_kernel(
             "mynn_seaice_blend", {"xice": xice, "value": value, "sea": sea},
-            {"n": n, "select": int(bool(select))}, exact_policy=False,
+            {"n": n, "select": int(bool(select)), "xice_threshold": threshold}, exact_policy=False,
             grid_size=n)
 
 

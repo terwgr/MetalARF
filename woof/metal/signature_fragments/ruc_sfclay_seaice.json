@@ -11,7 +11,7 @@
         ["tsk", "float", "read"],
         ["tsk_save", "float", "read"],
         ["tsk_sea", "float", "read_write"],
-        ["local_tsk", "float", "write"]
+        ["local_tsk", "float", "read_write"]
       ],
       "shapes": {
         "xice": [
@@ -32,10 +32,11 @@
       },
       "parameters": [
         ["n", "int32"],
-        ["itimestep", "int32"]
+        ["itimestep", "int32"],
+        ["xice_threshold", "float32"]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": ["default"]
     },
     {
@@ -117,10 +118,11 @@
         ]
       },
       "parameters": [
-        ["n", "int32"]
+        ["n", "int32"],
+        ["xice_threshold", "float32"]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": ["default"]
     },
     {
@@ -136,10 +138,10 @@
         ["xland", "float", "read"],
         ["tsk_sea", "float", "read_write"],
         ["znt_sea", "float", "read_write"],
-        ["local_tsk", "float", "write"],
-        ["sea_tsk", "float", "write"],
-        ["sea_mavail", "float", "write"],
-        ["sea_xland", "float", "write"]
+        ["local_tsk", "float", "read_write"],
+        ["sea_tsk", "float", "read_write"],
+        ["sea_mavail", "float", "read_write"],
+        ["sea_xland", "float", "read_write"]
       ],
       "shapes": {
         "xice": [
@@ -175,10 +177,11 @@
       },
       "parameters": [
         ["n", "int32"],
-        ["itimestep", "int32"]
+        ["itimestep", "int32"],
+        ["xice_threshold", "float32"]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": ["default"]
     },
     {
@@ -205,10 +208,11 @@
       },
       "parameters": [
         ["n", "int32"],
-        ["select", "int32"]
+        ["select", "int32"],
+        ["xice_threshold", "float32"]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": ["default"]
     }
   ]

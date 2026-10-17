@@ -9,18 +9,8 @@ kernel void ruc_sfclay_prepare(
     uint i [[thread_position_in_grid]]) {
     if (i >= uint(p.n)) return;
     float fraction = r.xice[i];
-    bool component = fraction >= 0.5f && fraction <= 1.0f;
+    bool component = fraction >= p.xice_threshold && fraction <= 1.0f;
     r.local_tsk[i] = component ? r.tsk_save[i] : r.tsk[i];
-    if (!component) return;
-
-    float sst = fmax(r.tsk_sea[i], 271.4f);
-    if (p.itimestep <= 3 && sst > 273.0f) {
-        if (fraction >= 0.6f) sst = 271.4f;
-        else if (fraction >= 0.4f) sst = 273.0f;
-        else if (fraction >= 0.2f && sst > 275.0f) sst = 275.0f;
-        else if (sst > 278.0f) sst = 278.0f;
-    }
-    r.tsk_sea[i] = sst;
 }
 
 kernel void ruc_sfclay_scatter(
@@ -29,7 +19,7 @@ kernel void ruc_sfclay_scatter(
     uint i [[thread_position_in_grid]]) {
     if (i >= uint(p.n)) return;
     float fraction = r.xice[i];
-    if (!(fraction >= 0.5f && fraction <= 1.0f)) return;
+    if (!(fraction >= p.xice_threshold && fraction <= 1.0f)) return;
     uint n = uint(p.n);
     r.znt_sea[i] = r.raw[0u*n+i];
     r.ust_sea[i] = r.raw[1u*n+i];
@@ -56,7 +46,7 @@ kernel void mynn_seaice_prepare(
     uint i [[thread_position_in_grid]]) {
     if (i >= uint(p.n)) return;
     const float fraction = r.xice[i];
-    const bool component = fraction >= 0.5f && fraction <= 1.0f;
+    const bool component = fraction >= p.xice_threshold && fraction <= 1.0f;
     float sea = r.tsk_sea[i];
     float local = r.tsk[i];
     if (component) {
@@ -71,6 +61,8 @@ kernel void mynn_seaice_prepare(
         const float diagnosed =
             (r.tsk[i] - (1.0f - fraction) * sea) / fraction;
         local = fmax(diagnosed, 221.4f);
+        if (fraction < 0.2f && r.tsk[i] < 253.15f) local = 253.15f;
+        if (fraction < 0.1f && r.tsk[i] < 263.15f) local = 263.15f;
         sea = fmax(sea, 271.4f);
         r.znt_sea[i] = 1.0e-4f;
     }
@@ -88,7 +80,7 @@ kernel void mynn_seaice_blend(
     uint i [[thread_position_in_grid]]) {
     if (i >= uint(p.n)) return;
     const float fraction = r.xice[i];
-    if (!(fraction >= 0.5f && fraction <= 1.0f)) return;
+    if (!(fraction >= p.xice_threshold && fraction <= 1.0f)) return;
     const float ice_part = r.value[i] * fraction;
     const float sea_part = (1.0f - fraction) * r.sea[i];
     r.value[i] = p.select ? r.sea[i] : ice_part + sea_part;

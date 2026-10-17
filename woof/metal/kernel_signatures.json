@@ -31661,7 +31661,7 @@
       ],
       "cuda_source": "woof/core/physics.py",
       "cuda_symbol": "PhysicsDriver._run_sfclay.mynn_fractional_seaice_blend",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "ruc_sfclay_seaice",
       "name": "mynn_seaice_blend",
       "parameters": [
@@ -31672,6 +31672,10 @@
         [
           "select",
           "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
         ]
       ],
       "resources": [
@@ -31717,7 +31721,7 @@
       ],
       "cuda_source": "woof/core/physics.py",
       "cuda_symbol": "PhysicsDriver._run_sfclay.mynn_fractional_seaice_prepare",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "ruc_sfclay_seaice",
       "name": "mynn_seaice_prepare",
       "parameters": [
@@ -31728,6 +31732,10 @@
         [
           "itimestep",
           "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
         ]
       ],
       "resources": [
@@ -60701,7 +60709,7 @@
       ],
       "cuda_source": "woof/core/physics.py",
       "cuda_symbol": "PhysicsDriver._run_sfclay.ruc_fractional_seaice_prepare",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "ruc_sfclay_seaice",
       "name": "ruc_sfclay_prepare",
       "parameters": [
@@ -60712,6 +60720,10 @@
         [
           "itimestep",
           "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
         ]
       ],
       "resources": [
@@ -60777,13 +60789,17 @@
       ],
       "cuda_source": "woof/core/physics.py",
       "cuda_symbol": "PhysicsDriver._run_sfclay.ruc_fractional_seaice_scatter",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "ruc_sfclay_seaice",
       "name": "ruc_sfclay_scatter",
       "parameters": [
         [
           "n",
           "int32"
+        ],
+        [
+          "xice_threshold",
+          "float32"
         ]
       ],
       "resources": [
