@@ -2693,7 +2693,7 @@ class PhysicsDriver:
         self.hmix_k_diag = (
             {name: arrays.zeros(self.state.p.shape, dtype=DTYPE)
              for name in hmix_names}
-            if self.sase_active and cfg.hmix_k_diag and hmix_names else None)
+            if cfg.hmix_k_diag and hmix_names else None)
         if self.sase_active:
             self.call_counts["sase"] = 0
         self.last_ysu = None

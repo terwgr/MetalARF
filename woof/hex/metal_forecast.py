@@ -328,8 +328,11 @@ def _run_physics(
         pbl_cadence=pbl_cadence or "auto", local_timestep=local_timestep,
         local_timestep_rates=rates, local_timestep_buffer_rings=rings,
         lbc_paths=lbc_paths)
-    setup = _restart_setup(
-        host, paths, local_timestep=local_timestep, rates=rates, rings=rings)
+    # Hashing the grid, static and init files is only needed to bind a
+    # checkpoint or check a restart against one.
+    setup = (_restart_setup(host, paths, local_timestep=local_timestep,
+                            rates=rates, rings=rings)
+             if restored_physics is not None or checkpoint is not None else None)
     # Older physics checkpoints predate setup binding. Keep their existing
     # restore path, without claiming their caller-owned setup was verified.
     restart_setup_verified = None

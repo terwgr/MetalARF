@@ -278,8 +278,9 @@ kernel void sase_diff_flux_diag(
     const ulong kf = soft64_mul(kfac, soft64_mul(half_w, kvsum));
     const ulong grad = soft64_div(soft64_sub(sase_f64(r.phi[q]),
                                              sase_f64(r.phi[q - ncol])), h);
-    const ulong flux = soft64_mul(fac, soft64_mul(
-        soft64_negate_bits(sase_f64(r.rho1[col])), soft64_mul(kf, grad)));
+    // sase.cu: fac * (-(double)rho1 * kf * grad), left to right.
+    const ulong flux = soft64_mul(fac, soft64_mul(soft64_mul(
+        soft64_negate_bits(sase_f64(r.rho1[col])), kf), grad));
     r.out[tid] = sase_f32(flux);
 }
 

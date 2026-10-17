@@ -3047,7 +3047,7 @@ SASE_BASIS_PREMULTIPLY_SHAPES = (('e', (('nz', 'ny', 'nx'),)), ('p0', (('nz', 'n
 SASE_BASIS_PREMULTIPLY_PARAM_FIELDS = [('delta', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_BASIS_PREMULTIPLY_THREADS_PER_GROUP = 128
 SASE_BASIS_PREMULTIPLY_LAYOUT_HASH = 'e7732584ca6bc8a6c963a22805b375ffa808b2974857a70ac4d21c79d024e3c4'
-SASE_BASIS_PREMULTIPLY_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_BASIS_PREMULTIPLY_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_BLACKADAR_LENGTH_RESOURCES = (('t', 'float', 'read'), ('constants', 'float64_bits', 'read'), ('lb', 'float', 'read_write'))
 SASE_BLACKADAR_LENGTH_ACCESS = ('read', 'read', 'read_write')
@@ -3055,7 +3055,7 @@ SASE_BLACKADAR_LENGTH_SHAPES = (('constants', ((3,),)), ('lb', (('nz', 'ny', 'nx
 SASE_BLACKADAR_LENGTH_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_BLACKADAR_LENGTH_THREADS_PER_GROUP = 128
 SASE_BLACKADAR_LENGTH_LAYOUT_HASH = '0b257899d807445eaa3c1d20cdaec69e028803d6c7df4c3ff55be1f48787086f'
-SASE_BLACKADAR_LENGTH_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_BLACKADAR_LENGTH_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_BOX_FILTER_RESOURCES = (('f', 'float', 'read'), ('out', 'float', 'read_write'))
 SASE_BOX_FILTER_ACCESS = ('read', 'read_write')
@@ -3063,7 +3063,7 @@ SASE_BOX_FILTER_SHAPES = (('f', (('nz', 'ny', 'nx'),)), ('out', (('nz', 'ny', 'n
 SASE_BOX_FILTER_PARAM_FIELDS = [('width', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_BOX_FILTER_THREADS_PER_GROUP = 128
 SASE_BOX_FILTER_LAYOUT_HASH = 'd6805adb26079b54e149afe5f21d4ff00240ed44409dbb155201bff52a673317'
-SASE_BOX_FILTER_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_BOX_FILTER_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_COUPLE_W_TENDENCY_RESOURCES = (('dw', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('mut', 'float', 'read'), ('msft', 'float', 'read'), ('rw', 'float', 'read_write'))
 SASE_COUPLE_W_TENDENCY_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write')
@@ -3071,7 +3071,7 @@ SASE_COUPLE_W_TENDENCY_SHAPES = (('c1f', (('nz+1',),)), ('c2f', (('nz+1',),)), (
 SASE_COUPLE_W_TENDENCY_PARAM_FIELDS = [('has_msf', 'ctypes.c_int32'), ('mask_ring', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_COUPLE_W_TENDENCY_THREADS_PER_GROUP = 128
 SASE_COUPLE_W_TENDENCY_LAYOUT_HASH = '20dd31c218776777eec6924325f2acb3e089104941b9b30104b00e2536e18c69'
-SASE_COUPLE_W_TENDENCY_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_COUPLE_W_TENDENCY_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_DDZ_COEFFICIENTS_RESOURCES = (('t', 'float', 'read'), ('cm', 'float', 'read_write'), ('c0', 'float', 'read_write'), ('cp', 'float', 'read_write'))
 SASE_DDZ_COEFFICIENTS_ACCESS = ('read', 'read_write', 'read_write', 'read_write')
@@ -3079,7 +3079,7 @@ SASE_DDZ_COEFFICIENTS_SHAPES = (('c0', (('nz', 'ny', 'nx'),)), ('cm', (('nz', 'n
 SASE_DDZ_COEFFICIENTS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_DDZ_COEFFICIENTS_THREADS_PER_GROUP = 128
 SASE_DDZ_COEFFICIENTS_LAYOUT_HASH = 'ee440309f9b1eb4ff51119acda533c172066b7a6c0116aec1a3afbe4d11993fc'
-SASE_DDZ_COEFFICIENTS_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_DDZ_COEFFICIENTS_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_DESTAGGER_W_RESOURCES = (('w', 'float', 'read'), ('out', 'float', 'read_write'))
 SASE_DESTAGGER_W_ACCESS = ('read', 'read_write')
@@ -3087,7 +3087,7 @@ SASE_DESTAGGER_W_SHAPES = (('out', (('nz', 'ny', 'nx'),)), ('w', (('nz+1', 'ny',
 SASE_DESTAGGER_W_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_DESTAGGER_W_THREADS_PER_GROUP = 128
 SASE_DESTAGGER_W_LAYOUT_HASH = '768c8e91fbe28a2131ae5001f19125b83eb20896feb0174eb141b6596cbcdcf3'
-SASE_DESTAGGER_W_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_DESTAGGER_W_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_DIFF_FLUX_DIAG_RESOURCES = (('phi', 'float', 'read'), ('kv', 'float', 'read'), ('rho1', 'float', 'read'), ('out', 'float', 'read_write'), ('t', 'float', 'read'), ('constants', 'float64_bits', 'read'))
 SASE_DIFF_FLUX_DIAG_ACCESS = ('read', 'read', 'read', 'read_write', 'read', 'read')
@@ -3095,7 +3095,7 @@ SASE_DIFF_FLUX_DIAG_SHAPES = (('constants', ((2,),)), ('kv', (('nz', 'ny', 'nx')
 SASE_DIFF_FLUX_DIAG_PARAM_FIELDS = [('dz', 'ctypes.c_float'), ('t_mode', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_DIFF_FLUX_DIAG_THREADS_PER_GROUP = 128
 SASE_DIFF_FLUX_DIAG_LAYOUT_HASH = '6a7d40d47eb98d23758989a9d52738cbab30ed5a0f342a8bd603a37a6f2aa3af'
-SASE_DIFF_FLUX_DIAG_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_DIFF_FLUX_DIAG_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_E_HFLUX_RESOURCES = (('e', 'float', 'read'), ('km', 'float', 'read'), ('fx', 'float', 'read_write'), ('fy', 'float', 'read_write'))
 SASE_E_HFLUX_ACCESS = ('read', 'read', 'read_write', 'read_write')
@@ -3103,7 +3103,7 @@ SASE_E_HFLUX_SHAPES = (('e', (('nz', 'ny', 'nx'),)), ('fx', (('nz', 'ny', 'nx'),
 SASE_E_HFLUX_PARAM_FIELDS = [('two_dx', 'ctypes.c_float'), ('two_dy', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_E_HFLUX_THREADS_PER_GROUP = 128
 SASE_E_HFLUX_LAYOUT_HASH = 'bae484d9ae9ec892a26e8e3526c50dbdf981458659e3b274e64dee4352639109'
-SASE_E_HFLUX_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_E_HFLUX_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_HFLUX_DIV_RESOURCES = (('fx', 'float', 'read'), ('fy', 'float', 'read'), ('out', 'float', 'read_write'))
 SASE_HFLUX_DIV_ACCESS = ('read', 'read', 'read_write')
@@ -3111,7 +3111,7 @@ SASE_HFLUX_DIV_SHAPES = (('fx', (('nz', 'ny', 'nx'),)), ('fy', (('nz', 'ny', 'nx
 SASE_HFLUX_DIV_PARAM_FIELDS = [('two_dx', 'ctypes.c_float'), ('two_dy', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_HFLUX_DIV_THREADS_PER_GROUP = 128
 SASE_HFLUX_DIV_LAYOUT_HASH = 'e9b112afa60fd4b74105fc2260d7cdbf93e2031797d118acbed83e0bf87d1f06'
-SASE_HFLUX_DIV_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_HFLUX_DIV_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_LIFT_COMBINE_RESOURCES = (('fuu', 'float', 'read'), ('fvv', 'float', 'read'), ('fww', 'float', 'read'), ('fuv', 'float', 'read'), ('fuw', 'float', 'read'), ('fvw', 'float', 'read'), ('fu', 'float', 'read'), ('fv', 'float', 'read'), ('fw', 'float', 'read'), ('l0', 'float', 'read_write'), ('l1', 'float', 'read_write'), ('l2', 'float', 'read_write'), ('l3', 'float', 'read_write'), ('l4', 'float', 'read_write'), ('l5', 'float', 'read_write'))
 SASE_LIFT_COMBINE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3119,7 +3119,7 @@ SASE_LIFT_COMBINE_SHAPES = (('fu', (('nz', 'ny', 'nx'),)), ('fuu', (('nz', 'ny',
 SASE_LIFT_COMBINE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_LIFT_COMBINE_THREADS_PER_GROUP = 128
 SASE_LIFT_COMBINE_LAYOUT_HASH = '15869de5d73a1f97ee18eb077628082265e31a78c658a42292850cdc516b9127'
-SASE_LIFT_COMBINE_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_LIFT_COMBINE_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_MODEL_STRESS_RESOURCES = (('e', 'float', 'read'), ('s0', 'float', 'read'), ('s1', 'float', 'read'), ('s2', 'float', 'read'), ('s3', 'float', 'read'), ('s4', 'float', 'read'), ('s5', 'float', 'read'), ('t0', 'float', 'read_write'), ('t1', 'float', 'read_write'), ('t2', 'float', 'read_write'), ('t3', 'float', 'read_write'), ('t4', 'float', 'read_write'), ('t5', 'float', 'read_write'))
 SASE_MODEL_STRESS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3127,7 +3127,7 @@ SASE_MODEL_STRESS_SHAPES = (('e', (('nz', 'ny', 'nx'),)), ('s0', (('nz', 'ny', '
 SASE_MODEL_STRESS_PARAM_FIELDS = [('c_nu', 'ctypes.c_float'), ('f_blend', 'ctypes.c_float'), ('delta_eddy', 'ctypes.c_float'), ('delta_mom', 'ctypes.c_float'), ('ck_over_prt', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_MODEL_STRESS_THREADS_PER_GROUP = 128
 SASE_MODEL_STRESS_LAYOUT_HASH = 'e6a47f8e514b72f8e6a0333abe809f231a5c0ec7a53bbb3e557653a6e7096923'
-SASE_MODEL_STRESS_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_MODEL_STRESS_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_MODEL_STRESS_GOV_RESOURCES = (('e', 'float', 'read'), ('s0', 'float', 'read'), ('s1', 'float', 'read'), ('s2', 'float', 'read'), ('s3', 'float', 'read'), ('s4', 'float', 'read'), ('s5', 'float', 'read'), ('t0', 'float', 'read_write'), ('t1', 'float', 'read_write'), ('t2', 'float', 'read_write'), ('t3', 'float', 'read_write'), ('t4', 'float', 'read_write'), ('t5', 'float', 'read_write'), ('km', 'float', 'read_write'), ('r_out', 'float', 'read_write'))
 SASE_MODEL_STRESS_GOV_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3135,7 +3135,7 @@ SASE_MODEL_STRESS_GOV_SHAPES = (('e', (('nz', 'ny', 'nx'),)), ('km', (('nz', 'ny
 SASE_MODEL_STRESS_GOV_PARAM_FIELDS = [('c_nu', 'ctypes.c_float'), ('f_blend', 'ctypes.c_float'), ('delta', 'ctypes.c_float'), ('c_s', 'ctypes.c_float'), ('km_cap', 'ctypes.c_float'), ('nu_eps', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_MODEL_STRESS_GOV_THREADS_PER_GROUP = 128
 SASE_MODEL_STRESS_GOV_LAYOUT_HASH = '7794f8c98ed633a97a21e3f162b255d9ec801c7214f3ec142ace3eb535f1d888'
-SASE_MODEL_STRESS_GOV_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_MODEL_STRESS_GOV_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_MOIST_N2_RESOURCES = (('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('pressure', 'float', 'read'), ('n2dry', 'float', 'read'), ('out', 'float', 'read_write'), ('t', 'float', 'read'), ('constants', 'float64_bits', 'read'))
 SASE_MOIST_N2_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read', 'read')
@@ -3143,7 +3143,7 @@ SASE_MOIST_N2_SHAPES = (('constants', ((11,),)), ('n2dry', (('nz', 'ny', 'nx'),)
 SASE_MOIST_N2_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_MOIST_N2_THREADS_PER_GROUP = 128
 SASE_MOIST_N2_LAYOUT_HASH = 'eba1019101b5f329836ffd592592bc55ef20b03cba21c9905ef710490904bb63'
-SASE_MOIST_N2_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_MOIST_N2_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_N2_RESOURCES = (('theta', 'float', 'read'), ('n2', 'float', 'read_write'), ('cm', 'float', 'read'), ('c0', 'float', 'read'), ('cp', 'float', 'read'))
 SASE_N2_ACCESS = ('read', 'read_write', 'read', 'read', 'read')
@@ -3151,7 +3151,7 @@ SASE_N2_SHAPES = (('c0', (('nz', 'ny', 'nx'),)), ('cm', (('nz', 'ny', 'nx'),)), 
 SASE_N2_PARAM_FIELDS = [('two_dx', 'ctypes.c_float'), ('two_dy', 'ctypes.c_float'), ('dz', 'ctypes.c_float'), ('two_dz', 'ctypes.c_float'), ('h_lo', 'ctypes.c_float'), ('h_hi', 'ctypes.c_float'), ('z_mode', 'ctypes.c_int32'), ('g_accel', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_N2_THREADS_PER_GROUP = 128
 SASE_N2_LAYOUT_HASH = 'ef320473d994bd61b5769ba07a952222c11ba9ca3b197227fc341dd3078f2818'
-SASE_N2_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_N2_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_PLUME_VENT_FLUX_RESOURCES = (('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('pressure', 'float', 'read'), ('e', 'float', 'read'), ('n2m', 'float', 'read'), ('n2d', 'float', 'read'), ('rho1', 'float', 'read'), ('fth', 'float', 'read_write'), ('fqv', 'float', 'read_write'), ('fqc', 'float', 'read_write'), ('idx', 'int32', 'read_write'), ('t', 'float', 'read'), ('constants', 'uint64', 'read'))
 SASE_PLUME_VENT_FLUX_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read')
@@ -3159,7 +3159,7 @@ SASE_PLUME_VENT_FLUX_SHAPES = (('constants', ((18,),)), ('e', (('nz', 'ny', 'nx'
 SASE_PLUME_VENT_FLUX_PARAM_FIELDS = [('min_run_cells', 'ctypes.c_int32'), ('sat_iters', 'ctypes.c_int32'), ('per_level', 'ctypes.c_int32'), ('has_idx', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_PLUME_VENT_FLUX_THREADS_PER_GROUP = 128
 SASE_PLUME_VENT_FLUX_LAYOUT_HASH = 'f5ca167816572b3382c70ced6123ebef64c1ff418cfb6ac2f5e21a4bda63a598'
-SASE_PLUME_VENT_FLUX_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_PLUME_VENT_FLUX_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_RATE_RESOURCES = (('a', 'float', 'read'), ('b', 'float', 'read'), ('out', 'float', 'read_write'))
 SASE_RATE_ACCESS = ('read', 'read', 'read_write')
@@ -3167,7 +3167,7 @@ SASE_RATE_SHAPES = (('a', (('nz', 'ny', 'nx'),)), ('b', (('nz', 'ny', 'nx'),)), 
 SASE_RATE_PARAM_FIELDS = [('mode', 'ctypes.c_int32'), ('inv_dt', 'ctypes.c_float'), ('heat_scale', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_RATE_THREADS_PER_GROUP = 128
 SASE_RATE_LAYOUT_HASH = '2a1ca63521db462933a2a8cf11cb95ce442a246f616f0a31ea77581e51a05fc6'
-SASE_RATE_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_RATE_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_SCALAR_HFLUX_RESOURCES = (('s', 'float', 'read'), ('e', 'float', 'read'), ('fx', 'float', 'read_write'), ('fy', 'float', 'read_write'))
 SASE_SCALAR_HFLUX_ACCESS = ('read', 'read', 'read_write', 'read_write')
@@ -3175,7 +3175,7 @@ SASE_SCALAR_HFLUX_SHAPES = (('e', (('nz', 'ny', 'nx'),)), ('fx', (('nz', 'ny', '
 SASE_SCALAR_HFLUX_PARAM_FIELDS = [('two_dx', 'ctypes.c_float'), ('two_dy', 'ctypes.c_float'), ('kh_coef', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_SCALAR_HFLUX_THREADS_PER_GROUP = 128
 SASE_SCALAR_HFLUX_LAYOUT_HASH = 'd615516a37d0416fea148ede367525a0a18df24b34f6ee835a52f0d716ff84cb'
-SASE_SCALAR_HFLUX_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_SCALAR_HFLUX_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_SCALAR_HFLUX_KM_RESOURCES = (('s', 'float', 'read'), ('km', 'float', 'read'), ('fx', 'float', 'read_write'), ('fy', 'float', 'read_write'))
 SASE_SCALAR_HFLUX_KM_ACCESS = ('read', 'read', 'read_write', 'read_write')
@@ -3183,7 +3183,7 @@ SASE_SCALAR_HFLUX_KM_SHAPES = (('fx', (('nz', 'ny', 'nx'),)), ('fy', (('nz', 'ny
 SASE_SCALAR_HFLUX_KM_PARAM_FIELDS = [('two_dx', 'ctypes.c_float'), ('two_dy', 'ctypes.c_float'), ('kh_fac', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_SCALAR_HFLUX_KM_THREADS_PER_GROUP = 128
 SASE_SCALAR_HFLUX_KM_LAYOUT_HASH = '9c2732b192ad317cf788b2a947927e4fcbf3860856e67a1c861404278bd0499f'
-SASE_SCALAR_HFLUX_KM_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_SCALAR_HFLUX_KM_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_SOLVE_PARTIAL_RESOURCES = (('e', 'float', 'read'), ('sc0', 'float', 'read'), ('sc1', 'float', 'read'), ('sc2', 'float', 'read'), ('sc3', 'float', 'read'), ('sc4', 'float', 'read'), ('sc5', 'float', 'read'), ('rf0', 'float', 'read'), ('rf1', 'float', 'read'), ('rf2', 'float', 'read'), ('rf3', 'float', 'read'), ('rf4', 'float', 'read'), ('rf5', 'float', 'read'), ('l0', 'float', 'read'), ('l1', 'float', 'read'), ('l2', 'float', 'read'), ('l3', 'float', 'read'), ('l4', 'float', 'read'), ('l5', 'float', 'read'), ('partials', 'float64_bits', 'read_write'))
 SASE_SOLVE_PARTIAL_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -3191,7 +3191,7 @@ SASE_SOLVE_PARTIAL_SHAPES = (('e', (('nz', 'ny', 'nx'),)), ('l0', (('nz', 'ny', 
 SASE_SOLVE_PARTIAL_PARAM_FIELDS = [('delta_a', 'ctypes.c_float'), ('delta_b', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('bw', 'ctypes.c_int32'), ('nblocks', 'ctypes.c_int32')]
 SASE_SOLVE_PARTIAL_THREADS_PER_GROUP = 128
 SASE_SOLVE_PARTIAL_LAYOUT_HASH = 'dc8976347c25430e1dc65a4af60bcfde17ec186443d47232f057e2cf49cc0225'
-SASE_SOLVE_PARTIAL_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_SOLVE_PARTIAL_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_SPLIT_E_UPDATE_RESOURCES = (('e', 'float', 'read_write'), ('heat', 'float', 'read_write'), ('theta', 'float', 'read'), ('n2', 'float', 'read'), ('n2d', 'float', 'read'), ('kv', 'float', 'read'), ('leps', 'float', 'read'), ('lb', 'float', 'read'), ('ph_e', 'float', 'read'), ('ph_heat', 'float', 'read'), ('pv', 'float', 'read'), ('fx', 'float', 'read'), ('fy', 'float', 'read'), ('gtap', 'float', 'read'), ('partials', 'float64_bits', 'read_write'), ('cm', 'float', 'read'), ('c0', 'float', 'read'), ('cp', 'float', 'read'))
 SASE_SPLIT_E_UPDATE_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read', 'read', 'read')
@@ -3199,7 +3199,7 @@ SASE_SPLIT_E_UPDATE_SHAPES = (('c0', (('nz', 'ny', 'nx'),)), ('cm', (('nz', 'ny'
 SASE_SPLIT_E_UPDATE_PARAM_FIELDS = [('two_dx', 'ctypes.c_float'), ('two_dy', 'ctypes.c_float'), ('dz', 'ctypes.c_float'), ('two_dz', 'ctypes.c_float'), ('h_lo', 'ctypes.c_float'), ('h_hi', 'ctypes.c_float'), ('z_mode', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('f_blend', 'ctypes.c_float'), ('delta', 'ctypes.c_float'), ('pr_t', 'ctypes.c_float'), ('c_e', 'ctypes.c_float'), ('ls_coef', 'ctypes.c_float'), ('c_es', 'ctypes.c_float'), ('cks_exp', 'ctypes.c_float'), ('has_ces', 'ctypes.c_int32'), ('c_ed', 'ctypes.c_float'), ('g_accel', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('has_ced', 'ctypes.c_int32'), ('has_n2', 'ctypes.c_int32'), ('has_moist', 'ctypes.c_int32'), ('has_taper', 'ctypes.c_int32'), ('nblocks', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_SPLIT_E_UPDATE_THREADS_PER_GROUP = 128
 SASE_SPLIT_E_UPDATE_LAYOUT_HASH = '7f049dbfde35aa69e486ca78869aa838582999b5c5dfc94855d20408e92aacb4'
-SASE_SPLIT_E_UPDATE_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_SPLIT_E_UPDATE_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_SPLIT_TENDENCIES_RESOURCES = (('t0', 'float', 'read'), ('t1', 'float', 'read'), ('t3', 'float', 'read'), ('t4', 'float', 'read'), ('t5', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('e', 'float', 'read'), ('r', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dw', 'float', 'read_write'), ('ph_e', 'float', 'read_write'), ('ph_heat', 'float', 'read_write'))
 SASE_SPLIT_TENDENCIES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3207,7 +3207,7 @@ SASE_SPLIT_TENDENCIES_SHAPES = (('du', (('nz', 'ny', 'nx'),)), ('dv', (('nz', 'n
 SASE_SPLIT_TENDENCIES_PARAM_FIELDS = [('two_dx', 'ctypes.c_float'), ('two_dy', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_SPLIT_TENDENCIES_THREADS_PER_GROUP = 128
 SASE_SPLIT_TENDENCIES_LAYOUT_HASH = '046e6977ff573c4ecd1f42369f997fd1463160e15e40a8d45dd1fba37569619c'
-SASE_SPLIT_TENDENCIES_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_SPLIT_TENDENCIES_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_STRAIN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('sxx', 'float', 'read_write'), ('syy', 'float', 'read_write'), ('szz', 'float', 'read_write'), ('sxy', 'float', 'read_write'), ('sxz', 'float', 'read_write'), ('syz', 'float', 'read_write'), ('cm', 'float', 'read'), ('c0', 'float', 'read'), ('cp', 'float', 'read'))
 SASE_STRAIN_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read')
@@ -3215,7 +3215,7 @@ SASE_STRAIN_SHAPES = (('c0', (('nz', 'ny', 'nx'),)), ('cm', (('nz', 'ny', 'nx'),
 SASE_STRAIN_PARAM_FIELDS = [('two_dx', 'ctypes.c_float'), ('two_dy', 'ctypes.c_float'), ('dz', 'ctypes.c_float'), ('two_dz', 'ctypes.c_float'), ('h_lo', 'ctypes.c_float'), ('h_hi', 'ctypes.c_float'), ('z_mode', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_STRAIN_THREADS_PER_GROUP = 128
 SASE_STRAIN_LAYOUT_HASH = '6131088139a3a7ddc564066e1a59e8d59b6606f23db1b83a6f9feae21fc83fd1'
-SASE_STRAIN_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_STRAIN_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_STRUCTURE_PARTIAL_RESOURCES = (('f', 'float', 'read'), ('partials', 'float64_bits', 'read_write'))
 SASE_STRUCTURE_PARTIAL_ACCESS = ('read', 'read_write')
@@ -3223,7 +3223,7 @@ SASE_STRUCTURE_PARTIAL_SHAPES = (('f', (('nz', 'ny', 'nx'),)), ('partials', ((3,
 SASE_STRUCTURE_PARTIAL_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nblocks', 'ctypes.c_int32')]
 SASE_STRUCTURE_PARTIAL_THREADS_PER_GROUP = 128
 SASE_STRUCTURE_PARTIAL_LAYOUT_HASH = '0b82c05e06e81704634841a930b8e4f535277874cdea190bc935ba512aaa7725'
-SASE_STRUCTURE_PARTIAL_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_STRUCTURE_PARTIAL_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_SURFACE_RHO1_RESOURCES = (('pressure', 'float', 'read'), ('temperature', 'float', 'read'), ('qv', 'float', 'read'), ('rho1', 'float', 'read_write'))
 SASE_SURFACE_RHO1_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -3231,7 +3231,7 @@ SASE_SURFACE_RHO1_SHAPES = (('pressure', (('ny', 'nx'),)), ('qv', (('ny', 'nx'),
 SASE_SURFACE_RHO1_PARAM_FIELDS = [('rd', 'ctypes.c_float'), ('ep1', 'ctypes.c_float'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_SURFACE_RHO1_THREADS_PER_GROUP = 128
 SASE_SURFACE_RHO1_LAYOUT_HASH = 'fda0b6724f35dacbf5b2bce8a55710d54a3470f6fad7fa04d8beea49a0fa7425'
-SASE_SURFACE_RHO1_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_SURFACE_RHO1_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_SURFACE_SOURCE_RESOURCES = (('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('theta1', 'float', 'read'), ('rho1', 'float', 'read'), ('dz1', 'float', 'read'), ('e_sgs', 'float', 'read_write'))
 SASE_SURFACE_SOURCE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -3239,7 +3239,7 @@ SASE_SURFACE_SOURCE_SHAPES = (('dz1', (('ny', 'nx'),)), ('e_sgs', (('nz', 'ny', 
 SASE_SURFACE_SOURCE_PARAM_FIELDS = [('ep1', 'ctypes.c_float'), ('cp_air', 'ctypes.c_float'), ('g_accel', 'ctypes.c_float'), ('karman', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_SURFACE_SOURCE_THREADS_PER_GROUP = 128
 SASE_SURFACE_SOURCE_LAYOUT_HASH = '9fca9f21a44279e56eef17ed9267def1e393f35cf7fc3b34be9146fe2a59e019'
-SASE_SURFACE_SOURCE_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_SURFACE_SOURCE_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_TAPER_WEIGHTS_RESOURCES = (('t', 'float', 'read'), ('out', 'float', 'read_write'))
 SASE_TAPER_WEIGHTS_ACCESS = ('read', 'read_write')
@@ -3247,7 +3247,7 @@ SASE_TAPER_WEIGHTS_SHAPES = (('out', (('nz', 'ny', 'nx'),)), ('t', (('nz', 'ny',
 SASE_TAPER_WEIGHTS_PARAM_FIELDS = [('zdamp', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_TAPER_WEIGHTS_THREADS_PER_GROUP = 128
 SASE_TAPER_WEIGHTS_LAYOUT_HASH = '6e235f62601e8f3e07b2619fa3d953dbcc3413903272ecfc5a02e28a3698d02b'
-SASE_TAPER_WEIGHTS_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_TAPER_WEIGHTS_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_THOMAS_MOMENTUM_RESOURCES = (('u', 'float', 'read_write'), ('v', 'float', 'read_write'), ('w', 'float', 'read_write'), ('du', 'float', 'read'), ('dv', 'float', 'read'), ('dw', 'float', 'read'), ('kv', 'float', 'read'), ('ust', 'float', 'read'), ('wspd', 'float', 'read'), ('t', 'float', 'read'), ('partials', 'float64_bits', 'read_write'), ('constants', 'float64_bits', 'read'))
 SASE_THOMAS_MOMENTUM_ACCESS = ('read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')
@@ -3255,7 +3255,7 @@ SASE_THOMAS_MOMENTUM_SHAPES = (('constants', ((1,),)), ('du', (('nz', 'ny', 'nx'
 SASE_THOMAS_MOMENTUM_PARAM_FIELDS = [('dz', 'ctypes.c_float'), ('t_mode', 'ctypes.c_int32'), ('has_drag', 'ctypes.c_int32'), ('has_wspd', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nblocks', 'ctypes.c_int32')]
 SASE_THOMAS_MOMENTUM_THREADS_PER_GROUP = 128
 SASE_THOMAS_MOMENTUM_LAYOUT_HASH = '3f2d674e3ad35f69651b6097f51e72cd4fbd980ea297ecc622f6dabe3eca8b64'
-SASE_THOMAS_MOMENTUM_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_THOMAS_MOMENTUM_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_THOMAS_SCALAR_RESOURCES = (('phi', 'float', 'read_write'), ('kv', 'float', 'read'), ('sfc_flux', 'float', 'read'), ('sfc_rho1', 'float', 'read'), ('t', 'float', 'read'), ('constants', 'float64_bits', 'read'))
 SASE_THOMAS_SCALAR_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read')
@@ -3263,7 +3263,7 @@ SASE_THOMAS_SCALAR_SHAPES = (('constants', ((1,),)), ('kv', (('nz', 'ny', 'nx'),
 SASE_THOMAS_SCALAR_PARAM_FIELDS = [('dz', 'ctypes.c_float'), ('t_mode', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('kfac', 'ctypes.c_float'), ('floor_val', 'ctypes.c_float'), ('has_floor', 'ctypes.c_int32'), ('has_sfc', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_THOMAS_SCALAR_THREADS_PER_GROUP = 128
 SASE_THOMAS_SCALAR_LAYOUT_HASH = '173c0a8c8e26713c92527ed729fad01408d008aa87298138c73db97f39475222'
-SASE_THOMAS_SCALAR_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_THOMAS_SCALAR_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_VELOCITY_PRODUCTS_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('uu', 'float', 'read_write'), ('vv', 'float', 'read_write'), ('ww', 'float', 'read_write'), ('uv', 'float', 'read_write'), ('uw', 'float', 'read_write'), ('vw', 'float', 'read_write'))
 SASE_VELOCITY_PRODUCTS_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3271,7 +3271,7 @@ SASE_VELOCITY_PRODUCTS_SHAPES = (('u', (('nz', 'ny', 'nx'),)), ('uu', (('nz', 'n
 SASE_VELOCITY_PRODUCTS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_VELOCITY_PRODUCTS_THREADS_PER_GROUP = 128
 SASE_VELOCITY_PRODUCTS_LAYOUT_HASH = '52a795f64005749dd51f81dc66a80f6e6225db70dd9c5d9b254f2bc91c19a7bf'
-SASE_VELOCITY_PRODUCTS_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_VELOCITY_PRODUCTS_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_VENT_DEPOSIT_RESOURCES = (('phi', 'float', 'read_write'), ('f', 'float', 'read'), ('scale', 'float64_bits', 'read'), ('rho1', 'float', 'read'), ('t', 'float', 'read'), ('constants', 'float64_bits', 'read'))
 SASE_VENT_DEPOSIT_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read')
@@ -3279,7 +3279,7 @@ SASE_VENT_DEPOSIT_SHAPES = (('constants', ((1,),)), ('f', (('nz+1', 'ny', 'nx'),
 SASE_VENT_DEPOSIT_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_VENT_DEPOSIT_THREADS_PER_GROUP = 128
 SASE_VENT_DEPOSIT_LAYOUT_HASH = '9e9573c7cc8ff027d38a74dc6a5d14625a70ea1baeb0b4642f32ad6590d9c122'
-SASE_VENT_DEPOSIT_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_VENT_DEPOSIT_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_VENT_DEPOSIT_SCALE_RESOURCES = (('fth', 'float', 'read'), ('fqv', 'float', 'read'), ('fqc', 'float', 'read'), ('rho1', 'float', 'read'), ('scale', 'float64_bits', 'read_write'), ('t', 'float', 'read'), ('constants', 'float64_bits', 'read'))
 SASE_VENT_DEPOSIT_SCALE_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read', 'read')
@@ -3287,7 +3287,7 @@ SASE_VENT_DEPOSIT_SCALE_SHAPES = (('constants', ((3,),)), ('fqc', (('nz+1', 'ny'
 SASE_VENT_DEPOSIT_SCALE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_VENT_DEPOSIT_SCALE_THREADS_PER_GROUP = 128
 SASE_VENT_DEPOSIT_SCALE_LAYOUT_HASH = 'f313b342e4272f78d245e858d49222854815842aa02a08759e407a87ffdff85c'
-SASE_VENT_DEPOSIT_SCALE_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_VENT_DEPOSIT_SCALE_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_VERTICAL_CHANNEL_RESOURCES = (('e', 'float', 'read'), ('n2', 'float', 'read'), ('n2d', 'float', 'read'), ('theta', 'float', 'read'), ('t', 'float', 'read'), ('kv', 'float', 'read_write'), ('leps', 'float', 'read_write'))
 SASE_VERTICAL_CHANNEL_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -3295,7 +3295,7 @@ SASE_VERTICAL_CHANNEL_SHAPES = (('e', (('nz', 'ny', 'nx'),)), ('kv', (('nz', 'ny
 SASE_VERTICAL_CHANNEL_PARAM_FIELDS = [('z0', 'ctypes.c_float'), ('karman', 'ctypes.c_float'), ('blk_lambda', 'ctypes.c_float'), ('c_kv', 'ctypes.c_float'), ('ls_coef', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('f_blend', 'ctypes.c_float'), ('g_accel', 'ctypes.c_float'), ('c_ks', 'ctypes.c_float'), ('cks_exp', 'ctypes.c_float'), ('dz', 'ctypes.c_float'), ('t_mode', 'ctypes.c_int32'), ('has_n2', 'ctypes.c_int32'), ('has_moist', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_VERTICAL_CHANNEL_THREADS_PER_GROUP = 128
 SASE_VERTICAL_CHANNEL_LAYOUT_HASH = 'e1149ca121679d091ea8d88ffc030e867150567053fca57338bffd3b6f65f923'
-SASE_VERTICAL_CHANNEL_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_VERTICAL_CHANNEL_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_VERTICAL_PRODUCTION_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('kv', 'float', 'read'), ('t', 'float', 'read'), ('pv', 'float', 'read_write'))
 SASE_VERTICAL_PRODUCTION_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write')
@@ -3303,7 +3303,7 @@ SASE_VERTICAL_PRODUCTION_SHAPES = (('kv', (('nz', 'ny', 'nx'),)), ('pv', (('nz',
 SASE_VERTICAL_PRODUCTION_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_VERTICAL_PRODUCTION_THREADS_PER_GROUP = 128
 SASE_VERTICAL_PRODUCTION_LAYOUT_HASH = '0e89f86b09e71e113f693ea6fb2e816c8f648a9d57403aab328fe2d9d599cf8a'
-SASE_VERTICAL_PRODUCTION_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_VERTICAL_PRODUCTION_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_W_SENSOR_PARTIAL_RESOURCES = (('w', 'float', 'read'), ('e', 'float', 'read'), ('n2', 'float', 'read'), ('partials', 'float64_bits', 'read_write'))
 SASE_W_SENSOR_PARTIAL_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -3311,7 +3311,7 @@ SASE_W_SENSOR_PARTIAL_SHAPES = (('e', (('nz', 'ny', 'nx'),)), ('n2', (('nz', 'ny
 SASE_W_SENSOR_PARTIAL_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('bw', 'ctypes.c_int32'), ('has_n2', 'ctypes.c_int32'), ('n2_screen', 'ctypes.c_float'), ('e_min', 'ctypes.c_float'), ('nblocks', 'ctypes.c_int32')]
 SASE_W_SENSOR_PARTIAL_THREADS_PER_GROUP = 128
 SASE_W_SENSOR_PARTIAL_LAYOUT_HASH = 'e7ae7e6d4a81c35c2f0cb6d5bc9cd0f462225dd5abb80a7a117f8b5e120d7a2e'
-SASE_W_SENSOR_PARTIAL_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_W_SENSOR_PARTIAL_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SASE_ZI_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('theta', 'float', 'read'), ('t', 'float', 'read'), ('zi', 'float', 'read_write'))
 SASE_ZI_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -3319,7 +3319,7 @@ SASE_ZI_COLUMN_SHAPES = (('t', (('nz', 'ny', 'nx'),)), ('theta', (('nz', 'ny', '
 SASE_ZI_COLUMN_PARAM_FIELDS = [('dz', 'ctypes.c_float'), ('t_mode', 'ctypes.c_int32'), ('rib_crit', 'ctypes.c_float'), ('wspd2_floor', 'ctypes.c_float'), ('g_accel', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_ZI_COLUMN_THREADS_PER_GROUP = 128
 SASE_ZI_COLUMN_LAYOUT_HASH = 'a7d04e58f12971532f9504c7210547eefeee1c9344a462df987a06361f7e7606'
-SASE_ZI_COLUMN_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_ZI_COLUMN_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 SET_SURFACE_W_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('ht', 'float', 'read'), ('msft', 'float', 'read'), ('w', 'float', 'read_write'))
 SET_SURFACE_W_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -7679,7 +7679,7 @@ SASE_VENT_FLUX_DIAG_SHAPES = (('f_row', (('nzp1', 'ny', 'nx'),)), ('scale', (('n
 SASE_VENT_FLUX_DIAG_PARAM_FIELDS = [('nzp1', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 SASE_VENT_FLUX_DIAG_THREADS_PER_GROUP = 128
 SASE_VENT_FLUX_DIAG_LAYOUT_HASH = '3b04c9dfcbb559f5625a80d160df7c70254c775331cbf7778ab3869dbf76e56b'
-SASE_VENT_FLUX_DIAG_SHADER_HASH = '7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2'
+SASE_VENT_FLUX_DIAG_SHADER_HASH = 'aa73daba068103749098b76a3d3d21e1362fbef6d1f229a41f1fdb8f442b581f'
 
 NEST_MP8_TO_MP18_MASS_DIAGNOSED_FIELD_RESOURCES = (('alt', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qr', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('mub2d', 'float', 'read'), ('mup', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('out', 'float', 'read_write'))
 NEST_MP8_TO_MP18_MASS_DIAGNOSED_FIELD_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
