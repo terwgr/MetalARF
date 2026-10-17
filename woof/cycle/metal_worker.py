@@ -163,8 +163,10 @@ class Leg:
         # the grid, static and init hashes, so an anchor from another case
         # is refused rather than resumed.
         from woof.hex.metal_forecast import _restart_setup
-        self.setup = _restart_setup(self.host, paths, local_timestep=False,
-                                    rates=None, rings=0)
+        self.setup = _restart_setup(
+            self.host, paths, local_timestep=False, rates=None, rings=0,
+            known={role: record.get("sha256")
+                   for role, record in authority["files"].items()})
         self.context = context
         self.stack: dict[str, Any] | None = None
         self.previous: dict[str, Any] = {}

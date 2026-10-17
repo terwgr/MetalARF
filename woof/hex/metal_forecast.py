@@ -107,12 +107,19 @@ def _start_stamp(value: datetime) -> str:
 
 
 def _restart_setup(host: Any, paths: dict[str, Path], *,
-                   local_timestep: bool, rates: Any, rings: int) -> dict[str, Any]:
-    """Bind the dynamics configuration and caller-owned static carriers."""
+                   local_timestep: bool, rates: Any, rings: int,
+                   known: dict[str, str] | None = None) -> dict[str, Any]:
+    """Bind the dynamics configuration and caller-owned static carriers.
+
+    ``known`` holds digests already taken (the authority check), by role.
+    """
     from dataclasses import asdict
     from hashlib import sha256
 
     def digest(path: Path) -> str:
+        for role, value in (known or {}).items():
+            if value and Path(paths[role]) == Path(path):
+                return value
         result = sha256()
         with path.open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -363,6 +370,9 @@ def _run_physics(
     if rings < 1:
         raise _refuse("--local-timestep-buffer-rings must be at least 1")
     authority = runner.verify_forecast_authorities(paths)
+    # Taken once by the authority check; reused, not re-hashed.
+    known_digests = {role: record.get("sha256")
+                     for role, record in authority["files"].items()}
     host = runner.prepare_forecast_host(
         paths, authority, start_time_text=getattr(arguments, "start_time", None),
         horiz_mixing=horiz_mixing, convection=convection,
@@ -372,7 +382,7 @@ def _run_physics(
     # Hashing the grid, static and init files is only needed to bind a
     # checkpoint or check a restart against one.
     setup = (_restart_setup(host, paths, local_timestep=local_timestep,
-                            rates=rates, rings=rings)
+                            rates=rates, rings=rings, known=known_digests)
              if restored_physics is not None or checkpoint is not None else None)
     if restored_physics is not None and restored_physics["setup"] != setup:
         raise _refuse(
@@ -546,7 +556,7 @@ def _run_physics(
         "history": frames,
         # The CUDA door's frame index, so the swath and cascade readers
         # take a Metal run as they take a CUDA one.
-        "forecast": _forecast_index(out, frames, paths),
+        "forecast": _forecast_index(out, frames, paths, known_digests),
         "step_health": health,
         "finite": refusal is None,
         "state": final.bounds_receipt() if refusal is None else None,
@@ -569,8 +579,12 @@ def _run_physics(
 
 
 def _forecast_index(out: Path, frames: list[dict[str, Any]],
-                    paths: dict[str, Path]) -> dict[str, Any]:
-    """Frame files with their SHA-256s, valid-time labels and authorities."""
+                    paths: dict[str, Path],
+                    known: dict[str, str] | None = None) -> dict[str, Any]:
+    """Frame files with their SHA-256s, valid-time labels and authorities.
+
+    ``known`` holds the authority digests the run already took, by role.
+    """
     from hashlib import sha256
 
     def digest(path: Path) -> str:
@@ -590,7 +604,8 @@ def _forecast_index(out: Path, frames: list[dict[str, Any]],
                 frame["valid_time"]).strftime("%Y-%m-%d_%H.%M.%S")
             for frame in frames},
         "authority": {"files": {
-            name: {"path": str(paths[name]), "sha256": digest(paths[name])}
+            name: {"path": str(paths[name]),
+                   "sha256": (known or {}).get(name) or digest(paths[name])}
             for name in ("grid", "static")}},
     }
 
