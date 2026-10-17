@@ -2679,7 +2679,7 @@ RRTMGP_CAL_CLDFRA1_SHAPES = (('cldfra', (('ncol', 'nlay'),)), ('play', (('ncol',
 RRTMGP_CAL_CLDFRA1_PARAM_FIELDS = [('ncell', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('f_qi', 'ctypes.c_int32'), ('f_qs', 'ctypes.c_int32')]
 RRTMGP_CAL_CLDFRA1_THREADS_PER_GROUP = 128
 RRTMGP_CAL_CLDFRA1_LAYOUT_HASH = '0229e21ec84ad13cc1ac0c9116807ba681482256a7b633f1dd620b2d73aa2f1b'
-RRTMGP_CAL_CLDFRA1_SHADER_HASH = 'd6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc'
+RRTMGP_CAL_CLDFRA1_SHADER_HASH = '0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9'
 
 RRTMGP_CLEAR_UPPER_LAYERS_RESOURCES = (('in_0', 'float', 'read'), ('in_1', 'float', 'read'), ('in_2', 'float', 'read'), ('in_3', 'float', 'read'), ('in_4', 'float', 'read'), ('out_0', 'float', 'read_write'), ('out_1', 'float', 'read_write'), ('out_2', 'float', 'read_write'), ('out_3', 'float', 'read_write'), ('out_4', 'float', 'read_write'))
 RRTMGP_CLEAR_UPPER_LAYERS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2703,7 +2703,7 @@ RRTMGP_CLOUDY_BACKGROUND_RADII_SHAPES = (('cldfra', (('ncol', 'nlay'),)), ('effc
 RRTMGP_CLOUDY_BACKGROUND_RADII_PARAM_FIELDS = [('ncell', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('ntable', 'ctypes.c_int32'), ('has_supplied_liquid', 'ctypes.c_int32'), ('has_supplied_ice', 'ctypes.c_int32'), ('is_p3', 'ctypes.c_int32')]
 RRTMGP_CLOUDY_BACKGROUND_RADII_THREADS_PER_GROUP = 128
 RRTMGP_CLOUDY_BACKGROUND_RADII_LAYOUT_HASH = 'c9518cd9fed0451131fc4a72391d13dfdf233d0cccd23f9823542db4ae8dd463'
-RRTMGP_CLOUDY_BACKGROUND_RADII_SHADER_HASH = 'd6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc'
+RRTMGP_CLOUDY_BACKGROUND_RADII_SHADER_HASH = '0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9'
 
 RRTMGP_DELTA_SCALE_RESOURCES = (('tau_in', 'float', 'read'), ('ssa_in', 'float', 'read'), ('g_in', 'float', 'read'), ('tau', 'float', 'read_write'), ('ssa', 'float', 'read_write'), ('asym', 'float', 'read_write'))
 RRTMGP_DELTA_SCALE_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write', 'read_write')
@@ -2775,7 +2775,7 @@ RRTMGP_HYDROMETEOR_PATHS_SHAPES = (('ciwp', (('ncol', 'nlay'),)), ('cldfra', (('
 RRTMGP_HYDROMETEOR_PATHS_PARAM_FIELDS = [('ncell', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('scheme', 'ctypes.c_int32'), ('snow_discount', 'ctypes.c_int32'), ('has_qi', 'ctypes.c_int32'), ('has_qs', 'ctypes.c_int32'), ('has_cldfra', 'ctypes.c_int32'), ('morrison_use_effective', 'ctypes.c_int32'), ('my2_icexc9', 'ctypes.c_float'), ('my2_icexi9', 'ctypes.c_float'), ('my2_igs20', 'ctypes.c_float'), ('my2_idms', 'ctypes.c_float'), ('my2_ilam_min', 'ctypes.c_float'), ('my2_eps_q', 'ctypes.c_float'), ('my2_eps_n', 'ctypes.c_float'), ('my2_cloud_radius', 'ctypes.c_float'), ('my2_ice_radius', 'ctypes.c_float'), ('my2_snow_radius', 'ctypes.c_float'), ('morrison_cloud_lambda_const', 'ctypes.c_float'), ('morrison_ice_lambda_const', 'ctypes.c_float'), ('morrison_snow_lambda_const', 'ctypes.c_float')]
 RRTMGP_HYDROMETEOR_PATHS_THREADS_PER_GROUP = 128
 RRTMGP_HYDROMETEOR_PATHS_LAYOUT_HASH = '137afe0daea2cbdda57c95aabba842bb6b8c34dada42678f3c0c39e5ad9aff69'
-RRTMGP_HYDROMETEOR_PATHS_SHADER_HASH = 'd6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc'
+RRTMGP_HYDROMETEOR_PATHS_SHADER_HASH = '0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9'
 
 RRTMGP_INTERPOLATION_INLINE_REFERENCE_RESOURCES = (('play', 'float', 'read'), ('tlay', 'float', 'read'), ('press_ref', 'float', 'read'), ('temp_ref', 'float', 'read'), ('iatm_out', 'float', 'read_write'), ('jt_out', 'float', 'read_write'), ('jp_out', 'float', 'read_write'), ('ftemp_out', 'float', 'read_write'), ('fpress_out', 'float', 'read_write'))
 RRTMGP_INTERPOLATION_INLINE_REFERENCE_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2839,7 +2839,7 @@ RRTMGP_MYNN_CLOUD_MERGE_SHAPES = (('cldfra', (('ncol', 'nlay'),)), ('cldfra_bl',
 RRTMGP_MYNN_CLOUD_MERGE_PARAM_FIELDS = [('ncell', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('has_cldfra', 'ctypes.c_int32'), ('replace_cldfra', 'ctypes.c_int32')]
 RRTMGP_MYNN_CLOUD_MERGE_THREADS_PER_GROUP = 128
 RRTMGP_MYNN_CLOUD_MERGE_LAYOUT_HASH = '0d0f4dcbe43484a42935087f16cd68708920533c1bd4778d44df88e626181a51'
-RRTMGP_MYNN_CLOUD_MERGE_SHADER_HASH = 'd6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc'
+RRTMGP_MYNN_CLOUD_MERGE_SHADER_HASH = '0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9'
 
 RRTMGP_MYNN_CLOUD_SUPPLIED_RESOURCES = (('qc', 'float', 'read'), ('qi', 'float', 'read'), ('qc_bl', 'float', 'read'), ('qi_bl', 'float', 'read'), ('cldfra_bl', 'float', 'read'), ('liquid_supplied', 'uint32', 'read_write'), ('ice_supplied', 'uint32', 'read_write'))
 RRTMGP_MYNN_CLOUD_SUPPLIED_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -2847,7 +2847,7 @@ RRTMGP_MYNN_CLOUD_SUPPLIED_SHAPES = (('cldfra_bl', (('ncol', 'nlay'),)), ('ice_s
 RRTMGP_MYNN_CLOUD_SUPPLIED_PARAM_FIELDS = [('ncell', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32')]
 RRTMGP_MYNN_CLOUD_SUPPLIED_THREADS_PER_GROUP = 128
 RRTMGP_MYNN_CLOUD_SUPPLIED_LAYOUT_HASH = '9024948db240fd025a2dd8b7eea63e92a73c0f56ed577f8535440a6b7cbe24bb'
-RRTMGP_MYNN_CLOUD_SUPPLIED_SHADER_HASH = 'd6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc'
+RRTMGP_MYNN_CLOUD_SUPPLIED_SHADER_HASH = '0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9'
 
 RRTMGP_PLANCK_SOURCES_RESOURCES = (('play', 'float', 'read'), ('tlay', 'float', 'read'), ('tlev', 'float', 'read'), ('tsfc', 'float', 'read'), ('vmr', 'float', 'read'), ('iatm_meta', 'float', 'read'), ('jt_meta', 'float', 'read'), ('jp_meta', 'float', 'read'), ('ftemp_meta', 'float', 'read'), ('fpress_meta', 'float', 'read'), ('temp_ref', 'float', 'read'), ('vmr_ref', 'float', 'read'), ('flavor', 'float', 'read'), ('gpoint_flavor', 'float', 'read'), ('gpoint_bands', 'float', 'read'), ('planck_fraction', 'float', 'read'), ('totplnk', 'float', 'read'), ('lay_source', 'float', 'read_write'), ('lev_source', 'float', 'read_write'), ('sfc_source', 'float', 'read_write'))
 RRTMGP_PLANCK_SOURCES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
@@ -2943,7 +2943,7 @@ RRTMGP_SURFACE_EMISSIVITY_SHAPES = (('emissivity', ((), ('ny', 'nx'), ('nband',)
 RRTMGP_SURFACE_EMISSIVITY_PARAM_FIELDS = [('layout', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nband', 'ctypes.c_int32'), ('ncell', 'ctypes.c_int32')]
 RRTMGP_SURFACE_EMISSIVITY_THREADS_PER_GROUP = 128
 RRTMGP_SURFACE_EMISSIVITY_LAYOUT_HASH = '42a00ecdd2074f379b791ffc25287072720d94e5171e8911d49dc9b7189f5fbb'
-RRTMGP_SURFACE_EMISSIVITY_SHADER_HASH = 'd6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc'
+RRTMGP_SURFACE_EMISSIVITY_SHADER_HASH = '0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9'
 
 RRTMGP_SW_2STREAM_RESOURCES = (('tau', 'float', 'read'), ('ssa', 'float', 'read'), ('asym', 'float', 'read'), ('mu0', 'float', 'read'), ('sfc_alb_dir', 'float', 'read'), ('sfc_alb_dif', 'float', 'read'), ('inc_flux', 'float', 'read'), ('part_up', 'float', 'read_write'), ('part_dn', 'float', 'read_write'), ('part_dir', 'float', 'read_write'), ('fz_cld_tau', 'float', 'read'), ('fz_cld_ssa', 'float', 'read'), ('fz_cld_asy', 'float', 'read'), ('fz_gpt_bands', 'float', 'read'), ('fz_mask', 'float', 'read'))
 RRTMGP_SW_2STREAM_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read')
@@ -2967,7 +2967,7 @@ RRTMGP_VALIDATE_CALL_SHAPES = (('cldfra', (('ncol', 'nlay'),)), ('effc', (('ncol
 RRTMGP_VALIDATE_CALL_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('nemiss', 'ctypes.c_int32'), ('nflag', 'ctypes.c_int32'), ('morrison', 'ctypes.c_int32'), ('have_effective', 'ctypes.c_int32'), ('play_lower', 'ctypes.c_float'), ('play_upper', 'ctypes.c_float'), ('temp_lower', 'ctypes.c_float'), ('temp_upper', 'ctypes.c_float'), ('effc_lower', 'ctypes.c_float'), ('effc_upper', 'ctypes.c_float'), ('effi_lower', 'ctypes.c_float'), ('effi_upper', 'ctypes.c_float'), ('effs_lower', 'ctypes.c_float'), ('effs_upper', 'ctypes.c_float'), ('has_expected_top', 'ctypes.c_int32'), ('expected_top', 'ctypes.c_float'), ('top_tolerance', 'ctypes.c_float')]
 RRTMGP_VALIDATE_CALL_THREADS_PER_GROUP = 128
 RRTMGP_VALIDATE_CALL_LAYOUT_HASH = 'f47289d3e44d696dd93f81c95e03ce9cd33b580f858a3aad6ee7688b01a9aec5'
-RRTMGP_VALIDATE_CALL_SHADER_HASH = 'd6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc'
+RRTMGP_VALIDATE_CALL_SHADER_HASH = '0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9'
 
 RUC_DRIVER_COMMIT_RESOURCES = (('raw', 'uint32', 'read_write'), ('flags', 'uint64', 'read_write'))
 RUC_DRIVER_COMMIT_ACCESS = ('read_write', 'read_write')
@@ -6592,6 +6592,14 @@ REFL10CM_WSM6_COLUMN_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_
 REFL10CM_WSM6_COLUMN_THREADS_PER_GROUP = 32
 REFL10CM_WSM6_COLUMN_LAYOUT_HASH = '443dbcd81754ad8b4feb62f1536f880fc1f45eb1aecc9815028896243fcfc8c7'
 REFL10CM_WSM6_COLUMN_SHADER_HASH = 'fe3a8967da6e0c9b00fa491349676a0f6568d613788a099020005aca9e744fd4'
+
+RRTMGP_MYNN_CLOUD_MERGE_GSD41_RESOURCES = (('qc', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('cldfra', 'float', 'read_write'), ('qc_bl', 'float', 'read'), ('cldfra_bl', 'float', 'read'), ('tlay', 'float', 'read'))
+RRTMGP_MYNN_CLOUD_MERGE_GSD41_ACCESS = ('read_write', 'read_write', 'read_write', 'read', 'read', 'read')
+RRTMGP_MYNN_CLOUD_MERGE_GSD41_SHAPES = (('qc', (('ncol', 'nlay'),)), ('qi', (('ncol', 'nlay'),)), ('cldfra', (('ncol', 'nlay'),)), ('qc_bl', (('ncol', 'nlay'),)), ('cldfra_bl', (('ncol', 'nlay'),)), ('tlay', (('ncol', 'nlay'),)))
+RRTMGP_MYNN_CLOUD_MERGE_GSD41_PARAM_FIELDS = [('ncell', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('nlay', 'ctypes.c_int32'), ('has_cldfra', 'ctypes.c_int32'), ('first_step', 'ctypes.c_int32')]
+RRTMGP_MYNN_CLOUD_MERGE_GSD41_THREADS_PER_GROUP = 128
+RRTMGP_MYNN_CLOUD_MERGE_GSD41_LAYOUT_HASH = 'd42f0390169a581e02cda72100ee3e10096fc7dd216f88dc4025683f592c2dbe'
+RRTMGP_MYNN_CLOUD_MERGE_GSD41_SHADER_HASH = '0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9'
 
 MYNN_PBLH_SCALE_GSD41_COLUMNS_RESOURCES = (('thetav', 'float', 'read'), ('qke', 'float', 'read'), ('zw', 'float', 'read'), ('dz', 'float', 'read'), ('landsea', 'float', 'read'), ('dx', 'float', 'read'), ('zi', 'float', 'read_write'), ('kzi', 'int32', 'read_write'), ('psig_bl', 'float', 'read_write'), ('psig_shcu', 'float', 'read_write'))
 MYNN_PBLH_SCALE_GSD41_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')

@@ -134298,6 +134298,111 @@
     },
     {
       "arithmetic_policies": [
+        "float32_ordered",
+        "wrf_mynn_thresholds"
+      ],
+      "cuda_source": "woof/core/kernels/rrtmg_legacy_adapter.cu",
+      "cuda_symbol": "rla_mynn_gsd41",
+      "layout_version": 1,
+      "module": "rrtmgp_cloud_prep_family",
+      "name": "rrtmgp_mynn_cloud_merge_gsd41",
+      "parameters": [
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "has_cldfra",
+          "int32"
+        ],
+        [
+          "first_step",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfra",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc_bl",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra_bl",
+          "float",
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "qc": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qi": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "cldfra": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qc_bl": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "cldfra_bl": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
         "default"
       ],
       "cuda_source": null,

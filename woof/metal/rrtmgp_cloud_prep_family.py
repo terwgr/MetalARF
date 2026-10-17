@@ -99,6 +99,29 @@ def submit_mynn_cloud_merge(qc, qi, cldfra, *, qc_bl, qi_bl, cldfra_bl,
         exact_policy=False, grid_size=qc.size, threads_per_group=128)
 
 
+def submit_mynn_cloud_merge_gsd41(qc, qi, cldfra, *, qc_bl, cldfra_bl, tlay,
+                                  first_step):
+    """Apply the GSD MYNN v4.1 in-cloud subgrid merge in place."""
+    arrays = {"qc": qc, "qi": qi, "qc_bl": qc_bl, "cldfra_bl": cldfra_bl,
+              "tlay": tlay}
+    shape = qc.shape
+    if len(shape) != 2 or min(shape) < 1:
+        raise ValueError("MYNN radiation clouds need nonempty (ncol,nlay) fields")
+    for name, value in arrays.items():
+        _f32(value, shape, name)
+    has_cldfra = cldfra is not None
+    if has_cldfra:
+        _f32(cldfra, shape, "cldfra")
+    # Without a fraction the shader's guarded write aliases qc.
+    arrays["cldfra"] = cldfra if has_cldfra else qc
+    context = _same_context(arrays)
+    context.submit_kernel(
+        "rrtmgp_mynn_cloud_merge_gsd41", arrays,
+        {"ncell": qc.size, "ncol": shape[0], "nlay": shape[1],
+         "has_cldfra": int(has_cldfra), "first_step": int(bool(first_step))},
+        exact_policy=False, grid_size=qc.size, threads_per_group=128)
+
+
 _RRTMGP_RETAB = {}
 
 

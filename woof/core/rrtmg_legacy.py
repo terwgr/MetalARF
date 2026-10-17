@@ -1596,7 +1596,9 @@ class RRTMGLegacyRadiation:
         active_bl = mynn_bl_cloud_active(
             getattr(cfg, "bl_pbl_physics", 0),
             getattr(cfg, "icloud_bl", 0))
-        from woof.metal.rrtmgp_cloud_prep_family import submit_cal_cldfra1
+        from woof.metal.rrtmgp_cloud_prep_family import (
+            submit_cal_cldfra1, submit_mynn_cloud_merge_gsd41)
+        source_bl = getattr(cfg, "bl_mynn_version", "wrf_461") == "gsd_41"
         cloud_moisture = {
             name: (value if value is not None else
                    np.zeros((ncol, nz), dtype=np.float32))
@@ -1623,19 +1625,27 @@ class RRTMGLegacyRadiation:
                         "and CLDFRA_BL")
                 bl[name] = xp.asarray(cols(fields[name], nz), dtype=np.float32)
             itimestep = wrf_itimestep(state.elapsed_seconds, cfg.dt)
-            supplied_liquid, supplied_ice = mynn_bl_cloud_supplied(
-                cloud_device["qc"], cloud_device["qi"],
-                qc_bl=bl["qc_bl"], qi_bl=bl["qi_bl"],
-                cldfra_bl=bl["cldfra_bl"],
-                bl_pbl_physics=getattr(cfg, "bl_pbl_physics", 0),
-                icloud_bl=getattr(cfg, "icloud_bl", 0))
-            merge_mynn_bl_clouds(
-                cloud_device["qc"], cloud_device["qi"], cloudfrac_device,
-                qc_bl=bl["qc_bl"], qi_bl=bl["qi_bl"],
-                cldfra_bl=bl["cldfra_bl"],
-                bl_pbl_physics=getattr(cfg, "bl_pbl_physics", 0),
-                icloud_bl=getattr(cfg, "icloud_bl", 0),
-                itimestep=itimestep)
+            if source_bl:
+                # GSD MYNN v4.1 carries in-cloud QC_BL: scale by CLDFRA_BL,
+                # split by temperature, and leave the radii as they are.
+                submit_mynn_cloud_merge_gsd41(
+                    cloud_device["qc"], cloud_device["qi"], cloudfrac_device,
+                    qc_bl=bl["qc_bl"], cldfra_bl=bl["cldfra_bl"],
+                    tlay=t3d_device, first_step=itimestep == 1)
+            else:
+                supplied_liquid, supplied_ice = mynn_bl_cloud_supplied(
+                    cloud_device["qc"], cloud_device["qi"],
+                    qc_bl=bl["qc_bl"], qi_bl=bl["qi_bl"],
+                    cldfra_bl=bl["cldfra_bl"],
+                    bl_pbl_physics=getattr(cfg, "bl_pbl_physics", 0),
+                    icloud_bl=getattr(cfg, "icloud_bl", 0))
+                merge_mynn_bl_clouds(
+                    cloud_device["qc"], cloud_device["qi"], cloudfrac_device,
+                    qc_bl=bl["qc_bl"], qi_bl=bl["qi_bl"],
+                    cldfra_bl=bl["cldfra_bl"],
+                    bl_pbl_physics=getattr(cfg, "bl_pbl_physics", 0),
+                    icloud_bl=getattr(cfg, "icloud_bl", 0),
+                    itimestep=itimestep)
             for name in ("qc", "qi"):
                 if moisture[name] is not None:
                     moisture[name] = cloud_device[name].to_numpy()
@@ -1644,7 +1654,7 @@ class RRTMGLegacyRadiation:
             cloudfrac = cloudfrac_device.to_numpy()
         radii = {name: cols(getattr(state, name, None), nz)
                  for name in ("effc", "effi", "effs")}
-        if active_bl:
+        if active_bl and not source_bl:
             from woof.core.rrtmgp import (
                 SCHEME_RADII_COUPLINGS, cloud_optics_scheme,
                 cloudy_background_radii)

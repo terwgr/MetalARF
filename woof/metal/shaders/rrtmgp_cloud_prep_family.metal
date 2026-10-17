@@ -2,6 +2,7 @@
 #include "rrtmgp_cal_cldfra1_bindings.metalh"
 #include "rrtmgp_mynn_cloud_supplied_bindings.metalh"
 #include "rrtmgp_mynn_cloud_merge_bindings.metalh"
+#include "rrtmgp_mynn_cloud_merge_gsd41_bindings.metalh"
 #include "rrtmgp_cloudy_background_radii_bindings.metalh"
 #include "rrtmgp_surface_emissivity_bindings.metalh"
 #include "rrtmgp_hydrometeor_paths_bindings.metalh"
@@ -103,6 +104,27 @@ kernel void rrtmgp_mynn_cloud_merge(
     const float qi = r.qi[cell];
     if ((qc < 1.0e-6f) && cloudy_bl) r.qc[cell] = qc + r.qc_bl[cell];
     if ((qi < 1.0e-8f) && cloudy_bl) r.qi[cell] = qi + r.qi_bl[cell];
+}
+
+// GSD MYNN v4.1 merge (bl_mynn_version = "gsd_41"): the carried QC_BL is
+// in-cloud, so it is scaled by CLDFRA_BL and split by (T-254)/15, and it is
+// added only where neither resolved phase is present.  On the first model
+// step the fraction takes CLDFRA_BL only where it exceeds 0.001.
+kernel void rrtmgp_mynn_cloud_merge_gsd41(
+    constant RrtmgpMynnCloudMergeGsd41Resources &r [[buffer(0)]],
+    constant RrtmgpMynnCloudMergeGsd41Params &p [[buffer(1)]],
+    uint cell [[thread_position_in_grid]]) {
+    if (cell >= uint(p.ncell)) return;
+    const float fb = r.cldfra_bl[cell];
+    if (p.has_cldfra && (!p.first_step || fb > 0.001f)) r.cldfra[cell] = fb;
+    const float qc = r.qc[cell];
+    const float qi = r.qi[cell];
+    if (qc < 1.0e-6f && qi < 1.0e-8f && fb > 0.001f) {
+        const float x = (r.tlay[cell] - 254.0f) / 15.0f;
+        const float liq = min(max(x, 0.0f), 1.0f);
+        r.qc[cell] = qc + (r.qc_bl[cell] * liq) * fb;
+        r.qi[cell] = qi + (r.qc_bl[cell] * (1.0f - liq)) * fb;
+    }
 }
 
 kernel void rrtmgp_cloudy_background_radii(

@@ -5425,7 +5425,7 @@
       "name": "rrtmgp_cal_cldfra1",
       "parameter_size": 20,
       "resource_count": 7,
-      "shader_hash": "d6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc",
+      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
       "threads_per_group": 128
     },
     {
@@ -5474,7 +5474,7 @@
       "name": "rrtmgp_cloudy_background_radii",
       "parameter_size": 28,
       "resource_count": 10,
-      "shader_hash": "d6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc",
+      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
       "threads_per_group": 128
     },
     {
@@ -5621,7 +5621,7 @@
       "name": "rrtmgp_hydrometeor_paths",
       "parameter_size": 88,
       "resource_count": 19,
-      "shader_hash": "d6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc",
+      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
       "threads_per_group": 128
     },
     {
@@ -5753,7 +5753,7 @@
       "name": "rrtmgp_mynn_cloud_merge",
       "parameter_size": 20,
       "resource_count": 6,
-      "shader_hash": "d6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc",
+      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
       "threads_per_group": 128
     },
     {
@@ -5770,7 +5770,7 @@
       "name": "rrtmgp_mynn_cloud_supplied",
       "parameter_size": 12,
       "resource_count": 7,
-      "shader_hash": "d6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc",
+      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
       "threads_per_group": 128
     },
     {
@@ -5964,7 +5964,7 @@
       "name": "rrtmgp_surface_emissivity",
       "parameter_size": 24,
       "resource_count": 2,
-      "shader_hash": "d6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc",
+      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
       "threads_per_group": 128
     },
     {
@@ -6013,7 +6013,7 @@
       "name": "rrtmgp_validate_call",
       "parameter_size": 76,
       "resource_count": 22,
-      "shader_hash": "d6f7389fc428491b3769682e8492d65d26b9efbc9364ef1b0b9101a0d88ca5bc",
+      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
       "threads_per_group": 128
     },
     {
@@ -13403,6 +13403,23 @@
       "resource_count": 8,
       "shader_hash": "fe3a8967da6e0c9b00fa491349676a0f6568d613788a099020005aca9e744fd4",
       "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "float32_ordered",
+        "wrf_mynn_thresholds"
+      ],
+      "cuda_source": "woof/core/kernels/rrtmg_legacy_adapter.cu",
+      "cuda_symbol": "rla_mynn_gsd41",
+      "layout_hash": "d42f0390169a581e02cda72100ee3e10096fc7dd216f88dc4025683f592c2dbe",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "module": "rrtmgp_cloud_prep_family",
+      "name": "rrtmgp_mynn_cloud_merge_gsd41",
+      "parameter_size": 20,
+      "resource_count": 6,
+      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
+      "threads_per_group": 128
     },
     {
       "arithmetic_policies": [
