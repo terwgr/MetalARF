@@ -3094,18 +3094,19 @@ class DryDycoreDriver:
             tend_ru_mixing = (
                 None if saved_mixing_euler is None else saved_mixing_euler.u
             )
-            ru_components = [tend_ru_transport, tend_ru_momentum, euler_ru]
-            if tend_ru_mixing is not None:
-                ru_components.append(tend_ru_mixing)
+            # The saved mixing pool already holds euler_ru (apply_saved_euler_mixing),
+            # so it replaces euler_ru rather than adding to it.
+            ru_components = [
+                tend_ru_transport, tend_ru_momentum,
+                euler_ru if tend_ru_mixing is None else tend_ru_mixing,
+            ]
             tend_ru_metal = (
                 _metal_rk_tendency_sum(self.metal_context, *ru_components)
                 if self.metal_context is not None else None
             )
             if tend_ru_metal is None:
                 tend_ru = tend_ru_transport + tend_ru_momentum
-                tend_ru += euler_ru
-                if tend_ru_mixing is not None:
-                    tend_ru += tend_ru_mixing
+                tend_ru += euler_ru if tend_ru_mixing is None else tend_ru_mixing
             else:
                 tend_ru = tend_ru_metal
             tend_rt = _rho_theta_tendency(
@@ -3155,17 +3156,15 @@ class DryDycoreDriver:
             tend_rw_mixing = (
                 None if saved_mixing_euler is None else saved_mixing_euler.w
             )
-            rw_components = [tend_rw, euler_rw]
-            if tend_rw_mixing is not None:
-                rw_components.append(tend_rw_mixing)
+            rw_components = [
+                tend_rw, euler_rw if tend_rw_mixing is None else tend_rw_mixing,
+            ]
             tend_rw_metal = (
                 _metal_rk_tendency_sum(self.metal_context, *rw_components)
                 if self.metal_context is not None else None
             )
             if tend_rw_metal is None:
-                tend_rw += euler_rw
-                if tend_rw_mixing is not None:
-                    tend_rw += tend_rw_mixing
+                tend_rw += euler_rw if tend_rw_mixing is None else tend_rw_mixing
             else:
                 tend_rw = tend_rw_metal
             tend_omega = convert_w_tendency_to_omega(
