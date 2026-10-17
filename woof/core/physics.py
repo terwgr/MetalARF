@@ -828,9 +828,18 @@ METAL_KNOWN_CONFLICTS = (
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "zadvect_implicit", 0) or 0) != 0
      and int(cfg.nz) > 256),
-    ("km_opt=0 runs on Metal only under the SASE PBL (bl_pbl_physics=900)",
+    # The same profile the Metal dycore step requires before it skips the
+    # km_opt operator (woof.core.dycore.step).
+    ("km_opt=0 runs on Metal only under the SASE PBL (bl_pbl_physics=900) "
+     "with diff_6th_opt=0, sf_sfclay_physics 1 or 91, no urban physics "
+     "and no CAM ozone",
      lambda cfg, radiation, cumulus, cam_ozone:
-     int(cfg.km_opt) == 0 and int(cfg.bl_pbl_physics) != 900),
+     int(cfg.km_opt) == 0 and (
+         int(cfg.bl_pbl_physics) != 900
+         or int(cfg.diff_6th_opt) != 0
+         or int(cfg.sf_sfclay_physics) not in (1, 91)
+         or int(getattr(cfg, "sf_urban_physics", 0) or 0) != 0
+         or cam_ozone is not None)),
     ("Metal RRTMGP holds at most 128 layers including its model-top layer",
      lambda cfg, radiation, cumulus, cam_ozone:
      radiation_enabled(cfg) and 4 in radiation_scheme_ids(cfg)
@@ -838,6 +847,12 @@ METAL_KNOWN_CONFLICTS = (
     ("Metal NSSL microphysics (mp_physics=18) sediments at most 128 levels",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(cfg.mp_physics) == 18 and int(cfg.nz) > 128),
+    ("Metal WSM6 and WDM6 (mp_physics=6, 16) run 2 to 80 levels",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(cfg.mp_physics) in (6, 16) and not 2 <= int(cfg.nz) <= 80),
+    ("Metal Milbrandt-Yau (mp_physics=9) runs 3 to 256 levels",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(cfg.mp_physics) == 9 and not 3 <= int(cfg.nz) <= 256),
     ("spp_pbl takes its pattern from an ensemble member's stochastic physics; "
      "this run has no member to supply one",
      lambda cfg, radiation, cumulus, cam_ozone:
