@@ -399,7 +399,7 @@ GF_GFDRV_STAGE_SHAPES = (('u', (('any_1d',),)), ('v', (('any_1d',),)), ('w', (('
 GF_GFDRV_STAGE_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('col0', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('dx', 'ctypes.c_float'), ('use_dx_column', 'ctypes.c_int32'), ('ishallow', 'ctypes.c_int32'), ('ichoice', 'ctypes.c_int32'), ('spp_enabled', 'ctypes.c_int32')]
 GF_GFDRV_STAGE_THREADS_PER_GROUP = 64
 GF_GFDRV_STAGE_LAYOUT_HASH = '1f26617228eda4facdee7147fb29b1ac3e34bc36ffe3787b557379ade04ae881'
-GF_GFDRV_STAGE_SHADER_HASH = 'c0dd1442bc699c848777956b2bc3615ace2b4eb18850abf619af4ecdaaefb53a'
+GF_GFDRV_STAGE_SHADER_HASH = '5c9f8bb96820b983b3ada183af9bbe85b3716ecaeef7d004d0282805857350b6'
 
 GLOBAL_BETTS_MILLER_FRAGMENT_RESOURCES = (('temperature', 'float64_bits', 'read'), ('qv', 'float64_bits', 'read'), ('pressure', 'float64_bits', 'read'), ('dp', 'float64_bits', 'read'), ('virtual_temperature', 'float64_bits', 'read'), ('relax', 'float64_bits', 'read'), ('rh', 'float64_bits', 'read'), ('minimum_depth', 'float64_bits', 'read'), ('epsilon', 'float64_bits', 'read'), ('gravity', 'float64_bits', 'read'), ('rd', 'float64_bits', 'read'), ('lv', 'float64_bits', 'read'), ('cp', 'float64_bits', 'read'), ('lv2', 'float64_bits', 'read'), ('rd_cp', 'float64_bits', 'read'), ('temperature_out', 'float64_bits', 'read_write'), ('qv_out', 'float64_bits', 'read_write'), ('precip', 'float64_bits', 'read_write'), ('deep', 'uint32', 'read_write'))
 GLOBAL_BETTS_MILLER_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')

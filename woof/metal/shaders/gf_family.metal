@@ -2670,7 +2670,7 @@ static inline void gfd_deep_column(
     ISCB[ISCA_ierr] = ierr;
 
     // ---- the get_inversion_layers capture, for the shallow port ----------
-    {
+    if (LEVB.p || SCAB.p || ISCB.p) {
         GfCol dtempdz = GFWS_AT(gfws, 85);
         GfCol first_s = GFWS_AT(gfws, 86);
         GfCol sec_s = GFWS_AT(gfws, 87);

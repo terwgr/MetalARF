@@ -836,7 +836,7 @@
       "name": "gf_gfdrv_stage",
       "parameter_size": 36,
       "resource_count": 31,
-      "shader_hash": "c0dd1442bc699c848777956b2bc3615ace2b4eb18850abf619af4ecdaaefb53a",
+      "shader_hash": "5c9f8bb96820b983b3ada183af9bbe85b3716ecaeef7d004d0282805857350b6",
       "threads_per_group": 64
     },
     {
