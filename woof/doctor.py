@@ -691,6 +691,12 @@ def _host_threads_check() -> Check:
 
 def _cupy_check() -> Check:
     wheels = _installed_cupy_wheels()
+    if not wheels and _apple_silicon():
+        # No CUDA wheel exists for this host; its forecast backend is
+        # Metal, which the Apple Metal runtime check answers for.
+        return Check("cupy (GPU runtime)", "info",
+                     "not applicable on Apple Silicon; forecasts run on Metal",
+                     brief="not applicable (Metal host)", blocking=False)
     if len(wheels) > 1:
         return _overlapping_cupy_check(wheels)
     ok, evidence = _import_probe("cupy")
@@ -830,15 +836,20 @@ with MetalContext() as context:
 '''
 
 
+def _apple_silicon() -> bool:
+    from woof.capabilities import apple_silicon
+
+    return apple_silicon()
+
+
 def _metal_runtime_check() -> Check:
     """Load the packaged Metal runtime and execute a tiny device dispatch.
 
-    This is informational while the public forecast routes remain CUDA-only;
-    artifact presence alone never certifies the backend. Once a supported
-    forecast door selects Metal, its failure must become blocking.
+    On Apple Silicon this is the forecast backend, so a failed dispatch
+    blocks; artifact presence alone never certifies it.
     """
     name = "Apple Metal runtime"
-    if sys.platform != "darwin" or platform.machine().lower() != "arm64":
+    if not _apple_silicon():
         return Check(name, "info", "not applicable (requires Apple Silicon)",
                      brief="not Apple Silicon", blocking=False)
     if no_local_gpu():
@@ -875,10 +886,11 @@ def _metal_runtime_check() -> Check:
                     if line.strip()]
             detail = (tail[-1] if tail else
                       f"device probe exited {result.returncode}")
-    # Until Metal is a supported public forecast route, report its state
-    # without turning an incomplete port into a product-readiness verdict.
-    return Check(name, "info", f"device smoke probe unavailable: {_short(detail, 120)}",
-                 brief=_short(detail), blocking=False)
+    return Check(name, "missing", f"device smoke probe failed: {_short(detail, 120)}",
+                 "  # the packaged Metal library did not load or dispatch here\n"
+                 "  remedy: pip install --force-reinstall --no-deps recast-woof",
+                 action="pip install --force-reinstall --no-deps recast-woof",
+                 brief=_short(detail), severity=SEVERITY_BROKEN)
 
 
 #: Compiles and executes two kernels, keeping execution failures separate

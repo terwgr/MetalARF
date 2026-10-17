@@ -19,6 +19,14 @@ import woof.doctor as doctor
 from woof import bridges
 
 
+@pytest.fixture(autouse=True)
+def _a_cuda_host(monkeypatch):
+    """These cells describe a CUDA host; on a Mac the doors answer with Metal."""
+    from woof import capabilities as _capabilities
+
+    monkeypatch.setattr(_capabilities, "apple_silicon", lambda: False)
+
+
 def test_bridge_env_override_wins_and_fails_loud(monkeypatch, tmp_path):
     exe = tmp_path / "grib1_bridge.exe"
     exe.write_bytes(b"prebuilt")

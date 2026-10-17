@@ -28,6 +28,12 @@ import pytest
 from woof import capabilities
 
 
+@pytest.fixture(autouse=True)
+def _a_cuda_host(monkeypatch):
+    """These cells describe a CUDA host; on a Mac the doors answer with Metal."""
+    monkeypatch.setattr(capabilities, "apple_silicon", lambda: False)
+
+
 # ---------------------------------------------------------------------------
 # The registry itself: derived remedies, and remedies that resolve
 # ---------------------------------------------------------------------------

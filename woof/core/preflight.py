@@ -10200,6 +10200,44 @@ def target_capacity_source(sampled, target_hardware) -> str:
     return "measured on the selected GPU" if target_hardware else "measured"
 
 
+def _metal_selected(declared_memory: bool) -> bool:
+    """Whether ``woof check`` prices for the Metal backend on this host.
+
+    A declared budget sizes for another machine, which the CUDA
+    arithmetic below still owns.
+    """
+    from woof import capabilities
+
+    if os.environ.get("WOOF_STATE_BACKEND") == "metal":
+        return True
+    return (not declared_memory and capabilities.apple_silicon()
+            and not capabilities.is_installed(capabilities.GPU_RUNTIME.module))
+
+
+def _metal_memory_check(args, exp) -> int:
+    """The memory verdict ``woof go --backend metal`` gates on, before fetch."""
+    from woof.metal import memory_gate as metal_memory
+    from woof.metal.runtime import MetalContext
+
+    runs = [domain.run for domain in exp.domains]
+    with MetalContext() as context:
+        estimate = metal_memory.estimate_runs(runs, context)
+    refusal = metal_memory.refusal_text(
+        estimate, [(int(run.nx), int(run.ny), int(run.nz)) for run in runs])
+    if args.json:
+        print(json.dumps({"backend": "metal",
+                          "estimate_bytes": int(estimate.peak_bytes),
+                          "limit_bytes": int(estimate.limit_bytes),
+                          "fits": refusal is None}, indent=2))
+    else:
+        print("woof check: Metal memory -- needs about "
+              f"{estimate.peak_bytes / GIB:.1f} GiB (estimate); limit "
+              f"{estimate.limit_bytes / GIB:.1f} GiB")
+        if refusal is not None:
+            print(refusal)
+    return 0 if refusal is None else 1
+
+
 def check_main(args) -> int:
     """``woof check CONFIG [--alloc]``: memory section of the preflight.
 
@@ -10271,6 +10309,13 @@ def check_main(args) -> int:
     prepared = _prepared_check_inputs(args)
     exp = (prepared.experiment if prepared is not None
            else _load_experiment_any(args.config))
+    if _metal_selected(declared_memory):
+        if args.alloc:
+            raise ValueError(
+                "--alloc measures a CUDA card's allocator and has no Metal "
+                "form; omit it to price this config against the Metal "
+                "working set")
+        return _metal_memory_check(args, exp)
     urban_columns = (None if prepared is None or args.alloc
                      else prepared.urban_columns)
     from woof.output_disk import forecast_projection
