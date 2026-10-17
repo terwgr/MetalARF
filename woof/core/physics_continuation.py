@@ -122,6 +122,10 @@ def capture_continuation(state, driver, *, store=None) -> dict[str, np.ndarray]:
     never allocated ``cu_*`` has no cumulus memory to move, and the
     restore side invents nothing.
     """
+    if getattr(driver, "pbl_raw_rates", {}) is None:
+        raise ValueError(
+            "this checkpoint has no physical PBL rates for relocation; "
+            "advance to the next scheduled PBL call before moving the nest")
     captured: dict[str, np.ndarray] = {}
     existing = getattr(state, "existing_scratch", None)
     if callable(existing):

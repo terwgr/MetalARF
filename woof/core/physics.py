@@ -2804,6 +2804,7 @@ class PhysicsDriver:
                             if forced else None)
         self.gf_rqvblten = (arrays.zeros(self.state.p.shape, dtype=DTYPE)
                             if forced else None)
+        self._allocate_pbl_raw_rates(cfg)
         self.gf_dx_column = None
         self.ysu_nan_guard_fires = 0
         self.rthratenlw = arrays.zeros(self.state.p.shape, dtype=DTYPE)
@@ -4201,6 +4202,10 @@ class PhysicsDriver:
                 "the moved nest would run its urban model on the old "
                 "footprint's roof/wall/road temperatures and urban "
                 "fractions")
+        if self.pbl_raw_rates is None:
+            raise ValueError(
+                "this checkpoint has no physical PBL rates for relocation; "
+                "advance to the next scheduled PBL call before moving the nest")
         if self.pbl_raw_rates:
             self.pbl_tendencies = couple_ysu_tendencies(
                 state, cfg, self.pbl_raw_rates)
@@ -4886,7 +4891,12 @@ class PhysicsDriver:
         if self.gf_rthblten is not None:
             self.gf_rthblten[...] = rates["dtheta"]
             self.gf_rqvblten[...] = rates["dqv"]
-        for name, target in getattr(self, "pbl_raw_rates", {}).items():
+        if self.pbl_raw_rates is None:
+            # Older Metal checkpoints retain coupled tendencies but cannot
+            # recover A-grid momentum from the averaged face tendencies.
+            # The next due producer supplies the first complete raw payload.
+            self._allocate_pbl_raw_rates(cfg)
+        for name, target in self.pbl_raw_rates.items():
             shared = PBL_SHARED_FORCING.get(name)
             if shared and target is getattr(self, shared, None):
                 continue  # the canonical GF/New Tiedtke lane was filled above
@@ -4894,6 +4904,16 @@ class PhysicsDriver:
             target[...] = 0.0 if source is None else source
         return couple_ysu_tendencies(
             self.state if state is None else state, cfg, rates)
+
+    def _allocate_pbl_raw_rates(self, cfg: RunConfig) -> None:
+        arrays = (self.state._array_module
+                  if getattr(self.state, "_metal_setup_state", False) else cp)
+        self.pbl_raw_rates = {}
+        for name in pbl_raw_rate_names(cfg):
+            shared = getattr(self, PBL_SHARED_FORCING.get(name, ""), None)
+            self.pbl_raw_rates[name] = (
+                shared if shared is not None
+                else arrays.zeros(self.state.p.shape, dtype=DTYPE))
 
     def _apply_gwd(self, drag, cfg: RunConfig,
                    rates: Mapping[str, cp.ndarray],

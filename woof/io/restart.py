@@ -3361,7 +3361,7 @@ def pbl_raw_manifest(driver) -> dict[str, object]:
     from woof.core.physics_inventory import PBL_SHARED_FORCING
 
     manifest = {}
-    for name, value in getattr(driver, "pbl_raw_rates", {}).items():
+    for name, value in (getattr(driver, "pbl_raw_rates", None) or {}).items():
         shared = PBL_SHARED_FORCING.get(name)
         key = (f"held/{shared}" if shared and value is getattr(driver, shared, None)
                else f"pbl/{name}")
@@ -3625,6 +3625,7 @@ def _write_restart(path, state, cfg, *, run_trackers=None,
                             for key, value in driver.call_counts.items()},
             "ysu_nan_guard_fires": int(driver.ysu_nan_guard_fires),
             "microphysics_updates": int(driver.microphysics_updates),
+            "pbl_raw_available": getattr(driver, "pbl_raw_rates", {}) is not None,
             # Carrier provenance: source + last producer model time, per
             # carrier.  Two scalars each, in the header rather than the
             # array set, so the v5 key layout is untouched.
@@ -5940,6 +5941,22 @@ def _validate_scratch_target(state, slot: str, host: np.ndarray,
             f"scratch dtype {dtype}")
 
 
+def _missing_legacy_metal_pbl(stored, header, state, driver) -> bool:
+    """Old Metal checkpoints have coupled PBL tendencies but no A-grid rates."""
+    expected = {key for key in pbl_raw_manifest(driver) if key.startswith("pbl/")}
+    stored_raw = {key for key in stored if key.startswith("pbl/")
+                  and not key.startswith("pbl/diagnostics/")}
+    driver_header = header.get("driver")
+    if not isinstance(driver_header, dict):
+        raise RestartMismatchError("restart physics-driver header is incomplete or malformed")
+    marker = driver_header.get("pbl_raw_available")
+    if marker is not None and not isinstance(marker, bool):
+        raise RestartMismatchError("restart pbl_raw_available must be boolean")
+    return bool(expected and not stored_raw
+                and getattr(state, "_metal_setup_state", False)
+                and marker is not True)
+
+
 def _validate_driver_payload(stored, header, state, driver, elapsed,
                              format_version: int) -> None:
     """Hoist every PhysicsDriver refusal without mutating the driver."""
@@ -5962,13 +5979,16 @@ def _validate_driver_payload(stored, header, state, driver, elapsed,
     stored_pbl = {key for key in stored if key.startswith("pbl/")
                   and not key.startswith("pbl/diagnostics/")}
     _validate_pbl_diagnostics(stored, header, state, driver)
-    if stored_pbl != expected_pbl:
+    legacy_pbl = _missing_legacy_metal_pbl(stored, header, state, driver)
+    if stored_pbl != expected_pbl and not legacy_pbl:
         raise RestartMismatchError(
             "restart raw PBL inventory does not match this configuration "
             f"(missing {sorted(expected_pbl - stored_pbl)}, "
             f"extra {sorted(stored_pbl - expected_pbl)}); use a checkpoint "
             "from this build or start from prepared state")
     for key, target in raw_pbl.items():
+        if legacy_pbl and key.startswith("pbl/"):
+            continue
         _check_array(stored[key], target, key)
 
     stored_fields = {key[len("fields/"):]: value
@@ -6890,8 +6910,13 @@ def _restore_driver(stored, header, state, driver, elapsed, asarray,
         if target is not None:
             target[...] = asarray(stored[f"held/{name}"])
 
-    for key, target in pbl_raw_manifest(driver).items():
-        target[...] = asarray(stored[key])
+    if _missing_legacy_metal_pbl(stored, header, state, driver):
+        # Keep the checkpoint's coupled tendencies until the next scheduled
+        # producer. Zero raw rates would falsely claim relocation is safe.
+        driver.pbl_raw_rates = None
+    else:
+        for key, target in pbl_raw_manifest(driver).items():
+            target[...] = asarray(stored[key])
 
     for key, target in pbl_diagnostic_manifest(driver).items():
         if key in stored:
