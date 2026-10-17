@@ -1,6 +1,10 @@
 #include <metal_stdlib>
 #include "noahmp_driver_snow_init_bindings.metalh"
 #include "noahmp_driver_noahmp_init_bindings.metalh"
+#include "soft_binary32.metalh"
+#include "soft_gfk_exp.metalh"
+#include "soft_gfk_log.metalh"
+#include "soft_gfk_pow.metalh"
 
 using namespace metal;
 
@@ -54,17 +58,19 @@ constant int NI_OUT_TSNO = 84;
 constant int NI_OUT_SNICE = 87;
 constant int NI_OUT_SNLIQ = 90;
 
-static inline float nmp_pow_native(float x, float y) {
-    return pow(x, y);
+// The oracle's x**y is glibc's powf (2095-2096); the water and glacier
+// leaves use the same transcription.
+static inline float nmp_powf(float x, float y) {
+    return as_type<float>(soft_gfk_pow_bits(as_type<uint>(x), as_type<uint>(y)));
 }
 
 static inline float nmp_supercooled_guess(float tslb, float bexp,
                                            float smcmax, float psisat,
                                            float smois) {
-    const float base = nmp_div(
-        nmp_mul(nmp_k(11), nmp_mul(nmp_k(12), nmp_sub(nmp_k(0), psisat))),
+    const float base = nmp_mul(
+        nmp_div(nmp_k(11), nmp_mul(nmp_k(12), nmp_sub(nmp_k(0), psisat))),
         nmp_div(nmp_sub(tslb, nmp_k(13)), tslb));
-    float fk = nmp_mul(nmp_pow_native(base, nmp_div(nmp_k(2), bexp)), smcmax);
+    float fk = nmp_mul(nmp_powf(base, nmp_div(nmp_k(2), bexp)), smcmax);
     fk = nmp_max(fk, nmp_k(20));
     return nmp_min(fk, smois);
 }

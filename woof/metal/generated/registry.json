@@ -3734,7 +3734,7 @@
       "name": "noahmp_driver_noahmp_init",
       "parameter_size": 4,
       "resource_count": 3,
-      "shader_hash": "6ed0537a5b301a79ebb609c63baa83b13c647d5ece5e990df817d7679be60edd",
+      "shader_hash": "b29e378a98d0b6f941add47c35e55c77dbc5e5397f9f979e8b3940c2440ce07d",
       "threads_per_group": 64
     },
     {
@@ -3750,7 +3750,7 @@
       "name": "noahmp_driver_snow_init",
       "parameter_size": 4,
       "resource_count": 3,
-      "shader_hash": "6ed0537a5b301a79ebb609c63baa83b13c647d5ece5e990df817d7679be60edd",
+      "shader_hash": "b29e378a98d0b6f941add47c35e55c77dbc5e5397f9f979e8b3940c2440ce07d",
       "threads_per_group": 64
     },
     {

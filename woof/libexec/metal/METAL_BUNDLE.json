@@ -6,8 +6,8 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "75bd9a1b36eabeeae3d5ea243758302d4b8ceb524d79ebc6a5eb7868855bd82b",
-      "size": 11312060
+      "sha256": "5bf96e3f6b912b9cd1bbe951d90a67170d58058a09efdecf8ac0a0ff9d4c2709",
+      "size": 11324396
     },
     "woof_exact.metallib": {
       "sha256": "017b8a398514b6f4d50366b83af61dc25fad1d1d6c805f9d4f73e8ae71949458",
@@ -15,8 +15,8 @@
     }
   },
   "implementation_file_count": 887,
-  "implementation_sha256": "8681f162234715f129e3e520e47944fe1f37b22b962a6dc023995630d922f2d0",
-  "metal_inputs_sha256": "6e8c0a27e7bf89e502de0cd6531154ff85e912ae968705af62a3f6efea7760f8",
+  "implementation_sha256": "f6a39691ebb44dedeefb9131c9a9a7b31ad7212959969101b77d7ef7d9681c77",
+  "metal_inputs_sha256": "32b8262a2c702258be55052d6d53f9d6ae47f9f00b8e596447e8a1d3d735c266",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -888,8 +888,8 @@
         "size": 5992
       },
       "woof/metal/shaders/noahmp_driver_family.metal": {
-        "sha256": "6ed0537a5b301a79ebb609c63baa83b13c647d5ece5e990df817d7679be60edd",
-        "size": 12187
+        "sha256": "b29e378a98d0b6f941add47c35e55c77dbc5e5397f9f979e8b3940c2440ce07d",
+        "size": 12470
       },
       "woof/metal/shaders/noahmp_fluxprep_family.metal": {
         "sha256": "939b7f346f8b6b7cf487342364f59d983560502bd0b560bbcff78602e8261cbf",
@@ -2968,6 +2968,6 @@
         "size": 296
       }
     },
-    "sha256": "6e8c0a27e7bf89e502de0cd6531154ff85e912ae968705af62a3f6efea7760f8"
+    "sha256": "32b8262a2c702258be55052d6d53f9d6ae47f9f00b8e596447e8a1d3d735c266"
   }
 }
