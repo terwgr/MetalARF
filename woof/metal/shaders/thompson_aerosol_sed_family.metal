@@ -253,7 +253,7 @@ struct TaaCleanupResources {
 // must not be emitted as a kernel before those contracts clear review.
 static inline void thompson_aa_final_phase_cleanup_item(
     thread const TaaCleanupResources &r, float dt, int idx,
-    float r1, float r2, float am_i)
+    float r1, float r2, float am_i, float number_ceiling)
 {
     const float temp0 = r.temperature[idx];
     const float qv0 = thompson_aa_fmaxf(1.0e-10f, r.qv[idx]);
@@ -290,7 +290,8 @@ static inline void thompson_aa_final_phase_cleanup_item(
         r.qi[idx] = 0.0f;
         r.ni[idx] = 0.0f;
     } else if (r.qi[idx] * rho > r1) {
-        thompson_aa_bound_ice_number(r.qi[idx] * rho, rho, &r.ni[idx]);
+        thompson_aa_bound_ice_number(
+            r.qi[idx] * rho, rho, &r.ni[idx], number_ceiling);
     } else {
         const float qi_local = r.qi[idx];
         const float ni_local = thompson_aa_fmaxf(
@@ -315,7 +316,7 @@ static inline void thompson_aa_final_phase_cleanup_item(
         const ulong mass_ratio = taa_f32_to_f64(as_type<uint>(mass_ratio32));
         const ulong candidate = soft64_mul(mass_ratio, cube);
         const ulong cap = soft64_div(
-            0x412e7cb000000000ul, // binary64 999000.0
+            taa_f32_to_f64(as_type<uint>(number_ceiling)),
             taa_f32_to_f64(as_type<uint>(rho)));
         r.ni[idx] = as_type<float>(taa_f64_to_f32(
             thompson_aa_soft64_fmin(candidate, cap)));
@@ -529,5 +530,6 @@ kernel void thompson_aa_final_phase_cleanup_source(
     view.pressure = r.pressure;
     view.qv = r.qv;
     thompson_aa_final_phase_cleanup_item(
-        view, p.dt, int(idx), p.r1, p.r2, p.am_i);
+        view, p.dt, int(idx), p.r1, p.r2, p.am_i,
+        p.wrf39 ? 499.0e3f : 999.0e3f);
 }

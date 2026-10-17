@@ -1,0 +1,161 @@
+{
+  "arithmetic_policies": [
+    "soft32-rn-nonftz",
+    "soft64-rn-bit-ops",
+    "dependency-marked-unverified"
+  ],
+  "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
+  "cuda_symbol": "thompson_aa_final_phase_cleanup",
+  "layout_version": 2,
+  "module": "thompson_aerosol_sed_family",
+  "name": "thompson_aa_final_phase_cleanup_source",
+  "parameters": [
+    [
+      "dt",
+      "float32"
+    ],
+    [
+      "r1",
+      "float32"
+    ],
+    [
+      "r2",
+      "float32"
+    ],
+    [
+      "am_i",
+      "float32"
+    ],
+    [
+      "size",
+      "int32"
+    ],
+    [
+      "wrf39",
+      "int32"
+    ]
+  ],
+  "resources": [
+    [
+      "qc",
+      "float",
+      "read_write"
+    ],
+    [
+      "qi",
+      "float",
+      "read_write"
+    ],
+    [
+      "ni",
+      "float",
+      "read_write"
+    ],
+    [
+      "temperature",
+      "float",
+      "read_write"
+    ],
+    [
+      "cloud_number_entry",
+      "float",
+      "read"
+    ],
+    [
+      "ice_number_entry",
+      "float",
+      "read"
+    ],
+    [
+      "cloud_number_tendency",
+      "float",
+      "read_write"
+    ],
+    [
+      "pressure",
+      "float",
+      "read"
+    ],
+    [
+      "qv",
+      "float",
+      "read"
+    ]
+  ],
+  "shapes": {
+    "cloud_number_entry": [
+      [
+        "size"
+      ],
+      [
+        "any_1d"
+      ]
+    ],
+    "cloud_number_tendency": [
+      [
+        "size"
+      ],
+      [
+        "any_1d"
+      ]
+    ],
+    "ice_number_entry": [
+      [
+        "size"
+      ],
+      [
+        "any_1d"
+      ]
+    ],
+    "ni": [
+      [
+        "size"
+      ],
+      [
+        "any_1d"
+      ]
+    ],
+    "pressure": [
+      [
+        "size"
+      ],
+      [
+        "any_1d"
+      ]
+    ],
+    "qc": [
+      [
+        "size"
+      ],
+      [
+        "any_1d"
+      ]
+    ],
+    "qi": [
+      [
+        "size"
+      ],
+      [
+        "any_1d"
+      ]
+    ],
+    "qv": [
+      [
+        "size"
+      ],
+      [
+        "any_1d"
+      ]
+    ],
+    "temperature": [
+      [
+        "size"
+      ],
+      [
+        "any_1d"
+      ]
+    ]
+  },
+  "source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
+  "threads_per_group": 256
+}

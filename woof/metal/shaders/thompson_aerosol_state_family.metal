@@ -465,14 +465,19 @@ kernel void thompson_aa_state_finalize_with_columns(
     const float nc_accumulated = thompson_aa_add(
         r.nc[tid], thompson_aa_mul(r.ncten[tid], p.dt));
     float nc_new = fmax(thompson_aa_div(2.0f, rho),
-                        fmin(nc_accumulated, 1999.0e6f));
+                        p.wrf39 ? nc_accumulated
+                                : fmin(nc_accumulated, 1999.0e6f));
 
     const float nwfa_updated = thompson_aa_add(
         r.nwfa[tid], thompson_aa_mul(r.nwfaten[tid], p.dt));
     const float nifa_updated = thompson_aa_add(
         r.nifa[tid], thompson_aa_mul(r.nifaten[tid], p.dt));
-    r.nwfa_out[tid] = fmax(11.1e6f, fmin(nwfa_updated, 9999.0e6f));
-    r.nifa_out[tid] = fmax(5.0e3f, fmin(nifa_updated, 9999.0e6f));
+    const float aerosol_ceiling = p.wrf39
+        ? thompson_aa_div(9999.0e6f, rho) : 9999.0e6f;
+    const float nwfa_floor = p.wrf39
+        ? thompson_aa_div(11.1e6f, rho) : 11.1e6f;
+    r.nwfa_out[tid] = fmax(nwfa_floor, fmin(nwfa_updated, aerosol_ceiling));
+    r.nifa_out[tid] = fmax(5.0e3f, fmin(nifa_updated, aerosol_ceiling));
 
     const float qc = r.qc[tid];
     if (qc <= 1.0e-12f) {

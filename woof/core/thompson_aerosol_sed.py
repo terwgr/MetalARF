@@ -308,9 +308,11 @@ def launch_aa_final_phase_cleanup(
         from woof.metal.thompson_aerosol_sed_family import (
             submit_final_phase_cleanup,
         )
+        from woof.core.thompson_aerosol_launch import active_thompson_version
         submit_final_phase_cleanup(
             qc, qi, ni, temperature, cloud_number_entry, ice_number_entry,
-            cloud_number_tendency, pressure, qv, dt=dt)
+            cloud_number_tendency, pressure, qv, dt=dt,
+            wrf39=active_thompson_version() == "wrf_39_noaa")
         return
     grid, block = launch_grid(size, DEFAULT_THREADS)
     aerosol_kernel(SED_MODULE, "thompson_aa_final_phase_cleanup")(

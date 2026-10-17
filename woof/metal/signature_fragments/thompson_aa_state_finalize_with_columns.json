@@ -1,0 +1,164 @@
+{
+  "arithmetic_policies": [
+    "wrf-exact"
+  ],
+  "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
+  "cuda_symbol": "thompson_aa_state_finalize_with_columns",
+  "layout_version": 2,
+  "module": "thompson_aerosol_state_family",
+  "name": "thompson_aa_state_finalize_with_columns",
+  "parameters": [
+    [
+      "dt",
+      "float32"
+    ],
+    [
+      "ncol",
+      "int32"
+    ],
+    [
+      "n",
+      "int32"
+    ],
+    [
+      "wrf39",
+      "int32"
+    ]
+  ],
+  "resources": [
+    [
+      "qc",
+      "float",
+      "read_write"
+    ],
+    [
+      "nc",
+      "float",
+      "read"
+    ],
+    [
+      "nwfa",
+      "float",
+      "read"
+    ],
+    [
+      "nifa",
+      "float",
+      "read"
+    ],
+    [
+      "ncten",
+      "float",
+      "read"
+    ],
+    [
+      "nwfaten",
+      "float",
+      "read"
+    ],
+    [
+      "nifaten",
+      "float",
+      "read"
+    ],
+    [
+      "rho",
+      "float",
+      "read"
+    ],
+    [
+      "nc_out",
+      "float",
+      "read_write"
+    ],
+    [
+      "nwfa_out",
+      "float",
+      "read_write"
+    ],
+    [
+      "nifa_out",
+      "float",
+      "read_write"
+    ],
+    [
+      "qv",
+      "float",
+      "read_write"
+    ],
+    [
+      "micro_columns",
+      "float",
+      "read"
+    ]
+  ],
+  "shapes": {
+    "micro_columns": [
+      [
+        "any_1d"
+      ]
+    ],
+    "nc": [
+      [
+        "any_1d"
+      ]
+    ],
+    "nc_out": [
+      [
+        "any_1d"
+      ]
+    ],
+    "ncten": [
+      [
+        "any_1d"
+      ]
+    ],
+    "nifa": [
+      [
+        "any_1d"
+      ]
+    ],
+    "nifa_out": [
+      [
+        "any_1d"
+      ]
+    ],
+    "nifaten": [
+      [
+        "any_1d"
+      ]
+    ],
+    "nwfa": [
+      [
+        "any_1d"
+      ]
+    ],
+    "nwfa_out": [
+      [
+        "any_1d"
+      ]
+    ],
+    "nwfaten": [
+      [
+        "any_1d"
+      ]
+    ],
+    "qc": [
+      [
+        "any_1d"
+      ]
+    ],
+    "qv": [
+      [
+        "any_1d"
+      ]
+    ],
+    "rho": [
+      [
+        "any_1d"
+      ]
+    ]
+  },
+  "source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
+  "threads_per_group": 128
+}

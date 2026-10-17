@@ -242,6 +242,7 @@ def submit_aerosol_state_finalize_with_columns(
     nifa_out: MetalArray,
     qv: MetalArray,
     micro_columns: MetalArray,
+    *, wrf39: bool = False,
 ):
     """Apply MP28 terminal tendencies while honoring entry column exits."""
     fields = {
@@ -326,7 +327,8 @@ def submit_aerosol_state_finalize_with_columns(
 
     return context.submit_kernel(
         "thompson_aa_state_finalize_with_columns", resources,
-        {"dt": float(dt_f32), "ncol": ncolumns, "n": count},
+        {"dt": float(dt_f32), "ncol": ncolumns, "n": count,
+         "wrf39": int(wrf39)},
         exact_policy=True, grid_size=count, threads_per_group=_THREADS)
 
 
@@ -797,7 +799,8 @@ def submit_wrf39_start_emission(nwfa: MetalArray, nwfa2d: MetalArray,
     ncolumns = ny * nx
     return context.submit_kernel(
         "thompson_aa_wrf39_start_emission",
-        {"nwfa": nwfa, "nwfa2d": nwfa2d},
+        {"nwfa": nwfa.view((nwfa.size,), byte_offset=nwfa.byte_offset),
+         "nwfa2d": nwfa2d.view((ncolumns,), byte_offset=nwfa2d.byte_offset)},
         {"dx": float(dx32), "dy": float(dy32), "ncolumns": ncolumns},
         exact_policy=True, grid_size=ncolumns, threads_per_group=_THREADS)
 

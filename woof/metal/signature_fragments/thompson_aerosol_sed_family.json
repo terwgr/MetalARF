@@ -996,10 +996,14 @@
       [
         "size",
         "int32"
+      ],
+      [
+        "wrf39",
+        "int32"
       ]
     ],
     "threads_per_group": 256,
-    "layout_version": 1,
+    "layout_version": 2,
     "arithmetic_policies": [
       "soft32-rn-nonftz",
       "soft64-rn-bit-ops",

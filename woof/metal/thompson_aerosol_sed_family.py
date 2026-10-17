@@ -159,7 +159,7 @@ def submit_cloud_sedimentation(
 
 def submit_final_phase_cleanup(
         qc, qi, ni, temperature, cloud_number_entry, ice_number_entry,
-        cloud_number_tendency, pressure, qv, *, dt: float):
+        cloud_number_tendency, pressure, qv, *, dt: float, wrf39: bool = False):
     """Submit the MP28 cloud/ice number-conserving phase cleanup."""
     if not isinstance(qc, MetalArray) or qc.ndim != 3:
         raise TypeError("MP28 phase cleanup requires 3-D MetalArray state")
@@ -195,7 +195,7 @@ def submit_final_phase_cleanup(
     return context.submit_kernel(
         "thompson_aa_final_phase_cleanup_source", flat,
         {"dt": float(dt32), "r1": float(_R1), "r2": float(_R2),
-         "am_i": float(_AM_I), "size": size},
+         "am_i": float(_AM_I), "size": size, "wrf39": int(wrf39)},
         exact_policy=False, grid_size=size, threads_per_group=256)
 
 

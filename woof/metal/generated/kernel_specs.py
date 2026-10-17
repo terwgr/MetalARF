@@ -3575,7 +3575,7 @@ THOMPSON_AA_EFFECTIVE_RADIUS_SHAPES = (('effc', (('any_1d',),)), ('effi', (('any
 THOMPSON_AA_EFFECTIVE_RADIUS_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_AA_EFFECTIVE_RADIUS_THREADS_PER_GROUP = 128
 THOMPSON_AA_EFFECTIVE_RADIUS_LAYOUT_HASH = 'c065c0674f6b7d7c50c0f3f9ba2e04327a270af0c33b56fd28c0e12ff13a121f'
-THOMPSON_AA_EFFECTIVE_RADIUS_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_EFFECTIVE_RADIUS_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_ENTRY_CLOUD_NUMBER_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('rho', 'float', 'read'), ('rc_out', 'float', 'read_write'), ('nc_entry_m3', 'float', 'read_write'), ('nu_c_out', 'int32', 'read_write'), ('l_qc_out', 'int32', 'read_write'))
 THOMPSON_AA_ENTRY_CLOUD_NUMBER_ACCESS = ('read_write', 'read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -3583,7 +3583,7 @@ THOMPSON_AA_ENTRY_CLOUD_NUMBER_SHAPES = (('l_qc_out', (('n',), ('any_1d',))), ('
 THOMPSON_AA_ENTRY_CLOUD_NUMBER_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_AA_ENTRY_CLOUD_NUMBER_THREADS_PER_GROUP = 128
 THOMPSON_AA_ENTRY_CLOUD_NUMBER_LAYOUT_HASH = 'a03676c8b3ffb92728496eb842c550ac987be15fb8dc0d0b80a759d7a0ab35c9'
-THOMPSON_AA_ENTRY_CLOUD_NUMBER_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_ENTRY_CLOUD_NUMBER_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_ENTRY_SNAPSHOT_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('nwfa', 'float', 'read'), ('nifa', 'float', 'read'), ('rho_out', 'float', 'read_write'), ('nwfa_entry_m3', 'float', 'read_write'), ('nifa_entry_m3', 'float', 'read_write'))
 THOMPSON_AA_ENTRY_SNAPSHOT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
@@ -3591,7 +3591,7 @@ THOMPSON_AA_ENTRY_SNAPSHOT_SHAPES = (('nifa', (('n',), ('any_1d',))), ('nifa_ent
 THOMPSON_AA_ENTRY_SNAPSHOT_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_AA_ENTRY_SNAPSHOT_THREADS_PER_GROUP = 128
 THOMPSON_AA_ENTRY_SNAPSHOT_LAYOUT_HASH = '5999f6349b0e44914b5f2c177bac76a284bc87fb627ad2ac5d371bb5e7771aee'
-THOMPSON_AA_ENTRY_SNAPSHOT_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_ENTRY_SNAPSHOT_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_INIT_PROFILE_RESOURCES = (('hgt', 'float', 'read'), ('nwfa', 'float', 'read_write'), ('nifa', 'float', 'read_write'), ('nwfa2d', 'float', 'read_write'))
 THOMPSON_AA_INIT_PROFILE_ACCESS = ('read', 'read_write', 'read_write', 'read_write')
@@ -3599,7 +3599,7 @@ THOMPSON_AA_INIT_PROFILE_SHAPES = (('hgt', (('any_1d',),)), ('nifa', (('any_1d',
 THOMPSON_AA_INIT_PROFILE_PARAM_FIELDS = [('fill_ccn', 'ctypes.c_int32'), ('fill_in', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ncolumns', 'ctypes.c_int32')]
 THOMPSON_AA_INIT_PROFILE_THREADS_PER_GROUP = 128
 THOMPSON_AA_INIT_PROFILE_LAYOUT_HASH = '975d5b43432ff1a579b3e127de9177be1af17afa7d0d366fbdca4b9fa93e244a'
-THOMPSON_AA_INIT_PROFILE_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_INIT_PROFILE_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_MICRO_COLUMNS_RESOURCES = (('qc', 'float', 'read'), ('qi', 'float', 'read'), ('qr', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('micro_columns', 'float', 'read_write'))
 THOMPSON_AA_MICRO_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -3607,7 +3607,7 @@ THOMPSON_AA_MICRO_COLUMNS_SHAPES = (('micro_columns', (('any_1d',),)), ('pressur
 THOMPSON_AA_MICRO_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 THOMPSON_AA_MICRO_COLUMNS_THREADS_PER_GROUP = 128
 THOMPSON_AA_MICRO_COLUMNS_LAYOUT_HASH = '456b511e8b70df2b0a4a5b8adb30aa274ffbcbfe88deb24eb891b587b6683b76'
-THOMPSON_AA_MICRO_COLUMNS_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_MICRO_COLUMNS_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_NCTEN_BALANCE_RESOURCES = (('qc_entry', 'float', 'read'), ('qc_after', 'float', 'read'), ('nc_entry', 'float', 'read'), ('density', 'float', 'read'), ('ncten', 'float', 'read_write'))
 THOMPSON_AA_NCTEN_BALANCE_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -3623,7 +3623,7 @@ THOMPSON_AA_PROFILE_HEIGHT_SHAPES = (('phb', (('nz+1',), ('nz+1', 'ny', 'nx'), (
 THOMPSON_AA_PROFILE_HEIGHT_PARAM_FIELDS = [('gravity', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('phb_full', 'ctypes.c_int32')]
 THOMPSON_AA_PROFILE_HEIGHT_THREADS_PER_GROUP = 128
 THOMPSON_AA_PROFILE_HEIGHT_LAYOUT_HASH = 'bd16e2caffca24179d9ac73cfc024adb5f09362db269b07b629fa139a39829e2'
-THOMPSON_AA_PROFILE_HEIGHT_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_PROFILE_HEIGHT_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_PROFILE_NEEDS_FILL_RESOURCES = (('field', 'float', 'read'), ('needs_fill', 'int32', 'read_write'))
 THOMPSON_AA_PROFILE_NEEDS_FILL_ACCESS = ('read', 'read_write')
@@ -3631,7 +3631,7 @@ THOMPSON_AA_PROFILE_NEEDS_FILL_SHAPES = (('field', (('size',), ('any_1d',))), ('
 THOMPSON_AA_PROFILE_NEEDS_FILL_PARAM_FIELDS = [('size', 'ctypes.c_int32'), ('threshold', 'ctypes.c_float')]
 THOMPSON_AA_PROFILE_NEEDS_FILL_THREADS_PER_GROUP = 1
 THOMPSON_AA_PROFILE_NEEDS_FILL_LAYOUT_HASH = '4a5fc0c2412feddedf31d1f5b31750328ab8cf9a4198d9a9fb67def13234dbf0'
-THOMPSON_AA_PROFILE_NEEDS_FILL_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_PROFILE_NEEDS_FILL_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_RAIN_EVAPORATION_RESOURCES = (('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('nwfaten', 'float', 'read_write'), ('reference_density', 'float', 'read_write'), ('reference_temperature', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read'), ('condensation_rate', 'float', 'read'), ('entry_density', 'float', 'read'))
 THOMPSON_AA_RAIN_EVAPORATION_ACCESS = ('read_write', 'read_write', 'read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read')
@@ -3652,10 +3652,10 @@ THOMPSON_AA_SATURATION_ADJUST_SHADER_HASH = '8c607d01264c08cb11e510d7a3dd8866037
 THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_RESOURCES = (('qc', 'float', 'read_write'), ('nc', 'float', 'read'), ('nwfa', 'float', 'read'), ('nifa', 'float', 'read'), ('ncten', 'float', 'read'), ('nwfaten', 'float', 'read'), ('nifaten', 'float', 'read'), ('rho', 'float', 'read'), ('nc_out', 'float', 'read_write'), ('nwfa_out', 'float', 'read_write'), ('nifa_out', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('micro_columns', 'float', 'read'))
 THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read')
 THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_SHAPES = (('micro_columns', (('any_1d',),)), ('nc', (('any_1d',),)), ('nc_out', (('any_1d',),)), ('ncten', (('any_1d',),)), ('nifa', (('any_1d',),)), ('nifa_out', (('any_1d',),)), ('nifaten', (('any_1d',),)), ('nwfa', (('any_1d',),)), ('nwfa_out', (('any_1d',),)), ('nwfaten', (('any_1d',),)), ('qc', (('any_1d',),)), ('qv', (('any_1d',),)), ('rho', (('any_1d',),)))
-THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('ncol', 'ctypes.c_int32'), ('n', 'ctypes.c_int32')]
+THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('ncol', 'ctypes.c_int32'), ('n', 'ctypes.c_int32'), ('wrf39', 'ctypes.c_int32')]
 THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_THREADS_PER_GROUP = 128
-THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_LAYOUT_HASH = '7ca73490a6033a29a680838c88c033c7f843ebe0b17239b16de8b9a112f92433'
-THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_LAYOUT_HASH = '1704729e6d03621e64da7b3a959008aa7ea54374108370c77beca08a4ae62ff7'
+THOMPSON_AA_STATE_FINALIZE_WITH_COLUMNS_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_SURFACE_EMISSION_RESOURCES = (('nwfa', 'float', 'read_write'), ('nifa', 'float', 'read_write'), ('nwfa2d', 'float', 'read'), ('nifa2d', 'float', 'read'))
 THOMPSON_AA_SURFACE_EMISSION_ACCESS = ('read_write', 'read_write', 'read', 'read')
@@ -3663,7 +3663,7 @@ THOMPSON_AA_SURFACE_EMISSION_SHAPES = (('nifa', (('any_1d',),)), ('nifa2d', (('a
 THOMPSON_AA_SURFACE_EMISSION_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('ncolumns', 'ctypes.c_int32')]
 THOMPSON_AA_SURFACE_EMISSION_THREADS_PER_GROUP = 128
 THOMPSON_AA_SURFACE_EMISSION_LAYOUT_HASH = '7bfc593770cfe0c63860170903b4f968b503a0e732f7ce50f14a91d92ba140c5'
-THOMPSON_AA_SURFACE_EMISSION_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_SURFACE_EMISSION_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_SURFACE_RAIN_FRACTION_RESOURCES = (('rainncv', 'float', 'read'), ('snowncv', 'float', 'read'), ('graupelncv', 'float', 'read'), ('sr', 'float', 'read_write'))
 THOMPSON_AA_SURFACE_RAIN_FRACTION_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -3671,7 +3671,7 @@ THOMPSON_AA_SURFACE_RAIN_FRACTION_SHAPES = (('graupelncv', (('ncolumns',), ('any
 THOMPSON_AA_SURFACE_RAIN_FRACTION_PARAM_FIELDS = [('ncolumns', 'ctypes.c_int32')]
 THOMPSON_AA_SURFACE_RAIN_FRACTION_THREADS_PER_GROUP = 128
 THOMPSON_AA_SURFACE_RAIN_FRACTION_LAYOUT_HASH = 'dabd1757fb417ddf33bc044fc9819dd2b1ae5746aa577823a63ce4074c5986e9'
-THOMPSON_AA_SURFACE_RAIN_FRACTION_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_SURFACE_RAIN_FRACTION_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_TAU1_DENSITY_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('rho_out', 'float', 'read_write'))
 THOMPSON_AA_TAU1_DENSITY_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -3679,7 +3679,7 @@ THOMPSON_AA_TAU1_DENSITY_SHAPES = (('pressure', (('n',), ('any_1d',))), ('qv', (
 THOMPSON_AA_TAU1_DENSITY_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_AA_TAU1_DENSITY_THREADS_PER_GROUP = 128
 THOMPSON_AA_TAU1_DENSITY_LAYOUT_HASH = '4125171af2a028787151ae75e5fbf9fe2ad6250cd1a612a571c9b65f5ada6236'
-THOMPSON_AA_TAU1_DENSITY_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_TAU1_DENSITY_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_WARM_SOURCE_NETWORK_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('graupel_number_per_kg', 'float', 'read_write'), ('graupel_melt_marker', 'float', 'read_write'), ('snow_melt_marker', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read_write'), ('nc_entry', 'float', 'read'), ('nwfa_entry', 'float', 'read'), ('nifa_entry', 'float', 'read'), ('ncten', 'float', 'read_write'), ('nwfaten', 'float', 'read_write'), ('nifaten', 'float', 'read_write'), ('rain_cloud_efficiency', 'float64_bits', 'read'), ('snow_cloud_efficiency', 'float64_bits', 'read'), ('tcs_racs1', 'float64_bits', 'read'), ('tmr_racs1', 'float64_bits', 'read'), ('tcs_racs2', 'float64_bits', 'read'), ('tmr_racs2', 'float64_bits', 'read'), ('tcr_sacr1', 'float64_bits', 'read'), ('tms_sacr1', 'float64_bits', 'read'), ('tcr_sacr2', 'float64_bits', 'read'), ('tms_sacr2', 'float64_bits', 'read'), ('tnr_racs1', 'float64_bits', 'read'), ('tnr_racs2', 'float64_bits', 'read'), ('tnr_sacr1', 'float64_bits', 'read'), ('tnr_sacr2', 'float64_bits', 'read'), ('tcg_racg', 'float64_bits', 'read'), ('tmr_racg', 'float64_bits', 'read'), ('tcr_gacr', 'float64_bits', 'read'), ('tnr_racg', 'float64_bits', 'read'), ('tnr_gacr', 'float64_bits', 'read'))
 THOMPSON_AA_WARM_SOURCE_NETWORK_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read_write', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -3695,7 +3695,7 @@ THOMPSON_AA_WORKING_CLOUD_SHAPES = (('l_qc_out', (('n',), ('any_1d',))), ('nc', 
 THOMPSON_AA_WORKING_CLOUD_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_AA_WORKING_CLOUD_THREADS_PER_GROUP = 128
 THOMPSON_AA_WORKING_CLOUD_LAYOUT_HASH = '474b9e111af0409cabfcd0dff89105c4059268a330d3f7bf88d8dae5dd0e1e6e'
-THOMPSON_AA_WORKING_CLOUD_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_WORKING_CLOUD_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_WORKING_NUMBER_RESOURCES = (('nwfa', 'float', 'read'), ('nwfaten', 'float', 'read'), ('rho', 'float', 'read'), ('nwfa_work_m3', 'float', 'read_write'))
 THOMPSON_AA_WORKING_NUMBER_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -3703,7 +3703,7 @@ THOMPSON_AA_WORKING_NUMBER_SHAPES = (('nwfa', (('n',), ('any_1d',))), ('nwfa_wor
 THOMPSON_AA_WORKING_NUMBER_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_AA_WORKING_NUMBER_THREADS_PER_GROUP = 128
 THOMPSON_AA_WORKING_NUMBER_LAYOUT_HASH = '9a0b50b0b99d29f932f2c6bda0554aeced7224f2e39b227b51ed8d088ae4b1d4'
-THOMPSON_AA_WORKING_NUMBER_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_WORKING_NUMBER_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_ADAPTER_ENTRY_RESOURCES = (('qc', 'float', 'read'), ('qi', 'float', 'read'), ('qr', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('graupel_number_per_kg', 'float', 'read_write'), ('micro_columns', 'float', 'read_write'))
 THOMPSON_ADAPTER_ENTRY_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -5039,7 +5039,7 @@ THOMPSON_AA_CLOUD_SEDIMENT_64_SOURCE_SHAPES = (('ccg2', ((16,), ('any_1d',))), (
 THOMPSON_AA_CLOUD_SEDIMENT_64_SOURCE_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('r1', 'ctypes.c_float'), ('r2', 'ctypes.c_float'), ('am_r', 'ctypes.c_float'), ('obmr', 'ctypes.c_float'), ('av_c', 'ctypes.c_float'), ('nc_sed_floor', 'ctypes.c_float'), ('sed_w_limit', 'ctypes.c_float'), ('sed_hgt_agl', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('has_rain_mask', 'ctypes.c_int32'), ('has_cloud_mask', 'ctypes.c_int32'), ('diagnostic_mask', 'ctypes.c_int32')]
 THOMPSON_AA_CLOUD_SEDIMENT_64_SOURCE_THREADS_PER_GROUP = 32
 THOMPSON_AA_CLOUD_SEDIMENT_64_SOURCE_LAYOUT_HASH = 'f2c8818e539311114dd210315f2b99b25acaa811810d30a33db8f879bc8bc5f2'
-THOMPSON_AA_CLOUD_SEDIMENT_64_SOURCE_SHADER_HASH = 'c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa'
+THOMPSON_AA_CLOUD_SEDIMENT_64_SOURCE_SHADER_HASH = 'b2c0afd71569c78cef459d38b17cf8fbf99b08d2d68bd972c58097e1510fd298'
 
 THOMPSON_AA_CLOUD_SEDIMENT_LEVELS_64_SOURCE_RESOURCES = (('qc', 'float', 'read_write'), ('cloud_number_entry', 'float', 'read'), ('cloud_number_tendency', 'float', 'read_write'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('reference_density', 'float', 'read'), ('rain_active_columns', 'float', 'read'), ('cloud_active_columns', 'float', 'read'), ('vertical_velocity', 'float', 'read'), ('dz', 'float', 'read'), ('ccg2', 'float', 'read'), ('ccg4', 'float', 'read'), ('ccg5', 'float', 'read'), ('ocg1', 'float', 'read'), ('ocg2', 'float', 'read'))
 THOMPSON_AA_CLOUD_SEDIMENT_LEVELS_64_SOURCE_ACCESS = ('read_write', 'read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -5047,7 +5047,7 @@ THOMPSON_AA_CLOUD_SEDIMENT_LEVELS_64_SOURCE_SHAPES = (('ccg2', ((16,), ('any_1d'
 THOMPSON_AA_CLOUD_SEDIMENT_LEVELS_64_SOURCE_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('r1', 'ctypes.c_float'), ('r2', 'ctypes.c_float'), ('am_r', 'ctypes.c_float'), ('obmr', 'ctypes.c_float'), ('av_c', 'ctypes.c_float'), ('nc_sed_floor', 'ctypes.c_float'), ('sed_w_limit', 'ctypes.c_float'), ('sed_hgt_agl', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('has_rain_mask', 'ctypes.c_int32'), ('has_cloud_mask', 'ctypes.c_int32')]
 THOMPSON_AA_CLOUD_SEDIMENT_LEVELS_64_SOURCE_THREADS_PER_GROUP = 512
 THOMPSON_AA_CLOUD_SEDIMENT_LEVELS_64_SOURCE_LAYOUT_HASH = '7448e68ff5b86b1d827afb9ea6eab19bf58846b69e8652915d6a715c6597c669'
-THOMPSON_AA_CLOUD_SEDIMENT_LEVELS_64_SOURCE_SHADER_HASH = 'c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa'
+THOMPSON_AA_CLOUD_SEDIMENT_LEVELS_64_SOURCE_SHADER_HASH = 'b2c0afd71569c78cef459d38b17cf8fbf99b08d2d68bd972c58097e1510fd298'
 
 THOMPSON_AA_CLOUD_SEDIMENT_256_SOURCE_RESOURCES = (('qc', 'float', 'read_write'), ('cloud_number_entry', 'float', 'read'), ('cloud_number_tendency', 'float', 'read_write'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('reference_density', 'float', 'read'), ('rain_active_columns', 'float', 'read'), ('cloud_active_columns', 'float', 'read'), ('vertical_velocity', 'float', 'read'), ('dz', 'float', 'read'), ('ccg2', 'float', 'read'), ('ccg4', 'float', 'read'), ('ccg5', 'float', 'read'), ('ocg1', 'float', 'read'), ('ocg2', 'float', 'read'), ('out_mass_velocity', 'float', 'read_write'), ('out_number_velocity', 'float', 'read_write'), ('out_cloud_mass', 'float', 'read_write'), ('out_cloud_number', 'float', 'read_write'))
 THOMPSON_AA_CLOUD_SEDIMENT_256_SOURCE_ACCESS = ('read_write', 'read', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -5055,15 +5055,15 @@ THOMPSON_AA_CLOUD_SEDIMENT_256_SOURCE_SHAPES = (('ccg2', ((16,), ('any_1d',))), 
 THOMPSON_AA_CLOUD_SEDIMENT_256_SOURCE_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('r1', 'ctypes.c_float'), ('r2', 'ctypes.c_float'), ('am_r', 'ctypes.c_float'), ('obmr', 'ctypes.c_float'), ('av_c', 'ctypes.c_float'), ('nc_sed_floor', 'ctypes.c_float'), ('sed_w_limit', 'ctypes.c_float'), ('sed_hgt_agl', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('has_rain_mask', 'ctypes.c_int32'), ('has_cloud_mask', 'ctypes.c_int32'), ('diagnostic_mask', 'ctypes.c_int32')]
 THOMPSON_AA_CLOUD_SEDIMENT_256_SOURCE_THREADS_PER_GROUP = 32
 THOMPSON_AA_CLOUD_SEDIMENT_256_SOURCE_LAYOUT_HASH = '4407c718efd34fd14ce9d069dff81734f17f2e906e7f35b09a3d4ba2783d8128'
-THOMPSON_AA_CLOUD_SEDIMENT_256_SOURCE_SHADER_HASH = 'c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa'
+THOMPSON_AA_CLOUD_SEDIMENT_256_SOURCE_SHADER_HASH = 'b2c0afd71569c78cef459d38b17cf8fbf99b08d2d68bd972c58097e1510fd298'
 
 THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_RESOURCES = (('qc', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('temperature', 'float', 'read_write'), ('cloud_number_entry', 'float', 'read'), ('ice_number_entry', 'float', 'read'), ('cloud_number_tendency', 'float', 'read_write'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'))
 THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read', 'read')
 THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_SHAPES = (('cloud_number_entry', (('size',), ('any_1d',))), ('cloud_number_tendency', (('size',), ('any_1d',))), ('ice_number_entry', (('size',), ('any_1d',))), ('ni', (('size',), ('any_1d',))), ('pressure', (('size',), ('any_1d',))), ('qc', (('size',), ('any_1d',))), ('qi', (('size',), ('any_1d',))), ('qv', (('size',), ('any_1d',))), ('temperature', (('size',), ('any_1d',))))
-THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('r1', 'ctypes.c_float'), ('r2', 'ctypes.c_float'), ('am_i', 'ctypes.c_float'), ('size', 'ctypes.c_int32')]
+THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('r1', 'ctypes.c_float'), ('r2', 'ctypes.c_float'), ('am_i', 'ctypes.c_float'), ('size', 'ctypes.c_int32'), ('wrf39', 'ctypes.c_int32')]
 THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_THREADS_PER_GROUP = 256
-THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_LAYOUT_HASH = '588e495ee992369a43196b60c64f5dc7e43c872373520bfd0488bb5e31a7a375'
-THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_SHADER_HASH = 'c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa'
+THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_LAYOUT_HASH = '8cf3b2461a9919ac7589bdc162caf485cb8cbe53cf36bda40f8062a92ee1c7ce'
+THOMPSON_AA_FINAL_PHASE_CLEANUP_SOURCE_SHADER_HASH = 'b2c0afd71569c78cef459d38b17cf8fbf99b08d2d68bd972c58097e1510fd298'
 
 TOPO_SLOPE_GEOMETRY_RESOURCES = (('ht', 'float', 'read'), ('msftx', 'float', 'read'), ('msfty', 'float', 'read'), ('sina', 'float', 'read'), ('cosa', 'float', 'read'), ('slope', 'float', 'read_write'), ('slp_azi', 'float', 'read_write'))
 TOPO_SLOPE_GEOMETRY_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -6239,15 +6239,15 @@ THOMPSON_AA_WRF39_GRAUPEL_FINALIZE_SHAPES = (('qg', (('n',),)),)
 THOMPSON_AA_WRF39_GRAUPEL_FINALIZE_PARAM_FIELDS = [('r1', 'ctypes.c_float'), ('n', 'ctypes.c_int32')]
 THOMPSON_AA_WRF39_GRAUPEL_FINALIZE_THREADS_PER_GROUP = 128
 THOMPSON_AA_WRF39_GRAUPEL_FINALIZE_LAYOUT_HASH = 'b8bc9a24ac063fbd5ecd6b21add45c43cf75f4cb4b8e189687b251986516c5ce'
-THOMPSON_AA_WRF39_GRAUPEL_FINALIZE_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_WRF39_GRAUPEL_FINALIZE_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_WRF39_START_EMISSION_RESOURCES = (('nwfa', 'float', 'read'), ('nwfa2d', 'float', 'read_write'))
 THOMPSON_AA_WRF39_START_EMISSION_ACCESS = ('read', 'read_write')
-THOMPSON_AA_WRF39_START_EMISSION_SHAPES = (('nwfa', (('nz', 'ny', 'nx'),)), ('nwfa2d', (('ny', 'nx'),)))
+THOMPSON_AA_WRF39_START_EMISSION_SHAPES = (('nwfa', (('any_1d',),)), ('nwfa2d', (('ncolumns',),)))
 THOMPSON_AA_WRF39_START_EMISSION_PARAM_FIELDS = [('dx', 'ctypes.c_float'), ('dy', 'ctypes.c_float'), ('ncolumns', 'ctypes.c_int32')]
 THOMPSON_AA_WRF39_START_EMISSION_THREADS_PER_GROUP = 128
-THOMPSON_AA_WRF39_START_EMISSION_LAYOUT_HASH = 'a5e78956b35ea4184185d653cc148959dcb9eee3c21591ac5395fe81ad0fb147'
-THOMPSON_AA_WRF39_START_EMISSION_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_WRF39_START_EMISSION_LAYOUT_HASH = '64e29ec93dba1a10d9497e3072584d6037803fcffe11e7320e0bfe1924d15310'
+THOMPSON_AA_WRF39_START_EMISSION_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_WRF39_ICE_SEDIMENT_64_RESOURCES = (('qi', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('reference_density', 'float', 'read'), ('dz', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'))
 THOMPSON_AA_WRF39_ICE_SEDIMENT_64_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -6311,7 +6311,7 @@ THOMPSON_AA_WRF39_EFFECTIVE_RADIUS_SHAPES = (('temperature', (('n',),)), ('press
 THOMPSON_AA_WRF39_EFFECTIVE_RADIUS_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 THOMPSON_AA_WRF39_EFFECTIVE_RADIUS_THREADS_PER_GROUP = 128
 THOMPSON_AA_WRF39_EFFECTIVE_RADIUS_LAYOUT_HASH = 'e8fdfb5267331d7c4a0bc7b8ee2b6a6de46297dd483141bcd3a00c7660653c61'
-THOMPSON_AA_WRF39_EFFECTIVE_RADIUS_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_WRF39_EFFECTIVE_RADIUS_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 THOMPSON_AA_WRF39_GRAUPEL_INTERCEPT_RESOURCES = (('qg', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qv', 'float', 'read'), ('n0_out', 'float', 'read_write'))
 THOMPSON_AA_WRF39_GRAUPEL_INTERCEPT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -6319,7 +6319,7 @@ THOMPSON_AA_WRF39_GRAUPEL_INTERCEPT_SHAPES = (('qg', (('nz', 'ny', 'nx'),)), ('q
 THOMPSON_AA_WRF39_GRAUPEL_INTERCEPT_PARAM_FIELDS = [('r1', 'ctypes.c_float'), ('r2', 'ctypes.c_float'), ('d0r', 'ctypes.c_float'), ('am_r', 'ctypes.c_float'), ('obmr', 'ctypes.c_float'), ('gonv_min', 'ctypes.c_float'), ('gonv_max', 'ctypes.c_float'), ('pi', 'ctypes.c_float'), ('rho_g', 'ctypes.c_float'), ('mvd_numerator', 'ctypes.c_float'), ('qv_floor', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('mode', 'ctypes.c_int32')]
 THOMPSON_AA_WRF39_GRAUPEL_INTERCEPT_THREADS_PER_GROUP = 32
 THOMPSON_AA_WRF39_GRAUPEL_INTERCEPT_LAYOUT_HASH = 'ca9f3bc5a1d4a0e21610784c9d358b0b3c5e0031e0a3b3da72e26e7df5db7655'
-THOMPSON_AA_WRF39_GRAUPEL_INTERCEPT_SHADER_HASH = 'e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f'
+THOMPSON_AA_WRF39_GRAUPEL_INTERCEPT_SHADER_HASH = '633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56'
 
 SOLAR_ALBEDO_VALIDATE_RESOURCES = (('xland', 'float32', 'read'), ('snow', 'float32', 'read'), ('xice', 'float32', 'read'), ('ivgtyp', 'int32', 'read'), ('coszen', 'float32', 'read'), ('status', 'uint32', 'read_write'))
 SOLAR_ALBEDO_VALIDATE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write')

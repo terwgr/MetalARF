@@ -22,12 +22,12 @@
       "resources": [
         ["nwfa", "float", "read"], ["nwfa2d", "float", "read_write"]
       ],
-      "shapes": {"nwfa": [["nz", "ny", "nx"]], "nwfa2d": [["ny", "nx"]]},
+      "shapes": {"nwfa": [["any_1d"]], "nwfa2d": [["ncolumns"]]},
       "parameters": [
         ["dx", "float32"], ["dy", "float32"], ["ncolumns", "int32"]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": ["wrf-exact", "soft64-rn-bit-ops"]
     },
     {

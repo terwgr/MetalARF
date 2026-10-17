@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "a2913e2a806a831f37a5ce785516e02bfbd98dab9343132cf8e70904d37e9778",
-      "size": 12486811
+      "sha256": "6cae7926b6a3f9f95f642b89e6b4d36ad1365b32c2d61cdd2b2760c1c8b8f464",
+      "size": 12487179
     },
     "woof_exact.metallib": {
-      "sha256": "f5e19d29444c351472202583d7ee286015fe21bfe5a6a40128026de4a690ff88",
-      "size": 8138116
+      "sha256": "b0a6ab3a60c3a9a0cbbd28153144e5f2078ac8e37e0deac7910aa6faa9b6c80e",
+      "size": 8138468
     }
   },
-  "implementation_file_count": 1140,
-  "implementation_sha256": "3e49451534d92df33b916bba5f04a6ee38a6d2aa9603ae0da0e516acb2221378",
-  "metal_inputs_sha256": "eddecb32f51cf4105dc99c14ceb6f35a5831c5bdc83cda2ff82415c4bf9f92b9",
+  "implementation_file_count": 1142,
+  "implementation_sha256": "ba847aa6335714f45e80fba4b01dbabb0eada2ec856ef41abbe710a8bdb95a71",
+  "metal_inputs_sha256": "c5f430793980fb9a6c923c8fdf1c447ffe0f15bd15f2ac3242954ee864927a74",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "eb13891a62c557387d5f642581bd0027011af70686610b34a063cb11b4d78255",
-        "size": 2540613
+        "sha256": "c506bff6af0ed201124f39e553c1dd48b5771bdfc518a82434c158a47050f588",
+        "size": 2540685
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
@@ -1728,20 +1728,20 @@
         "size": 111956
       },
       "woof/metal/shaders/thompson_aerosol_common.metalh": {
-        "sha256": "a000e4588ad348dc47f160a0d2a747f39a6024d5a3f86f1e189d1e957740da4d",
-        "size": 6702
+        "sha256": "6cddf628b7d2ea44ae3a0ac4c6b2192250580b98238590474938c38a9c77cf9c",
+        "size": 6740
       },
       "woof/metal/shaders/thompson_aerosol_sat_family.metal": {
         "sha256": "8c607d01264c08cb11e510d7a3dd8866037a4f0669e17cfe47606226994035fa",
         "size": 23628
       },
       "woof/metal/shaders/thompson_aerosol_sed_family.metal": {
-        "sha256": "c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa",
-        "size": 22065
+        "sha256": "b2c0afd71569c78cef459d38b17cf8fbf99b08d2d68bd972c58097e1510fd298",
+        "size": 22159
       },
       "woof/metal/shaders/thompson_aerosol_state_family.metal": {
-        "sha256": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
-        "size": 38693
+        "sha256": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
+        "size": 38952
       },
       "woof/metal/shaders/thompson_aerosol_warm_family.metal": {
         "sha256": "254468a343d74a2dd6606e1ff683e4fb10647e2fd616c1d45763445c071ca4cb",
@@ -3639,6 +3639,14 @@
         "sha256": "0b3e3188cf17ef4fb87973ffcf1a9c50d59fea434b24a49cc8752662ddd915ab",
         "size": 5433
       },
+      "woof/metal/signature_fragments/thompson_aa_final_phase_cleanup_source.json": {
+        "sha256": "7191dd9146734297c7c5639a3417cf034099f08fae722a88fcf35cfcdfcac4fb",
+        "size": 2148
+      },
+      "woof/metal/signature_fragments/thompson_aa_state_finalize_with_columns.json": {
+        "sha256": "bc5811dbb3b9e113a8695e5dcde46b03ad1b92a1d57f42bbae1794214848128d",
+        "size": 2102
+      },
       "woof/metal/signature_fragments/thompson_aerosol_cold_family.json": {
         "sha256": "3273546009b2ce454d02ead631a745f8b3246e65658b4ef410425c8a3a8e592b",
         "size": 11488
@@ -3648,8 +3656,8 @@
         "size": 7440
       },
       "woof/metal/signature_fragments/thompson_aerosol_sed_family.json": {
-        "sha256": "807cba7c7d1b6a6f7d51c0a010d2e460db9618b09862ae4e0373c292f1a46e75",
-        "size": 30023
+        "sha256": "77787ea847ccda4ef2bb9afed7902a3f83e07f10a5d413226643a0d658f1c5ba",
+        "size": 30073
       },
       "woof/metal/signature_fragments/thompson_aerosol_state_family.json": {
         "sha256": "088dfd10af56341c4b45dda773b683251f0e0a046152c6cc01eccc745aca8b3b",
@@ -3664,8 +3672,8 @@
         "size": 22032
       },
       "woof/metal/signature_fragments/thompson_aerosol_wrf39_state.json": {
-        "sha256": "a88540de2970560d5c9ff948917ca25d2b155958b033fb2570396f0b664b6326",
-        "size": 3759
+        "sha256": "a443ec744610adb41c71ead6555b25f05b2c50b547d3f59df32b37b11c6a4075",
+        "size": 3751
       },
       "woof/metal/signature_fragments/thompson_cloud_sedimentation.json": {
         "sha256": "ff2c84df1ac0d671881f74b342c219cf4453556e76c931ce74fdc87cb748f3b6",
@@ -3980,6 +3988,6 @@
         "size": 296
       }
     },
-    "sha256": "eddecb32f51cf4105dc99c14ceb6f35a5831c5bdc83cda2ff82415c4bf9f92b9"
+    "sha256": "c5f430793980fb9a6c923c8fdf1c447ffe0f15bd15f2ac3242954ee864927a74"
   }
 }

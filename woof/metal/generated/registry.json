@@ -7231,7 +7231,7 @@
       "name": "thompson_aa_effective_radius",
       "parameter_size": 4,
       "resource_count": 11,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7247,7 +7247,7 @@
       "name": "thompson_aa_entry_cloud_number",
       "parameter_size": 4,
       "resource_count": 7,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7263,7 +7263,7 @@
       "name": "thompson_aa_entry_snapshot",
       "parameter_size": 4,
       "resource_count": 8,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7279,7 +7279,7 @@
       "name": "thompson_aa_init_profile",
       "parameter_size": 16,
       "resource_count": 4,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7295,7 +7295,7 @@
       "name": "thompson_aa_micro_columns",
       "parameter_size": 8,
       "resource_count": 9,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7327,7 +7327,7 @@
       "name": "thompson_aa_profile_height",
       "parameter_size": 20,
       "resource_count": 3,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7343,7 +7343,7 @@
       "name": "thompson_aa_profile_needs_fill",
       "parameter_size": 8,
       "resource_count": 2,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 1
     },
     {
@@ -7388,14 +7388,14 @@
       ],
       "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
       "cuda_symbol": "thompson_aa_state_finalize_with_columns",
-      "layout_hash": "7ca73490a6033a29a680838c88c033c7f843ebe0b17239b16de8b9a112f92433",
-      "layout_version": 1,
+      "layout_hash": "1704729e6d03621e64da7b3a959008aa7ea54374108370c77beca08a4ae62ff7",
+      "layout_version": 2,
       "metal_source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
       "module": "thompson_aerosol_state_family",
       "name": "thompson_aa_state_finalize_with_columns",
-      "parameter_size": 12,
+      "parameter_size": 16,
       "resource_count": 13,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7411,7 +7411,7 @@
       "name": "thompson_aa_surface_emission",
       "parameter_size": 8,
       "resource_count": 4,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7427,7 +7427,7 @@
       "name": "thompson_aa_surface_rain_fraction",
       "parameter_size": 4,
       "resource_count": 4,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7443,7 +7443,7 @@
       "name": "thompson_aa_tau1_density",
       "parameter_size": 4,
       "resource_count": 4,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7475,7 +7475,7 @@
       "name": "thompson_aa_working_cloud",
       "parameter_size": 8,
       "resource_count": 8,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -7491,7 +7491,7 @@
       "name": "thompson_aa_working_number",
       "parameter_size": 8,
       "resource_count": 4,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -10255,7 +10255,7 @@
       "name": "thompson_aa_cloud_sediment_64_source",
       "parameter_size": 60,
       "resource_count": 20,
-      "shader_hash": "c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa",
+      "shader_hash": "b2c0afd71569c78cef459d38b17cf8fbf99b08d2d68bd972c58097e1510fd298",
       "threads_per_group": 32
     },
     {
@@ -10273,7 +10273,7 @@
       "name": "thompson_aa_cloud_sediment_levels_64_source",
       "parameter_size": 56,
       "resource_count": 16,
-      "shader_hash": "c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa",
+      "shader_hash": "b2c0afd71569c78cef459d38b17cf8fbf99b08d2d68bd972c58097e1510fd298",
       "threads_per_group": 512
     },
     {
@@ -10291,7 +10291,7 @@
       "name": "thompson_aa_cloud_sediment_256_source",
       "parameter_size": 60,
       "resource_count": 20,
-      "shader_hash": "c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa",
+      "shader_hash": "b2c0afd71569c78cef459d38b17cf8fbf99b08d2d68bd972c58097e1510fd298",
       "threads_per_group": 32
     },
     {
@@ -10302,14 +10302,14 @@
       ],
       "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
       "cuda_symbol": "thompson_aa_final_phase_cleanup",
-      "layout_hash": "588e495ee992369a43196b60c64f5dc7e43c872373520bfd0488bb5e31a7a375",
-      "layout_version": 1,
+      "layout_hash": "8cf3b2461a9919ac7589bdc162caf485cb8cbe53cf36bda40f8062a92ee1c7ce",
+      "layout_version": 2,
       "metal_source": "woof/metal/shaders/thompson_aerosol_sed_family.metal",
       "module": "thompson_aerosol_sed_family",
       "name": "thompson_aa_final_phase_cleanup_source",
-      "parameter_size": 20,
+      "parameter_size": 24,
       "resource_count": 9,
-      "shader_hash": "c6eb0e9b0f445bc40dd6bcb4cb60d0a482246f07057c1640873c9393577717fa",
+      "shader_hash": "b2c0afd71569c78cef459d38b17cf8fbf99b08d2d68bd972c58097e1510fd298",
       "threads_per_group": 256
     },
     {
@@ -12665,7 +12665,7 @@
       "name": "thompson_aa_wrf39_graupel_finalize",
       "parameter_size": 8,
       "resource_count": 1,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -12675,14 +12675,14 @@
       ],
       "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
       "cuda_symbol": "thompson_aa_wrf39_start_emission",
-      "layout_hash": "a5e78956b35ea4184185d653cc148959dcb9eee3c21591ac5395fe81ad0fb147",
-      "layout_version": 1,
+      "layout_hash": "64e29ec93dba1a10d9497e3072584d6037803fcffe11e7320e0bfe1924d15310",
+      "layout_version": 2,
       "metal_source": "woof/metal/shaders/thompson_aerosol_state_family.metal",
       "module": "thompson_aerosol_state_family",
       "name": "thompson_aa_wrf39_start_emission",
       "parameter_size": 12,
       "resource_count": 2,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -12825,7 +12825,7 @@
       "name": "thompson_aa_wrf39_effective_radius",
       "parameter_size": 4,
       "resource_count": 11,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 128
     },
     {
@@ -12842,7 +12842,7 @@
       "name": "thompson_aa_wrf39_graupel_intercept",
       "parameter_size": 60,
       "resource_count": 7,
-      "shader_hash": "e17afc582d167350690ed2236b82f531c8d90c6ecb5f0d00a699dbfb33c40f1f",
+      "shader_hash": "633cf48923141afff0c7ea95241300a5c629be8e5f05629c147a40b5010f9b56",
       "threads_per_group": 32
     },
     {

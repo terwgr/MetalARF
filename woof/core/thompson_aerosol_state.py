@@ -460,9 +460,11 @@ def launch_aerosol_state_finalize(qc, nc, nwfa, nifa, ncten, nwfaten,
         from woof.metal.thompson_aerosol_state_family import (
             submit_aerosol_state_finalize_with_columns,
         )
+        from woof.core.thompson_aerosol_launch import active_thompson_version
         submit_aerosol_state_finalize_with_columns(
             qc, nc, nwfa, nifa, ncten, nwfaten, nifaten, rho, dt,
-            nc_out, nwfa_out, nifa_out, qv, micro_columns)
+            nc_out, nwfa_out, nifa_out, qv, micro_columns,
+            wrf39=active_thompson_version() == "wrf_39_noaa")
         return
     _launch("thompson_aa_state_finalize_with_columns", size,
             (qc, nc, nwfa, nifa, ncten, nwfaten, nifaten, rho, DTYPE(dt),

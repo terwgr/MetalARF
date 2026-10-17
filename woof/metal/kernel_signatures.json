@@ -73312,7 +73312,7 @@
       ],
       "cuda_source": "woof/core/kernels/thompson_aerosol_state.cu",
       "cuda_symbol": "thompson_aa_state_finalize_with_columns",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "thompson_aerosol_state_family",
       "name": "thompson_aa_state_finalize_with_columns",
       "parameters": [
@@ -73326,6 +73326,10 @@
         ],
         [
           "n",
+          "int32"
+        ],
+        [
+          "wrf39",
           "int32"
         ]
       ],
@@ -107318,7 +107322,7 @@
       ],
       "cuda_source": "woof/core/kernels/thompson_aerosol_sed.cu",
       "cuda_symbol": "thompson_aa_final_phase_cleanup",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "thompson_aerosol_sed_family",
       "name": "thompson_aa_final_phase_cleanup_source",
       "parameters": [
@@ -107340,6 +107344,10 @@
         ],
         [
           "size",
+          "int32"
+        ],
+        [
+          "wrf39",
           "int32"
         ]
       ],
@@ -128049,15 +128057,12 @@
       "shapes": {
         "nwfa": [
           [
-            "nz",
-            "ny",
-            "nx"
+            "any_1d"
           ]
         ],
         "nwfa2d": [
           [
-            "ny",
-            "nx"
+            "ncolumns"
           ]
         ]
       },
@@ -128076,7 +128081,7 @@
         ]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": [
         "wrf-exact",
         "soft64-rn-bit-ops"

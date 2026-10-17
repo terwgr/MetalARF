@@ -122,7 +122,8 @@ static inline int thompson_aa_nu_c(float nc_m3)
 
 // thompson_aa_bound_ice_number (thompson_aerosol_common.cuh:1524-1547).
 static inline void thompson_aa_bound_ice_number(
-    float ice_mass, float density, device float *ice_number_per_kg)
+    float ice_mass, float density, device float *ice_number_per_kg,
+    float number_ceiling)
 {
     if (ice_mass <= THOMPSON_AA_R1) {
         *ice_number_per_kg = 0.0f;
@@ -147,10 +148,10 @@ static inline void thompson_aa_bound_ice_number(
             thompson_aa_mul(thompson_aa_div(1.0f, 6.0f), ice_mass), am_i);
         ice_number = thompson_aa_mul(mass_factor, cube32);
         if (diameter < 5.0e-6f)
-            ice_number = thompson_aa_fminf(999.0e3f, ice_number);
+            ice_number = thompson_aa_fminf(number_ceiling, ice_number);
     }
     *ice_number_per_kg = thompson_aa_div(
-        thompson_aa_fminf(ice_number, 999.0e3f), density);
+        thompson_aa_fminf(ice_number, number_ceiling), density);
 }
 
 #endif // WOOF_THOMPSON_AEROSOL_COMMON_METALH
