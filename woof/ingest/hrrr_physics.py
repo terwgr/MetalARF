@@ -329,6 +329,7 @@ def initialize_prepared_physics(
         if "shdmax" in driver.fields:
             driver.fields["shdmax"][...] = xp.asarray(
                 100.0 * static["GREENFRAC"].max(axis=0), dtype=np.float32)
+        _attach_mosaic(driver, cfg, static, landuse_attrs, fractional_seaice)
         return driver
     driver.fields["snoalb"][...] = cp.asarray(
         surface_snow_albedo(cfg, static, driver.noah_params),
@@ -353,13 +354,18 @@ def initialize_prepared_physics(
         near_surface["U10"][:, :-1] + near_surface["U10"][:, 1:])
     driver.fields["v10"][...] = 0.5 * (
         near_surface["V10"][:-1] + near_surface["V10"][1:])
+    _attach_mosaic(driver, cfg, static, landuse_attrs, fractional_seaice)
+    return driver
+
+
+def _attach_mosaic(driver, cfg, static, landuse_attrs, fractional_seaice):
+    """The Noah mosaic tiles, on either backend's driver."""
     if getattr(cfg, "sf_surface_mosaic", 0) == 1:
         from woof.core.noah_mosaic_door import attach_noah_mosaic_to_driver
         attach_noah_mosaic_to_driver(
             driver, cfg, landusef=static.get("LANDUSEF"), processed=False,
             landuse_attrs=landuse_attrs, landmask=static["LANDMASK"],
             fractional_seaice=fractional_seaice)
-    return driver
 
 
 def _resolve_cached_ruc_surface(surface, cfg):
