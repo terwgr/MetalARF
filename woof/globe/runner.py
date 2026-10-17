@@ -998,6 +998,28 @@ def _sizing_model_peak_bytes(cfg: ArwenGlobalConfig) -> int | None:
     return int(banded_device_peak_bytes(estimate, bands))
 
 
+
+def metal_refusal(cfg: ArwenGlobalConfig) -> str | None:
+    """Why ``--metal`` cannot run ``cfg``, or ``None`` when it can.
+
+    Asked by every door that takes ``--metal`` before it writes anything.
+    """
+
+    if cfg.backend != "numpy":
+        return (f"--metal runs backend = 'numpy' configs; this one sets "
+                f"backend = {cfg.backend!r}. Next: drop --metal")
+    if str(cfg.precision).lower() != "float64":
+        return (f"--metal runs float64 configs only; this one sets precision = "
+                f"{cfg.precision!r}. Next: set precision = 'float64', or "
+                "drop --metal")
+    if cfg.diffusion_closure == "spectral_eddy_viscosity":
+        return ("--metal has no spectral_eddy_viscosity diffusion closure. "
+                "Next: choose another closure, or drop --metal")
+    if cfg.physics_mode == "arwen-native":
+        return ("--metal has no real-data physics: physics mode "
+                "'arwen-native' runs on CUDA only. Next: drop --metal")
+    return None
+
 def run(
     cfg: ArwenGlobalConfig,
     outdir: str | Path,
@@ -1052,13 +1074,9 @@ def run(
     metal_context = None
     try:
         if metal:
-            if (cfg.backend != "numpy"
-                    or str(cfg.precision).lower() != "float64"
-                    or cfg.diffusion_closure == "spectral_eddy_viscosity"):
-                raise ValueError(
-                    "metal currently requires backend='numpy', "
-                    "precision='float64', and a supported diffusion closure"
-                )
+            refusal = metal_refusal(cfg)
+            if refusal is not None:
+                raise ValueError(refusal)
             from woof.metal.runtime import MetalContext
             metal_context = MetalContext()
         return _run_tracked(

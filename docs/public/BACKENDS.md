@@ -53,7 +53,12 @@ woof global run CONFIG.toml --metal
 The legacy `woof run` command does not expose a Metal selector. Regional Metal
 coverage follows the capability table and admitted scheme combinations; Hex
 and Global are preview models, and their Metal coverage is limited to the
-implemented forecast paths. CUDA installation uses the matching `all-cu12` or
+implemented forecast paths. Global's `--metal` is on `woof global run`, `go`,
+`cycle` and `da cycle`, `da forecast` and `da fresh`. It runs configs with
+`backend = "numpy"` and `precision = "float64"` only, without `arwen-native`
+real-data physics; any other Global config, including the float32 ones, is
+refused before the run writes anything. `da init`, `da analyze` and
+`assimilate` integrate no model and run on the CPU. CUDA installation uses the matching `all-cu12` or
 `all-cu13` extra on Linux; install one CUDA/CuPy major per environment.
 
 Check an install with `woof selftest` (one tiny regional, Hex and Global

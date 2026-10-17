@@ -193,7 +193,9 @@ def _add_run_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--metal", action="store_true",
-        help="enable the optional Apple Metal execution path",
+        help="run on Apple Metal; needs a backend = 'numpy', precision = "
+             "'float64' config without arwen-native physics, and refuses any "
+             "other before writing anything",
     )
     _add_memory_lever_arguments(parser)
 
@@ -583,6 +585,12 @@ def _add_cycle_arguments(parser: argparse.ArgumentParser) -> None:
         help="WOOF global experiment TOML; its duration_s is the end of the "
              "whole run, cycle and forecast",
     )
+    parser.add_argument(
+        "--metal", action="store_true",
+        help="run on Apple Metal; needs a backend = 'numpy', precision = "
+             "'float64' config without arwen-native physics, and refuses any "
+             "other before writing anything",
+    )
     _add_memory_lever_arguments(parser)
     _add_assimilation_option_arguments(parser)
     parser.add_argument(
@@ -869,7 +877,9 @@ def _add_da_cycle_arguments(parser: argparse.ArgumentParser) -> None:
     _add_stream_arguments(parser, obs_required=False)
     parser.add_argument(
         "--metal", action="store_true",
-        help="run the cycle forecast legs and model-coupled analysis operators through the Global Metal runner",
+        help="run the cycle forecast legs and model-coupled analysis operators "
+             "through the Global Metal runner; needs a backend = 'numpy', "
+             "precision = 'float64' config without arwen-native physics",
     )
     _add_assimilation_option_arguments(parser, with_obs=False)
     parser.add_argument(
@@ -955,6 +965,12 @@ def _add_da_fresh_arguments(parser: argparse.ArgumentParser) -> None:
              "(fresh-config.toml in --outdir: the fetched analysis as the "
              "initial state, duration = cycle span + --forecast-hours)",
     )
+    parser.add_argument(
+        "--metal", action="store_true",
+        help="run the cycle on Apple Metal; needs a backend = 'numpy', precision = "
+             "'float64' config without arwen-native physics, and refuses any "
+             "other before writing anything",
+    )
     _add_stream_arguments(parser, obs_required=False)
     _add_assimilation_option_arguments(parser, with_obs=False)
     parser.add_argument(
@@ -1033,6 +1049,12 @@ def _add_da_forecast_arguments(parser: argparse.ArgumentParser) -> None:
         "config", type=config_argument,
         help="the experiment TOML the analysis was formed under (fresh writes "
              "fresh-config.toml)",
+    )
+    parser.add_argument(
+        "--metal", action="store_true",
+        help="run on Apple Metal; needs a backend = 'numpy', precision = "
+             "'float64' config without arwen-native physics, and refuses any "
+             "other before writing anything",
     )
     parser.add_argument(
         "--analysis", type=Path, required=True,
@@ -1691,8 +1713,20 @@ def read_run_sidecar(outdir):
     return copy if copy.is_file() else None
 
 
+def _refuse_metal(args: argparse.Namespace, cfg) -> None:
+    """Refuse ``--metal`` on a config it cannot run, before any output."""
+    if getattr(args, "metal", False):
+        from .runner import metal_refusal
+
+        refusal = metal_refusal(cfg)
+        if refusal is not None:
+            raise ValueError(refusal)
+
+
 def _run(args: argparse.Namespace) -> int:
-    cfg, plan = _size_the_run(args, load_config(args.config), _door_name(args))
+    cfg = load_config(args.config)
+    _refuse_metal(args, cfg)
+    cfg, plan = _size_the_run(args, cfg, _door_name(args))
     # The config travels with the run.  Written after the sizer has accepted
     # it, so a directory that carries a config is a directory a run actually
     # started in, and never after a refusal.
@@ -1911,7 +1945,9 @@ def _assimilate(args: argparse.Namespace) -> int:
 
 def _cycle(args: argparse.Namespace) -> int:
     door = _door_name(args)
-    cfg, plan = _size_the_run(args, load_config(args.config), door)
+    cfg = load_config(args.config)
+    _refuse_metal(args, cfg)
+    cfg, plan = _size_the_run(args, cfg, door)
     print(f"{door}: {vertical_grid_sentence(cfg)}")
     from .statics import statics_sentence
 
@@ -1956,7 +1992,7 @@ def _cycle(args: argparse.Namespace) -> int:
             keep_backgrounds=args.keep_backgrounds,
             partial_analyses=args.partial_analyses == "on", progress=progress,
             analysis_progress=analysis_progress,
-            door_plan=plan,
+            door_plan=plan, metal=bool(args.metal),
         )
     except BaseException:
         receipt_path = Path(args.outdir) / RECEIPT_NAME
@@ -2152,11 +2188,13 @@ def _da(args: argparse.Namespace) -> int:
         return 0
     if args.da_command == "forecast":
         cfg = load_config(args.config)
+        _refuse_metal(args, cfg)
         print(f"{door}: {vertical_grid_sentence(cfg)}")
         progress, _ = _da_progress(door)
         receipt = da_door.forecast(
             cfg, args.outdir, analysis=args.analysis, until_s=args.until_s,
             overwrite=args.overwrite, progress=progress, config_path=args.config,
+            metal=bool(args.metal),
         )
         _da_summary(door, receipt)
         return 0 if receipt["status"] == "pass" else 1
@@ -2165,6 +2203,7 @@ def _da(args: argparse.Namespace) -> int:
     progress, analysis_progress = _da_progress(door)
     if args.da_command == "cycle":
         cfg = load_config(args.config)
+        _refuse_metal(args, cfg)
         gate = run_memory_gate(cfg)
         print(f"{door}: {gate['verdict']}")
         if gate["refuse"]:
@@ -2191,6 +2230,7 @@ def _da(args: argparse.Namespace) -> int:
         _da_summary(door, receipt)
         return 0 if receipt["status"] in ("pass", "incomplete") else 1
     if args.da_command == "fresh":
+        _refuse_metal(args, load_config(args.config))
         receipt = da_door.fresh(
             args.config, args.outdir, stream_specs=args.stream, obs_locations=args.obs,
             analysis_grib=None if args.analysis_grib is None else str(args.analysis_grib),
@@ -2208,7 +2248,7 @@ def _da(args: argparse.Namespace) -> int:
             increment_application=args.increment_application, cutoff_utc=args.cutoff_utc,
             filter_overrides=_filter_overrides_from_args(args),
             defaulted_names=("hybrid_beta",) if getattr(args, "hybrid_beta", None) is None else (),
-            keep_backgrounds=args.keep_backgrounds,
+            keep_backgrounds=args.keep_backgrounds, metal=bool(args.metal),
         )
         _da_summary(door, receipt)
         return 0 if receipt["status"] in ("pass", "incomplete") else 1

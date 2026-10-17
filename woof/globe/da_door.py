@@ -740,7 +740,7 @@ def fresh(
     observation_bin_s: float | None = None, anchor_spec: str | None = None,
     increment_application: str = "iau", cutoff_utc=None, filter_overrides=None,
     defaulted_names: tuple[str, ...] = (), filter_settings: dict | None = None,
-    keep_backgrounds: bool = False,
+    keep_backgrounds: bool = False, metal: bool = False,
 ) -> dict:
     """The one command: a fresh global analysis, the latest constructible
     from the information available by a declared cutoff (amendment F:
@@ -884,6 +884,7 @@ def fresh(
         increment_application=increment_application, information_cutoff_utc=_iso(cutoff),
         filter_overrides=filter_overrides,
         filter_settings=filter_settings, keep_backgrounds=keep_backgrounds,
+        metal=metal,
     )
     handed_back = cycle_receipt["analysis_checkpoint"]
     forecast_command = None
@@ -891,6 +892,7 @@ def fresh(
         forecast_command = (
             f"woof global da forecast {config_path.as_posix()} --analysis "
             f"{Path(handed_back['path']).as_posix()} --outdir {(output / 'forecast').as_posix()}"
+            + (" --metal" if metal else "")
         )
     receipt = {
         "door": "woof global da fresh",
@@ -1053,14 +1055,15 @@ def localisation(
 def forecast(
     cfg: ArwenGlobalConfig, outdir: str | Path, *, analysis: str | Path,
     until_s: float | None = None, overwrite: bool = False, progress=None,
-    config_path: str | Path | None = None,
+    config_path: str | Path | None = None, metal: bool = False,
 ) -> dict:
     """The forecast from an analysis checkpoint: the runner's restart,
     with the DA receipt naming the analysis it started from."""
     start = time.perf_counter()
     output = Path(outdir)
     identity = _checkpoint_identity(Path(analysis), cfg)
-    receipt = run(cfg, output, restart=analysis, overwrite=overwrite, progress=progress, until_s=until_s)
+    receipt = run(cfg, output, restart=analysis, overwrite=overwrite, progress=progress,
+                  until_s=until_s, metal=metal)
     da_receipt = {
         "door": "woof global da forecast",
         "config_hash": cfg.config_hash,

@@ -321,11 +321,10 @@ def cycle(
     metal_context = None
     try:
         if metal:
-            if (cfg.backend != 'numpy' or str(cfg.precision).lower() != 'float64'
-                    or cfg.diffusion_closure == 'spectral_eddy_viscosity'):
-                raise ValueError(
-                    "metal currently requires backend='numpy', precision='float64', "
-                    "and a supported diffusion closure")
+            from .runner import metal_refusal
+            refusal = metal_refusal(cfg)
+            if refusal is not None:
+                raise ValueError(refusal)
             from woof.metal.runtime import MetalContext
             metal_context = MetalContext()
         return _cycle_tracked(

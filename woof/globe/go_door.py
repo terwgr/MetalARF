@@ -48,6 +48,10 @@ def add_go_arguments(parser: argparse.ArgumentParser) -> None:
         help="the run directory; checkpoints, receipt, status.json and the log "
              "go here, and pictures under <outdir>/pictures")
     parser.add_argument(
+        "--metal", action="store_true",
+        help="run the forecast on Apple Metal; needs a backend = 'numpy', "
+             "precision = 'float64' config without arwen-native physics")
+    parser.add_argument(
         "--start-date", default=None,
         help="analysis valid time as YYYY-MM-DD_HH:MM:SS for the render stage; "
              "without it the forecast still runs and the render stage is "
@@ -96,6 +100,8 @@ def go(args: argparse.Namespace) -> int:
     from .config import load_config
     from .render_door import render
 
+    if getattr(args, "metal", False):
+        cli._refuse_metal(args, load_config(args.config))
     outdir = Path(args.outdir)
     status = StatusWriter(outdir, "go", stages=STAGES)
     if status.log_path is not None:
@@ -189,4 +195,5 @@ def _run_namespace(args: argparse.Namespace) -> argparse.Namespace:
     defaults["config"] = args.config
     defaults["outdir"] = Path(args.outdir)
     defaults["overwrite"] = args.overwrite
+    defaults["metal"] = bool(getattr(args, "metal", False))
     return argparse.Namespace(**defaults)
