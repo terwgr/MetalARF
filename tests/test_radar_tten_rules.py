@@ -182,11 +182,14 @@ def test_the_batched_state_is_recognised_by_the_method_the_refusal_reads():
 
 def test_the_forcing_is_in_no_state_or_restart_inventory():
     """External data: an inventory row would make a restart carry one
-    leg's observations into the next."""
+    leg's observations into the next.  A checkpoint written inside a
+    forced leg (local-da writes one at every cadence) leaves it out."""
+    from types import SimpleNamespace
     from woof.io import restart
 
-    with pytest.raises(restart.RestartManifestError):
-        restart.classify_state_attr(radar_tten.STATE_ATTRIBUTE)
+    assert restart.classify_state_attr(radar_tten.STATE_ATTRIBUTE) == "infra"
+    state = SimpleNamespace(**{radar_tten.STATE_ATTRIBUTE: object()})
+    assert restart.state_manifest(state) == {}
 
 
 def test_the_cycle_admission_prices_the_forcing():

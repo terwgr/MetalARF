@@ -504,6 +504,11 @@ STATE_INFRA_ATTRS = frozenset({
     # clock spec already carries -- and a second copy is a second thing
     # that can disagree.
     "domain_start_offset",
+    # A leg's radar latent heating (woof.da.radar_tten.attach): external
+    # data like the boundary data, rebuilt from the leg's radar window
+    # when a leg starts or resumes, so a checkpoint written inside a forced
+    # leg carries the state without it.
+    "radar_tten_forcing",
     # mp_physics=50 (P3).  WRF's itimestep, which the adapter maintains
     # lazily on the state (woof/core/p3.py, the ``it`` block).  It is a
     # plain int, not an array, and it is CLOCK-DERIVED rather than dropped:

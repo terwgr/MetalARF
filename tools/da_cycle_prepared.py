@@ -2805,8 +2805,8 @@ def cycle(stages: list, contexts) -> int:
             # -- radar latent heating for this leg --------------------------
             # External data, like the boundary data: attached for the
             # integration and detached before anything reads the state as
-            # a whole (the restart set below would refuse an unclassified
-            # attribute).  Members only; the control stays the no-DA arm.
+            # a whole; no restart carries it.  Members only; the control
+            # stays the no-DA arm.
             tten_forcing = None
             if tten_reflectivity is not None and name != CONTROL:
                 background = radar_tten.background_from_state(state)

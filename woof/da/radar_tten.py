@@ -1705,8 +1705,8 @@ class RadarTtenForcing:
 def attach(state, forcing: RadarTtenForcing, cfg=None) -> None:
     """Attach ``forcing`` to ``state`` for the coming leg.
 
-    The forcing is external data, like boundary data: detach it before the
-    state is written to a restart, and attach again on the next leg.
+    The forcing is external data, like boundary data: restarts do not
+    carry it, so attach it again on the next leg or on a resume.
     """
     if not isinstance(forcing, RadarTtenForcing):
         raise RadarTtenError(
