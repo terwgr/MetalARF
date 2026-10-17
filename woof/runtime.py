@@ -5824,10 +5824,15 @@ def run_experiment(exp: ExperimentConfig, data: CaseDataConfig, outdir, *,
                 moisture_floor_receipts=floor_receipts or None)
         finally:
             # The prepared state owns the one Metal context this run
-            # created; close it once the run has finished or failed.
+            # created; close it once the run has finished or failed.  An
+            # ensemble's members borrow the session's context instead.
+            from woof.ensemble.runtime_context import current_metal_array_module
             metal_arrays = getattr(prepared.initial_result.state,
                                    "_array_module", None)
-            if getattr(metal_arrays, "__woof_metal_array_module__", False):
+            shared = current_metal_array_module()
+            if (getattr(metal_arrays, "__woof_metal_array_module__", False)
+                    and (shared is None
+                         or metal_arrays.context is not shared.context)):
                 metal_arrays.context.close()
 
     _preparation_progress(progress_callback, "build-domain-tree")

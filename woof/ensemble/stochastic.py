@@ -156,6 +156,107 @@ def _launch(name: str, size: int, args: tuple, *, block_size: int = 128) -> None
     _kernel(name)(((size + block_size - 1) // block_size,), (block_size,), args)
 
 
+# Host transcriptions of ensemble_stochastic.cu for states without CUDA (the
+# Metal route keeps its patterns in host memory, which it shares with the
+# GPU).  Same counters, conjugacy and unfused FP32 AR(1) arithmetic; libm and
+# the FFT may differ from CUDA's by rounding, as cuFFT already does from WRF.
+
+def _host_philox(c0, c1, c2, c3, seed: int):
+    mask = np.uint64(_UINT32_MAX)
+    c0, c1, c2, c3 = (np.asarray(c, dtype=np.uint64) for c in (c0, c1, c2, c3))
+    k0, k1 = seed & _UINT32_MAX, seed >> 32
+    for _ in range(10):
+        p0 = np.uint64(0xD2511F53) * c0
+        p1 = np.uint64(0xCD9E8D57) * c2
+        c0, c1, c2, c3 = ((p1 >> np.uint64(32)) ^ c1 ^ np.uint64(k0),
+                          p1 & mask,
+                          (p0 >> np.uint64(32)) ^ c3 ^ np.uint64(k1),
+                          p0 & mask)
+        k0 = (k0 + 0x9E3779B9) & _UINT32_MAX
+        k1 = (k1 + 0xBB67AE85) & _UINT32_MAX
+    return c0, c1, c2, c3
+
+
+def _host_gaussian(index, step: int, stream: int, seed: int) -> np.ndarray:
+    """WRF gauss_noise with |z| < 3 rejection, one counter per attempt."""
+    index = np.asarray(index, dtype=np.uint64)
+    out = np.empty(index.shape, dtype=np.float32)
+    pending = np.arange(index.size)
+    scale = np.float32(2.0 ** -24)
+    one, two = np.float32(1.0), np.float32(2.0)
+    attempt = 0
+    while pending.size:
+        q = index.ravel()[pending]
+        r = _host_philox(q, np.full_like(q, step), np.full_like(q, stream),
+                         np.full_like(q, attempt), seed)
+        u = (r[0] >> np.uint64(8)).astype(np.float32) * scale
+        v = (r[1] >> np.uint64(8)).astype(np.float32) * scale
+        x = two * u - one
+        y = two * v - one
+        radius = x * x + y * y
+        inside = (radius > 0) & (radius < 1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            z = np.sqrt((np.float32(-2.0) * np.log(radius)) / radius) * x
+        accept = inside & (np.abs(z) < np.float32(3.0))
+        out.ravel()[pending[accept]] = z[accept]
+        pending = pending[~accept]
+        attempt += 1
+    return out
+
+
+def _host_spectrum_weights(nx, ny, dx, dy, kind, length, exponent, minimum, maximum):
+    y, x = np.mgrid[0:ny, 0:nx]
+    rx, ry = nx * dx, ny * dy
+    kx, ky = x / rx, y / ry
+    rho2 = kx * kx + ky * ky
+    rho = np.sqrt(rho2)
+    band = (((rho < (maximum + 0.5) / rx) & (rho >= (minimum - 0.5) / rx))
+            | ((rho < (maximum + 0.5) / ry) & (rho >= (minimum - 0.5) / ry)))
+    off = ~band | ((x == 0) & (y == 0))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        if kind == 0:
+            log_weights = -2.0 * math.pi * math.pi * length * length * rho2
+            gamma = log_weights.copy()
+        else:
+            log_weights = 0.5 * exponent * np.log(rho2)
+            gamma = rho2 ** (exponent + (1.0 if kind == 1 else 0.0))
+    log_weights[off] = -np.inf
+    gamma[off] = -np.inf if kind == 0 else 0.0
+    return log_weights, gamma
+
+
+def _host_folded(nx: int, ny: int):
+    y, x = np.mgrid[0:ny, 0:nx]
+    return (np.where(y <= ny // 2, y, ny - y), np.where(x <= nx // 2, x, nx - x))
+
+
+def _host_noise_index(nx: int, ny: int):
+    y, x = np.mgrid[0:ny, 0:nx]
+    mirror = ((y == 0) & (x > nx // 2)) | (y > ny // 2)
+    qx = np.where(mirror, np.where(x == 0, 0, nx - x), x)
+    qy = np.where(mirror, np.where(y == 0, 0, ny - y), y)
+    sign = np.where(mirror, np.float32(-1.0), np.float32(1.0)).astype(np.float32)
+    return (qy * nx + qx).astype(np.uint64), sign
+
+
+def _host_derivative(spectrum, nx, ny, dx, dy, component):
+    y, x = np.mgrid[0:ny, 0:nx]
+    if component == 1:
+        k = np.where(y <= ny // 2, y, y - ny)
+        size = np.float32(ny) * np.float32(dy)
+    else:
+        k = np.where(x <= nx // 2, x, x - nx)
+        size = np.float32(nx) * np.float32(dx)
+    factor = (np.float32(6.2831853071795864769) / size) * k.astype(np.float32)
+    re, im = spectrum.real, spectrum.imag
+    out = np.empty_like(spectrum)
+    if component == 1:
+        out.real, out.imag = factor * im, -(factor * re)
+    else:
+        out.real, out.imag = -(factor * im), factor * re
+    return out
+
+
 class WrfStochasticPattern:
     """One member's spectral process, kept entirely on its current CUDA device.
 
@@ -167,7 +268,7 @@ class WrfStochasticPattern:
 
     def __init__(self, config: StochasticConfig, shape_yx: tuple[int, int], *,
                  dx: float, dy: float, dt: float, member_seed: int,
-                 stream_id: int | None = None):
+                 stream_id: int | None = None, host: bool = False):
         if (len(shape_yx) != 2 or any(type(n) is not int or n < 12 for n in shape_yx)
                 or math.prod(shape_yx) >= (1 << 31)):
             raise ValueError(
@@ -189,13 +290,21 @@ class WrfStochasticPattern:
             raise ValueError("SKEBS dt exceeds decorrelation time, making WRF AR(1) unstable")
         self.alpha = (dt / config.timescale_s if skebs else
                       -math.expm1(-dt / config.timescale_s))
-        import cupy as cp
-        self.device = cp.cuda.Device().id
-        self.spectrum = cp.zeros(self.shape, dtype=cp.complex64)
+        self.host = bool(host)
+        if self.host:
+            self.device = None
+            self.spectrum = np.zeros(self.shape, dtype=np.complex64)
+        else:
+            import cupy as cp
+            self.device = cp.cuda.Device().id
+            self.spectrum = cp.zeros(self.shape, dtype=cp.complex64)
         self.amplitude = self._amplitude()
 
     def _amplitude(self):
-        import cupy as cp
+        if self.host:
+            cp = np
+        else:
+            import cupy as cp
         cfg = self.config
         ny, nx = self.shape
         n = ny * nx
@@ -203,13 +312,18 @@ class WrfStochasticPattern:
         if mode_max < cfg.min_wavenumber:
             raise ValueError("WRF spectral limits contain no forced wavenumbers")
         kind = {"skebs_psi": 1, "skebs_theta": 2}.get(cfg.kind, 0)
-        log_weights = cp.empty(self.shape, dtype=cp.float64)
-        gamma_terms = cp.empty_like(log_weights)
-        _launch("stoch_spectrum_weights", n, (
-            log_weights, gamma_terms, np.int32(nx), np.int32(ny),
-            np.float64(self.dx), np.float64(self.dy), np.int32(kind),
-            np.float64(cfg.lengthscale_m), np.float64(cfg.spectral_exponent),
-            np.int32(cfg.min_wavenumber), np.int32(mode_max)))
+        if self.host:
+            log_weights, gamma_terms = _host_spectrum_weights(
+                nx, ny, self.dx, self.dy, kind, cfg.lengthscale_m,
+                cfg.spectral_exponent, cfg.min_wavenumber, mode_max)
+        else:
+            log_weights = cp.empty(self.shape, dtype=cp.float64)
+            gamma_terms = cp.empty_like(log_weights)
+            _launch("stoch_spectrum_weights", n, (
+                log_weights, gamma_terms, np.int32(nx), np.int32(ny),
+                np.float64(self.dx), np.float64(self.dy), np.int32(kind),
+                np.float64(cfg.lengthscale_m), np.float64(cfg.spectral_exponent),
+                np.int32(cfg.min_wavenumber), np.int32(mode_max)))
         shift = float(cp.max(log_weights).item()) if kind == 0 else 0.0
         if not math.isfinite(shift):
             raise ValueError("WRF spectral limits contain no finite forcing amplitudes")
@@ -233,6 +347,9 @@ class WrfStochasticPattern:
                   math.sqrt(300.0 * energy / 1004.5))
         if not math.isfinite(gamma) or gamma <= 0 or not math.isfinite(f0):
             raise ValueError("spectral normalization is not finite and positive")
+        if self.host:
+            qy, qx = _host_folded(nx, ny)
+            return (f0 * np.exp(log_weights[qy, qx] - shift)).astype(np.float32)
         amplitude = cp.empty(self.shape, dtype=cp.float32)
         _launch("stoch_spectrum_amplitude", n, (
             amplitude, log_weights, np.int32(nx), np.int32(ny),
@@ -263,6 +380,8 @@ class WrfStochasticPattern:
         self.amplitude = self._amplitude()
 
     def _check_device(self) -> None:
+        if self.host:
+            return
         import cupy as cp
         if cp.cuda.Device().id != self.device:
             raise ValueError("stochastic state belongs to a different CUDA device")
@@ -276,10 +395,21 @@ class WrfStochasticPattern:
         if type(block_size) is not int or not 1 <= block_size <= 1024:
             raise ValueError("block_size must be an integer from 1 through 1024")
         ny, nx = self.shape
-        _launch("stoch_update", ny * nx, (
-            self.spectrum, self.amplitude, np.int32(nx), np.int32(ny),
-            np.float32(self.alpha), np.uint64(self.seed), np.uint32(step),
-            np.uint32(self.stream)), block_size=block_size)
+        if self.host:
+            q, sign = _host_noise_index(nx, ny)
+            cosine = _host_gaussian(2 * q, step, self.stream, self.seed)
+            sine = _host_gaussian(2 * q + np.uint64(1), step, self.stream, self.seed)
+            phi = np.float32(1.0) - np.float32(self.alpha)
+            old = self.spectrum
+            updated = np.empty_like(old)
+            updated.real = phi * old.real + self.amplitude * cosine
+            updated.imag = phi * old.imag + self.amplitude * (sign * sine)
+            self.spectrum = updated
+        else:
+            _launch("stoch_update", ny * nx, (
+                self.spectrum, self.amplitude, np.int32(nx), np.int32(ny),
+                np.float32(self.alpha), np.uint64(self.seed), np.uint32(step),
+                np.uint32(self.stream)), block_size=block_size)
         self.completed_step = step
         return self.gridpoint()
 
@@ -290,6 +420,15 @@ class WrfStochasticPattern:
             raise ValueError("component must be scalar, u or v")
         if component != "scalar" and self.config.kind != "skebs_psi":
             raise ValueError("rotational derivatives require the SKEBS streamfunction")
+        cutoff = np.float32(self.config.stddev * self.config.cutoff_sigma)
+        if self.host:
+            spectral = self.spectrum
+            if component != "scalar":
+                ny, nx = self.shape
+                spectral = _host_derivative(spectral, nx, ny, self.dx, self.dy,
+                                            1 if component == "u" else 2)
+            field = np.fft.ifft2(spectral, norm="forward").real.astype(np.float32)
+            return np.clip(field, -cutoff, cutoff, out=field)
         import cupy as cp
         spectral = self.spectrum
         if component != "scalar":
@@ -301,7 +440,6 @@ class WrfStochasticPattern:
                 np.int32(1 if component == "u" else 2)))
         # Independent 2D FFT calls keep transform plans independent of N.
         field = cp.fft.ifft2(spectral, norm="forward").real.copy()
-        cutoff = np.float32(self.config.stddev * self.config.cutoff_sigma)
         return cp.clip(field, -cutoff, cutoff, out=field)
 
     def snapshot(self) -> dict:
@@ -312,7 +450,10 @@ class WrfStochasticPattern:
 
     def _validate_state(self, state: Mapping) -> None:
         self._check_device()
-        import cupy as cp
+        if self.host:
+            cp = np
+        else:
+            import cupy as cp
         metadata = state.get("metadata")
         expected = self.metadata()
         if not isinstance(metadata, Mapping):
@@ -330,7 +471,8 @@ class WrfStochasticPattern:
             raise ValueError("stochastic restart has an invalid completed_step")
         spectrum = state.get("spectrum")
         if (not isinstance(spectrum, cp.ndarray) or spectrum.shape != self.shape
-                or spectrum.dtype != cp.complex64 or spectrum.device.id != self.device):
+                or spectrum.dtype != cp.complex64
+                or (not self.host and spectrum.device.id != self.device)):
             raise ValueError("stochastic restart spectrum has wrong shape, dtype or CUDA device")
         if not bool(cp.all(cp.isfinite(spectrum)).item()):
             raise ValueError("stochastic restart spectrum contains nonfinite coefficients")
@@ -349,12 +491,13 @@ class WrfSkebs:
                  dt: float, member_seed: int,
                  psi_config: StochasticConfig | None = None,
                  theta_config: StochasticConfig | None = None,
-                 wrf_seed_labels: Mapping | None = None):
+                 wrf_seed_labels: Mapping | None = None, host: bool = False):
         psi_config = psi_config or StochasticConfig.wrf_reference("skebs_psi")
         theta_config = theta_config or StochasticConfig.wrf_reference("skebs_theta")
         if psi_config.kind != "skebs_psi" or theta_config.kind != "skebs_theta":
             raise ValueError("SKEBS requires streamfunction and temperature configurations")
-        kwargs = dict(dx=dx, dy=dy, dt=dt, member_seed=member_seed)
+        kwargs = dict(dx=dx, dy=dy, dt=dt, member_seed=member_seed,
+                      **({"host": True} if host else {}))
         from woof.ensemble.stochastic_seeds import process_seed
         self.psi = WrfStochasticPattern(psi_config, shape_yx, **dict(kwargs,
             member_seed=process_seed(member_seed, "skebs_psi", wrf_seed_labels)))
@@ -381,6 +524,14 @@ class WrfSkebs:
         self.theta.restore(state["theta"])
 
 
+def _module_of(array):
+    """``(module, device)`` owning ``array``: NumPy (device None) or CuPy."""
+    if isinstance(array, np.ndarray):
+        return np, None
+    import cupy as cp
+    return cp, getattr(getattr(array, "device", None), "id", None)
+
+
 def apply_nonmicrophysics_sppt(pattern, tendencies: Mapping, *,
                               tendency_scope: str) -> dict:
     """WRF perturb_physics_tend:1013-1087 on active tendency views.
@@ -392,7 +543,7 @@ def apply_nonmicrophysics_sppt(pattern, tendencies: Mapping, *,
     """
     if tendency_scope != "nonmicrophysics":
         raise ValueError("SPPT requires nonmicrophysics tendencies to avoid perturbing the microphysics increment")
-    import cupy as cp
+    cp, device = _module_of(pattern)
     if (not isinstance(pattern, cp.ndarray) or pattern.ndim != 2
             or pattern.dtype != cp.float32):
         raise ValueError("SPPT pattern must be a 2D float32 CUDA array")
@@ -403,7 +554,7 @@ def apply_nonmicrophysics_sppt(pattern, tendencies: Mapping, *,
     result = {}
     for name, values in tendencies.items():
         if (not isinstance(values, cp.ndarray) or values.dtype != cp.float32
-                or values.ndim != 3 or values.device.id != pattern.device.id
+                or values.ndim != 3 or _module_of(values)[1] != device
                 or any(v > p for v, p in zip(values.shape[-2:], pattern.shape))):
             raise ValueError(f"{name} tendency must be a float32 CUDA volume within the pattern grid")
         ny, nx = values.shape[-2:]
@@ -466,7 +617,8 @@ class StochasticTimestepHook:
                  skebs_theta: StochasticConfig | None = None,
                  spp: bool = False, spp_levels: Mapping[str, int] | None = None,
                  spp_configs: Mapping[str, StochasticConfig] | None = None,
-                 wrf_seed_labels: Mapping | None = None):
+                 wrf_seed_labels: Mapping | None = None, host: bool = False):
+        self.host = bool(host)
         self.wrf_seed_labels = None
         self.spp_levels = dict(spp_levels or {}) if enabled and spp else {}
         self.spp_configs = {}
@@ -504,7 +656,8 @@ class StochasticTimestepHook:
         if self.enabled:
             from woof.ensemble.stochastic_seeds import normalize_wrf_seed_labels, process_seed
             self.wrf_seed_labels = normalize_wrf_seed_labels(wrf_seed_labels)
-            kwargs = dict(dx=dx, dy=dy, dt=dt, member_seed=member_seed)
+            kwargs = dict(dx=dx, dy=dy, dt=dt, member_seed=member_seed,
+                          **({"host": True} if self.host else {}))
             if sppt is not None:
                 self.sppt = WrfStochasticPattern(sppt, shape_yx, **dict(kwargs,
                     member_seed=process_seed(member_seed, "sppt", self.wrf_seed_labels)))
@@ -550,7 +703,10 @@ class StochasticTimestepHook:
         if self.sppt is not None:
             self._pattern = self.sppt.advance(step)
         if self.spp:
-            import cupy as cp
+            if self.host:
+                cp = np
+            else:
+                import cupy as cp
             # WRF vertstruc_spp_*=0 repeats the same spectrum at every
             # physical level. Parameter arrays address mass cells only.
             self.parameter_patterns = {
@@ -591,7 +747,6 @@ class StochasticTimestepHook:
             raise ValueError("stochastic hook requires nonmicrophysics tendencies")
         if set(tendencies) != {"u", "v", "theta", "qv"}:
             raise ValueError("stochastic hook requires u, v, theta and qv tendencies")
-        import cupy as cp
         result = dict(tendencies)
         forcing_fields = self._forcing if skebs_forcing is None else skebs_forcing
         if forcing_fields is not None:
@@ -600,8 +755,9 @@ class StochasticTimestepHook:
             for name in ("u", "v", "theta"):
                 values = result[name]
                 field = forcing_fields[name]
+                cp, device = _module_of(field)
                 if (not isinstance(values, cp.ndarray) or values.ndim != 3
-                        or values.dtype != cp.float32 or values.device.id != field.device.id
+                        or values.dtype != cp.float32 or _module_of(values)[1] != device
                         or any(v > p for v, p in zip(values.shape[-2:], field.shape))):
                     raise ValueError(f"{name} must be a float32 CUDA tendency within the forcing grid")
                 ny, nx = values.shape[-2:]
@@ -609,7 +765,7 @@ class StochasticTimestepHook:
                 if mass_factors is not None:
                     factor = mass_factors[name]
                     if (not isinstance(factor, cp.ndarray) or factor.dtype != cp.float32
-                            or factor.shape != values.shape or factor.device.id != values.device.id):
+                            or factor.shape != values.shape or _module_of(factor)[1] != device):
                         raise ValueError(f"{name} mass factor must match its CUDA tendency")
                     forcing = forcing * factor
                 result[name] = values + forcing
@@ -686,7 +842,10 @@ class StochasticTimestepHook:
             process.restore(state["spp"][name])
         self.completed_step = state["completed_step"]
         if self.spp:
-            import cupy as cp
+            if self.host:
+                cp = np
+            else:
+                import cupy as cp
             self.parameter_patterns = {
                 name: cp.broadcast_to(cp.ascontiguousarray(process.gridpoint()[:-1, :-1]),
                                       (self.spp_levels[name], process.shape[0]-1, process.shape[1]-1))

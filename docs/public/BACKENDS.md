@@ -56,7 +56,12 @@ Other commands select Metal the same way:
   `[case_data]` configs in process, nested trees included (`woof branch` and
   `woof resume` take the same flag). A `[case_data]` ensemble runs its
   members serially on one Metal context; each member decodes its own
-  inputs, and stochastic members stay refused as on every Metal ensemble.
+  inputs. Stochastic physics from a calibrated source selection (SPPT,
+  SKEBS and SPP for the GF, MYNN and RUC consumers) runs on resident Metal
+  members: the patterns are generated and applied on the host, which shares
+  memory with the GPU, and the Metal memory check counts that work. A public
+  request still cannot set amplitudes, as on CUDA, and `[tiles]` with
+  stochastic physics stays CUDA only.
   Delayed, spawned and moving nests (scripted `[relocation]` moves,
   `[relocation.follow]` and per-domain `follow`) run as on CUDA, and the
   tree is checked against the Metal memory plan first, as `woof go` does.
@@ -153,7 +158,7 @@ Important restrictions from `METAL_KNOWN_CONFLICTS` and the dynamics gate:
 | Urban | Requires Noah-MP (`sf_surface_physics=4`) in Metal admission. |
 | NSSL (`mp_physics=18`) | At most 128 levels on Metal (CUDA: 256); the 256-level sedimentation column does not fit the GPU stack. |
 | IEVA (`zadvect_implicit`) | Both variants, up to 256 levels, as on CUDA. |
-| MYNN | `bl_mynn_mixscalars=1` runs on Metal with `wrf_461`; with `gsd_41` it stays refused, as on CUDA. `spp_pbl` is refused: the Metal MYNN kernels support SPP, but no Metal route supplies a perturbation pattern yet. |
+| MYNN | `bl_mynn_mixscalars=1` runs on Metal with `wrf_461`; with `gsd_41` it stays refused, as on CUDA. `spp_pbl` takes its pattern from an ensemble member's stochastic physics, as on CUDA; outside an ensemble member it is refused before the run. |
 | Radiation / cumulus adapters | Must match the configured selectors; no radiation adapter when radiation is disabled. |
 | Noah-MP | Admission checks that its required SFLX and glacier callers exist. |
 | Dynamics | Further checks cover base-state layout, boundary forcing, diffusion, damping and diagnostics in `dycore.step`. |

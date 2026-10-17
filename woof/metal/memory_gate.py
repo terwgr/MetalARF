@@ -20,6 +20,12 @@ from functools import lru_cache
 
 FIXED_ENGINE_BYTES = 1385 * 2**20
 PER_COLUMN_LEVEL_BYTES = 880
+# SPPT/SKEBS act on host copies of the four rates: the copies, the SKEBS and
+# SPPT results, the coupled mass factors and their device faces peak at
+# twenty FP32 volumes.  An SPP PBL pattern adds its host and device levels
+# plus the previous step's bound copy.
+STOCHASTIC_RATE_COLUMN_LEVEL_BYTES = 20 * 4
+SPP_PBL_COLUMN_LEVEL_BYTES = 3 * 4
 DEFAULT_FRACTION = 0.65
 FRACTION_ENV = "WOOF_METAL_MEMORY_FRACTION"
 
@@ -64,7 +70,8 @@ def _ruc_table_inventory():
 
 def estimate(domains, context, *, cumulus=None, spp_conv=None,
              land_surface=None, legacy_radiation=None, mosaic_lu=None,
-             mosaic_soil=None) -> MetalMemoryEstimate:
+             mosaic_soil=None, spp_pbl=None,
+             stochastic_rates: bool = False) -> MetalMemoryEstimate:
     """Price residents, selected radiation/RUC storage and bounded GF scratch."""
     from woof.core.rrtmg_legacy import (
         metal_rrtmg_bytes_per_column, metal_rrtmg_column_chunk)
@@ -77,17 +84,21 @@ def estimate(domains, context, *, cumulus=None, spp_conv=None,
                         else list(legacy_radiation))
     mosaic_lu = [False] * len(domains) if mosaic_lu is None else list(mosaic_lu)
     mosaic_soil = [False] * len(domains) if mosaic_soil is None else list(mosaic_soil)
+    spp_pbl = [0] * len(domains) if spp_pbl is None else list(spp_pbl)
     if any(len(values) != len(domains) for values in
-           (cumulus, spp_conv, land_surface, legacy_radiation, mosaic_lu, mosaic_soil)):
+           (cumulus, spp_conv, land_surface, legacy_radiation, mosaic_lu, mosaic_soil,
+            spp_pbl)):
         raise ValueError("Metal memory physics selectors must match the domain count")
     working_set = int(context.recommended_working_set_size)
     resident = radiation = columns = gf_scratch = ruc_scratch = 0
-    for (nx, ny, nz), scheme, stochastic, lsm, legacy, lu, soil in zip(
+    for (nx, ny, nz), scheme, stochastic, lsm, legacy, lu, soil, pbl in zip(
             domains, cumulus, spp_conv, land_surface, legacy_radiation,
-            mosaic_lu, mosaic_soil):
+            mosaic_lu, mosaic_soil, spp_pbl):
         ncol = int(nx) * int(ny)
         columns += ncol
         resident += PER_COLUMN_LEVEL_BYTES * int(nz) * ncol
+        resident += (STOCHASTIC_RATE_COLUMN_LEVEL_BYTES * bool(stochastic_rates)
+                     + SPP_PBL_COLUMN_LEVEL_BYTES * bool(int(pbl))) * int(nz) * ncol
         if legacy:
             chunk = metal_rrtmg_column_chunk(context, int(nz), ncol)
             radiation = max(radiation, chunk * metal_rrtmg_bytes_per_column(nz))
@@ -107,10 +118,15 @@ def estimate(domains, context, *, cumulus=None, spp_conv=None,
         fraction=fraction, columns=columns)
 
 
-def estimate_runs(runs, context) -> MetalMemoryEstimate:
-    """Resolve the selected physics for each live regional domain."""
+def estimate_runs(runs, context, *, stochastic_rates: bool = False) -> MetalMemoryEstimate:
+    """Resolve the selected physics for each live regional domain.
+
+    ``stochastic_rates`` prices SPPT/SKEBS, which no RunConfig field names.
+    """
     runs = list(runs)
     return estimate([(int(run.nx), int(run.ny), int(run.nz)) for run in runs], context,
+        stochastic_rates=stochastic_rates,
+        spp_pbl=[getattr(run, "spp_pbl", 0) for run in runs],
         cumulus=[run.cu_physics for run in runs], spp_conv=[run.spp_conv for run in runs],
         land_surface=[run.sf_surface_physics for run in runs],
         legacy_radiation=[run.ra_rrtmg_variant == "rrtmg_legacy"

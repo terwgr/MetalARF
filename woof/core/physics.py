@@ -818,6 +818,11 @@ METAL_FAMILY_CAPS = {
 }
 
 
+def _outside_ensemble_member() -> bool:
+    from woof.ensemble.runtime_context import current_capture
+    return current_capture() is None
+
+
 METAL_KNOWN_CONFLICTS = (
     ("IEVA vertical advection solves at most 256 levels",
      lambda cfg, radiation, cumulus, cam_ozone:
@@ -833,10 +838,10 @@ METAL_KNOWN_CONFLICTS = (
     ("Metal NSSL microphysics (mp_physics=18) sediments at most 128 levels",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(cfg.mp_physics) == 18 and int(cfg.nz) > 128),
-    ("spp_pbl: the Metal MYNN kernels support SPP, but no Metal route "
-     "supplies a perturbation pattern yet",
+    ("spp_pbl takes its pattern from an ensemble member's stochastic physics; "
+     "this run has no member to supply one",
      lambda cfg, radiation, cumulus, cam_ozone:
-     int(getattr(cfg, "spp_pbl", 0)) != 0),
+     int(getattr(cfg, "spp_pbl", 0)) != 0 and _outside_ensemble_member()),
     ("diff_opt=1 (coordinate-surface mixing) has no Metal kernels; use diff_opt=2",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "diff_opt", 2)) == 1),

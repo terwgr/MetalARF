@@ -177,7 +177,6 @@ def metal_request_refusal(request) -> str | None:
                          - set(METAL_PRODUCT_FIELDS))
     asked = [name for name, wanted in (
         ("retain_member_diagnostics", request.retain_member_diagnostics),
-        ("stochastic perturbations", request.stochastic is not None),
         (f"thresholds for {', '.join(unpublished)}", bool(unpublished)),
     ) if wanted]
     if not asked:
@@ -1234,6 +1233,30 @@ class PreparedEnsembleSession:
             ensemble_manifest=ensemble_manifest,
             ensemble_manifest_sha256=hashlib.sha256(ensemble_manifest.read_bytes()).hexdigest())
 
+    def _admit_metal_stochastic(self, experiment, array_module, runner_options):
+        """Refuse [tiles] and price the host pattern work, before any member runs."""
+        from woof.core import streaming
+        if any(streaming.options_for_domain(domain, getattr(experiment, "tiles", None)).enabled
+               for domain in experiment.domains):
+            raise ValueError(
+                "Metal stochastic physics runs on resident domains; its windowed "
+                "patterns for [tiles] are CUDA only. Next: remove [tiles], or run "
+                "the ensemble on CUDA")
+        selected = self.stochastic_provider.configure_experiment(experiment)
+        if not self.stochastic_provider.enabled_for_experiment(selected):
+            return
+        # The host pattern work is not visible in any RunConfig the doors priced.
+        from woof.metal import memory_gate as metal_memory
+        runs = [domain.run for domain in selected.domains]
+        gate = metal_memory.estimate_runs(
+            runs, array_module.context, stochastic_rates=(
+                self.stochastic_provider.sppt is not None
+                or self.stochastic_provider.skebs_psi is not None))
+        refusal = metal_memory.refusal_text(
+            gate, [(int(run.nx), int(run.ny), int(run.nz)) for run in runs])
+        if refusal is not None and not runner_options.get("no_memory_gate"):
+            raise ValueError(refusal)
+
     def _run_prepared_metal(self, runner, inputs, *, output_directory,
                             array_module, runner_options):
         """Run source-bound members serially through the ordinary Metal runner."""
@@ -1243,8 +1266,6 @@ class PreparedEnsembleSession:
         refusal = metal_request_refusal(self.request)
         if refusal is not None:
             raise ValueError(refusal)
-        if self.stochastic_provider is not None:
-            raise ValueError("Metal ensemble stochastic spectral perturbations are not integrated")
         out = Path(output_directory or self.output_directory)
         out.mkdir(parents=True, exist_ok=True)
         if (out / "ensemble-run.json").exists():
@@ -1260,6 +1281,14 @@ class PreparedEnsembleSession:
         if self.input_provider is None and self.member_roster is None and self.source_execution is None:
             if self.identical_members is None and self.request.members > 1:
                 self._require_member_inputs(inputs.experiment)
+        if self.stochastic_provider is not None:
+            for member in self.member_order:
+                experiment = getattr(member_inputs[member], "experiment", None)
+                if experiment is None:
+                    raise ValueError(
+                        f"Metal stochastic physics is admitted per member experiment, "
+                        f"and member {member}'s inputs carry none")
+                self._admit_metal_stochastic(experiment, array_module, runner_options)
         self.collector = self.collector or __import__(
             "woof.ensemble.metal_output", fromlist=["MetalEnsembleCollector"]
         ).MetalEnsembleCollector(out, self.request.members,

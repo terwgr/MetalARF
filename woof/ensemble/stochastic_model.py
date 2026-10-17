@@ -300,6 +300,9 @@ class StochasticModelProvider:
             name: self.spp_configs[name] for name in levels}}
         if self.wrf_seed_labels is not None:
             explicit["wrf_seed_labels"] = self.wrf_seed_labels
+        if getattr(state, "_metal_setup_state", False):
+            # Metal shares host memory with the GPU: patterns live on the host.
+            explicit["host"] = True
         hook = StochasticTimestepHook((cfg.ny + 1, cfg.nx + 1), dx=cfg.dx, dy=cfg.dy,
             dt=cfg.dt, member_seed=seed, sppt=self.sppt, skebs_psi=self.skebs_psi,
             skebs_theta=self.skebs_theta, spp=bool(levels), spp_levels=levels, **explicit)
@@ -321,4 +324,5 @@ class StochasticModelProvider:
             bind = getattr(driver, "bind_spp_patterns", None)
             if bind is None:
                 raise ValueError("rebuilt SPP physics requires its original parameter consumers")
-            bind(binding.hook.parameter_patterns)
+            from woof.ensemble.stochastic_execution import device_patterns
+            bind(device_patterns(state, binding.hook.parameter_patterns))

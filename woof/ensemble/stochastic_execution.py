@@ -41,7 +41,7 @@ class StochasticPhysicsBinding:
             bind = getattr(getattr(state, "physics", None), "bind_spp_patterns", None)
             if bind is None:
                 raise RuntimeError("SPP patterns require the corresponding physics parameter consumers")
-            bind(patterns)
+            bind(device_patterns(state, patterns))
 
     def after_nonmicrophysics(self, state, cfg, tendencies):
         if not self.enabled:
@@ -53,6 +53,10 @@ class StochasticPhysicsBinding:
                  "theta": tendencies.rtheta, "qv": tendencies.rqv}
         if any(value is None for value in rates.values()):
             raise RuntimeError("stochastic forcing requires the complete nonmicrophysics tendency representation")
+        metal = _is_metal(state)
+        if metal:
+            # The host patterns act on host copies of the four rates.
+            rates = {name: _host(value) for name, value in rates.items()}
         factors = None
         if getattr(self.hook, "skebs", None) is not None:
             factors = (coupled_mass_factors(state, cfg) if self.mass_factor_provider is None
@@ -62,6 +66,13 @@ class StochasticPhysicsBinding:
         if getattr(self.hook, "sppt", None) is not None or getattr(self.hook, "skebs", None) is not None:
             close_stochastic_periodic_faces(result, cfg)
         self.applied_steps += 1
+        if metal:
+            # In place: Metal transport reads the driver's own tendency
+            # arrays, never a replacement set.
+            for name, target in (("u", tendencies.ru), ("v", tendencies.rv),
+                                 ("theta", tendencies.rtheta), ("qv", tendencies.rqv)):
+                target[...] = np.ascontiguousarray(result[name], dtype=np.float32)
+            return tendencies
         return replace(tendencies, ru=result["u"], rv=result["v"],
                        rtheta=result["theta"], rqv=result["qv"])
 
@@ -82,6 +93,28 @@ class StochasticPhysicsBinding:
             raise ValueError("stochastic checkpoint belongs to another member or source recipe")
         if type(snapshot.get("applied_steps")) is not int or snapshot["applied_steps"] < 0:
             raise ValueError("stochastic checkpoint has an invalid applied step count")
+
+
+def _is_metal(state) -> bool:
+    return bool(getattr(state, "_metal_setup_state", False))
+
+
+def _host(value) -> np.ndarray:
+    to_numpy = getattr(value, "to_numpy", None)
+    return to_numpy() if callable(to_numpy) else np.asarray(value)
+
+
+def device_patterns(state, patterns):
+    """SPP patterns in the form the state's consumers read.
+
+    A Metal state's patterns are generated on the host and its consumers
+    take contiguous MetalArrays, so the broadcast levels are materialized.
+    """
+    if not _is_metal(state):
+        return patterns
+    xp = state._array_module
+    return {name: xp.asarray(np.ascontiguousarray(value), dtype=np.float32)
+            for name, value in patterns.items()}
 
 
 def close_stochastic_periodic_faces(rates, cfg):
@@ -107,10 +140,27 @@ def coupled_mass_factors(state, cfg):
     Moisture remains unforced by SKEBS and is never assigned theta's factor.
     """
     from woof.core.physics import _couple_momentum_to_faces
+    if _is_metal(state):
+        # Host factors for the host rates; the faces go through the Metal
+        # coupling kernel, the same operation the physics coupling uses.
+        mass = (_host(state.c1h)[:, None, None] * _host(state.total_mu())[None]
+                + _host(state.c2h)[:, None, None]).astype(np.float32, copy=False)
+        device_mass = state._array_module.asarray(np.ascontiguousarray(mass))
+        u, v = _couple_momentum_to_faces(state, cfg, device_mass, device_mass)
+        theta = mass / _host(state.msft)[None] if state.has_msf else mass
+        return {"u": _host(u), "v": _host(v), "theta": theta}
     mass = state.c1h[:, None, None] * state.total_mu()[None] + state.c2h[:, None, None]
     u, v = _couple_momentum_to_faces(state, cfg, mass, mass)
     theta = mass / state.msft[None] if state.has_msf else mass
     return {"u": u, "v": v, "theta": theta}
+
+
+def checkpoint_module(binding):
+    """NumPy for a host-held hook (the Metal route), CuPy otherwise."""
+    if getattr(getattr(binding, "hook", None), "host", False):
+        return np
+    import cupy
+    return cupy
 
 
 def checkpoint_payload(binding, *, array_module=None):
@@ -120,7 +170,7 @@ def checkpoint_payload(binding, *, array_module=None):
     Native restart writers can persist each returned float32 view directly.
     """
     if array_module is None:
-        import cupy as array_module
+        array_module = checkpoint_module(binding)
     arrays = {}
     def encode(value, path):
         if isinstance(value, array_module.ndarray):
@@ -142,7 +192,9 @@ def checkpoint_payload(binding, *, array_module=None):
 
 def restore_checkpoint_payload(binding, metadata, arrays, *, array_module=None):
     """Rebuild borrowed complex views and validate the complete provider state."""
-    restored = decode_checkpoint_payload(metadata, arrays, array_module=array_module)
+    restored = decode_checkpoint_payload(
+        metadata, arrays, array_module=(checkpoint_module(binding)
+                                        if array_module is None else array_module))
     binding.restore(restored)
 
 

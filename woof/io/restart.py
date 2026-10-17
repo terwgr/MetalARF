@@ -6483,9 +6483,11 @@ def _validate_ensemble_stochastic_checkpoint(header, stored, state):
         return
     if not enabled or metadata is None:
         raise RestartMismatchError("stochastic checkpoint enabling differs from this member")
-    from woof.ensemble.stochastic_execution import decode_checkpoint_payload
+    from woof.ensemble.stochastic_execution import (checkpoint_module,
+                                                     decode_checkpoint_payload)
     try:
-        snapshot = decode_checkpoint_payload(metadata, arrays)
+        snapshot = decode_checkpoint_payload(
+            metadata, arrays, array_module=checkpoint_module(binding))
         binding.validate_identity(snapshot)
         binding.hook.validate_snapshot(snapshot["hook"])
     except (ValueError, TypeError, KeyError) as error:
