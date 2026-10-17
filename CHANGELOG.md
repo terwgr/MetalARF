@@ -1,6 +1,66 @@
 # Changelog
 
-## Unreleased
+## MetalARF 1.0.4
+
+Added:
+
+- Run the Hex forecast on Metal (`woof hex forecast --backend metal`) with
+  the resident v8.4.1 dynamical core and the same physics row as the CUDA
+  forecast, on global and limited-area meshes, with checkpoints and
+  restarts, local time stepping on global meshes, `--stop-on-refusal`,
+  memory admission and history that the Hex readers take directly.
+- Cycle an MPAS-mesh parent on the Metal Hex engine in `woof cycle`
+  (`mpas-metal`, `mpas-metal-frames`), and run `woof hex cycle run`'s fine
+  legs on Metal.
+- Run on Metal: `woof run --wrfinput` / `--met-em`, `woof sim`, `woof
+  stream`, `woof speedrun` (warm class), `woof downscale` with microphysics
+  conversion and under pinned `[tiles]`, single-domain and nested
+  `[case_data]` experiments with delayed, spawned and moving nests,
+  `[case_data]` ensembles, the prepared radar-DA cycling tool, and every
+  Global forecast door with `--metal`.
+- Run stochastic physics (SPPT, SKEBS and SPP) in Metal ensembles.
+- Port to Metal: MYNN GSD 4.1 stages, the GSL WRF 3.9 MYNN surface layer,
+  `bl_mynn_mixscalars`, the WRF local MYNN mixing length, IEVA's WRF 4.7.1
+  variant and deep column tiers, WSM6 on 65 to 80 levels, NSSL sedimentation
+  to 128 levels, mixed-microphysics nest transitions, nest inflow
+  perturbation, SASE on specified and nested domains, prescribed smoke
+  feedback in legacy RRTMG, nested CAM ozone, YSU and MYJ with single-layer
+  and BEP urban physics, MYNN and RUC physics parameter sets, radar latent
+  heating, and threshold probabilities from Metal ensembles.
+- Add opt-in radar latent heating to `woof local-da` (`--radar-tten`), and
+  clear radar-observed no-echo precipitation without CUDA.
+- Build every Metal pipeline ahead of time in `woof warm-kernels`, and run
+  Noah-MP as a whole-grid slab on Metal.
+- Ask the Metal admission at the go doors before any fetch, refuse
+  configurations Metal cannot run by name, price `woof check` with the Metal
+  memory gate, and let `woof doctor` judge the Metal runtime.
+
+Fixed:
+
+- Match Metal physics to CUDA: Grell-Freitas inversion scan termination,
+  column batching, tiled scratch and uncoupled momentum tendencies;
+  Kain-Fritsch on the specified-zone ring; Morrison multiply-add
+  contraction; the precipitation split passed to RUC and Noah-MP; GSD 4.1
+  subgrid clouds in legacy RRTMG; MYNN clouds in Dudhia shortwave.
+- Correct Metal Noah-MP snow-shifted soil depths and frozen-soil initial
+  liquid water, Thompson thin-ice number, riming thresholds and WRF39
+  aerosol bounds, RUC soil perturbations, frozen saturation and fractional
+  sea ice, BEP column state, the Global quasi-monotone tracer bounds,
+  implicit-solve capacity and semi-Lagrangian Exner power, and the requested
+  legacy RRTMG cloud optics.
+- Keep restart carriers complete for MYJ, dry and TKE runs, carry held PBL
+  rates through restart and relocation, preserve microphysics NaNs for the
+  health checks, publish SASE and horizontal mixing diagnostics, and price
+  Metal memory by live ownership.
+- Count the Hex Euler pressure tendencies once when mixing is on.
+- Let checkpoints inside a radar-heated `woof local-da` leg leave the
+  forcing out, give Metal Kain-Fritsch's short last column span its own
+  workspace, carry nest leg boundaries across a change of tick unit, and
+  skip the Grell-Freitas deep inversion capture that no caller reads.
+- Refuse at admission, before any fetch, the `km_opt=0` profiles and the
+  WSM6, WDM6 and Milbrandt-Yau level counts Metal cannot run.
+
+Also in this release:
 
 - Add native Metal runners for nine idealized verification cases and an
   independent lateral boundary-flux diagnostic.
