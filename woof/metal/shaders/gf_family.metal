@@ -1427,16 +1427,22 @@ static inline void gfd_get_inversion_layers(int ierr, GfColC p_cup,
     int ilev = IMAX(3, kstart + 1);
     int ix = 1;
     int k = ilev;
+    // The exit level is assigned once after the scan: Metal miscompiled the
+    // per-iteration ilev store of the original for/break form, so ilev never
+    // advanced and the loop did not terminate.
     while (ilev < kend_p3) {
-        for (int kk = k; kk <= kend_p3 + 2; kk++) {
+        int kk = k;
+        bool found = false;
+        while (kk <= kend_p3 + 2) {
             if (sec[kk] < sec[kk + 1] && sec[kk] < sec[kk - 1]) {
                 k_inv[ix] = kk;
                 ix = IMIN(5, ix + 1);
-                ilev = kk + 1;
+                found = true;
                 break;
             }
-            ilev = kk + 1;
+            kk += 1;
         }
+        ilev = found ? kk + 1 : kend_p3 + 3;
         k = ilev;
     }
     int kadd = 0;
