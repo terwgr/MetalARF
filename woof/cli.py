@@ -864,7 +864,7 @@ def _dispatch_argv(argv: list[str] | None = None) -> int:
                 pass
         metal_verify = (args.command == "verify"
                         and getattr(args, "backend", "cuda") == "metal")
-        metal_input_run = (args.command in ("run", "resume", "branch")
+        metal_input_run = (args.command in ("run", "resume", "branch", "downscale")
                            and getattr(args, "backend", None) == "metal")
         if (not _spends_nothing and not metal_prepared_sim
                 and not metal_prepared_ensemble and not metal_verify

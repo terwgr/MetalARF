@@ -143,7 +143,7 @@ NO_METAL_ROUTE = "  CUDA does not run on this Mac; this command has no Metal rou
 METAL_DOORS = frozenset(
     ("woof go", "woof ensemble", "woof sim", "woof verify",
      "woof run", "woof resume", "woof branch",
-     "woof warm-kernels"))
+     "woof warm-kernels", "woof downscale"))
 
 
 GPU_RUNTIME = Requirement(

@@ -1,4 +1,4 @@
-"""``woof downscale``: offline parent-history -> standalone CUDA child.
+"""``woof downscale``: offline parent-history -> standalone child.
 
 Front door for the native ``ndown`` replacement (:mod:`woof.offline_child`
 contracts, :mod:`woof.offline_child_run` driver).  Two child modes:
@@ -1670,6 +1670,18 @@ def _downscale_main(args, reservation: _OutputReservation,
             SimpleNamespace(devices=load_device_options(supplied_child)),
             "woof downscale")
 
+    if getattr(args, "backend", "cuda") == "metal":
+        # A Metal child runs resident on this Mac's unified memory: there is
+        # no card to price a streaming verdict against.
+        if getattr(args, "tiles", None) is not None:
+            raise OfflineChildContractError(
+                "--tiles streams the child through a CUDA card's memory; "
+                "a Metal downscaled child runs resident, so omit --tiles")
+        if getattr(args, "auto_vram", False):
+            raise OfflineChildContractError(
+                "--auto-vram measures a CUDA card; a Metal downscaled child "
+                "is priced by the Metal memory gate, so omit --auto-vram")
+
     # The parser refuses a ratio below 1 as it reads --ratio.  A caller
     # that hands this command a namespace of its own skips the parser,
     # and every later step divides by the ratio (0 was a division by zero,
@@ -1982,6 +1994,10 @@ def _downscale_main(args, reservation: _OutputReservation,
     # disagreement earns prints exactly once.
     tiles_options = resolve_child_streaming_options(
         child_config, getattr(args, "tiles", None))
+    if getattr(args, "backend", "cuda") == "metal" and tiles_options.enabled:
+        raise OfflineChildContractError(
+            "a Metal downscaled child runs resident; remove [tiles] or "
+            "set its mode off")
     _validate_child_window(cfg.run_seconds, window_seconds)
     archive_frame_count = len(frames)
     frames = _frames_for_child_window(contract, cfg.run_seconds)
@@ -2303,6 +2319,7 @@ def _downscale_main(args, reservation: _OutputReservation,
         child_terrain=static_policy.terrain,
         geog_root=(None if getattr(args, "geog_root", None) is None
                    else Path(args.geog_root)),
+        state_backend=args.backend,
         preprocess_backend=args.preprocess_backend,
         health_interval_seconds=float(args.health_interval_seconds),
         render_products=render_products,
@@ -2440,7 +2457,7 @@ def register_cli(subparsers) -> None:
 
     parser = subparsers.add_parser(
         "downscale",
-        help="run a standalone CUDA child from archived parent history "
+        help="run a standalone child from archived parent history "
              "(native ndown replacement; woof and stock-WRF parents)")
     parser.add_argument(
         "parent", nargs="+",
@@ -2555,6 +2572,10 @@ def register_cli(subparsers) -> None:
                         help="child-grid wrfinput/history file with land "
                              "identity + soil warm start (required for "
                              "surface-physics children)")
+    parser.add_argument("--backend", choices=("cuda", "metal"), default="cuda",
+                        help="forecast backend for the child (default cuda); "
+                             "a Metal child interpolates its parent on the CPU "
+                             "and runs resident")
     parser.add_argument("--preprocess-backend", choices=("cuda", "cpu", "auto"),
                         default="auto",
                         help="where the parent-to-child interpolation "

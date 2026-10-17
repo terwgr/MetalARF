@@ -1920,7 +1920,7 @@ def _launch_conversion(contract, planes, names, *, coupled: bool, xp):
     shape = tuple(int(v) for v in donor.qv.shape)
     out = {}
     for name in names:
-        target = xp.empty(shape, dtype=xp.float32)
+        target = xp.empty(shape, dtype=np.float32)
         _mt.launch_microphysics_edge_parent_field(
             contract, donor, name, out=target, coupled=bool(coupled))
         out[name] = target
@@ -1945,6 +1945,11 @@ def _convert_parent_microphysics(
     try:
         import cupy as cp
     except Exception as error:   # pragma: no cover - box without a GPU
+        from woof import capabilities
+        if backend == "cpu" and capabilities.apple_silicon():
+            return _convert_parent_microphysics_metal(
+                contract, planes, names, coupled=coupled,
+                hypsometric_opt=hypsometric_opt)
         raise OfflineChildContractError(
             "offline cross-physics conversion runs the nest-transition "
             "kernel (woof/core/kernels/nest_microphysics.cu), which has "
@@ -1993,6 +1998,52 @@ def _convert_parent_microphysics(
         chunks += 1
     return OfflineSchemeTransition(
         contract=contract, fields=MappingProxyType(host), device="cuda",
+        host_chunked=True, chunk_rows=int(rows), chunks=int(chunks),
+        parent_hypsometric_opt=int(hypsometric_opt))
+
+
+def _convert_parent_microphysics_metal(contract, planes, names, *, coupled,
+                                       hypsometric_opt):
+    """The CPU backend's band conversion, through the Metal edge kernel.
+
+    Inside a Metal run it borrows that run's context: a second context in
+    the same process would wait forever on its own GPU slot lock.
+    """
+    import contextlib
+
+    from woof.ensemble.runtime_context import current_metal_array_module
+    from woof.metal.array import MetalArrayModule
+    from woof.metal.runtime import MetalContext
+
+    shared = current_metal_array_module()
+    nz, ny, nx = (int(v) for v in np.asarray(planes["qv"]).shape)
+    rows = max(1, min(ny, CONVERSION_CHUNK_CELLS // max(1, nz * nx)))
+    host = {name: np.empty((nz, ny, nx), dtype=np.float32) for name in names}
+    columnar = {"c1h", "c2h"}
+    chunks = 0
+    with (contextlib.nullcontext(shared.context) if shared is not None
+          else MetalContext()) as context:
+        xp = shared if shared is not None else MetalArrayModule(context)
+        for j0 in range(0, ny, rows):
+            j1 = min(ny, j0 + rows)
+            band = {}
+            for name, value in planes.items():
+                if value is None:
+                    band[name] = None
+                    continue
+                if name not in columnar:
+                    value = value[j0:j1] if np.ndim(value) == 2 else value[:, j0:j1]
+                band[name] = xp.asarray(
+                    np.ascontiguousarray(value, dtype=np.float32))
+            converted = _launch_conversion(contract, band, names,
+                                           coupled=coupled, xp=xp)
+            context._wait_submissions()
+            for name, value in converted.items():
+                host[name][:, j0:j1] = value.to_numpy()
+            del band, converted
+            chunks += 1
+    return OfflineSchemeTransition(
+        contract=contract, fields=MappingProxyType(host), device="metal",
         host_chunked=True, chunk_rows=int(rows), chunks=int(chunks),
         parent_hypsometric_opt=int(hypsometric_opt))
 
@@ -3484,7 +3535,7 @@ def build_offline_child_domain_state(
     coord, base = _base_from_interpolated_initial(initial, cfg)
     state = DomainState(cfg, array_module=array_module)
     state.load_base(coord, base)
-    xp = np if array_module is np else __import__("cupy")
+    xp = array_module if array_module is not None else __import__("cupy")
 
     def assign(name, value):
         target = getattr(state, name)
@@ -3492,7 +3543,7 @@ def build_offline_child_domain_state(
         if tuple(target.shape) != tuple(host.shape):
             raise OfflineChildContractError(
                 f"initial {name} shape {host.shape} != state {target.shape}")
-        target[...] = xp.asarray(host, dtype=xp.float32)
+        target[...] = xp.asarray(host, dtype=np.float32)
 
     for state_name, wrf_name in (
             ("u", "U"), ("v", "V"), ("w", "W"),
@@ -3500,7 +3551,7 @@ def build_offline_child_domain_state(
         assign(state_name, initial.fields[wrf_name])
     total_theta = np.asarray(initial.fields["T"], dtype=np.float32) + np.float32(300.0)
     state.thp[...] = xp.asarray(
-        total_theta - np.asarray(base.thb, dtype=np.float32), dtype=xp.float32)
+        total_theta - np.asarray(base.thb, dtype=np.float32), dtype=np.float32)
     state.set_map_coriolis(
         initial.fields["MAPFAC_M"], initial.fields["MAPFAC_U"],
         initial.fields["MAPFAC_V"], initial.fields["F"], initial.fields["E"],

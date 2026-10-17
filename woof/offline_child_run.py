@@ -115,7 +115,9 @@ _CAPABILITIES = {
     "terrain_policy": "child-own-static-geography",
     "terrain_policies": ["child-own-static-geography",
                          "sint-parent-inherited"],
+    # forecast_backend is the default, kept for controllers that read it.
     "forecast_backend": "cuda",
+    "forecast_backends": ["cuda", "metal"],
     "preprocess_backends": ["cuda", "cpu"],
     "output_ownership": "create-only",
     # Davies clock bind era: the standalone child binds a DomainClock to
@@ -1324,6 +1326,14 @@ def child_disk_projection(cfg, cadence: ChildCadence, *,
 
 
 def _memory_snapshot(cp) -> dict[str, int]:
+    if getattr(cp, "__woof_metal_array_module__", False):
+        # Unified memory: the context's own allocations, and the working
+        # set the system recommends for this device.
+        live = int(cp.context.allocation_snapshot()["live_allocated_bytes"])
+        total = int(cp.context.recommended_working_set_size)
+        return {"pool_used_bytes": live, "pool_reserved_bytes": live,
+                "device_free_bytes": max(total - live, 0),
+                "device_total_bytes": total}
     pool = cp.get_default_memory_pool()
     free_bytes, total_bytes = cp.cuda.runtime.memGetInfo()
     return {
@@ -1465,6 +1475,14 @@ def _initialize_child_physics(child, cfg, initial, surface, start_time, *,
                 ozone_routing=(ROUTING_CHILD_GRID_CLIMATOLOGY
                                if cfg.o3input == 2 else None))
 
+    if (radiation is None and radiation_active
+            and getattr(child, "_metal_setup_state", False)):
+        # A Metal state needs the fused no-CuPy RRTMGP adapter.
+        from woof.ingest.hrrr_physics import prepared_radiation
+        radiation = prepared_radiation(
+            cfg, child, start_time, lat, lon,
+            p_top=float(initial.receipt["p_top"]))
+
     if surface is None:
         return initialize_physics(
             child, cfg, radiation=radiation,
@@ -1539,7 +1557,10 @@ def _initialize_child_physics(child, cfg, initial, surface, start_time, *,
     # Seed time-zero surface diagnostics from the child-grid source; the
     # first model step replaces them through SFCLAY/LSM/PBL in WRF
     # ordering (same convention as the experiment path's warm seed).
-    import cupy as cp
+    if getattr(child, "_metal_setup_state", False):
+        cp = child._array_module
+    else:
+        import cupy as cp
     # A child on its OWN geography carries the land-model fields a
     # standalone run of its grid initializes from its static build (leaf
     # area on the start date, the greenness range, the snow albedo), the
@@ -1551,7 +1572,7 @@ def _initialize_child_physics(child, cfg, initial, surface, start_time, *,
         value = fields.get(source_name)
         if value is not None and field_name in driver.fields:
             driver.fields[field_name][...] = cp.asarray(
-                value, dtype=cp.float32)
+                value, dtype=np.float32)
     if (int(cfg.sf_surface_physics) == 3 and cfg.rdlai2d
             and terrain_drag_static is not None
             and terrain_drag_static.get("LAI12M") is not None
@@ -1559,12 +1580,12 @@ def _initialize_child_physics(child, cfg, initial, surface, start_time, *,
         from woof.core.landuse import surface_leaf_area
         driver.fields["lai"][...] = cp.asarray(
             surface_leaf_area(cfg, terrain_drag_static["LAI12M"], start_time),
-            dtype=cp.float32)
+            dtype=np.float32)
     if (int(cfg.sf_surface_physics) == 3 and cfg.usemonalb
             and "snoalb" in driver.fields):
         from woof.core.landuse import surface_snow_albedo
         driver.fields["snoalb"][...] = cp.asarray(
-            surface_snow_albedo(cfg, terrain_drag_static, None), dtype=cp.float32)
+            surface_snow_albedo(cfg, terrain_drag_static, None), dtype=np.float32)
     noah_params = getattr(driver, "noah_params", None)
     if (fields.get("SNOALB") is not None and noah_params is not None
             and "snoalb" in driver.fields):
@@ -1573,14 +1594,14 @@ def _initialize_child_physics(child, cfg, initial, surface, start_time, *,
             noah_initial_snow_albedo(
                 fields["SNOALB"], np.rint(fields["LU_INDEX"]).astype(np.int64),
                 noah_params, rdmaxalb=cfg.rdmaxalb),
-            dtype=cp.float32)
+            dtype=np.float32)
     for source_name, field_name in (
             ("PSFC", "psfc"), ("T2", "t2"), ("Q2", "q2"), ("TH2", "th2"),
             ("U10", "u10"), ("V10", "v10"), ("UST", "ust")):
         value = fields.get(source_name)
         if value is not None and field_name in driver.fields:
             driver.fields[field_name][...] = cp.asarray(
-                value, dtype=cp.float32)
+                value, dtype=np.float32)
     return driver
 
 
@@ -2257,20 +2278,26 @@ def _parent_grid_metadata(path: Path) -> tuple[float, float, dict[str, object]]:
 
 def _output_fields(state, initial, refl_field=None,
                    surface=None) -> dict[str, np.ndarray]:
-    import cupy as cp
     from woof.io.wrfout import state_frame
+
+    if getattr(state, "_metal_setup_state", False):
+        def host(array):
+            return array.to_numpy()
+    else:
+        import cupy as cp
+        host = cp.asnumpy
 
     result = state_frame(state, include_diagnostic_pressure=True)
     if refl_field is not None:
-        result["REFL_10CM"] = cp.asnumpy(refl_field)
+        result["REFL_10CM"] = host(refl_field)
     result.update({
-        "MAPFAC_M": cp.asnumpy(state.msft),
-        "MAPFAC_U": cp.asnumpy(state.msfu),
-        "MAPFAC_V": cp.asnumpy(state.msfv),
-        "F": cp.asnumpy(state.f),
-        "E": cp.asnumpy(state.e),
-        "SINALPHA": cp.asnumpy(state.sina),
-        "COSALPHA": cp.asnumpy(state.cosa),
+        "MAPFAC_M": host(state.msft),
+        "MAPFAC_U": host(state.msfu),
+        "MAPFAC_V": host(state.msfv),
+        "F": host(state.f),
+        "E": host(state.e),
+        "SINALPHA": host(state.sina),
+        "COSALPHA": host(state.cosa),
         "XLAT": np.asarray(initial.fields["XLAT"], dtype=np.float32),
         "XLONG": np.asarray(initial.fields["XLONG"], dtype=np.float32),
     })
@@ -2385,7 +2412,17 @@ def run(args: argparse.Namespace) -> dict[str, object]:
 def _run_with_receipts(args: argparse.Namespace) -> dict[str, object]:
     progress = _ChildProgress()
     try:
-        report = _run(args, progress)
+        if getattr(args, "state_backend", "cuda") == "metal":
+            from woof.ensemble.runtime_context import (
+                metal_array_module_scope)
+            from woof.metal.array import MetalArrayModule
+            from woof.metal.runtime import MetalContext
+
+            with MetalContext() as context, metal_array_module_scope(
+                    MetalArrayModule(context)) as array_module:
+                report = _run(args, progress, array_module=array_module)
+        else:
+            report = _run(args, progress)
     except BaseException as error:
         if _stopped_by_user(error):
             # A STOP IS NOT A FAILURE.  It was published as one -- event
@@ -3018,8 +3055,19 @@ def _interpolation_price(contract, placement, cfg):
 
 
 def _run(args: argparse.Namespace,
-         progress: "_ChildProgress") -> dict[str, object]:
-    import cupy as cp
+         progress: "_ChildProgress", array_module=None) -> dict[str, object]:
+    """Integrate the child; ``array_module`` is a MetalArrayModule on Metal."""
+    metal = array_module is not None
+    if metal:
+        cp = array_module
+
+        def synchronize():
+            array_module.context._wait_submissions()
+    else:
+        import cupy as cp
+
+        def synchronize():
+            cp.cuda.runtime.deviceSynchronize()
     from woof.ingest.preprocess_backend import decide_preparation_device
     from woof.core import streaming
     from woof.core.refl import consume_refl_10cm, refl_10cm_is_stashed
@@ -3110,6 +3158,14 @@ def _run(args: argparse.Namespace,
     else:
         binding = bind_parent_physics_from_wrf_namelist(
             args.parent_namelist, domain_id=args.parent_domain_id)
+    if metal:
+        # Before the archive is read: what a Metal child cannot run.
+        from woof.core.physics import _metal_admission_refusals
+        refusals = _metal_admission_refusals(
+            cfg, radiation=None, cumulus=None, cam_ozone=None)
+        if refusals:
+            raise OfflineChildContractError(
+                "this child cannot run on Metal: " + "; ".join(refusals))
     contract = validate_parent_history(
         args.parent_history,
         max_boundary_interval_seconds=args.max_boundary_interval_seconds,
@@ -3291,43 +3347,65 @@ def _run(args: argparse.Namespace,
     # carried an envelope larger than the card the child then ran on
     # (17,033,346,128 B for a 552x552x49 child on a 15.47 GiB card that the
     # review and a --tiles=auto run both priced at 14,922,267,728 B).
-    from tilestream.autoplan import CannotPlan
+    if metal:
+        # Unified memory: the child runs resident, priced by the Metal gate.
+        if tiles.enabled:
+            raise OfflineChildContractError(
+                "a Metal downscaled child runs resident; remove [tiles] or "
+                "set its mode off")
+        from woof.metal import memory_gate as metal_memory
+        estimate = metal_memory.estimate_runs([cfg], array_module.context)
+        refusal = metal_memory.refusal_text(
+            estimate, [(int(cfg.nx), int(cfg.ny), int(cfg.nz))])
+        if refusal is not None and not getattr(args, "no_memory_gate", False):
+            raise OfflineChildContractError(refusal)
+        streaming_decision = streaming.StreamingDecision(
+            stream=False, reason="a Metal child runs resident")
+        streaming_entry = {
+            "mode": "resident", "why": streaming_decision.reason,
+            "basis": "metal-memory-gate",
+            "budget_bytes": int(estimate.limit_bytes),
+            "peak_envelope_bytes": int(estimate.peak_bytes)}
+        _log("child_streaming_decision", **streaming_entry)
+    else:
+        from tilestream.autoplan import CannotPlan
 
-    try:
-        card = downscale_pricing.cold_card(tiles)
-        # The estimator's default forcing model, as the fitted sizing and
-        # the review price it: the child's boundary intervals are streamed
-        # from the host one at a time, so counting every archived interval
-        # as retained on the device would price this child a third above
-        # what it holds and stream a child that fits.
-        pricing = downscale_pricing.price_child(
-            cfg, tiles, machine=card.machine, profile=card.profile,
-            basis=downscale_pricing.MEASURED_BASIS)
-    except CannotPlan as error:
-        raise OfflineChildContractError(str(error)) from error
-    tiles = pricing.options
-    streaming_decision = pricing.decision
-    _log("child_streaming_decision", **pricing.plan_entry())
-    admission_machine = streaming.cold_admission_machine(card.machine,
-                                                         options=tiles)
-    try:
-        # A pinned tiling, priced on this card before its buffers exist.
-        streaming.admit_pinned_road(cfg, tiles, streaming_decision,
-                                    machine=admission_machine,
-                                    resident_estimate=pricing.estimate)
-    except CannotPlan as error:
-        raise OfflineChildContractError(str(error)) from error
-    if pricing.estimate is not None:
-        # THE RESIDENT CHILD, ADMITTED BEFORE ITS FIRST ALLOCATION.  With
-        # [tiles] off the decision above admits nothing, so the child state
-        # and the physics driver attached after it (_initialize_child_physics
-        # below) went onto the card unpriced and a child too big for it died
-        # in CUDA after interpolation.  The same estimate the plan review
-        # printed, weighed against the card the decision was read on.
-        streaming.admit_resident_road(
-            None, streaming_decision, machine=admission_machine,
-            estimate=pricing.estimate,
-            what="this downscaled child, held resident on the card")
+        try:
+            card = downscale_pricing.cold_card(tiles)
+            # The estimator's default forcing model, as the fitted sizing and
+            # the review price it: the child's boundary intervals are streamed
+            # from the host one at a time, so counting every archived interval
+            # as retained on the device would price this child a third above
+            # what it holds and stream a child that fits.
+            pricing = downscale_pricing.price_child(
+                cfg, tiles, machine=card.machine, profile=card.profile,
+                basis=downscale_pricing.MEASURED_BASIS)
+        except CannotPlan as error:
+            raise OfflineChildContractError(str(error)) from error
+        tiles = pricing.options
+        streaming_decision = pricing.decision
+        streaming_entry = pricing.plan_entry()
+        _log("child_streaming_decision", **streaming_entry)
+        admission_machine = streaming.cold_admission_machine(card.machine,
+                                                             options=tiles)
+        try:
+            # A pinned tiling, priced on this card before its buffers exist.
+            streaming.admit_pinned_road(cfg, tiles, streaming_decision,
+                                        machine=admission_machine,
+                                        resident_estimate=pricing.estimate)
+        except CannotPlan as error:
+            raise OfflineChildContractError(str(error)) from error
+        if pricing.estimate is not None:
+            # THE RESIDENT CHILD, ADMITTED BEFORE ITS FIRST ALLOCATION.  With
+            # [tiles] off the decision above admits nothing, so the child state
+            # and the physics driver attached after it (_initialize_child_physics
+            # below) went onto the card unpriced and a child too big for it died
+            # in CUDA after interpolation.  The same estimate the plan review
+            # printed, weighed against the card the decision was read on.
+            streaming.admit_resident_road(
+                None, streaming_decision, machine=admission_machine,
+                estimate=pricing.estimate,
+                what="this downscaled child, held resident on the card")
 
     # PUBLISHED HERE: after every contract that can refuse this child has
     # passed and before the first minute of preprocessing is spent, so a
@@ -3364,8 +3442,13 @@ def _run(args: argparse.Namespace,
     # free memory; an explicit cuda that cannot fit is refused by name
     # (A65).  The child state itself is the forecast's, on the card either
     # way, and was priced above.
+    if metal and args.preprocess_backend not in (None, "auto", "cpu"):
+        raise OfflineChildContractError(
+            "a Metal child interpolates its parent on the CPU; "
+            "--preprocess-backend cuda needs CuPy")
     preprocess_backend, preprocess_selection = decide_preparation_device(
-        args.preprocess_backend, _interpolation_price(contract, placement, cfg))
+        "cpu" if metal else args.preprocess_backend,
+        _interpolation_price(contract, placement, cfg))
     if preprocess_selection is not None:
         _log("preprocess_backend_selection", **preprocess_selection)
 
@@ -3414,7 +3497,8 @@ def _run(args: argparse.Namespace,
         _log("initial_positive_definite_clamp",
              fields={name: dict(account)
                      for name, account in initial_clamp.items()})
-    child = build_offline_child_domain_state(initial, cfg)
+    child = build_offline_child_domain_state(
+        initial, cfg, **({"array_module": array_module} if metal else {}))
     attach_streaming_lateral_boundaries(child, prepared.boundaries)
     # Davies clock bind (production semantics): boundary consumers take
     # WRF's post-increment dtbc recurrence from a bound integer-tick
@@ -3433,7 +3517,7 @@ def _run(args: argparse.Namespace,
                                            or cfg.usemonalb
                                            or cfg.rdlai2d) else {}))
     ozone_routing = _child_ozone_routing(driver)
-    cp.cuda.runtime.deviceSynchronize()
+    synchronize()
     # ``[tiles]``, wired exactly the way the prepared front doors wire it
     # (woof.prepared_single_domain_forecast: decide ONCE, hand the decision
     # to make_stepper, record it).  With no block this is
@@ -3561,7 +3645,7 @@ def _run(args: argparse.Namespace,
         output_due = step_index % output_steps == 0 or step_index == steps
         step_started = time.perf_counter()
         stepper(child, cfg, refl_10cm_due=output_due)
-        cp.cuda.runtime.deviceSynchronize()
+        synchronize()
         step_seconds.append(time.perf_counter() - step_started)
         clock.advance()
         if step_index % health_steps == 0 or step_index == steps:
@@ -3676,6 +3760,7 @@ def _run(args: argparse.Namespace,
             "child_nx": placement.child_nx,
             "child_ny": placement.child_ny,
         },
+        "forecast_backend": "metal" if metal else "cuda",
         "preprocess_backend": preprocess_backend,
         "preprocess_backend_selection": preprocess_selection,
         # Which cadence flag the invoker gave (audit finding 5): True
@@ -3735,7 +3820,7 @@ def _run(args: argparse.Namespace,
         # The decision the run was integrated with, and what it was judged
         # on: the same block the plan review wrote, so a reader can hold
         # the two documents side by side and find one answer.
-        "streaming": pricing.plan_entry(),
+        "streaming": streaming_entry,
         "streamed_carriers_refreshed": carriers_refreshed,
         # The checkpoints this run leaves on disk, written on the child's
         # own restart_interval_s under the instant naming the next
@@ -3814,6 +3899,9 @@ def _parser() -> argparse.ArgumentParser:
                         help="child-grid wrfinput/history file supplying "
                              "land identity and soil warm-start state "
                              "(required for surface-physics children)")
+    parser.add_argument("--state-backend", choices=("cuda", "metal"),
+                        default="cuda",
+                        help="forecast backend for the child (default cuda)")
     parser.add_argument("--preprocess-backend", choices=("cuda", "cpu", "auto"),
                         default="auto")
     parser.add_argument("--parent-terrain", action="store_const",
