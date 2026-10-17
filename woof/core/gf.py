@@ -556,7 +556,7 @@ class GrellFreitas:
                     pattern_spp_conv=None):
         """Run the complete GFDRV column chain with owned Metal buffers."""
         from woof.metal.array import MetalArray
-        from woof.metal.gf_family import submit_gf_gfdrv_stage
+        from woof.metal.gf_family import submit_gf_tiled
 
         nz, ny, nx = map(int, state.p.shape)
         ncol = ny * nx
@@ -598,9 +598,6 @@ class GrellFreitas:
         if nz > GF_METAL_KMAX:
             raise NotImplementedError(
                 f"Metal GF supports at most {GF_METAL_KMAX} levels, got {nz}")
-        workspace = module.zeros(
-            (gf_workspace_floats(nz, ncol, capacity=GF_METAL_KMAX),),
-            dtype=DTYPE)
         dx_column = getattr(self._driver, "gf_dx_column", None)
         if dx_column is not None:
             dx_flat = use_array(dx_column, "gf_dx_column", surface_shape)
@@ -645,13 +642,12 @@ class GrellFreitas:
             **{name: value.view((int(value.size),))
                for name, value in output.items()},
             "rainc": rainc.view((ncol,)),
-            "workspace": workspace,
             # The disabled path borrows dx_column as an unread ABI carrier;
             # the enabled path is the four family planes in WRF layout.
             "spp_conv": (pattern_spp_conv.view((4 * ncol,))
                          if pattern_spp_conv is not None else dx_flat),
         }
-        submit_gf_gfdrv_stage(
+        submit_gf_tiled(
             resources,
             {"ncol": ncol, "nz": nz, "dt": _model_clock_dt(cfg),
              "dx": float(cfg.dx), "use_dx_column": int(dx_column is not None),

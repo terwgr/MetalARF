@@ -44,22 +44,31 @@ def _fraction() -> float:
     return value
 
 
-def estimate(domains, context) -> MetalMemoryEstimate:
-    """Add resident domain costs and the largest reused radiation workspace."""
+def estimate(domains, context, *, cumulus=None, spp_conv=None) -> MetalMemoryEstimate:
+    """Add resident costs, radiation, and the selected bounded GF scratch."""
     from woof.core.rrtmg_legacy import (
         metal_rrtmg_bytes_per_column, metal_rrtmg_column_chunk)
 
+    domains = list(domains)
+    cumulus = [0] * len(domains) if cumulus is None else list(cumulus)
+    spp_conv = [0] * len(domains) if spp_conv is None else list(spp_conv)
+    if len(cumulus) != len(domains) or len(spp_conv) != len(domains):
+        raise ValueError("Metal memory physics selectors must match the domain count")
     working_set = int(context.recommended_working_set_size)
-    resident = radiation = columns = 0
-    for nx, ny, nz in domains:
+    resident = radiation = columns = gf_scratch = 0
+    for (nx, ny, nz), scheme, stochastic in zip(domains, cumulus, spp_conv):
         ncol = int(nx) * int(ny)
         columns += ncol
         resident += PER_COLUMN_LEVEL_BYTES * int(nz) * ncol
         chunk = metal_rrtmg_column_chunk(context, int(nz), ncol)
         radiation = max(radiation, chunk * metal_rrtmg_bytes_per_column(nz))
+        if int(scheme) == 3:
+            from woof.metal.gf_family import gf_metal_scratch_bytes
+            gf_scratch = max(gf_scratch, gf_metal_scratch_bytes(
+                int(nz), ncol, spp_enabled=bool(stochastic)))
     fraction = _fraction()
     return MetalMemoryEstimate(
-        peak_bytes=FIXED_ENGINE_BYTES + resident + radiation,
+        peak_bytes=FIXED_ENGINE_BYTES + resident + radiation + gf_scratch,
         limit_bytes=int(fraction * working_set), working_set_bytes=working_set,
         fraction=fraction, columns=columns)
 

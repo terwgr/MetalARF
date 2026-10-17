@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from woof.metal.array import MetalArray
+from woof.metal.array import MetalArray, MetalArrayModule
 
 
 _SIGNATURE_PATH = (Path(__file__).resolve().parent
@@ -18,6 +18,20 @@ with _SIGNATURE_PATH.open(encoding="utf-8") as _stream:
 #: GPU watchdog on a display GPU (kIOGPUCommandBufferCallbackErrorImpacting-
 #: Interactivity); each batch is its own submission.
 GF_COLUMNS_PER_SUBMIT = 2048
+
+_OUTPUTS = {"rthcuten", "rqvcuten", "rqccuten", "rqicuten",
+            "rucuten", "rvcuten", "rainc"}
+_SURFACE_FIELDS = {"ht", "hfx", "qfx", "xland", "kpbl", "dx_column", "rainc"}
+
+
+def _planes(name, nz, spp_enabled):
+    if name in _SURFACE_FIELDS:
+        return 1
+    if name in {"w", "p_interface"}:
+        return int(nz) + 1
+    if name == "spp_conv":
+        return 4 if spp_enabled else 1
+    return int(nz)
 
 _DTYPES = {"float": np.dtype(np.float32),
            "float32": np.dtype(np.float32),
@@ -79,4 +93,86 @@ def submit_gf_gfdrv_stage(resources: dict, parameters: dict, *, ncol: int):
     return result
 
 
-__all__ = ["GF_COLUMNS_PER_SUBMIT", "submit_gf_gfdrv_stage"]
+def gf_metal_scratch_bytes(nz, columns, *, spp_enabled=False):
+    """Peak bounded workspace and resident packing buffers for one call."""
+    from woof.core.gf import GF_METAL_KMAX, gf_workspace_floats
+
+    tile = min(int(columns), GF_COLUMNS_PER_SUBMIT)
+    workspace = gf_workspace_floats(nz, tile, capacity=GF_METAL_KMAX) * 4
+    packed = sum(_planes(name, nz, spp_enabled)
+                 for name, _, _ in _ENTRY["resources"] if name != "workspace") * tile * 4
+    return workspace + (packed if columns > tile else 0)
+
+
+def submit_gf_tiled(resources, parameters, *, ncol, column_limit=GF_COLUMNS_PER_SUBMIT):
+    """Pack independent columns into one bounded, reused per-call arena."""
+    from woof.core.gf import GF_METAL_KMAX, gf_workspace_floats
+
+    if type(column_limit) is not int or not 1 <= column_limit <= GF_COLUMNS_PER_SUBMIT:
+        raise ValueError("GF tile must lie within the column submission limit")
+    if isinstance(ncol, bool) or not isinstance(ncol, (int, np.integer)) or not 0 < ncol <= 0x7fffffff:
+        raise ValueError("GF column count must fit positive int32")
+    ncol = int(ncol)
+    if int(parameters.get("ncol", -1)) != ncol:
+        raise ValueError("GF ncol parameter does not match launch width")
+    specifications = {name: dtype for name, dtype, _ in _ENTRY["resources"] if name != "workspace"}
+    if set(resources) != set(specifications):
+        raise ValueError("the tiled GF resources must match the ABI without workspace")
+    context = resources["rainc"].buffer.context
+    nz = int(parameters["nz"])
+    if not 0 < nz <= GF_METAL_KMAX:
+        raise ValueError("GF level count exceeds its compiled workspace capacity")
+    rows = {name: _planes(name, nz, bool(parameters["spp_enabled"])) for name in resources}
+    for name, array in resources.items():
+        if (not isinstance(array, MetalArray) or array.ndim != 1
+                or not array.flags.c_contiguous or array.buffer.context is not context
+                or array.dtype != _DTYPES[specifications[name]]
+                or array.size != rows[name] * ncol):
+            raise ValueError(f"GF {name} must contain {rows[name]} contiguous column planes")
+    module = MetalArrayModule(context)
+    tile = min(int(ncol), column_limit)
+    workspace = module.empty(
+        (gf_workspace_floats(nz, tile, capacity=GF_METAL_KMAX),),
+        dtype=np.float32)
+    if tile == ncol:
+        workspace.fill(0)
+        return submit_gf_gfdrv_stage(
+            {**resources, "workspace": workspace}, parameters, ncol=ncol)
+
+    buffers = {}
+    for name, array in resources.items():
+        buffers[name] = module.empty((rows[name] * tile,), array.dtype)
+
+    def transfer(pairs):
+        submission = None
+        for offset in range(0, len(pairs), 64):
+            submission = context.submit_bookkeeping(tuple(pairs[offset:offset + 64]))
+        return submission
+
+    submission = None
+    for start in range(0, ncol, tile):
+        count = min(tile, ncol - start)
+        packed = {name: array.view((rows[name] * count,))
+                  for name, array in buffers.items()}
+        gather, scatter = [], []
+        for name, array in resources.items():
+            itemsize = array.dtype.itemsize
+            for level in range(rows[name]):
+                full = array.view((count,), byte_offset=array.byte_offset
+                                  + (level * ncol + start) * itemsize)
+                part = packed[name].view((count,), byte_offset=packed[name].byte_offset
+                                         + level * count * itemsize)
+                (scatter if name in _OUTPUTS else gather).append(
+                    (part, full) if name in _OUTPUTS else (full, part))
+        transfer(gather)
+        workspace.fill(0)
+        for name in _OUTPUTS:
+            packed[name].fill(0)
+        submission = submit_gf_gfdrv_stage(
+            {**packed, "workspace": workspace}, {**parameters, "ncol": count}, ncol=count)
+        submission = transfer(scatter)
+    return submission
+
+
+__all__ = ["GF_COLUMNS_PER_SUBMIT", "gf_metal_scratch_bytes",
+           "submit_gf_gfdrv_stage", "submit_gf_tiled"]
