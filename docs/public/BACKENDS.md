@@ -50,7 +50,30 @@ woof hex forecast ... --backend metal
 woof global run CONFIG.toml --metal
 ```
 
-The legacy `woof run` command does not expose a Metal selector. Regional Metal
+Other commands select Metal the same way:
+
+- `woof run --backend metal` runs `--wrfinput` / `--met-em` inputs and
+  single-domain `[case_data]` configs in process (`woof branch` and
+  `woof resume` take the same flag). Nested `[case_data]` trees and
+  `[case_data]` ensembles still run on CUDA only and are refused before any
+  input is decoded; run those from a prepared bundle with `woof go`.
+- `woof sim --backend metal`; `woof downscale --backend metal` (the parent is
+  interpolated on the CPU, a microphysics change converts through the Metal
+  edge kernel, and the child runs resident, so `[tiles]` and `--auto-vram`
+  are refused);
+  `woof hex cycle run --backend metal` (the CUDA contract deck, a CUDA
+  kernel self-check, is skipped and recorded as skipped); and `woof stream`
+  with `[run] backend = "metal"` in its plan.
+- `woof speedrun --backend metal` records the warm class only: the Metal
+  pipeline cache belongs to the system and cannot be emptied for one run.
+- `woof warm-kernels` on a Mac builds every Metal pipeline once (this can take
+  minutes on a cold cache), so later forecasts skip the driver's first-use
+  compile. `--profile`, `--all-profiles` and `--levels` select CUDA compile
+  domains and are refused on Metal.
+- `woof local-da --precip-analysis clear` clears precipitation where the
+  radar observed no echo, on either backend.
+
+Regional Metal
 coverage follows the capability table and admitted scheme combinations, and
 Metal tile streaming runs only `[tiles] mode = "on"` with a pinned tile
 extent and `store = "device"` (no `auto` mode and no host store, so no
@@ -102,6 +125,9 @@ Important restrictions from `METAL_KNOWN_CONFLICTS` and the dynamics gate:
 | MYJ / Eta surface layer | PBL 2 and surface-layer option 2 must be paired. |
 | Grell–Freitas | Requires a PBL caller for KPBL and `cudt_minutes=0`. |
 | Urban | Requires Noah-MP (`sf_surface_physics=4`) in Metal admission. |
+| NSSL (`mp_physics=18`) | At most 128 levels on Metal (CUDA: 256); the 256-level sedimentation column does not fit the GPU stack. |
+| IEVA (`zadvect_implicit`) | Both variants, up to 256 levels, as on CUDA. |
+| MYNN | `bl_mynn_mixscalars=1` runs on Metal with `wrf_461`; with `gsd_41` it stays refused, as on CUDA. `spp_pbl` is refused: the Metal MYNN kernels support SPP, but no Metal route supplies a perturbation pattern yet. |
 | Radiation / cumulus adapters | Must match the configured selectors; no radiation adapter when radiation is disabled. |
 | Noah-MP | Admission checks that its required SFLX and glacier callers exist. |
 | Dynamics | Further checks cover base-state layout, boundary forcing, diffusion, damping and diagnostics in `dycore.step`. |
