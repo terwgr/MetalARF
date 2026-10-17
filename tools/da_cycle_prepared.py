@@ -1282,8 +1282,8 @@ def cycle(stages: list, contexts) -> int:
     parser.add_argument("--err-inflation", type=float, default=1.0)
     parser.add_argument(
         "--memory-budget-mib", type=float, default=6144.0,
-        help="the CUDA cycle's device budget; a Metal cycle is priced "
-             "against the Metal memory plan instead")
+        help="ceiling (MiB) on the LETKF batched solve's scratch, which "
+             "sizes the analysis chunk on either backend")
     parser.add_argument(
         "--solve-device", default="auto",
         choices=("auto", "host", "cuda", "metal"),
