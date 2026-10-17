@@ -1,0 +1,137 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_divergence_damping_lts",
+      "module": "hexv841_divergence_damping_lts",
+      "source": "woof/metal/shaders/hexv841_divergence_damping_lts.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_lts.py",
+      "cuda_symbol": "divergence_damping_lts",
+      "resources": [
+        [
+          "theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_pp_old",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "spec_zone_mask_edge",
+          "float",
+          "read"
+        ],
+        [
+          "rho_u_perturbation",
+          "float",
+          "read_write"
+        ],
+        [
+          "lts_active",
+          "int32",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "theta_m": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp_old": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "spec_zone_mask_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_u_perturbation": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "lts_active": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "coefficient",
+          "float32"
+        ],
+        [
+          "n_cells_solve",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "lts_n_active",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

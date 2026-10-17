@@ -1,0 +1,306 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_acoustic_rs_ts_lts",
+      "module": "hexv841_acoustic_rs_ts_lts",
+      "source": "woof/metal/shaders/hexv841_acoustic_rs_ts_lts.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_lts.py",
+      "cuda_symbol": "acoustic_rs_ts_lts",
+      "resources": [
+        [
+          "edge_sign_on_cell",
+          "float",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float",
+          "read"
+        ],
+        [
+          "coftz",
+          "float",
+          "read"
+        ],
+        [
+          "ewm",
+          "float",
+          "read"
+        ],
+        [
+          "ru_p",
+          "float",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float",
+          "read"
+        ],
+        [
+          "rho_pp",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float",
+          "read"
+        ],
+        [
+          "tend_rt",
+          "float",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "rs",
+          "float",
+          "read_write"
+        ],
+        [
+          "ts",
+          "float",
+          "read_write"
+        ],
+        [
+          "lts_active",
+          "int32",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ewm": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ru_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "lts_active": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "lts_n_active",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

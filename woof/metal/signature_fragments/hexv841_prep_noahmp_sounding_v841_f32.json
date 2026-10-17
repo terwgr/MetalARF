@@ -1,0 +1,184 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_prep_noahmp_sounding_v841_f32",
+      "module": "hexv841_prep_noahmp_sounding_v841_f32",
+      "source": "woof/metal/shaders/hexv841_prep_noahmp_sounding_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_prep_v841.py",
+      "cuda_symbol": "prep_noahmp_sounding_v841_f32",
+      "resources": [
+        [
+          "raw_qv",
+          "float",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_base",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_p",
+          "float",
+          "read"
+        ],
+        [
+          "zgrid",
+          "float",
+          "read"
+        ],
+        [
+          "u_p",
+          "float",
+          "read"
+        ],
+        [
+          "v_p",
+          "float",
+          "read"
+        ],
+        [
+          "dz8w",
+          "float",
+          "read_write"
+        ],
+        [
+          "qv_curr",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_phy",
+          "float",
+          "read_write"
+        ],
+        [
+          "u_phy",
+          "float",
+          "read_write"
+        ],
+        [
+          "v_phy",
+          "float",
+          "read_write"
+        ],
+        [
+          "p8w",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "raw_qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zgrid": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv_curr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

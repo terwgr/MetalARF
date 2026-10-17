@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_clamp_wsm6_v841_f32",
+      "module": "hexv841_clamp_wsm6_v841_f32",
+      "source": "woof/metal/shaders/hexv841_clamp_wsm6_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_v841.py",
+      "cuda_symbol": "clamp_wsm6_v841_f32",
+      "resources": [
+        [
+          "values",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "values": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "apply_clamp",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,228 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_prep_mass_v841_f32",
+      "module": "hexv841_prep_mass_v841_f32",
+      "source": "woof/metal/shaders/hexv841_prep_mass_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_prep_v841.py",
+      "cuda_symbol": "prep_mass_v841_f32",
+      "resources": [
+        [
+          "rho_zz",
+          "float",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "scalars",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_base",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_p",
+          "float",
+          "read"
+        ],
+        [
+          "zgrid",
+          "float",
+          "read"
+        ],
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "qout",
+          "float",
+          "read_write"
+        ],
+        [
+          "zz_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_dry",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "th_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "t_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "pi_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "pres_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "zmid_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "dz_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zgrid": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qout": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_dry": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "th_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pi_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pres_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmid_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nspecies",
+          "int32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

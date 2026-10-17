@@ -1,0 +1,415 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_acoustic_column_solve_lts",
+      "module": "hexv841_acoustic_column_solve_lts",
+      "source": "woof/metal/shaders/hexv841_acoustic_column_solve_lts.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_lts.py",
+      "cuda_symbol": "acoustic_column_solve_lts",
+      "resources": [
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float",
+          "read"
+        ],
+        [
+          "fzm",
+          "float",
+          "read"
+        ],
+        [
+          "fzp",
+          "float",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float",
+          "read"
+        ],
+        [
+          "dss",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read"
+        ],
+        [
+          "rw_save",
+          "float",
+          "read"
+        ],
+        [
+          "tend_rw",
+          "float",
+          "read"
+        ],
+        [
+          "rs",
+          "float",
+          "read"
+        ],
+        [
+          "ts",
+          "float",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float",
+          "read"
+        ],
+        [
+          "cofwz",
+          "float",
+          "read"
+        ],
+        [
+          "coftz",
+          "float",
+          "read"
+        ],
+        [
+          "cofwt",
+          "float",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float",
+          "read"
+        ],
+        [
+          "a_tri",
+          "float",
+          "read"
+        ],
+        [
+          "alpha_tri",
+          "float",
+          "read"
+        ],
+        [
+          "gamma_tri",
+          "float",
+          "read"
+        ],
+        [
+          "etp",
+          "float",
+          "read"
+        ],
+        [
+          "etm",
+          "float",
+          "read"
+        ],
+        [
+          "ewp",
+          "float",
+          "read"
+        ],
+        [
+          "ewm",
+          "float",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float",
+          "read_write"
+        ],
+        [
+          "lts_active",
+          "int32",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "zz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "dss": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rw_save": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "tend_rw": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "etp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "etm": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ewp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ewm": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "lts_active": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "lts_n_active",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

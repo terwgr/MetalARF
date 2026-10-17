@@ -1,0 +1,124 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_project_edges_v841_f32",
+      "module": "hexv841_project_edges_v841_f32",
+      "source": "woof/metal/shaders/hexv841_project_edges_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_v841.py",
+      "cuda_symbol": "project_edges_v841_f32",
+      "resources": [
+        [
+          "cells",
+          "int32",
+          "read"
+        ],
+        [
+          "east",
+          "float",
+          "read"
+        ],
+        [
+          "north",
+          "float",
+          "read"
+        ],
+        [
+          "normal",
+          "float",
+          "read"
+        ],
+        [
+          "du",
+          "float",
+          "read"
+        ],
+        [
+          "dv",
+          "float",
+          "read"
+        ],
+        [
+          "rho_edge",
+          "float",
+          "read"
+        ],
+        [
+          "out_ru",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "east": [
+          [
+            "any_1d"
+          ]
+        ],
+        "north": [
+          [
+            "any_1d"
+          ]
+        ],
+        "normal": [
+          [
+            "any_1d"
+          ]
+        ],
+        "du": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out_ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

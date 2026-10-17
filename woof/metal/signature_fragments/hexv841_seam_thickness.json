@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_seam_thickness",
+      "module": "hexv841_seam_thickness",
+      "source": "woof/metal/shaders/hexv841_seam_thickness.metal",
+      "cuda_source": "woof/core/mpas_column_batch.py",
+      "cuda_symbol": "run_phase1:cp.subtract(z_if[1:], z_if[:-1])",
+      "resources": [
+        [
+          "z_interface",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "z_interface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

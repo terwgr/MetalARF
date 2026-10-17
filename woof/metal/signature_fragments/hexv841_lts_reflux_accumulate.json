@@ -1,0 +1,94 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_lts_reflux_accumulate",
+      "module": "hexv841_lts_reflux_accumulate",
+      "source": "woof/metal/shaders/hexv841_lts_reflux_accumulate.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_lts.py",
+      "cuda_symbol": "lts_reflux_accumulate",
+      "resources": [
+        [
+          "iface_edges",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "ru_p",
+          "float",
+          "read"
+        ],
+        [
+          "resid",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "iface_edges": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ru_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "resid": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "n_iface",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "sign_scale",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

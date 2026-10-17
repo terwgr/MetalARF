@@ -1,0 +1,66 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_commit_wsm6_state_v841_f32",
+      "module": "hexv841_commit_wsm6_state_v841_f32",
+      "source": "woof/metal/shaders/hexv841_commit_wsm6_state_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_v841.py",
+      "cuda_symbol": "commit_wsm6_state_v841_f32",
+      "resources": [
+        [
+          "candidate_rho_theta",
+          "float",
+          "read"
+        ],
+        [
+          "candidate_scalars",
+          "float",
+          "read"
+        ],
+        [
+          "rho_theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "scalars",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "candidate_rho_theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "candidate_scalars": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

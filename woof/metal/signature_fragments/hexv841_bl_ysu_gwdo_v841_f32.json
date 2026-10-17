@@ -1,0 +1,358 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_bl_ysu_gwdo_v841_f32",
+      "module": "hexv841_bl_ysu_gwdo_v841_f32",
+      "source": "woof/metal/shaders/hexv841_bl_ysu_gwdo_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_gwdo_v841.py",
+      "cuda_symbol": "bl_ysu_gwdo_v841_f32",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "temperature",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "p_mass_dry_hyd",
+          "float",
+          "read"
+        ],
+        [
+          "p_interface_dry_hyd",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "zmid",
+          "float",
+          "read"
+        ],
+        [
+          "rublten_in",
+          "float",
+          "read"
+        ],
+        [
+          "rvblten_in",
+          "float",
+          "read"
+        ],
+        [
+          "mesh_density",
+          "float",
+          "read"
+        ],
+        [
+          "var2d",
+          "float",
+          "read"
+        ],
+        [
+          "oc1",
+          "float",
+          "read"
+        ],
+        [
+          "oa1",
+          "float",
+          "read"
+        ],
+        [
+          "oa2",
+          "float",
+          "read"
+        ],
+        [
+          "oa3",
+          "float",
+          "read"
+        ],
+        [
+          "oa4",
+          "float",
+          "read"
+        ],
+        [
+          "ol1",
+          "float",
+          "read"
+        ],
+        [
+          "ol2",
+          "float",
+          "read"
+        ],
+        [
+          "ol3",
+          "float",
+          "read"
+        ],
+        [
+          "ol4",
+          "float",
+          "read"
+        ],
+        [
+          "rublten_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "rvblten_out",
+          "float",
+          "read_write"
+        ],
+        [
+          "dtaux3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "dtauy3d",
+          "float",
+          "read_write"
+        ],
+        [
+          "dusfcg",
+          "float",
+          "read_write"
+        ],
+        [
+          "dvsfcg",
+          "float",
+          "read_write"
+        ],
+        [
+          "rubldiff",
+          "float",
+          "read_write"
+        ],
+        [
+          "rvbldiff",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "temperature": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p_mass_dry_hyd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "p_interface_dry_hyd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmid": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rublten_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rvblten_in": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "var2d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "oc1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "oa1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "oa2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "oa3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "oa4": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ol1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ol2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ol3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ol4": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rublten_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rvblten_out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dtaux3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dtauy3d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dusfcg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dvsfcg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rubldiff": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rvbldiff": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "len_disp",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "rd",
+          "float32"
+        ],
+        [
+          "fv",
+          "float32"
+        ],
+        [
+          "pi",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

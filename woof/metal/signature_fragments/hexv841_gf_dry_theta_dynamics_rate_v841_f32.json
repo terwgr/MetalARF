@@ -1,0 +1,94 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_gf_dry_theta_dynamics_rate_v841_f32",
+      "module": "hexv841_gf_dry_theta_dynamics_rate_v841_f32",
+      "source": "woof/metal/shaders/hexv841_gf_dry_theta_dynamics_rate_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "gf_dry_theta_dynamics_rate_v841_f32",
+      "resources": [
+        [
+          "modified_rate",
+          "float",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "rthdynten",
+          "float",
+          "read_write"
+        ],
+        [
+          "rqvdynten",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "modified_rate": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rthdynten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rqvdynten": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

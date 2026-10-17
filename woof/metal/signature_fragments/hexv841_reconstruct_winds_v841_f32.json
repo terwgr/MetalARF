@@ -1,0 +1,208 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_reconstruct_winds_v841_f32",
+      "module": "hexv841_reconstruct_winds_v841_f32",
+      "source": "woof/metal/shaders/hexv841_reconstruct_winds_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_prep_v841.py",
+      "cuda_symbol": "reconstruct_winds_v841_f32",
+      "resources": [
+        [
+          "normal_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "coeffs_reconstruct",
+          "float",
+          "read"
+        ],
+        [
+          "lat_cell",
+          "float",
+          "read"
+        ],
+        [
+          "lon_cell",
+          "float",
+          "read"
+        ],
+        [
+          "sealed_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "sealed_n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "sealed_coeffs_reconstruct",
+          "float",
+          "read"
+        ],
+        [
+          "sealed_lat_cell",
+          "float",
+          "read"
+        ],
+        [
+          "sealed_lon_cell",
+          "float",
+          "read"
+        ],
+        [
+          "x",
+          "float",
+          "read_write"
+        ],
+        [
+          "y",
+          "float",
+          "read_write"
+        ],
+        [
+          "z",
+          "float",
+          "read_write"
+        ],
+        [
+          "u_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "v_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coeffs_reconstruct": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lat_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lon_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sealed_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sealed_n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sealed_coeffs_reconstruct": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sealed_lat_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sealed_lon_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "x": [
+          [
+            "any_1d"
+          ]
+        ],
+        "y": [
+          [
+            "any_1d"
+          ]
+        ],
+        "z": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "maxedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

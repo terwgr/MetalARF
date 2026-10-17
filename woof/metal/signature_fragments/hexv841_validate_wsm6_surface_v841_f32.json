@@ -1,0 +1,84 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_validate_wsm6_surface_v841_f32",
+      "module": "hexv841_validate_wsm6_surface_v841_f32",
+      "source": "woof/metal/shaders/hexv841_validate_wsm6_surface_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_v841.py",
+      "cuda_symbol": "validate_wsm6_surface_v841_f32",
+      "resources": [
+        [
+          "acc_p",
+          "float",
+          "read"
+        ],
+        [
+          "inc_p",
+          "float",
+          "read"
+        ],
+        [
+          "old_p",
+          "float",
+          "read"
+        ],
+        [
+          "sr",
+          "float",
+          "read"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "acc_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inc_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "nbuckets",
+          "int32"
+        ],
+        [
+          "sr_upper",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

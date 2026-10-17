@@ -1,0 +1,464 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_validate_prep_v841_f32",
+      "module": "hexv841_validate_prep_v841_f32",
+      "source": "woof/metal/shaders/hexv841_validate_prep_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_prep_v841.py",
+      "cuda_symbol": "validate_prep_v841_f32",
+      "resources": [
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "coeffs_reconstruct",
+          "float",
+          "read"
+        ],
+        [
+          "lat_cell",
+          "float",
+          "read"
+        ],
+        [
+          "lon_cell",
+          "float",
+          "read"
+        ],
+        [
+          "source_scalars",
+          "float",
+          "read"
+        ],
+        [
+          "source_theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "source_exner",
+          "float",
+          "read"
+        ],
+        [
+          "qspecies",
+          "float",
+          "read"
+        ],
+        [
+          "u_p",
+          "float",
+          "read"
+        ],
+        [
+          "v_p",
+          "float",
+          "read"
+        ],
+        [
+          "zz_p",
+          "float",
+          "read"
+        ],
+        [
+          "rho_dry",
+          "float",
+          "read"
+        ],
+        [
+          "rho_p",
+          "float",
+          "read"
+        ],
+        [
+          "th_p",
+          "float",
+          "read"
+        ],
+        [
+          "t_p",
+          "float",
+          "read"
+        ],
+        [
+          "pi_p",
+          "float",
+          "read"
+        ],
+        [
+          "pres_p",
+          "float",
+          "read"
+        ],
+        [
+          "zmid_p",
+          "float",
+          "read"
+        ],
+        [
+          "dz_p",
+          "float",
+          "read"
+        ],
+        [
+          "pres_hyd_p",
+          "float",
+          "read"
+        ],
+        [
+          "pres_hydd_p",
+          "float",
+          "read"
+        ],
+        [
+          "znu_p",
+          "float",
+          "read"
+        ],
+        [
+          "znu_hyd_p",
+          "float",
+          "read"
+        ],
+        [
+          "w_p",
+          "float",
+          "read"
+        ],
+        [
+          "z_p",
+          "float",
+          "read"
+        ],
+        [
+          "t2_p",
+          "float",
+          "read"
+        ],
+        [
+          "pres2_p",
+          "float",
+          "read"
+        ],
+        [
+          "pres2_hyd_p",
+          "float",
+          "read"
+        ],
+        [
+          "pres2_hydd_p",
+          "float",
+          "read"
+        ],
+        [
+          "psfc_p",
+          "float",
+          "read"
+        ],
+        [
+          "psfc_hyd_p",
+          "float",
+          "read"
+        ],
+        [
+          "psfc_hydd_p",
+          "float",
+          "read"
+        ],
+        [
+          "plrad",
+          "float",
+          "read"
+        ],
+        [
+          "noah_dz8w",
+          "float",
+          "read"
+        ],
+        [
+          "noah_qv_curr",
+          "float",
+          "read"
+        ],
+        [
+          "noah_t_phy",
+          "float",
+          "read"
+        ],
+        [
+          "noah_u_phy",
+          "float",
+          "read"
+        ],
+        [
+          "noah_v_phy",
+          "float",
+          "read"
+        ],
+        [
+          "noah_p8w",
+          "float",
+          "read"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coeffs_reconstruct": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lat_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lon_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_scalars": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qspecies": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_dry": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "th_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pi_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pres_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zmid_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dz_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pres_hyd_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pres_hydd_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "znu_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "znu_hyd_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "z_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "t2_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pres2_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pres2_hyd_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pres2_hydd_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psfc_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psfc_hyd_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "psfc_hydd_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "plrad": [
+          [
+            "any_1d"
+          ]
+        ],
+        "noah_dz8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "noah_qv_curr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "noah_t_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "noah_u_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "noah_v_phy": [
+          [
+            "any_1d"
+          ]
+        ],
+        "noah_p8w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "maxedges",
+          "int32"
+        ],
+        [
+          "wsm6_ready",
+          "int32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ],
+        [
+          "nspecies",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

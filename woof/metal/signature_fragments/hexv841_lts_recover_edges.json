@@ -1,0 +1,108 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_lts_recover_edges",
+      "module": "hexv841_lts_recover_edges",
+      "source": "woof/metal/shaders/hexv841_lts_recover_edges.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_lts.py",
+      "cuda_symbol": "lts_recover_edges",
+      "resources": [
+        [
+          "edge_steps",
+          "int32",
+          "read"
+        ],
+        [
+          "ru_saved",
+          "float",
+          "read"
+        ],
+        [
+          "ru_p",
+          "float",
+          "read"
+        ],
+        [
+          "ru_avg_p",
+          "float",
+          "read"
+        ],
+        [
+          "ru",
+          "float",
+          "read_write"
+        ],
+        [
+          "flux_u",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "edge_steps": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ru_saved": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ru_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ru_avg_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ru": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "flux_u": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

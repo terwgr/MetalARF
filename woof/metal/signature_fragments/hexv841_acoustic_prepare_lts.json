@@ -1,0 +1,116 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_acoustic_prepare_lts",
+      "module": "hexv841_acoustic_prepare_lts",
+      "source": "woof/metal/shaders/hexv841_acoustic_prepare_lts.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_lts.py",
+      "cuda_symbol": "acoustic_prepare_lts",
+      "resources": [
+        [
+          "rw_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_pp_old",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float",
+          "read_write"
+        ],
+        [
+          "lts_active",
+          "int32",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "rw_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp_old": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "lts_active": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "small_step",
+          "int32"
+        ],
+        [
+          "lts_n_active",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

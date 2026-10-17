@@ -1,0 +1,54 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_seam_exner",
+      "module": "hexv841_seam_exner",
+      "source": "woof/metal/shaders/hexv841_seam_exner.metal",
+      "cuda_source": "woof/core/mpas_column_batch.py",
+      "cuda_symbol": "run_phase1:cp.power(p / P0, RCP)",
+      "resources": [
+        [
+          "pressure",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "p0",
+          "float32"
+        ],
+        [
+          "rcp",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -538,6 +538,33 @@ def _recover_candidate(driver: Any, saved_state: MetalPrognosticState,
     return state, diagnostics, flux_u, flux_w
 
 
+def rebuild_saved_diagnostics_metal_v841(driver: Any,
+                                         state: MetalPrognosticState
+                                         ) -> MetalSavedDiagnostics:
+    """``CudaDryDycoreDriver._rebuild_saved_diagnostics``: the full
+    ``recover_state`` (pressure, then edge and vertical velocity)."""
+
+    arrays = driver.arrays
+    atmosphere = driver.atmosphere
+    reference = atmosphere.reference
+    mctx = _context(state.rho)
+    shape = state.rho.shape
+    theta, exner, pressure, rho_p, rtheta_p, pressure_p = (
+        arrays.empty(shape, np.float32) for _ in range(6))
+    _launch("recover_pressure_f32", driver.ncells * driver.nlev, mctx,
+            dict(rho=state.rho, rtheta=state.rho_theta,
+                 rho_base=reference.rho_base,
+                 rtheta_base=reference.rho_theta_base,
+                 exner_base=reference.exner_base, zz=atmosphere.vertical.zz,
+                 theta=theta, exner=exner, pressure=pressure, rho_p=rho_p,
+                 rtheta_p=rtheta_p, pressure_p=pressure_p),
+            dict(rgas=_f(287.0), cp=_f(1004.5), p0=_f(100_000.0),
+                 nlev=_i(driver.nlev), ncells=_i(driver.ncells)))
+    normal_velocity, vertical_velocity = _recover_velocities(driver, state)
+    return _device_saved(driver, theta, exner, rho_p, rtheta_p, pressure_p,
+                         normal_velocity, vertical_velocity)
+
+
 def _copy_state(driver: Any, source: MetalPrognosticState, *,
                 share_scalars: bool = False) -> MetalPrognosticState:
     return _device_state(

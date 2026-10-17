@@ -1,0 +1,56 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_seam_density",
+      "module": "hexv841_seam_density",
+      "source": "woof/metal/shaders/hexv841_seam_density.metal",
+      "cuda_source": "woof/core/mpas_column_batch.py",
+      "cuda_symbol": "run_phase1:(1 + qv) * rho_dry",
+      "resources": [
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "rho_dry",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_dry": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

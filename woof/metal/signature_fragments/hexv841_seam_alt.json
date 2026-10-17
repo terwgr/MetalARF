@@ -1,0 +1,46 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_seam_alt",
+      "module": "hexv841_seam_alt",
+      "source": "woof/metal/shaders/hexv841_seam_alt.metal",
+      "cuda_source": "woof/core/mpas_column_batch.py",
+      "cuda_symbol": "run_phase2:cp.divide(1, rho_dry)",
+      "resources": [
+        [
+          "rho_dry",
+          "float",
+          "read"
+        ],
+        [
+          "alt",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_dry": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alt": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

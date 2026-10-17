@@ -6,14 +6,17 @@ fields, with one ``hexv841_*`` shader per CUDA kernel.  The state stays on the
 device for the whole step; the only readback is the four-byte validation flag
 at the end, as on CUDA.
 
-This is the dry lane, global or limited-area (``regional_v841`` attached by
-:func:`assemble_regional_metal_dycore_v841`).  The physics and halo hooks of
-the CUDA step are refused by name until their Metal mirrors exist.
+The dry lane runs global or limited-area (``regional_v841`` attached by
+:func:`assemble_regional_metal_dycore_v841`).  The full-physics lane follows
+CUDA's transaction: :meth:`MetalDycoreV841.step_device_with_physics` advances
+to an uncommitted candidate with the held phase-one tendencies, and
+:meth:`MetalDycoreV841.commit_post_wsm6_candidate` publishes it after WSM6.
+The halo hooks of the CUDA step are refused by name.
 """
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -44,15 +47,56 @@ from .metal_dynamics_v841 import (
     accumulate_finite_array_metal_v841,
     accumulate_split_flux_metal_v841,
     finish_split_flux_metal_v841,
+    rebuild_saved_diagnostics_metal_v841,
     validate_recovered_state_metal_v841,
 )
 from .metal_horizontal_v841 import MetalHorizontalV841
+from .metal_moist_v841 import (
+    compute_moist_dynamics_coefficients_metal_v841,
+    gf_dry_theta_dynamics_rate_metal_v841,
+    modified_theta_dynamics_rate_metal_v841,
+    moist_dpdz_metal_v841,
+    moist_euler_w_metal_v841,
+)
 from .metal_transport_v841 import (
     MetalAdvectionCoefficients,
     advance_scalar_transport_metal_v841,
 )
 from .offcentering_v841 import build_v841_acoustic_offcentering
+from .species_row import species_row_for_scheme
 from .transport import build_advection_coefficients
+
+
+@dataclass(frozen=True)
+class MetalGfDynamicsTendenciesV841:
+    """``CudaV841GfDynamicsTendencies``: endpoint dry-theta and qv rates."""
+
+    rthdynten: Any
+    rqvdynten: Any
+    time_seconds: float
+
+
+@dataclass(frozen=True)
+class MetalPhysicsStepCandidateV841:
+    """An uncommitted full-physics endpoint awaiting post-WSM6 commit."""
+
+    atmosphere: MetalAtmosphere
+    dynamics_tendencies: MetalGfDynamicsTendenciesV841
+    start_time_seconds: float
+
+
+@dataclass(frozen=True)
+class MetalCommittedPhysicsStepV841:
+    atmosphere: MetalAtmosphere
+    dynamics_tendencies: MetalGfDynamicsTendenciesV841
+    surface_updates: Any
+    effective_radii: Any
+
+
+def _full_physics(config: Any) -> bool:
+    from .config_v841 import V841MpasColumnPhysicsConfig
+
+    return isinstance(config, V841MpasColumnPhysicsConfig)
 
 
 class MetalDycoreV841:
@@ -60,6 +104,7 @@ class MetalDycoreV841:
 
     regional_v841 = None
     halo_exchanger_v841 = None
+    _pending_candidate = None
 
     def __init__(
         self,
@@ -189,22 +234,26 @@ class MetalDycoreV841:
 
     def _vertical_coefficients(
         self, state: Any, dts: float, theta_m: Any, rtheta_p: Any, *,
-        exner: Any, validation_flag: Any,
+        exner: Any, validation_flag: Any, moist: Any | None = None,
     ) -> Any:
         vertical = self.atmosphere.vertical
         reference = self.atmosphere.reference
+        cqw = (self.arrays.ones(state.rho.shape, np.float32)
+               if moist is None else moist.cqw)
+        qtot = (self.arrays.zeros(state.rho.shape, np.float32)
+                if moist is None else moist.qtot)
         return compute_vertical_implicit_coefficients_metal_v841(
             dts=dts,
             context=self.v841_context,
             zz=vertical.zz,
-            cqw=self.arrays.ones(state.rho.shape, np.float32),
+            cqw=cqw,
             exner=exner,
             theta=theta_m,
             rho_base=reference.rho_base,
             rho_theta_base=reference.rho_theta_base,
             exner_base=reference.exner_base,
             rho_theta_perturbation=rtheta_p,
-            qtot=self.arrays.zeros(state.rho.shape, np.float32),
+            qtot=qtot,
             rdzw=vertical.rdzw,
             fzm=vertical.fzm,
             fzp=vertical.fzp,
@@ -215,7 +264,8 @@ class MetalDycoreV841:
     def _advance_dynamics_subcycle(
         self, state: Any, *, time_level_one: Any, initial_diagnostics: Any,
         schedule: RKSchedule, outer_dt: float, validation_flag: Any,
-    ) -> tuple[Any, Any, Any, Any, Any]:
+        physics: Any | None = None, moist: Any | None = None,
+    ) -> tuple[Any, Any, Any, Any, Any, Any]:
         if schedule.full_timestep != outer_dt or schedule.dynamics_splits != 3:
             raise ValueError("the v8.4.1 subcycle requires the outer split-three schedule")
         vertical = self.atmosphere.vertical
@@ -229,18 +279,35 @@ class MetalDycoreV841:
         coefficients = self._vertical_coefficients(
             saved_state, schedule.stages[0].acoustic_timestep,
             saved_diag.theta_m, saved_diag.rho_theta_perturbation,
-            exner=saved_diag.exner, validation_flag=validation_flag)
-        cqu = self.arrays.ones(saved_state.rho_u.shape, np.float32)
-        dpdz = _scale(self, saved_diag.density_perturbation, -9.80616)
+            exner=saved_diag.exner, validation_flag=validation_flag,
+            moist=moist)
+        if moist is None:
+            cqu = self.arrays.ones(saved_state.rho_u.shape, np.float32)
+            dpdz = _scale(self, saved_diag.density_perturbation, -9.80616)
+        else:
+            cqu = moist.cqu
+            dpdz = moist_dpdz_metal_v841(
+                self, saved_diag.density_perturbation, moist.qtot,
+                validation_flag)
         saved_euler_ru = self.horizontal.pressure_gradient_euler_tendency(
             saved_diag.pressure_perturbation, dpdz, cqu, vertical.zz, vertical.zxu)
-        tend_rho_saved = self.horizontal.density_tendency(
+        tend_rho_dynamics = self.horizontal.density_tendency(
             saved_state.rho_u, saved_state.rho_w, vertical.rdzw)
+        tend_rho_saved = (
+            tend_rho_dynamics if physics is None
+            else self.horizontal.density_tendency(
+                saved_state.rho_u, saved_state.rho_w, vertical.rdzw,
+                physics_tendency=physics.rho))
         if self.regional_v841 is not None:
             # Native writes tend_rho only at rk_step 1 and the regional stages
             # adjust that pool again in RK2 and RK3; keep a private image.
             tend_rho_saved = tend_rho_saved.copy()
-        saved_euler_rw = _euler_w(self, saved_diag.pressure_perturbation, dpdz)
+        if moist is None:
+            saved_euler_rw = _euler_w(self, saved_diag.pressure_perturbation, dpdz)
+        else:
+            saved_euler_rw = moist_euler_w_metal_v841(
+                self, saved_diag.pressure_perturbation, dpdz, moist.cqw,
+                validation_flag)
         saved_euler_theta = None
         if self.mixing_config_v841 is not None:
             # Native forms the mixing Euler tendencies once per dynamics
@@ -261,12 +328,14 @@ class MetalDycoreV841:
             saved_euler_theta = saved_mixing.tend_theta_euler.copy()
 
         final_flux_u = final_flux_w = None
+        modified_theta_rate = None
         for stage in schedule.stages:
             if stage.stage == 2:
                 coefficients = self._vertical_coefficients(
                     current_state, stage.acoustic_timestep,
                     current_diag.theta_m, current_diag.rho_theta_perturbation,
-                    exner=saved_diag.exner, validation_flag=validation_flag)
+                    exner=saved_diag.exner, validation_flag=validation_flag,
+                    moist=moist)
             mass_divergence = self.horizontal.mass_flux_divergence(
                 current_state.rho_u)
             tend_ru = _vertical_u(self, current_diag.normal_velocity,
@@ -275,11 +344,21 @@ class MetalDycoreV841:
                 self, current_diag.normal_velocity, diagnostics.h_edge,
                 diagnostics.pv_edge, diagnostics.kinetic_energy, mass_divergence))
             _add(self, tend_ru, saved_euler_ru)
+            if physics is not None:
+                _add(self, tend_ru, physics.rho_u)
             tend_rt = _theta_tendency(
                 self, current_state, current_diag.theta_m, saved_state,
                 saved_diag.theta_m, stage.stage)
+            if physics is not None and stage.stage == 3:
+                # The GF dynamics rate reads tend_theta before the mixing and
+                # physics increments land (native F:6941 then F:6948).
+                modified_theta_rate = modified_theta_dynamics_rate_metal_v841(
+                    self, tend_rt, tend_rho_dynamics, current_state.rho,
+                    current_diag.theta_m, validation_flag)
             if saved_euler_theta is not None:
                 _add(self, tend_rt, saved_euler_theta)
+            if physics is not None:
+                _add(self, tend_rt, physics.rho_theta)
             tend_rw = _w_tendency(self, current_state,
                                   current_diag.vertical_velocity)
             _add(self, tend_rw, saved_euler_rw)
@@ -374,10 +453,11 @@ class MetalDycoreV841:
             cached_v = diagnostics.tangential_velocity
         if final_flux_u is None or final_flux_w is None:
             raise RuntimeError("v8.4.1 dynamics subcycle did not reach RK3")
-        return current_state, current_diag, diagnostics, final_flux_u, final_flux_w
+        return (current_state, current_diag, diagnostics, final_flux_u,
+                final_flux_w, modified_theta_rate)
 
-    def step_device(self) -> None:
-        """Advance the resident atmosphere one outer step."""
+    def _advance(self, physics: Any | None) -> tuple[Any, Any, Any, Any]:
+        """``_step_device_v841`` up to the four-byte validation readback."""
 
         config = self.config
         validation_flag = self.arrays.zeros((1,), np.int32)
@@ -391,11 +471,27 @@ class MetalDycoreV841:
         time_level_one = _copy_saved(self, self.atmosphere.saved)
         if regional is not None:
             regional.bind_state_rho(outer_saved.rho)
-            if config.config_moist_physics:
+            if config.config_moist_physics or physics is not None:
                 raise ConfigurationRefusal(
                     "config_moist_physics", True,
                     "the regional moist coefficients join with the physics lane",
                     "config_moist_physics=False")
+        moist = None
+        if physics is not None:
+            row = species_row_for_scheme(config.config_microp_scheme)
+            if int(outer_saved.scalars.shape[0]) != row.n_species():
+                raise ValueError(
+                    f"{row.scheme_name!r} declares {row.n_species()} scalars "
+                    f"and the state carries {int(outer_saved.scalars.shape[0])}")
+            physics.validate(n_vert_levels=self.nlev, n_cells=self.ncells,
+                             n_edges=self.nedges, n_scalars=row.n_species())
+            if float(physics.time_seconds) != float(outer_saved.time_seconds):
+                raise ValueError(
+                    "held physics time must equal the candidate start exactly: "
+                    f"{physics.time_seconds} != {outer_saved.time_seconds}")
+            moist = compute_moist_dynamics_coefficients_metal_v841(
+                self, outer_saved.scalars, scalar_names=row.names(),
+                validation_flag=validation_flag)
         outer_dt = float(config.config_dt)
         splits = int(config.config_dynamics_split_steps)
         dynamics_schedule = RKSchedule.from_mpas(
@@ -412,15 +508,16 @@ class MetalDycoreV841:
             normal_velocity=time_level_one.normal_velocity, rk_step=3)
         current, carried = outer_saved, time_level_one
         split_flux_u_sum = split_flux_w_sum = None
+        modified_theta_rate = None
         for _subcycle in range(splits):
             if regional is not None:
                 regional.begin_dynamics_substep(_subcycle + 1)
-            current, carried, diagnostics, flux_u, flux_w = (
-                self._advance_dynamics_subcycle(
-                    current, time_level_one=carried,
-                    initial_diagnostics=diagnostics,
-                    schedule=dynamics_schedule, outer_dt=outer_dt,
-                    validation_flag=validation_flag))
+            (current, carried, diagnostics, flux_u, flux_w,
+             modified_theta_rate) = self._advance_dynamics_subcycle(
+                current, time_level_one=carried,
+                initial_diagnostics=diagnostics,
+                schedule=dynamics_schedule, outer_dt=outer_dt,
+                validation_flag=validation_flag, physics=physics, moist=moist)
             split_flux_u_sum = accumulate_split_flux_metal_v841(
                 flux_u, split_flux_u_sum)
             split_flux_w_sum = accumulate_split_flux_metal_v841(
@@ -469,6 +566,8 @@ class MetalDycoreV841:
                     validation_flag=validation_flag,
                     indices_prevalidated=True,
                     rho_old_prevalidated=True,
+                    **({} if physics is None
+                       else {"scalar_tendency": physics.scalars}),
                 )
                 scalar_stage = transported.scalars
                 accumulate_finite_array_metal_v841(
@@ -485,11 +584,103 @@ class MetalDycoreV841:
                 scalars=current.scalars)
             regional.advance_clock(outer_dt)
 
+        rates = None
+        if physics is not None:
+            if modified_theta_rate is None:
+                raise RuntimeError(
+                    "full-physics split loop did not capture final RK dynamics heating")
+            rates = gf_dry_theta_dynamics_rate_metal_v841(
+                self, modified_theta_rate, carried.theta_m, current.scalars[0],
+                validation_flag)
         if int(validation_flag.to_numpy()[0]) != 0:
             raise FloatingPointError(
                 "v8.4.1 Metal validation flag refused the outer step before publish")
         current.time_seconds = outer_saved.time_seconds + outer_dt
+        return current, carried, outer_saved, rates
+
+    def step_device(self) -> None:
+        """Advance the resident atmosphere one outer step."""
+
+        if _full_physics(self.config):
+            raise ConfigurationRefusal(
+                "held_physics_tendencies", None,
+                "the full-physics lane must compute and validate phase one before RK",
+                "step_device_with_physics(MetalHeldMpasPhysicsTendenciesV841)")
+        current, carried, _start, _rates = self._advance(None)
         self.atmosphere = replace(self.atmosphere, state=current, saved=carried)
+
+    def step_device_with_physics(
+        self, physics: Any
+    ) -> MetalPhysicsStepCandidateV841:
+        """Advance to an uncommitted endpoint using one held phase-one source."""
+
+        if not _full_physics(self.config):
+            raise ConfigurationRefusal(
+                "config_physics_suite", self.config.config_physics_suite,
+                "held column tendencies require the distinct full-physics config",
+                "V841MpasColumnPhysicsConfig()")
+        if self._pending_candidate is not None:
+            raise RuntimeError(
+                "a prior full-physics candidate still awaits post-WSM6 commit")
+        current, carried, start, rates = self._advance(physics)
+        candidate = MetalPhysicsStepCandidateV841(
+            atmosphere=replace(self.atmosphere, state=current, saved=carried),
+            dynamics_tendencies=MetalGfDynamicsTendenciesV841(
+                rthdynten=rates[0], rqvdynten=rates[1],
+                time_seconds=current.time_seconds),
+            start_time_seconds=start.time_seconds,
+        )
+        self._pending_candidate = candidate
+        return candidate
+
+    def commit_post_wsm6_candidate(
+        self, candidate: MetalPhysicsStepCandidateV841, recovery: Any
+    ) -> MetalCommittedPhysicsStepV841:
+        """Publish only the externally validated phase-two resident endpoint."""
+
+        if candidate is not self._pending_candidate:
+            raise ValueError("candidate is not the driver's pending transaction")
+        endpoint = float(candidate.atmosphere.state.time_seconds)
+        if endpoint != float(recovery.time_seconds):
+            raise ValueError(
+                "post-WSM6 recovery time must equal the candidate endpoint exactly")
+        if recovery.state is not candidate.atmosphere.state:
+            raise ValueError(
+                "post-WSM6 recovery must validate the pending candidate in place")
+        if float(self.atmosphere.state.time_seconds) != float(
+                candidate.start_time_seconds):
+            raise ValueError("resident driver start state changed during phase two")
+        committed = replace(
+            candidate.atmosphere, state=recovery.state,
+            saved=rebuild_saved_diagnostics_metal_v841(self, recovery.state))
+        flag = self.arrays.zeros((1,), np.int32)
+        if self.regional_v841 is None:
+            validate_recovered_state_metal_v841(
+                committed.state, committed.saved, invalid_flag=flag)
+        else:
+            self.regional_v841.validate_recovered(
+                committed.state, committed.saved, flag)
+        accumulate_finite_array_metal_v841(committed.state.scalars, invalid_flag=flag)
+        if int(flag.to_numpy()[0]) != 0:
+            raise FloatingPointError(
+                "final rebuilt v8.4.1 full-physics state failed numeric validation")
+        self.atmosphere = committed
+        self._pending_candidate = None
+        return MetalCommittedPhysicsStepV841(
+            atmosphere=committed,
+            dynamics_tendencies=candidate.dynamics_tendencies,
+            surface_updates=recovery.surface_updates,
+            effective_radii=recovery.effective_radii,
+        )
+
+    def abort_post_wsm6_candidate(
+        self, candidate: MetalPhysicsStepCandidateV841
+    ) -> None:
+        """Discard exactly the pending candidate without publishing any state."""
+
+        if self._pending_candidate is None or candidate is not self._pending_candidate:
+            raise ValueError("candidate is not the driver's pending transaction")
+        self._pending_candidate = None
 
     def step(self) -> tuple[Any, Any]:
         """Advance one step and return the host state and saved diagnostics."""

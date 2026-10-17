@@ -1,0 +1,168 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_lts_reflux_settle",
+      "module": "hexv841_lts_reflux_settle",
+      "source": "woof/metal/shaders/hexv841_lts_reflux_settle.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_lts.py",
+      "cuda_symbol": "lts_reflux_settle",
+      "resources": [
+        [
+          "coarse_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "slot_offsets",
+          "int32",
+          "read"
+        ],
+        [
+          "slot_edges",
+          "int32",
+          "read"
+        ],
+        [
+          "slot_signs",
+          "float",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "resid",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "coarse_cells": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "slot_offsets": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "slot_edges": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "slot_signs": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "resid": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "n_coarse",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

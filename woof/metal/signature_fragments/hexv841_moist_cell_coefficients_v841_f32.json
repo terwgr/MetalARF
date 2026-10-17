@@ -1,0 +1,74 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_moist_cell_coefficients_v841_f32",
+      "module": "hexv841_moist_cell_coefficients_v841_f32",
+      "source": "woof/metal/shaders/hexv841_moist_cell_coefficients_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "moist_cell_coefficients_v841_f32",
+      "resources": [
+        [
+          "scalars",
+          "float",
+          "read"
+        ],
+        [
+          "qtot",
+          "float",
+          "read_write"
+        ],
+        [
+          "cqw",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "scalars": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qtot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nmass",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

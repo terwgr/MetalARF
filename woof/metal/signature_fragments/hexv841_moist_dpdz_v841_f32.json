@@ -1,0 +1,84 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_moist_dpdz_v841_f32",
+      "module": "hexv841_moist_dpdz_v841_f32",
+      "source": "woof/metal/shaders/hexv841_moist_dpdz_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "moist_dpdz_v841_f32",
+      "resources": [
+        [
+          "rho_base",
+          "float",
+          "read"
+        ],
+        [
+          "density_perturbation",
+          "float",
+          "read"
+        ],
+        [
+          "qtot",
+          "float",
+          "read"
+        ],
+        [
+          "dpdz",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "density_perturbation": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qtot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dpdz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

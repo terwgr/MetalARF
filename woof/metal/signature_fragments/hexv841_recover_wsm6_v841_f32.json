@@ -1,0 +1,108 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_recover_wsm6_v841_f32",
+      "module": "hexv841_recover_wsm6_v841_f32",
+      "source": "woof/metal/shaders/hexv841_recover_wsm6_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_physics_v841.py",
+      "cuda_symbol": "recover_wsm6_v841_f32",
+      "resources": [
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "water",
+          "float",
+          "read"
+        ],
+        [
+          "radius",
+          "float",
+          "read"
+        ],
+        [
+          "rho_theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "scalars",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "water": [
+          [
+            "any_1d"
+          ]
+        ],
+        "radius": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ],
+        [
+          "nspecies",
+          "int32"
+        ],
+        [
+          "nradius",
+          "int32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

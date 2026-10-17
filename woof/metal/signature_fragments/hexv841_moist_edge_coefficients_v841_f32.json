@@ -1,0 +1,78 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_moist_edge_coefficients_v841_f32",
+      "module": "hexv841_moist_edge_coefficients_v841_f32",
+      "source": "woof/metal/shaders/hexv841_moist_edge_coefficients_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "moist_edge_coefficients_v841_f32",
+      "resources": [
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "scalars",
+          "float",
+          "read"
+        ],
+        [
+          "cqu",
+          "float",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nmass",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

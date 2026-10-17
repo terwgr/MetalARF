@@ -2273,10 +2273,6 @@ def couple_column_tendencies(
 
 def _prepare_atmosphere(state: DomainState) -> dict[str, cp.ndarray]:
     """CuPy transcription of WRF ``phy_prep`` fields used in Phase 3."""
-    if getattr(state, "_metal_setup_state", False):
-        from woof.metal.physics_atmosphere import (
-            submit_prepare_physics_atmosphere)
-        return submit_prepare_physics_atmosphere(state)
     supplied = getattr(state, "prepared_physics_atmosphere", None)
     if supplied is not None:
         # A column state that already lives on the physics grid (A-grid
@@ -2289,6 +2285,10 @@ def _prepare_atmosphere(state: DomainState) -> dict[str, cp.ndarray]:
         # fields.  The ORCHESTRATION (cadence, holds, buckets, scheme
         # calls) above and below this seam is shared, not duplicated.
         return supplied()
+    if getattr(state, "_metal_setup_state", False):
+        from woof.metal.physics_atmosphere import (
+            submit_prepare_physics_atmosphere)
+        return submit_prepare_physics_atmosphere(state)
     nz, ny, nx = state.p.shape
     theta = cp.ascontiguousarray(state.total_theta())
     pressure = state.p

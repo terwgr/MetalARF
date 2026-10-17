@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_seam_geopotential",
+      "module": "hexv841_seam_geopotential",
+      "source": "woof/metal/shaders/hexv841_seam_geopotential.metal",
+      "cuda_source": "woof/core/mpas_column_batch.py",
+      "cuda_symbol": "run_phase2:cp.multiply(z_interface, G)",
+      "resources": [
+        [
+          "z_interface",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "z_interface": [
+          [
+            "any_1d"
+          ]
+        ],
+        "php": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "g",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

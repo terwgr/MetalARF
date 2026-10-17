@@ -1,0 +1,108 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_lts_recover_interfaces",
+      "module": "hexv841_lts_recover_interfaces",
+      "source": "woof/metal/shaders/hexv841_lts_recover_interfaces.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_lts.py",
+      "cuda_symbol": "lts_recover_interfaces",
+      "resources": [
+        [
+          "cell_steps",
+          "int32",
+          "read"
+        ],
+        [
+          "rw_saved",
+          "float",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float",
+          "read"
+        ],
+        [
+          "ww_avg_p",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read_write"
+        ],
+        [
+          "flux_w",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cell_steps": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rw_saved": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ww_avg_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "flux_w": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

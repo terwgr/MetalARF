@@ -1,0 +1,162 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_recover_pressure_f32",
+      "module": "hexv841_recover_pressure_f32",
+      "source": "woof/metal/shaders/hexv841_recover_pressure_f32.metal",
+      "cuda_source": "woof/hex/cuda_backend/recovery.py",
+      "cuda_symbol": "recover_pressure_f32",
+      "resources": [
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta",
+          "float",
+          "read"
+        ],
+        [
+          "rho_base",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_base",
+          "float",
+          "read"
+        ],
+        [
+          "exner_base",
+          "float",
+          "read"
+        ],
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure_p",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "p0",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}
