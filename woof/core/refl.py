@@ -394,6 +394,17 @@ def launch_refl10cm_morrison(qv, qr, nr, qs, ns, qg, ng, t, p, refl, *,
     meteorological interpretation; woof returns non-finite output at the
     affected level rather than silently mapping it to clear air.
     """
+    from woof.metal.array import MetalArray
+    if isinstance(refl, MetalArray):
+        from woof.metal.array import MetalArrayModule
+        from woof.metal.refl_family import submit_refl10cm_morrison
+
+        # The Metal column forms T as theta * pii in FP32; a unit pii
+        # passes this caller's temperature through exactly.
+        pii = MetalArrayModule(refl.buffer.context).ones(refl.shape)
+        submit_refl10cm_morrison(qv, qr, nr, qs, ns, qg, ng, t, pii, p, refl,
+                                 morr_rimed_ice=morr_rimed_ice)
+        return
     shape = refl.shape
     if len(shape) != 3:
         raise ValueError(f"refl fields must be 3-D, got {shape}")
