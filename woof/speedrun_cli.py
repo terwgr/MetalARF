@@ -151,6 +151,19 @@ def _device_block() -> dict[str, Any]:
     return block
 
 
+def _metal_device_block(context) -> dict[str, Any]:
+    """The Metal device the forecast runs on, read from its context."""
+
+    return {
+        "status": "measured",
+        "backend": "metal",
+        "name": context.device_name,
+        "device_count": 1,
+        "recommended_working_set_gib": round(
+            context.recommended_working_set_size / (1 << 30), 3),
+    }
+
+
 def renderer_block() -> dict[str, Any]:
     """Which rw_wrfbatch drew the pictures, by path and by digest.
 
@@ -639,13 +652,16 @@ def course_driver(row: Mapping[str, Any]) -> str:
 
 def run_plan_document(row: Mapping[str, Any], *, config: Path,
                       case_dir: Path, staged: Path,
-                      geog_root: Path | None) -> dict[str, Any]:
+                      geog_root: Path | None,
+                      backend: str = "cuda") -> dict[str, Any]:
     """The run-plan JSON for a course, with the course's own product set."""
 
     options: dict[str, Any] = {
         "data_dir": str(staged),
         "render_products": ",".join(sorted(set(row["products"]))),
     }
+    if backend == "metal":
+        options["state_backend"] = "metal"
     if geog_root is not None:
         options["geog_root"] = str(geog_root)
     return {
@@ -659,18 +675,46 @@ def run_plan_document(row: Mapping[str, Any], *, config: Path,
 
 
 def _go_command(config: Path, *, case_dir: Path, staged: Path,
-                products: list[str], geog_root: Path | None) -> list[str]:
+                products: list[str], geog_root: Path | None,
+                backend: str = "cuda") -> list[str]:
     command = [sys.executable, "-m", "woof.cli", "go", str(config),
                "--outdir", str(case_dir),
                "--data-dir", str(staged),
                "--products", ",".join(products)]
     if geog_root is not None:
         command += ["--geog-root", str(geog_root)]
+    if backend == "metal":
+        command += ["--backend", "metal"]
     return command
 
 
 def _run_plan_command(plan_path: Path) -> list[str]:
     return [sys.executable, "-m", "woof.cli", "run-plan", str(plan_path)]
+
+
+def _warm_metal_pipelines(declared_mode: str, *, cold_cache_dir):
+    """Metal records are warm: build every pipeline before the clock.
+
+    The driver's pipeline cache is system-wide, so no run can empty it,
+    and a cold Metal record cannot be set up.
+    """
+
+    if declared_mode != "warm" or cold_cache_dir is not None:
+        raise speedrun.CompileModeMismatch(
+            "a Metal record is a WARM-cache record only: the Metal "
+            "pipeline cache belongs to the system and cannot be emptied "
+            "for one run, so a cold record cannot be set up.  Remedy: pass "
+            "--compile-mode warm (without --cold-cache-dir); the door then "
+            "builds every Metal pipeline before the clock starts.")
+    from woof.metal.runtime import MetalContext
+
+    with MetalContext() as context:
+        count, unbuilt = context.warm_pipelines()
+        device = _metal_device_block(context)
+    print(f"speedrun: built {count} Metal pipelines (OFF the clock)")
+    census = {"entries": count, "entries_for_this_card": count,
+              "architectures": [device["name"]], "unbuildable": list(unbuilt)}
+    return census, "system Metal pipeline cache", device
 
 
 def run_course(args) -> int:
@@ -681,7 +725,12 @@ def run_course(args) -> int:
     inputs = _staged_inputs(row, staged)
 
     declared_mode = args.compile_mode or row["compile_mode"]
-    if args.cold_cache_dir is not None:
+    backend = getattr(args, "backend", "cuda")
+    if backend == "metal":
+        census, cache_dir, device = _warm_metal_pipelines(
+            declared_mode, cold_cache_dir=args.cold_cache_dir)
+        measured_mode = "warm"
+    elif args.cold_cache_dir is not None:
         cache_dir = _prepare_cold_cache(
             Path(args.cold_cache_dir).expanduser().resolve())
         os.environ["CUPY_CACHE_DIR"] = str(cache_dir)
@@ -689,15 +738,15 @@ def run_course(args) -> int:
         from woof import kernel_compile_notice as notice
 
         cache_dir = notice.cupy_kernel_cache_dir()
-    census = _cache_census(cache_dir)
-    measured_mode = speedrun.measured_compile_mode(
-        census["entries_for_this_card"])
-    speedrun.assert_compile_mode(
-        declared_mode, measured=measured_mode, cache_dir=cache_dir,
-        entries=census["entries"],
-        entries_for_this_card=census["entries_for_this_card"])
-
-    device = _device_block()
+    if backend != "metal":
+        census = _cache_census(cache_dir)
+        measured_mode = speedrun.measured_compile_mode(
+            census["entries_for_this_card"])
+        speedrun.assert_compile_mode(
+            declared_mode, measured=measured_mode, cache_dir=cache_dir,
+            entries=census["entries"],
+            entries_for_this_card=census["entries_for_this_card"])
+        device = _device_block()
     stack = _numerical_stack_block()
     stack["renderer"] = renderer_block()
 
@@ -712,13 +761,14 @@ def run_course(args) -> int:
         plan_path.write_text(
             json.dumps(run_plan_document(
                 row, config=config, case_dir=case_dir, staged=staged,
-                geog_root=geog_root), indent=2, sort_keys=True) + "\n",
+                geog_root=geog_root, backend=backend),
+            indent=2, sort_keys=True) + "\n",
             encoding="utf-8")
         command = _run_plan_command(plan_path)
     else:
         command = _go_command(config, case_dir=case_dir, staged=staged,
                               products=sorted(set(row["products"])),
-                              geog_root=geog_root)
+                              geog_root=geog_root, backend=backend)
 
     print(f"speedrun: course {row['id']} -- {row['title']}")
     print(f"speedrun: driver {driver} ({row['domains']} domain(s))")
@@ -963,10 +1013,16 @@ def speedrun_main(args) -> int:
             args._speedrun_parser.error(
                 "name a course to run, or pass --list to see them")
         from woof import capabilities
-        capabilities.require(
-            "woof speedrun", capabilities.GPU_RUNTIME,
-            before="Refusing here, before the course's case directory is "
-                   "written.")
+        if getattr(args, "backend", "cuda") == "metal":
+            if not capabilities.apple_silicon():
+                raise SpeedrunRefusal(
+                    "--backend metal runs on Apple Silicon only; refusing "
+                    "here, before the course's case directory is written.")
+        else:
+            capabilities.require(
+                "woof speedrun", capabilities.GPU_RUNTIME,
+                before="Refusing here, before the course's case directory "
+                       "is written.")
         return run_course(args)
     except SpeedrunRefusal as refusal:
         print(f"woof speedrun: {refusal}", file=sys.stderr)
@@ -1026,6 +1082,10 @@ def register_cli(subparsers) -> None:
                              "and it is always inside the clock -- a cold "
                              "record and a warm record are different "
                              "records and are never compared")
+    parser.add_argument("--backend", choices=("cuda", "metal"), default="cuda",
+                        help="forecast backend; a Metal record is a warm "
+                             "record whose pipelines are built before the "
+                             "clock starts")
     parser.add_argument("--cold-cache-dir", type=Path, default=None,
                         dest="cold_cache_dir", metavar="DIR",
                         help="EMPTY this directory and point CUPY_CACHE_DIR "
