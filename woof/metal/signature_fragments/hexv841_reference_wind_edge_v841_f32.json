@@ -1,0 +1,70 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_reference_wind_edge_v841_f32",
+      "module": "hexv841_reference_wind_edge_v841_f32",
+      "source": "woof/metal/shaders/hexv841_reference_wind_edge_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_dynamics_v841.py",
+      "cuda_symbol": "reference_wind_edge_v841_f32",
+      "resources": [
+        [
+          "angle_edge",
+          "float",
+          "read"
+        ],
+        [
+          "u_init",
+          "float",
+          "read"
+        ],
+        [
+          "v_init",
+          "float",
+          "read"
+        ],
+        [
+          "reference_u",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "angle_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u_init": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v_init": [
+          [
+            "any_1d"
+          ]
+        ],
+        "reference_u": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

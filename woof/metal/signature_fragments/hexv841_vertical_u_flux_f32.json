@@ -1,0 +1,94 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_vertical_u_flux_f32",
+      "module": "hexv841_vertical_u_flux_f32",
+      "source": "woof/metal/shaders/hexv841_vertical_u_flux_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "vertical_u_flux_f32",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float",
+          "read"
+        ],
+        [
+          "fzp",
+          "float",
+          "read"
+        ],
+        [
+          "flux",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

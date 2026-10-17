@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "5bf96e3f6b912b9cd1bbe951d90a67170d58058a09efdecf8ac0a0ff9d4c2709",
-      "size": 11324396
+      "sha256": "48ee5e86995deebaa827621b6a395bcd1fe61644b0a6f6608d6a59226b6bfd48",
+      "size": 11866069
     },
     "woof_exact.metallib": {
-      "sha256": "017b8a398514b6f4d50366b83af61dc25fad1d1d6c805f9d4f73e8ae71949458",
-      "size": 6975237
+      "sha256": "26c015d418f62dbd7ac88e324caef4a18ab79313e88c42d94ba30e8ef650d958",
+      "size": 7517054
     }
   },
-  "implementation_file_count": 887,
-  "implementation_sha256": "f6a39691ebb44dedeefb9131c9a9a7b31ad7212959969101b77d7ef7d9681c77",
-  "metal_inputs_sha256": "32b8262a2c702258be55052d6d53f9d6ae47f9f00b8e596447e8a1d3d735c266",
+  "implementation_file_count": 1010,
+  "implementation_sha256": "445969f8c733878471c9b45c5c02901143a940a308bfa5c5aa7fc29aef954d05",
+  "metal_inputs_sha256": "1d38dabb8ec94f6c246b1711b97b25a423c475120c77b69911e14af8ae75b34d",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -24,8 +24,8 @@
     "binding": "sha256-build-inputs",
     "files": {
       "tools/build_metal_backend.py": {
-        "sha256": "abb749b156bb0aa71895396c89131973567b739c5c23526277a6ef7f494870b5",
-        "size": 91960
+        "sha256": "2d4ba8f6a5029559414d184b7eebe25fe2e23af6e79ba838972edb134bed0284",
+        "size": 92505
       },
       "tools/generate_metal_kernel_signatures.py": {
         "sha256": "828b6378afd4c24d9925d0b3ed62e5947a4633725264a07bc981132df6e286c4",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "bcf7a4c9c2139bef1c5dc41d91472a6fdd040516c33cd5305ea7f57b1d70432e",
-        "size": 2263426
+        "sha256": "b469bb1b5953c83d7e865f87022334ee604c0bff9f1b9dfa86713dea04311856",
+        "size": 2394525
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
@@ -651,6 +651,10 @@
         "sha256": "5d61149d486481c6d4684e3d205c30c7ac838292a2a45c9035cf44e9888baa44",
         "size": 2656
       },
+      "woof/metal/shaders/hex_ieee32.metalh": {
+        "sha256": "09b309c8c2a389f0cbbc3408412829ed4935c90267dc8285f21c6a264b7bc0bf",
+        "size": 5522
+      },
       "woof/metal/shaders/hex_interface_velocity_recovery_fragment.metal": {
         "sha256": "3b7ee15479d4ced66dc708969ea95033a33a3928904682690499120466a1ab97",
         "size": 1574
@@ -746,6 +750,250 @@
       "woof/metal/shaders/hex_vertical_velocity_tendency_fragment.metal": {
         "sha256": "548fc5100b7e347a5b99f094acd0603dd8fdd45c0825db67c49104ae40647d81",
         "size": 3534
+      },
+      "woof/metal/shaders/hexv841_acoustic_coefficients_v841.metal": {
+        "sha256": "a1968e965d9edf75f395e852ada02ea75e8ff49cf19b6916c7a32feea5c1494f",
+        "size": 5457
+      },
+      "woof/metal/shaders/hexv841_acoustic_cofrz_v841.metal": {
+        "sha256": "70b8be1dd450a9e7e7f9bc5c5873516bddcaf4f6bb35d6e4ceaaaddf585881f1",
+        "size": 772
+      },
+      "woof/metal/shaders/hexv841_acoustic_column_solve_v841.metal": {
+        "sha256": "71bb131ceee49bea23695efe1319cb1f0149f7d6a3006c5033ef73ad83259151",
+        "size": 4490
+      },
+      "woof/metal/shaders/hexv841_acoustic_prepare_v841.metal": {
+        "sha256": "c20ee542e240022725533cb91c8cb9e45a56e21f3b525dd26a0117ca2e36609a",
+        "size": 1392
+      },
+      "woof/metal/shaders/hexv841_acoustic_rs_ts_v841.metal": {
+        "sha256": "b94eb0eaf66b3a8c3dbd019df1a7eb988902977411e7c83843bce87eabed2484",
+        "size": 2579
+      },
+      "woof/metal/shaders/hexv841_acoustic_ru_v841.metal": {
+        "sha256": "5eaa0f0314b6e2f8d15eb5831f4a55a81a5dc679040078a2367adede07c962c8",
+        "size": 2600
+      },
+      "woof/metal/shaders/hexv841_add_inplace_f32.metal": {
+        "sha256": "18c4e1f934f3ea6c6173db3c3c6ec89ec6715306fe9d73e630cb76d8cab37727",
+        "size": 1105
+      },
+      "woof/metal/shaders/hexv841_cell_diagnostics_v841_f32.metal": {
+        "sha256": "1dc00165c128e1476173b6b4689d32ef4883d563e647716bd75c0bb4963d2417",
+        "size": 3500
+      },
+      "woof/metal/shaders/hexv841_density_tendency_f32.metal": {
+        "sha256": "ec5c99b846cee9c2ef1edda9053899133f7cf56311e5f0b678389cf6ee90fc48",
+        "size": 1441
+      },
+      "woof/metal/shaders/hexv841_divergence_damping_f32.metal": {
+        "sha256": "241d000d028e63c4c0ff53cee8f307086f18458c668d88e29dc8661db74bdfba",
+        "size": 2128
+      },
+      "woof/metal/shaders/hexv841_edge_fields_from_saved_u_f32.metal": {
+        "sha256": "f500e0d6e487b0c350f636ee496a5117e9a79f548bf2db0937a1bb3fab3959c3",
+        "size": 1640
+      },
+      "woof/metal/shaders/hexv841_enforce_rw_endpoints_v841_f32.metal": {
+        "sha256": "48c8530e300f4936b5dbe67bd6355ba37f76dead49d10cf83bacb76debd68337",
+        "size": 1086
+      },
+      "woof/metal/shaders/hexv841_euler_w_f32.metal": {
+        "sha256": "797ae2016442afc9be832f5102d49998bca4773ceaa88999778e382f7c417bd4",
+        "size": 1741
+      },
+      "woof/metal/shaders/hexv841_laplacian_divergence_f32.metal": {
+        "sha256": "3687cb99be3c0a4c8a1314f207b8992b6165926e1f5fc3147b787aec17e4e12d",
+        "size": 1784
+      },
+      "woof/metal/shaders/hexv841_laplacian_vorticity_f32.metal": {
+        "sha256": "14498339576139ab60754fc4377255783a396c612ed79628ce4c43c21191cca9",
+        "size": 1883
+      },
+      "woof/metal/shaders/hexv841_mass_flux_divergence_v841_f32.metal": {
+        "sha256": "01484042f465be28a396022f8caa7a3a083e72db506f82873d9dcf409b58e7c1",
+        "size": 1837
+      },
+      "woof/metal/shaders/hexv841_mixing_scaling_f32.metal": {
+        "sha256": "ce0654cfacf939dad073371fec4919dc91524625442d21cc37bf8cc8abfca022",
+        "size": 1211
+      },
+      "woof/metal/shaders/hexv841_momentum_filter_lap2_f32.metal": {
+        "sha256": "0bc43d7363766cb5945c1865ebef1e64091826e4352d94b9c23c2a3479e15d57",
+        "size": 2333
+      },
+      "woof/metal/shaders/hexv841_momentum_filter_lap4_f32.metal": {
+        "sha256": "6c787343c7a99b88d3828e5efbddb482a6349874063bfe1e79f40edf290791a4",
+        "size": 2363
+      },
+      "woof/metal/shaders/hexv841_pressure_gradient_v841_f32.metal": {
+        "sha256": "0ea3a70f8e2f525c3f9e81e4e666ad6ec5a431c7fc17d45dc24c10d141435c51",
+        "size": 1952
+      },
+      "woof/metal/shaders/hexv841_pv_apvm_v841_f32.metal": {
+        "sha256": "ef6dba191c3d2ba07d57a55ffac3c29aaa24b879ba4449e8384b1ba10ee7ce5d",
+        "size": 2460
+      },
+      "woof/metal/shaders/hexv841_pv_cell_v841_f32.metal": {
+        "sha256": "3f9074e678832ce489b9abd4387eeb2dbebc688b7dbd3f3c325a52ef7e4c276e",
+        "size": 2345
+      },
+      "woof/metal/shaders/hexv841_pv_edge_base_f32.metal": {
+        "sha256": "1e8e2f60a988e94592a223fd006a29c10858bc9c262e6dbcf6efca25637ac516",
+        "size": 1244
+      },
+      "woof/metal/shaders/hexv841_recover_cells_f32.metal": {
+        "sha256": "e742782a9f999b2bd0aba1cb5a8da2fe41e9080cf11892bfe34fc528d86fd03b",
+        "size": 3194
+      },
+      "woof/metal/shaders/hexv841_recover_edge_f32.metal": {
+        "sha256": "57f95440e5fc7d55feb136c416f4480bb4435297c868a85e8d7343552118623e",
+        "size": 1677
+      },
+      "woof/metal/shaders/hexv841_recover_edge_velocity_f32.metal": {
+        "sha256": "c3bf1394d696e61a452e7b1c8e16892a074931f4b779d72f0558accc9ffff383",
+        "size": 1573
+      },
+      "woof/metal/shaders/hexv841_recover_edges_f32.metal": {
+        "sha256": "fde54fbe04d0625c28164e6e5c39c81021d2e45c414767f4f840f4f9e03b2698",
+        "size": 1400
+      },
+      "woof/metal/shaders/hexv841_recover_flat_w_f32.metal": {
+        "sha256": "a47684a106ad376c762d18ee8c0d914fb7cc413cbec5341f52b72154112200c9",
+        "size": 1768
+      },
+      "woof/metal/shaders/hexv841_recover_interfaces_f32.metal": {
+        "sha256": "cadd590a28acc4f687df13be55228e7261ed29c5ded7b2b0f5e52672d5bbcd82",
+        "size": 1567
+      },
+      "woof/metal/shaders/hexv841_recover_terrain_w_f32.metal": {
+        "sha256": "abf3f9ec1097ac233fe556c42dd4a953ec441e271dd2f4f27220d2659a86d031",
+        "size": 3845
+      },
+      "woof/metal/shaders/hexv841_reference_wind_edge_v841_f32.metal": {
+        "sha256": "43d7d8f83bb270749a8a5df9cd231d1b70ea504082969ac50cbf41465d2941ce",
+        "size": 1435
+      },
+      "woof/metal/shaders/hexv841_scale_f32.metal": {
+        "sha256": "c67c89fc3f185ac7bfcf9590f65f04f6633106dbe37824d5ef12415903992ff6",
+        "size": 1091
+      },
+      "woof/metal/shaders/hexv841_smagorinsky_v841_f32.metal": {
+        "sha256": "e4ef5c9ae39838a9774c3377154d149c50dd7a748d2b05f126f4091f45cdcb44",
+        "size": 3183
+      },
+      "woof/metal/shaders/hexv841_split_flux_add_v841_f32.metal": {
+        "sha256": "cafa7645febc24c6ba6aa6045043bbf1cb25d3a4e17cbbab7d0048d5ebd643a3",
+        "size": 1162
+      },
+      "woof/metal/shaders/hexv841_split_flux_finish_v841_f32.metal": {
+        "sha256": "f1f4bc495e6c3686082fba2d921c6bf250a24dcded0ba56d76d5077582b5f905",
+        "size": 1210
+      },
+      "woof/metal/shaders/hexv841_split_flux_first_v841_f32.metal": {
+        "sha256": "0825f49cbf3197c7d82dc8dcf7d18977b5cfa219e9c62d56eb538e094a1d72e1",
+        "size": 1140
+      },
+      "woof/metal/shaders/hexv841_tangential_velocity_f32.metal": {
+        "sha256": "a49144edbef3a39fb00fe649965ca355ebcf39d31182c24bafa6035257bbb2f8",
+        "size": 1660
+      },
+      "woof/metal/shaders/hexv841_tendency_w_to_omega.metal": {
+        "sha256": "05890b251055e768651cf3d374114d8cd45f2298ff6e13fc15e4e7e6cf1e46e5",
+        "size": 2352
+      },
+      "woof/metal/shaders/hexv841_theta_edge_flux_f32.metal": {
+        "sha256": "864da6c0945adec1bd9d1f60a36a2911053f030019f3d093535a33f3c2516bc5",
+        "size": 2681
+      },
+      "woof/metal/shaders/hexv841_theta_filter_lap2_f32.metal": {
+        "sha256": "4e00084ce692631c6d4f59c0c5ceae7340aa5c08279eb9f905f488fdbc549ca0",
+        "size": 2618
+      },
+      "woof/metal/shaders/hexv841_theta_filter_lap4_f32.metal": {
+        "sha256": "cfcca45a71ebff3b9074960dab51bdb3d1ae1ae63708ac97cdec65c32929d86a",
+        "size": 2167
+      },
+      "woof/metal/shaders/hexv841_theta_finish_v841_f32.metal": {
+        "sha256": "68cfeef64a0324a9914b392ae8d00b95a7a96e7c925e6b2cd53e831ed135d768",
+        "size": 2135
+      },
+      "woof/metal/shaders/hexv841_theta_vertical_flux_f32.metal": {
+        "sha256": "2a34135d6fe2052dc38612512c273e3db49f3055d356d90e1cbddf4ce88936ed",
+        "size": 3242
+      },
+      "woof/metal/shaders/hexv841_transport_edge_values.metal": {
+        "sha256": "63f969f5173010d7d165f390f09066feba9ac97ece9259433f24ae6e6e0108be",
+        "size": 4279
+      },
+      "woof/metal/shaders/hexv841_transport_interpolate_target_v841.metal": {
+        "sha256": "3ecf41dcb8f9bcdf9a76c7a209de70266f2cf72241afb23cfe4ce2df4d0a0674",
+        "size": 796
+      },
+      "woof/metal/shaders/hexv841_transport_standard_finish_v841.metal": {
+        "sha256": "0b949603c5a236e27b4f9788b3abc136e7c4985204ab83544939858f1c3cb13f",
+        "size": 2385
+      },
+      "woof/metal/shaders/hexv841_transport_vertical_flux.metal": {
+        "sha256": "45c6df8fc4520155800c7f8bf7928a20e527f9b7ebd8a04fed48d454e79c360f",
+        "size": 2910
+      },
+      "woof/metal/shaders/hexv841_validate_density_v841.metal": {
+        "sha256": "bc1d859376b4e44099ab57b728af3b6ec64f9cfe1c2a05693a47bfcbca786d83",
+        "size": 748
+      },
+      "woof/metal/shaders/hexv841_validate_finite_array_v841_f32.metal": {
+        "sha256": "b5333d6f22bd4d33c3c1157c8b462ef2cb05f720295c5479e074b70a4bf55d1c",
+        "size": 1120
+      },
+      "woof/metal/shaders/hexv841_validate_positive_state_v841_f32.metal": {
+        "sha256": "7adb36632b37e59ff610e2a33fd6ed5860d77ee02e88ad4df4dee358d7a6ad36",
+        "size": 1326
+      },
+      "woof/metal/shaders/hexv841_validate_recovered_v841_f32.metal": {
+        "sha256": "46fb46069725bbf726e1b7dafb7dd4db527a08df377bad86f5741ae8b1e605cb",
+        "size": 2647
+      },
+      "woof/metal/shaders/hexv841_validate_transport_indices_v841.metal": {
+        "sha256": "5043213c4c6effdda643b60db40ec8fe8c719d776d3a71a809d7e869c815d3b0",
+        "size": 2233
+      },
+      "woof/metal/shaders/hexv841_vector_momentum_v841_f32.metal": {
+        "sha256": "46a33db679f09d81b373a7205f22bda6b6e52f761aae165c3bb1cfc31f58c0bb",
+        "size": 3154
+      },
+      "woof/metal/shaders/hexv841_vertex_diagnostics_v841_f32.metal": {
+        "sha256": "14b37d5aa7d0d0c235642efbb6961f2897c78bbe2873668d9bf763211dc39d03",
+        "size": 2512
+      },
+      "woof/metal/shaders/hexv841_vertical_u_finish_f32.metal": {
+        "sha256": "e71a3d5e4f272bf9f5e271f8e9bd50116570cee33ac52da31a2c1731a58f327a",
+        "size": 1333
+      },
+      "woof/metal/shaders/hexv841_vertical_u_flux_f32.metal": {
+        "sha256": "f290e0ed0d8bfd2a38ae476ec42df4a736e3dae3ffaf3289605450202de48334",
+        "size": 2611
+      },
+      "woof/metal/shaders/hexv841_w_edge_flux_f32.metal": {
+        "sha256": "7e9a181300fd9b73b73253ba03eb366071cca99a686a5c561d7dec7e22a6306c",
+        "size": 2355
+      },
+      "woof/metal/shaders/hexv841_w_filter_lap2_f32.metal": {
+        "sha256": "a62c7c9d6f9d834979839dad1db8d1538cf2307f9ca3ae61a506b96839799f61",
+        "size": 3016
+      },
+      "woof/metal/shaders/hexv841_w_filter_lap4_f32.metal": {
+        "sha256": "e5e6970da635dafa8d7f972a5378b83316a12930018486ac1e7fc699e8b00bf1",
+        "size": 2207
+      },
+      "woof/metal/shaders/hexv841_w_finish_v841_f32.metal": {
+        "sha256": "751c39dfafebaca0447bc486cbfcb7b625be4f63689a6acb6ecf1eabf00ec13b",
+        "size": 2261
+      },
+      "woof/metal/shaders/hexv841_w_vertical_flux_f32.metal": {
+        "sha256": "88061e6667828b671dac769b8b2ab097e40a76cff9a7853670f4e75ec2179ca5",
+        "size": 2275
       },
       "woof/metal/shaders/ieva_family.metal": {
         "sha256": "f0913c91c96f8975e15a75b451867411421d43565811a41eb87772af0460d268",
@@ -2143,6 +2391,250 @@
         "sha256": "ac0a1365065f11227677769e613e267c1772ca93ded6ce233bb3046ad9f769af",
         "size": 2057
       },
+      "woof/metal/signature_fragments/hexv841_acoustic_coefficients_v841.json": {
+        "sha256": "efb6c7ff81c116699a1be6af4763dc5c01d40b5eeaaa85b8180a146c4d8eb258",
+        "size": 6085
+      },
+      "woof/metal/signature_fragments/hexv841_acoustic_cofrz_v841.json": {
+        "sha256": "f2c262b48088ebbe13b9a574358fe085e807e8214dda492b8baeb6947579fa64",
+        "size": 954
+      },
+      "woof/metal/signature_fragments/hexv841_acoustic_column_solve_v841.json": {
+        "sha256": "ac468c9e3e4ec4ff217d952909038aeb3883ff35d1255bb82a86667725260ed2",
+        "size": 6215
+      },
+      "woof/metal/signature_fragments/hexv841_acoustic_prepare_v841.json": {
+        "sha256": "82858287e0d9544f73a9b8eab2ddbc92b5352a55bc05a065eb614ddc385dbc3e",
+        "size": 1727
+      },
+      "woof/metal/signature_fragments/hexv841_acoustic_rs_ts_v841.json": {
+        "sha256": "548e62888d2ed4020105e805e1607cc4df644fa07c75a1a0a6b528bddcfd7adc",
+        "size": 4647
+      },
+      "woof/metal/signature_fragments/hexv841_acoustic_ru_v841.json": {
+        "sha256": "e2651b868e164b53ffdad41a1f4724f75808339aff79665722ec5cc27c4af9ff",
+        "size": 3168
+      },
+      "woof/metal/signature_fragments/hexv841_add_inplace_f32.json": {
+        "sha256": "99a22de7d2bf9dde34943ea5c26e84f22c3da2c12e767cb28586cedd55477685",
+        "size": 914
+      },
+      "woof/metal/signature_fragments/hexv841_cell_diagnostics_v841_f32.json": {
+        "sha256": "8c9601de5f6c148847e06719a1055d3eb7bf7221761356f5dc387750d893c212",
+        "size": 3647
+      },
+      "woof/metal/signature_fragments/hexv841_density_tendency_f32.json": {
+        "sha256": "8ed07595d3178e6f3273fa649d54e151f46ce48bb1beee31970677c387cb3b3c",
+        "size": 1717
+      },
+      "woof/metal/signature_fragments/hexv841_divergence_damping_f32.json": {
+        "sha256": "c2abdcd80fba5d034afede7cf6c75b8eb0db912413e4906aeb133c8717e9ad50",
+        "size": 2101
+      },
+      "woof/metal/signature_fragments/hexv841_edge_fields_from_saved_u_f32.json": {
+        "sha256": "e656e2b561dbdf3e52f6328e857750f46e5ef2e11a80a4e8022ac2dae6be1d69",
+        "size": 2148
+      },
+      "woof/metal/signature_fragments/hexv841_enforce_rw_endpoints_v841_f32.json": {
+        "sha256": "4ae3c8921f0d128a736f1da0605744a402d249d738c7cf89ad7157c7cf9daa80",
+        "size": 806
+      },
+      "woof/metal/signature_fragments/hexv841_euler_w_f32.json": {
+        "sha256": "4a6e9bf898a1c1eaf3ad7b9fc58feeb49986e3d9549e0d521243b25525f4ec2c",
+        "size": 1488
+      },
+      "woof/metal/signature_fragments/hexv841_laplacian_divergence_f32.json": {
+        "sha256": "64b3b424b053f8d79cbf75f3d6c75116927597ac82dc485e8f6d0429af2aa63c",
+        "size": 2228
+      },
+      "woof/metal/signature_fragments/hexv841_laplacian_vorticity_f32.json": {
+        "sha256": "e4caa42e49a54e69c782bacd41a4b5be9b623d3ccd10d6a847e9581ea80e7cb1",
+        "size": 2030
+      },
+      "woof/metal/signature_fragments/hexv841_mass_flux_divergence_v841_f32.json": {
+        "sha256": "02b2ccd2be258a083ae7e8c276d6e5b3b26ac421a27818b6d1d11ae49f2678b2",
+        "size": 2255
+      },
+      "woof/metal/signature_fragments/hexv841_mixing_scaling_f32.json": {
+        "sha256": "9bf03700d603270f7e639f9dde2b8dca37c3114aa017b9a80644527c164ae36a",
+        "size": 1445
+      },
+      "woof/metal/signature_fragments/hexv841_momentum_filter_lap2_f32.json": {
+        "sha256": "2b404803a9f147c4d231eb7efa5615e108b9f334d5cecd76b5bf9d89700ff0a2",
+        "size": 3010
+      },
+      "woof/metal/signature_fragments/hexv841_momentum_filter_lap4_f32.json": {
+        "sha256": "e510cfe4cbb6fb650bfa8e5464037acfa6e399ca72fde028cbfe0b961621dadb",
+        "size": 2752
+      },
+      "woof/metal/signature_fragments/hexv841_pressure_gradient_v841_f32.json": {
+        "sha256": "324a5690df9a9cc6a4c056ccb32ae8d2af8688cc62d49cd946e4f2a7f9903d04",
+        "size": 2314
+      },
+      "woof/metal/signature_fragments/hexv841_pv_apvm_v841_f32.json": {
+        "sha256": "ba43f2de74538ceb36ef57160a9499eea07d00ccaea1de00906d76af6fd7d8d9",
+        "size": 3141
+      },
+      "woof/metal/signature_fragments/hexv841_pv_cell_v841_f32.json": {
+        "sha256": "304661c262be4a725bf95732846f7e955cf489b815be0bced47fd7fea71806f1",
+        "size": 2280
+      },
+      "woof/metal/signature_fragments/hexv841_pv_edge_base_f32.json": {
+        "sha256": "c4be117ef20a6a4d38ddf7a148b80f2a2d7e3944b8645e6e3cc06d62b0e4d627",
+        "size": 1293
+      },
+      "woof/metal/signature_fragments/hexv841_recover_cells_f32.json": {
+        "sha256": "54117956eee9f8332e99ce8156dd4091acc12cdc869aba56c44a9d4b2e50e3a4",
+        "size": 3550
+      },
+      "woof/metal/signature_fragments/hexv841_recover_edge_f32.json": {
+        "sha256": "aad61fc86b56e5256ad63f262852fe7f68e05e5d7ea1a4d5f7f656e7ec85481d",
+        "size": 2303
+      },
+      "woof/metal/signature_fragments/hexv841_recover_edge_velocity_f32.json": {
+        "sha256": "2f8e5d9e9509138b5a20ddc74fb8371cdc01afb76164b77c06d3c74f28fb9c26",
+        "size": 1309
+      },
+      "woof/metal/signature_fragments/hexv841_recover_edges_f32.json": {
+        "sha256": "d59eb2bc4a83775d91735885783449e94a4b444576251a7509c3526cca3e8709",
+        "size": 1440
+      },
+      "woof/metal/signature_fragments/hexv841_recover_flat_w_f32.json": {
+        "sha256": "fb037c8b542cb55d7296cb8d9fdbe03c309cf18ec5368ef72538298db5e70362",
+        "size": 1494
+      },
+      "woof/metal/signature_fragments/hexv841_recover_interfaces_f32.json": {
+        "sha256": "fee4a1e73273dd182b111d5411a0439617d2682025e5c6918259f4c7ebbd247d",
+        "size": 1460
+      },
+      "woof/metal/signature_fragments/hexv841_recover_terrain_w_f32.json": {
+        "sha256": "3def78c938fd54f50b66486c83fa14fa3bf5f9417c0d86d8fb964ac2ed4244fa",
+        "size": 2771
+      },
+      "woof/metal/signature_fragments/hexv841_reference_wind_edge_v841_f32.json": {
+        "sha256": "bce5e3f40f3dedfb70a5a4c33b43e51e1d15071e612f0e7837ae47b593eab1d0",
+        "size": 1287
+      },
+      "woof/metal/signature_fragments/hexv841_scale_f32.json": {
+        "sha256": "b3657727e956b9be13a70dfe29885b797c5b7fc1907bc4f14d8a983590c8a345",
+        "size": 944
+      },
+      "woof/metal/signature_fragments/hexv841_smagorinsky_v841_f32.json": {
+        "sha256": "34e4f9d40aa5ab6974264934f927892715b52fc79687c1727670b29a7974de1b",
+        "size": 2549
+      },
+      "woof/metal/signature_fragments/hexv841_split_flux_add_v841_f32.json": {
+        "sha256": "373a548790ef34b7227931dc0ae37f66133bdd9b5e8d8ad526d18bdcccebe28f",
+        "size": 959
+      },
+      "woof/metal/signature_fragments/hexv841_split_flux_finish_v841_f32.json": {
+        "sha256": "873fefcd7d0f1b98a19bb37b04724539bf761eb5112e2574c3321c643e937f75",
+        "size": 1036
+      },
+      "woof/metal/signature_fragments/hexv841_split_flux_first_v841_f32.json": {
+        "sha256": "2b9b04f496c5304d328e60344f0febc9372b7582bc3b5ea75a79bff7fcecb0be",
+        "size": 967
+      },
+      "woof/metal/signature_fragments/hexv841_tangential_velocity_f32.json": {
+        "sha256": "7b97a3ab80f33c48e1ae5b626d117546bd12289a694cb5905a918a6aa916ea7e",
+        "size": 1786
+      },
+      "woof/metal/signature_fragments/hexv841_tendency_w_to_omega.json": {
+        "sha256": "2d9d808332836245aae076505870a3ddad5218248e67e10bb90d704dea5deefa",
+        "size": 2773
+      },
+      "woof/metal/signature_fragments/hexv841_theta_edge_flux_f32.json": {
+        "sha256": "db770a950341173652a6dfc94aa585692f16fb6f037fb54dee3501600c8d31f8",
+        "size": 2550
+      },
+      "woof/metal/signature_fragments/hexv841_theta_filter_lap2_f32.json": {
+        "sha256": "8134fdf4cccd6c0f9ff5a24e582eda846a83e995514f4d27acad3d9ac4525b6a",
+        "size": 3211
+      },
+      "woof/metal/signature_fragments/hexv841_theta_filter_lap4_f32.json": {
+        "sha256": "92bea5895bbfe538f80f370294b3c1834a068e402f569a071fa2c9b1c34a48f0",
+        "size": 2602
+      },
+      "woof/metal/signature_fragments/hexv841_theta_finish_v841_f32.json": {
+        "sha256": "69217d81f277aaf0b2bbae540f06352a90df0c13211bb2e7a44297fd2bcc151e",
+        "size": 2050
+      },
+      "woof/metal/signature_fragments/hexv841_theta_vertical_flux_f32.json": {
+        "sha256": "75eaaad7bd3bd7cf05f95966d4d78fbae81b55277e91a3314e1f30aaf40b63e7",
+        "size": 1755
+      },
+      "woof/metal/signature_fragments/hexv841_transport_edge_values.json": {
+        "sha256": "b6bfa1e6924ea32bb962a4a269f58739baa53382e932a3c1484d123ca2a03673",
+        "size": 2127
+      },
+      "woof/metal/signature_fragments/hexv841_transport_interpolate_target_v841.json": {
+        "sha256": "e5cf79413b8d2718d14e2d66cd8d0b85992516a52ca783afcbbbfb8ebce13371",
+        "size": 1290
+      },
+      "woof/metal/signature_fragments/hexv841_transport_standard_finish_v841.json": {
+        "sha256": "59796eab423ad910773a5da3406f444cc687e78ecde6a589316dd1c6167b86d7",
+        "size": 3342
+      },
+      "woof/metal/signature_fragments/hexv841_transport_vertical_flux.json": {
+        "sha256": "36cff29e8698eb38520c8c93d20e4525d082d655da5d8dce87245c249c7a4944",
+        "size": 1647
+      },
+      "woof/metal/signature_fragments/hexv841_validate_density_v841.json": {
+        "sha256": "baf43f3bc23dd8f3440ec5f9a9f2005f9f742e3940b2639a026bef0164260565",
+        "size": 925
+      },
+      "woof/metal/signature_fragments/hexv841_validate_finite_array_v841_f32.json": {
+        "sha256": "9d3df51c15074314b74e5e761833398d12f24e2b58500d10744df4d7c7e8d986",
+        "size": 910
+      },
+      "woof/metal/signature_fragments/hexv841_validate_positive_state_v841_f32.json": {
+        "sha256": "79638d68be0e0708c9991542c53e4e04233305d03514681d3aeffef5ce4ce21e",
+        "size": 1071
+      },
+      "woof/metal/signature_fragments/hexv841_validate_recovered_v841_f32.json": {
+        "sha256": "958efd7fcd1f7cfa02ede00a19d8e04c1497208ff4b4711fa50065a68e65cbd8",
+        "size": 2585
+      },
+      "woof/metal/signature_fragments/hexv841_validate_transport_indices_v841.json": {
+        "sha256": "f3c8338d102053f8675ab918b9bf20b8c3fc69bd6672cca69a53861ef18a4e64",
+        "size": 2010
+      },
+      "woof/metal/signature_fragments/hexv841_vector_momentum_v841_f32.json": {
+        "sha256": "4959a31a23dc734bdf06cdd669de396b17c49481e8d85f23f95d7068b26b8bd3",
+        "size": 2852
+      },
+      "woof/metal/signature_fragments/hexv841_vertex_diagnostics_v841_f32.json": {
+        "sha256": "8c23f12d7b6b63333de5bc3a4a4f8d5a7a59f9a6be0d7240e623f52fa7667831",
+        "size": 2889
+      },
+      "woof/metal/signature_fragments/hexv841_vertical_u_finish_f32.json": {
+        "sha256": "6edad403128dac5366434b0c38c3333f6fde020291fb0cc024a9a4739d9da555",
+        "size": 1073
+      },
+      "woof/metal/signature_fragments/hexv841_vertical_u_flux_f32.json": {
+        "sha256": "0d06cd641ef2e6c9cf6604638a68ef4cf151ad21832aa935f315b5f7942e8ea6",
+        "size": 1571
+      },
+      "woof/metal/signature_fragments/hexv841_w_edge_flux_f32.json": {
+        "sha256": "089fed304a725b24d3b1678ada59293c3efa77b4d34e935526ac8c81872abfcf",
+        "size": 2118
+      },
+      "woof/metal/signature_fragments/hexv841_w_filter_lap2_f32.json": {
+        "sha256": "1767c0e5b2f99d50bf5a90e31dc6a97b42e318ffebe483918144ccbd75858677",
+        "size": 3207
+      },
+      "woof/metal/signature_fragments/hexv841_w_filter_lap4_f32.json": {
+        "sha256": "d7dd2c29708a2b6e890e79b9eb76c69f8bd51da3e5fe0953729b5e3520ba630a",
+        "size": 2578
+      },
+      "woof/metal/signature_fragments/hexv841_w_finish_v841_f32.json": {
+        "sha256": "3555ecabf0a345c3fce6114de6ec344897e56aa85cf36d9ba54c7128ca7607ac",
+        "size": 2034
+      },
+      "woof/metal/signature_fragments/hexv841_w_vertical_flux_f32.json": {
+        "sha256": "df17642ccd335d8af46c5bd96c718e00f3d9c5c034baf5d20c9a64c929cad3e8",
+        "size": 1051
+      },
       "woof/metal/signature_fragments/ieva_family.json": {
         "sha256": "aac245dbf779dac21e18255509210f865d11707a51f1a236259a69596bcd3a72",
         "size": 7092
@@ -2968,6 +3460,6 @@
         "size": 296
       }
     },
-    "sha256": "32b8262a2c702258be55052d6d53f9d6ae47f9f00b8e596447e8a1d3d735c266"
+    "sha256": "1d38dabb8ec94f6c246b1711b97b25a423c475120c77b69911e14af8ae75b34d"
   }
 }

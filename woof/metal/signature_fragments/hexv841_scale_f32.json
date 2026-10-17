@@ -1,0 +1,54 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_scale_f32",
+      "module": "hexv841_scale_f32",
+      "source": "woof/metal/shaders/hexv841_scale_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "scale_f32",
+      "resources": [
+        [
+          "source",
+          "float",
+          "read"
+        ],
+        [
+          "target",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevels",
+          "int32"
+        ],
+        [
+          "nowners",
+          "int32"
+        ],
+        [
+          "scale",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

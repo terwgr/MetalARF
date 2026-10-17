@@ -1,0 +1,40 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_enforce_rw_endpoints_v841_f32",
+      "module": "hexv841_enforce_rw_endpoints_v841_f32",
+      "source": "woof/metal/shaders/hexv841_enforce_rw_endpoints_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_dynamics_v841.py",
+      "cuda_symbol": "enforce_rw_endpoints_v841_f32",
+      "resources": [
+        [
+          "rw",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

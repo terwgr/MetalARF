@@ -3,10 +3,15 @@
 This route consumes a real MPAS init directly.  Init files carry the grid,
 static fields, and vertical metrics needed by the current dycore, so no CUDA
 driver or separate mesh asset lookup is needed here.
+
+The route runs the resident v8.4.1 dycore (``metal_driver_v841``) without
+physics, with or without horizontal mixing.  Every forecast flag it does not
+implement is refused by name rather than dropped.
 """
 
 from __future__ import annotations
 
+import argparse
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -38,12 +43,53 @@ def _initial_time(dataset: Any) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+# Forecast flags this route reads.  ``--repo`` is accepted and unused on
+# every backend.
+_IMPLEMENTED = frozenset({
+    "mesh", "backend", "init", "init_source", "start_time", "hours",
+    "history_every_minutes", "out", "receipt", "case_label", "repo",
+    "horiz_mixing",
+})
+
+
+def _refuse_unimplemented(arguments: Any, refuse: Any) -> None:
+    from .forecast_door import add_forecast_arguments
+
+    parser = argparse.ArgumentParser(add_help=False)
+    add_forecast_arguments(parser)
+    for action in parser._actions:
+        dest = action.dest
+        if dest in _IMPLEMENTED or not hasattr(arguments, dest):
+            continue
+        if getattr(arguments, dest) != action.default:
+            raise refuse(
+                f"{action.option_strings[0]} is not implemented by "
+                "--backend metal"
+            )
+
+
+# The v8.4.1 lane's mixing settings (config_v841.py).
+_MIXING = {
+    "off": {"config_horiz_mixing": "off"},
+    "2d_smagorinsky": {
+        "config_horiz_mixing": "2d_smagorinsky",
+        "config_len_disp": 0.0,
+        "config_visc4_2dsmag": 0.05,
+        "config_smagorinsky_coef": 0.125,
+        "config_del4u_div_factor": 10.0,
+    },
+}
+
+
+def _start_stamp(value: datetime) -> str:
+    return value.strftime("%Y-%m-%d_%H:%M:%S")
+
+
 def run_metal_forecast(arguments: Any) -> int:
     """Run the registered public forecast request from an initialized MPAS file."""
     from netCDF4 import Dataset
 
     from .driver import (
-        DryDycoreDriver,
         load_mpas_initial_state,
         load_mpas_vertical_grid,
     )
@@ -51,10 +97,12 @@ def run_metal_forecast(arguments: Any) -> int:
         DRIVERS_DIR, _load_module, _refuse, _schedule, load_registry,
     )
     from .mesh import Mesh
+    from .metal_driver_v841 import MetalDycoreV841
     from .output import write_dry_state_history
     from .config_v841 import V841DryDycoreConfig
     from woof.metal.runtime import MetalContext
 
+    _refuse_unimplemented(arguments, _refuse)
     mesh_name = getattr(arguments, "mesh", None)
     if not mesh_name:
         raise _refuse("--mesh is required for --backend metal; name a registered MPAS mesh row")
@@ -92,6 +140,21 @@ def run_metal_forecast(arguments: Any) -> int:
         raise _refuse(f"--out parent directory does not exist: {out.parent}")
     if out.exists():
         raise _refuse(f"--out {out} exists; choose a fresh output directory")
+    receipt_raw = getattr(arguments, "receipt", None)
+    receipt_path = (
+        Path(receipt_raw).expanduser().absolute() if receipt_raw is not None
+        else out / "forecast-receipt.json"
+    )
+    if not receipt_path.parent.is_dir() and receipt_path.parent != out:
+        raise _refuse(f"--receipt parent directory does not exist: {receipt_path.parent}")
+    with Dataset(init, mode="r") as dataset:
+        valid_time = _initial_time(dataset)
+    start_time = getattr(arguments, "start_time", None)
+    if start_time is not None and start_time != _start_stamp(valid_time):
+        raise _refuse(
+            f"--start-time {start_time} does not match the init's "
+            f"{_start_stamp(valid_time)}"
+        )
     out.mkdir()
 
     # The init is a self-contained MPAS state file: it carries topology,
@@ -106,25 +169,36 @@ def run_metal_forecast(arguments: Any) -> int:
             f"mesh row {mesh_name} declares {row.cells} cells and "
             f"{binding.n_edges} edges"
         )
+    horiz_mixing = str(getattr(arguments, "horiz_mixing", "2d_smagorinsky"))
     native = load_mpas_vertical_grid(init, mesh)
     state, reference, saved = load_mpas_initial_state(
         init, mesh, native.vertical_grid, scalar_names=("qv",),
         terrain_metrics=native.terrain_metrics, return_saved_diagnostics=True,
     )
+    # The dycore of the CUDA v8.4.1 lane (config_v841.py), without physics.
     config = V841DryDycoreConfig(
         config_dt=float(row.dt_seconds),
         config_time_integration_order=3,
         config_number_of_sub_steps=6,
-        config_dynamics_split_steps=1,
+        config_dynamics_split_steps=3,
+        config_split_dynamics_transport=True,
+        config_scalar_advection=True,
+        config_monotonic=False,
+        config_positive_definite=False,
+        config_apvm_upwinding=0.5,
+        config_xnutr=0.2,
+        config_zd=22_000.0,
+        config_smdiv=0.1,
+        config_divergence_damping=True,
+        config_terrain_following=True,
         config_scalar_adv_order=3,
         config_scalar_vadv_order=3,
-        config_split_dynamics_transport=True,
-        config_moist_physics=True,
-        config_horiz_mixing="off",
-        config_coef_3rd_order=float(getattr(arguments, "coef_3rd_order", 0.25)),
+        # Dry: qv is a passive tracer, as in the CUDA dry step.
+        config_moist_physics=False,
+        config_coef_3rd_order=0.25,
+        **_MIXING[horiz_mixing],
     )
     with Dataset(init, mode="r") as dataset:
-        valid_time = _initial_time(dataset)
         wind_u = np.asarray(dataset.variables["u_init"][:], dtype=np.float32)
         wind_v = np.asarray(dataset.variables["v_init"][:], dtype=np.float32)
     from .dynamics_v841 import V841ReferenceWindProfiles
@@ -132,31 +206,33 @@ def run_metal_forecast(arguments: Any) -> int:
     wind = V841ReferenceWindProfiles(wind_u, wind_v)
     stride = int(history_minutes) * 60 // int(row.dt_seconds)
     with MetalContext() as context:
-        driver = DryDycoreDriver(
-            mesh, native.vertical_grid, reference, config,
-            terrain_metrics=native.terrain_metrics,
-            reference_wind_profiles=wind, index_qv=0,
-            metal_context=context, backend="metal",
+        driver = MetalDycoreV841.from_host(
+            context, mesh, state, native.vertical_grid, reference, config,
+            saved_diagnostics=saved, terrain_metrics=native.terrain_metrics,
+            reference_wind_profiles=wind,
         )
         for step in range(1, steps + 1):
-            result = driver.step(state, saved_diagnostics=saved)
-            state, saved = result.state, result.saved_diagnostics
+            driver.step_device()
             if step % stride == 0:
+                state = driver.atmosphere.state.to_host()
                 frame_time = valid_time + timedelta(seconds=step * row.dt_seconds)
                 write_dry_state_history(
                     out / f"history.{step:06d}.nc", mesh, state, frame_time,
                     initial_time=valid_time, vertical_grid=native.vertical_grid,
                 )
+        state = driver.atmosphere.state.to_host()
         state.validate(
             n_cells=int(mesh.dimensions["nCells"]),
             n_edges=int(mesh.dimensions["nEdges"]),
             n_vert_levels=int(mesh.dimensions["nVertLevels"]),
         )
 
-    receipt_path = out / "forecast-receipt.json"
     receipt_path.write_text(json.dumps({
         "schema": "woof.hex.metal-forecast/v1",
         "backend": "metal",
+        "case_label": getattr(arguments, "case_label", None),
+        "physics": "none",
+        "horiz_mixing": horiz_mixing,
         "mesh": mesh_name,
         "init": str(init),
         "init_source": init_source,

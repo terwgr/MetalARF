@@ -1,0 +1,90 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_euler_w_f32",
+      "module": "hexv841_euler_w_f32",
+      "source": "woof/metal/shaders/hexv841_euler_w_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "euler_w_f32",
+      "resources": [
+        [
+          "pressure_p",
+          "float",
+          "read"
+        ],
+        [
+          "dpdz",
+          "float",
+          "read"
+        ],
+        [
+          "rdzu",
+          "float",
+          "read"
+        ],
+        [
+          "fzm",
+          "float",
+          "read"
+        ],
+        [
+          "fzp",
+          "float",
+          "read"
+        ],
+        [
+          "result",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dpdz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "result": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

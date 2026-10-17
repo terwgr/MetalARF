@@ -1,0 +1,138 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_pressure_gradient_v841_f32",
+      "module": "hexv841_pressure_gradient_v841_f32",
+      "source": "woof/metal/shaders/hexv841_pressure_gradient_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_v841.py",
+      "cuda_symbol": "pressure_gradient_v841_f32",
+      "resources": [
+        [
+          "pressure_p",
+          "float",
+          "read"
+        ],
+        [
+          "dpdz",
+          "float",
+          "read"
+        ],
+        [
+          "cqu",
+          "float",
+          "read"
+        ],
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "zxu",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float",
+          "read"
+        ],
+        [
+          "tendency",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pressure_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "dpdz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cqu": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "zxu": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

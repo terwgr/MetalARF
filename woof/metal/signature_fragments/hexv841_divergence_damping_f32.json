@@ -1,0 +1,120 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_divergence_damping_f32",
+      "module": "hexv841_divergence_damping_f32",
+      "source": "woof/metal/shaders/hexv841_divergence_damping_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal.py",
+      "cuda_symbol": "divergence_damping_f32",
+      "resources": [
+        [
+          "theta_m",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_pp_old",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "spec_zone_mask_edge",
+          "float",
+          "read"
+        ],
+        [
+          "rho_u_perturbation",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta_m": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp_old": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "spec_zone_mask_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_u_perturbation": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "coefficient",
+          "float32"
+        ],
+        [
+          "n_cells_solve",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

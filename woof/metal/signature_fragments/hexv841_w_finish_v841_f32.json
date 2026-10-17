@@ -1,0 +1,118 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_w_finish_v841_f32",
+      "module": "hexv841_w_finish_v841_f32",
+      "source": "woof/metal/shaders/hexv841_w_finish_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_dynamics_v841.py",
+      "cuda_symbol": "w_finish_v841_f32",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "acoustic_sign",
+          "float",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "rdzu",
+          "float",
+          "read"
+        ],
+        [
+          "edge_flux",
+          "float",
+          "read"
+        ],
+        [
+          "vertical_flux",
+          "float",
+          "read"
+        ],
+        [
+          "result",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "acoustic_sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_flux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertical_flux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "result": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

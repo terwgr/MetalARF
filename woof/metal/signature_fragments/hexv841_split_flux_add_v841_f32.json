@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_split_flux_add_v841_f32",
+      "module": "hexv841_split_flux_add_v841_f32",
+      "source": "woof/metal/shaders/hexv841_split_flux_add_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_dynamics_v841.py",
+      "cuda_symbol": "split_flux_add_v841_f32",
+      "resources": [
+        [
+          "current",
+          "float",
+          "read"
+        ],
+        [
+          "accumulator",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "current": [
+          [
+            "any_1d"
+          ]
+        ],
+        "accumulator": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevels",
+          "int32"
+        ],
+        [
+          "nowners",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

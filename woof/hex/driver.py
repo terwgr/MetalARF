@@ -10,7 +10,8 @@ operations.  The orchestration follows
 * recover the large-step variables and advect passive scalars; and
 * refresh C-grid diagnostics before the next stage.
 
-Only the closed/global, dry CPU path is admitted here.  Both coupled and split
+The driver runs the dry dycore in NumPy or, with a Metal context, with its
+stage kernels on Metal (see :class:`DryDycoreDriver`).  Both coupled and split
 scalar transport are wired for one dynamics split, including the native
 terrain-coordinate conversion when the frozen ``zb``/``zb3`` coupling metrics
 are supplied.  The frozen JW 2-D Smagorinsky filters, three-dimensional
@@ -2203,12 +2204,14 @@ def make_synthetic_x1_case(
 
 
 class DryDycoreDriver:
-    """Reusable preview driver with mesh/advection setup cached across steps.
+    """Reusable dry driver with mesh/advection setup cached across steps.
 
-    ``metal_context`` opts only the saved-stage horizontal mass-flux
-    divergence into Metal.  The prognostic state and all remaining stages
-    stay on the CPU; this is not the CUDA forecast route or a GPU-resident
-    whole-model backend.
+    With ``metal_context`` (or ``backend='metal'``) the stage kernels run as
+    ``hex_*`` Metal shaders: acoustic solve and damping, pressure and edge
+    diagnostics, momentum, theta and density tendencies, vertical transport
+    and scalar transport.  The host orchestrates the step and owns the
+    prognostic state between calls.  Saved Euler mixing and 3-D divergence
+    damping still run in NumPy.  This is not the CUDA forecast route.
     """
 
     def __init__(

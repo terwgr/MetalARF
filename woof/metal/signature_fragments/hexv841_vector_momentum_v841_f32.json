@@ -1,0 +1,168 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_vector_momentum_v841_f32",
+      "module": "hexv841_vector_momentum_v841_f32",
+      "source": "woof/metal/shaders/hexv841_vector_momentum_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_dynamics_v841.py",
+      "cuda_symbol": "vector_momentum_v841_f32",
+      "resources": [
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "rho_edge",
+          "float",
+          "read"
+        ],
+        [
+          "pv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "kinetic",
+          "float",
+          "read"
+        ],
+        [
+          "mass_divergence",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "weights_on_edge",
+          "float",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float",
+          "read"
+        ],
+        [
+          "reference_u",
+          "float",
+          "read"
+        ],
+        [
+          "f_edge",
+          "float",
+          "read"
+        ],
+        [
+          "result",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kinetic": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mass_divergence": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "weights_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "reference_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "f_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "result": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges2",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

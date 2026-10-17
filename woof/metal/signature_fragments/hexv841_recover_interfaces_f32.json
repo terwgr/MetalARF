@@ -1,0 +1,84 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_recover_interfaces_f32",
+      "module": "hexv841_recover_interfaces_f32",
+      "source": "woof/metal/shaders/hexv841_recover_interfaces_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "recover_interfaces_f32",
+      "resources": [
+        [
+          "rw_saved",
+          "float",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float",
+          "read"
+        ],
+        [
+          "ww_avg_p",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read_write"
+        ],
+        [
+          "flux_w",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rw_saved": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww_avg_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux_w": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "acoustic_steps",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

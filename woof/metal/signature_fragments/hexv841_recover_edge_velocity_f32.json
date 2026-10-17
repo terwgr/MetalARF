@@ -1,0 +1,74 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_recover_edge_velocity_f32",
+      "module": "hexv841_recover_edge_velocity_f32",
+      "source": "woof/metal/shaders/hexv841_recover_edge_velocity_f32.metal",
+      "cuda_source": "woof/hex/cuda_backend/recovery.py",
+      "cuda_symbol": "recover_edge_velocity_f32",
+      "resources": [
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "ru",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

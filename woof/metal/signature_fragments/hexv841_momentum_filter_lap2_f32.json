@@ -1,0 +1,181 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_momentum_filter_lap2_f32",
+      "module": "hexv841_momentum_filter_lap2_f32",
+      "source": "woof/metal/shaders/hexv841_momentum_filter_lap2_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal.py",
+      "cuda_symbol": "momentum_filter_lap2_f32",
+      "resources": [
+        [
+          "rho_edge",
+          "float",
+          "read"
+        ],
+        [
+          "divergence",
+          "float",
+          "read"
+        ],
+        [
+          "vorticity",
+          "float",
+          "read"
+        ],
+        [
+          "kdiff",
+          "float",
+          "read"
+        ],
+        [
+          "del2",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dc_edge",
+          "float",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "delsq_u",
+          "float",
+          "read_write"
+        ],
+        [
+          "tendency",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "divergence": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "vorticity": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "kdiff": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "del2": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "dc_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "delsq_u": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

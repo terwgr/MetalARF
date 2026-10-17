@@ -1,0 +1,99 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_acoustic_prepare_v841",
+      "module": "hexv841_acoustic_prepare_v841",
+      "source": "woof/metal/shaders/hexv841_acoustic_prepare_v841.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_v841.py",
+      "cuda_symbol": "acoustic_prepare_v841",
+      "resources": [
+        [
+          "rw_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_pp_old",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rw_p": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rtheta_pp_old": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "small_step",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,155 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_w_filter_lap4_f32",
+      "module": "hexv841_w_filter_lap4_f32",
+      "source": "woof/metal/shaders/hexv841_w_filter_lap4_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal.py",
+      "cuda_symbol": "w_filter_lap4_f32",
+      "resources": [
+        [
+          "delsq_w",
+          "float",
+          "read"
+        ],
+        [
+          "del4",
+          "float",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dc_edge",
+          "float",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "tendency",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "delsq_w": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "del4": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "dc_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "area_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "h4",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_add_inplace_f32",
+      "module": "hexv841_add_inplace_f32",
+      "source": "woof/metal/shaders/hexv841_add_inplace_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "add_inplace_f32",
+      "resources": [
+        [
+          "increment",
+          "float",
+          "read"
+        ],
+        [
+          "target",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "increment": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevels",
+          "int32"
+        ],
+        [
+          "nowners",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

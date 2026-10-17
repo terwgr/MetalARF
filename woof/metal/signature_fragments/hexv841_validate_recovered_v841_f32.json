@@ -1,0 +1,154 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_validate_recovered_v841_f32",
+      "module": "hexv841_validate_recovered_v841_f32",
+      "source": "woof/metal/shaders/hexv841_validate_recovered_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_dynamics_v841.py",
+      "cuda_symbol": "validate_recovered_v841_f32",
+      "resources": [
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "rho_theta",
+          "float",
+          "read"
+        ],
+        [
+          "rho_u",
+          "float",
+          "read"
+        ],
+        [
+          "rho_w",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "rho_p",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_p",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_p",
+          "float",
+          "read"
+        ],
+        [
+          "normal_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "vertical_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertical_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

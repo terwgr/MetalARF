@@ -1,0 +1,49 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_validate_density_v841",
+      "module": "hexv841_validate_density_v841",
+      "source": "woof/metal/shaders/hexv841_validate_density_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "validate_density_v841",
+      "resources": [
+        [
+          "density",
+          "float32",
+          "read"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "density": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nvalues",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

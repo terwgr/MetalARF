@@ -1,0 +1,112 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_validate_transport_indices_v841",
+      "module": "hexv841_validate_transport_indices_v841",
+      "source": "woof/metal/shaders/hexv841_validate_transport_indices_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "validate_transport_indices_v841",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "n_adv",
+          "int32",
+          "read"
+        ],
+        [
+          "adv_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "cells_on_cell": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "nedges",
+            "2"
+          ]
+        ],
+        "n_adv": [
+          [
+            "nedges"
+          ]
+        ],
+        "adv_cells": [
+          [
+            "nedges",
+            "width"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

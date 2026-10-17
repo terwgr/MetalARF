@@ -1,0 +1,133 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_pv_cell_v841_f32",
+      "module": "hexv841_pv_cell_v841_f32",
+      "source": "woof/metal/shaders/hexv841_pv_cell_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_v841.py",
+      "cuda_symbol": "pv_cell_v841_f32",
+      "resources": [
+        [
+          "pv_vertex",
+          "float",
+          "read"
+        ],
+        [
+          "vertices_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "kite_areas",
+          "float",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float",
+          "read"
+        ],
+        [
+          "pv_cell",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pv_vertex": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "vertices_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cells_on_vertex": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "kite_areas": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "pv_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

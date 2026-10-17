@@ -1,0 +1,99 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_tangential_velocity_f32",
+      "module": "hexv841_tangential_velocity_f32",
+      "source": "woof/metal/shaders/hexv841_tangential_velocity_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal.py",
+      "cuda_symbol": "tangential_velocity_f32",
+      "resources": [
+        [
+          "normal_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "edges_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "weights_on_edge",
+          "float",
+          "read"
+        ],
+        [
+          "tangential_velocity",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "normal_velocity": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "edges_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "n_edges_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "weights_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "tangential_velocity": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges2",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

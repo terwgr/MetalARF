@@ -1,0 +1,132 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_w_edge_flux_f32",
+      "module": "hexv841_w_edge_flux_f32",
+      "source": "woof/metal/shaders/hexv841_w_edge_flux_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "w_edge_flux_f32",
+      "resources": [
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "ru",
+          "float",
+          "read"
+        ],
+        [
+          "fzm",
+          "float",
+          "read"
+        ],
+        [
+          "fzp",
+          "float",
+          "read"
+        ],
+        [
+          "adv",
+          "float",
+          "read"
+        ],
+        [
+          "adv3",
+          "float",
+          "read"
+        ],
+        [
+          "n_adv",
+          "int32",
+          "read"
+        ],
+        [
+          "adv_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "flux",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "coefficient",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

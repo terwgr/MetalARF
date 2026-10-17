@@ -1,0 +1,60 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_w_vertical_flux_f32",
+      "module": "hexv841_w_vertical_flux_f32",
+      "source": "woof/metal/shaders/hexv841_w_vertical_flux_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "w_vertical_flux_f32",
+      "resources": [
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read"
+        ],
+        [
+          "flux",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

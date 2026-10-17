@@ -1,0 +1,69 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_transport_interpolate_target_v841",
+      "module": "hexv841_transport_interpolate_target_v841",
+      "source": "woof/metal/shaders/hexv841_transport_interpolate_target_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "transport_interpolate_target_v841",
+      "resources": [
+        [
+          "rho_old",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_new",
+          "float32",
+          "read"
+        ],
+        [
+          "target",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_old": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_new": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nvalues",
+          "int32"
+        ],
+        [
+          "weight",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

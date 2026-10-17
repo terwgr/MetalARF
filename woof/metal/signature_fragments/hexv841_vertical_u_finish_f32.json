@@ -1,0 +1,60 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_vertical_u_finish_f32",
+      "module": "hexv841_vertical_u_finish_f32",
+      "source": "woof/metal/shaders/hexv841_vertical_u_finish_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "vertical_u_finish_f32",
+      "resources": [
+        [
+          "rdzw",
+          "float",
+          "read"
+        ],
+        [
+          "flux",
+          "float",
+          "read"
+        ],
+        [
+          "result",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "result": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

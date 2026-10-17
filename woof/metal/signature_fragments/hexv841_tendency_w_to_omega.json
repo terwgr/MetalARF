@@ -1,0 +1,166 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_tendency_w_to_omega",
+      "module": "hexv841_tendency_w_to_omega",
+      "source": "woof/metal/shaders/hexv841_tendency_w_to_omega.metal",
+      "cuda_source": "woof/hex/cuda_acoustic.py",
+      "cuda_symbol": "tendency_w_to_omega",
+      "resources": [
+        [
+          "edge_sign_on_cell",
+          "float",
+          "read"
+        ],
+        [
+          "u_tendency",
+          "float",
+          "read"
+        ],
+        [
+          "fzm",
+          "float",
+          "read"
+        ],
+        [
+          "fzp",
+          "float",
+          "read"
+        ],
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "zb",
+          "float",
+          "read"
+        ],
+        [
+          "zb3",
+          "float",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "omega_tendency",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "u_tendency": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "zb": [
+          [
+            "nlev+1",
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "zb3": [
+          [
+            "nlev+1",
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "omega_tendency": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

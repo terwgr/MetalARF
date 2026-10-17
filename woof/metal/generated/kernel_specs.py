@@ -6593,6 +6593,494 @@ REFL10CM_WSM6_COLUMN_THREADS_PER_GROUP = 32
 REFL10CM_WSM6_COLUMN_LAYOUT_HASH = '443dbcd81754ad8b4feb62f1536f880fc1f45eb1aecc9815028896243fcfc8c7'
 REFL10CM_WSM6_COLUMN_SHADER_HASH = 'fe3a8967da6e0c9b00fa491349676a0f6568d613788a099020005aca9e744fd4'
 
+HEXV841_ACOUSTIC_COEFFICIENTS_V841_RESOURCES = (('zz', 'float', 'read'), ('cqw', 'float', 'read'), ('exner', 'float', 'read'), ('theta', 'float', 'read'), ('rho_base', 'float', 'read'), ('rtheta_base', 'float', 'read'), ('exner_base', 'float', 'read'), ('rtheta_p', 'float', 'read'), ('qtot', 'float', 'read'), ('rdzw', 'float', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('rdzu', 'float', 'read'), ('etp', 'float', 'read'), ('ewp', 'float', 'read'), ('cofrz', 'float', 'read'), ('cofwr', 'float', 'read_write'), ('cofwz', 'float', 'read_write'), ('coftz', 'float', 'read_write'), ('cofwt', 'float', 'read_write'), ('a_tri', 'float', 'read_write'), ('b_tri', 'float', 'read_write'), ('c_tri', 'float', 'read_write'), ('alpha_tri', 'float', 'read_write'), ('gamma_tri', 'float', 'read_write'), ('singular', 'int32', 'read_write'))
+HEXV841_ACOUSTIC_COEFFICIENTS_V841_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+HEXV841_ACOUSTIC_COEFFICIENTS_V841_SHAPES = (('zz', (('any_1d',), ('any_2d',))), ('cqw', (('any_1d',), ('any_2d',))), ('exner', (('any_1d',), ('any_2d',))), ('theta', (('any_1d',), ('any_2d',))), ('rho_base', (('any_1d',), ('any_2d',))), ('rtheta_base', (('any_1d',), ('any_2d',))), ('exner_base', (('any_1d',), ('any_2d',))), ('rtheta_p', (('any_1d',), ('any_2d',))), ('qtot', (('any_1d',), ('any_2d',))), ('rdzw', (('any_1d',), ('any_2d',))), ('fzm', (('any_1d',), ('any_2d',))), ('fzp', (('any_1d',), ('any_2d',))), ('rdzu', (('any_1d',), ('any_2d',))), ('etp', (('any_1d',), ('any_2d',))), ('ewp', (('any_1d',), ('any_2d',))), ('cofrz', (('any_1d',), ('any_2d',))), ('cofwr', (('any_1d',), ('any_2d',))), ('cofwz', (('any_1d',), ('any_2d',))), ('coftz', (('any_1d',), ('any_2d',))), ('cofwt', (('any_1d',), ('any_2d',))), ('a_tri', (('any_1d',), ('any_2d',))), ('b_tri', (('any_1d',), ('any_2d',))), ('c_tri', (('any_1d',), ('any_2d',))), ('alpha_tri', (('any_1d',), ('any_2d',))), ('gamma_tri', (('any_1d',), ('any_2d',))), ('singular', (('any_1d',), ('any_2d',))))
+HEXV841_ACOUSTIC_COEFFICIENTS_V841_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('dts', 'ctypes.c_float'), ('gravity', 'ctypes.c_float'), ('rgas', 'ctypes.c_float'), ('cp', 'ctypes.c_float')]
+HEXV841_ACOUSTIC_COEFFICIENTS_V841_THREADS_PER_GROUP = 128
+HEXV841_ACOUSTIC_COEFFICIENTS_V841_LAYOUT_HASH = 'fb515e999453129e81725ff3591afb8bcd62cf784112eeaf4690969cd74330a0'
+HEXV841_ACOUSTIC_COEFFICIENTS_V841_SHADER_HASH = 'a1968e965d9edf75f395e852ada02ea75e8ff49cf19b6916c7a32feea5c1494f'
+
+HEXV841_ACOUSTIC_COFRZ_V841_RESOURCES = (('rdzw', 'float', 'read'), ('cofrz', 'float', 'read_write'))
+HEXV841_ACOUSTIC_COFRZ_V841_ACCESS = ('read', 'read_write')
+HEXV841_ACOUSTIC_COFRZ_V841_SHAPES = (('rdzw', (('any_1d',), ('any_2d',))), ('cofrz', (('any_1d',), ('any_2d',))))
+HEXV841_ACOUSTIC_COFRZ_V841_PARAM_FIELDS = [('nlev', 'ctypes.c_int32')]
+HEXV841_ACOUSTIC_COFRZ_V841_THREADS_PER_GROUP = 128
+HEXV841_ACOUSTIC_COFRZ_V841_LAYOUT_HASH = 'd7f8e1e8975621e9f954553cf947bfc81c268c0ee6dceb305e24df595e7785e4'
+HEXV841_ACOUSTIC_COFRZ_V841_SHADER_HASH = '70b8be1dd450a9e7e7f9bc5c5873516bddcaf4f6bb35d6e4ceaaaddf585881f1'
+
+HEXV841_ACOUSTIC_COLUMN_SOLVE_V841_RESOURCES = (('zz', 'float', 'read'), ('rho_zz', 'float', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('rdzw', 'float', 'read'), ('dss', 'float', 'read'), ('w', 'float', 'read'), ('rw', 'float', 'read'), ('rw_save', 'float', 'read'), ('tend_rw', 'float', 'read'), ('rs', 'float', 'read'), ('ts', 'float', 'read'), ('cofwr', 'float', 'read'), ('cofwz', 'float', 'read'), ('coftz', 'float', 'read'), ('cofwt', 'float', 'read'), ('cofrz', 'float', 'read'), ('a_tri', 'float', 'read'), ('alpha_tri', 'float', 'read'), ('gamma_tri', 'float', 'read'), ('etp', 'float', 'read'), ('etm', 'float', 'read'), ('ewp', 'float', 'read'), ('ewm', 'float', 'read'), ('rw_p', 'float', 'read_write'), ('rho_pp', 'float', 'read_write'), ('rtheta_pp', 'float', 'read_write'), ('ww_avg', 'float', 'read_write'))
+HEXV841_ACOUSTIC_COLUMN_SOLVE_V841_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
+HEXV841_ACOUSTIC_COLUMN_SOLVE_V841_SHAPES = (('zz', (('any_1d',), ('any_2d',))), ('rho_zz', (('any_1d',), ('any_2d',))), ('fzm', (('any_1d',), ('any_2d',))), ('fzp', (('any_1d',), ('any_2d',))), ('rdzw', (('any_1d',), ('any_2d',))), ('dss', (('any_1d',), ('any_2d',))), ('w', (('any_1d',), ('any_2d',))), ('rw', (('any_1d',), ('any_2d',))), ('rw_save', (('any_1d',), ('any_2d',))), ('tend_rw', (('any_1d',), ('any_2d',))), ('rs', (('any_1d',), ('any_2d',))), ('ts', (('any_1d',), ('any_2d',))), ('cofwr', (('any_1d',), ('any_2d',))), ('cofwz', (('any_1d',), ('any_2d',))), ('coftz', (('any_1d',), ('any_2d',))), ('cofwt', (('any_1d',), ('any_2d',))), ('cofrz', (('any_1d',), ('any_2d',))), ('a_tri', (('any_1d',), ('any_2d',))), ('alpha_tri', (('any_1d',), ('any_2d',))), ('gamma_tri', (('any_1d',), ('any_2d',))), ('etp', (('any_1d',), ('any_2d',))), ('etm', (('any_1d',), ('any_2d',))), ('ewp', (('any_1d',), ('any_2d',))), ('ewm', (('any_1d',), ('any_2d',))), ('rw_p', (('any_1d',), ('any_2d',))), ('rho_pp', (('any_1d',), ('any_2d',))), ('rtheta_pp', (('any_1d',), ('any_2d',))), ('ww_avg', (('any_1d',), ('any_2d',))))
+HEXV841_ACOUSTIC_COLUMN_SOLVE_V841_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('dts', 'ctypes.c_float')]
+HEXV841_ACOUSTIC_COLUMN_SOLVE_V841_THREADS_PER_GROUP = 128
+HEXV841_ACOUSTIC_COLUMN_SOLVE_V841_LAYOUT_HASH = '274c03f941887f786842663c732530d5257e5c779bb8fbb9ed9f9df0b2c0b759'
+HEXV841_ACOUSTIC_COLUMN_SOLVE_V841_SHADER_HASH = '71bb131ceee49bea23695efe1319cb1f0149f7d6a3006c5033ef73ad83259151'
+
+HEXV841_ACOUSTIC_PREPARE_V841_RESOURCES = (('rw_p', 'float', 'read_write'), ('rtheta_pp', 'float', 'read_write'), ('rtheta_pp_old', 'float', 'read_write'), ('rho_pp', 'float', 'read_write'), ('ww_avg', 'float', 'read_write'))
+HEXV841_ACOUSTIC_PREPARE_V841_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+HEXV841_ACOUSTIC_PREPARE_V841_SHAPES = (('rw_p', (('any_1d',), ('any_2d',))), ('rtheta_pp', (('any_1d',), ('any_2d',))), ('rtheta_pp_old', (('any_1d',), ('any_2d',))), ('rho_pp', (('any_1d',), ('any_2d',))), ('ww_avg', (('any_1d',), ('any_2d',))))
+HEXV841_ACOUSTIC_PREPARE_V841_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('small_step', 'ctypes.c_int32')]
+HEXV841_ACOUSTIC_PREPARE_V841_THREADS_PER_GROUP = 128
+HEXV841_ACOUSTIC_PREPARE_V841_LAYOUT_HASH = 'abbe5e93f01352456ad748c5ff6643cb121edeb9918be1b10a97bf4f69bcada0'
+HEXV841_ACOUSTIC_PREPARE_V841_SHADER_HASH = 'c20ee542e240022725533cb91c8cb9e45a56e21f3b525dd26a0117ca2e36609a'
+
+HEXV841_ACOUSTIC_RS_TS_V841_RESOURCES = (('edge_sign_on_cell', 'float', 'read'), ('dv_edge', 'float', 'read'), ('inv_area_cell', 'float', 'read'), ('theta_m', 'float', 'read'), ('rdzw', 'float', 'read'), ('cofrz', 'float', 'read'), ('coftz', 'float', 'read'), ('ewm', 'float', 'read'), ('ru_p', 'float', 'read'), ('rw_p', 'float', 'read'), ('rho_pp', 'float', 'read'), ('rtheta_pp', 'float', 'read'), ('tend_rho', 'float', 'read'), ('tend_rt', 'float', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('edges_on_cell', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('rs', 'float', 'read_write'), ('ts', 'float', 'read_write'))
+HEXV841_ACOUSTIC_RS_TS_V841_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV841_ACOUSTIC_RS_TS_V841_SHAPES = (('edge_sign_on_cell', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('inv_area_cell', (('any_1d',), ('any_2d',))), ('theta_m', (('any_1d',), ('any_2d',))), ('rdzw', (('any_1d',), ('any_2d',))), ('cofrz', (('any_1d',), ('any_2d',))), ('coftz', (('any_1d',), ('any_2d',))), ('ewm', (('any_1d',), ('any_2d',))), ('ru_p', (('any_1d',), ('any_2d',))), ('rw_p', (('any_1d',), ('any_2d',))), ('rho_pp', (('any_1d',), ('any_2d',))), ('rtheta_pp', (('any_1d',), ('any_2d',))), ('tend_rho', (('any_1d',), ('any_2d',))), ('tend_rt', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('rs', (('any_1d',), ('any_2d',))), ('ts', (('any_1d',), ('any_2d',))))
+HEXV841_ACOUSTIC_RS_TS_V841_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32'), ('dts', 'ctypes.c_float')]
+HEXV841_ACOUSTIC_RS_TS_V841_THREADS_PER_GROUP = 128
+HEXV841_ACOUSTIC_RS_TS_V841_LAYOUT_HASH = '6358bf7dbecefef68745feb8cee66a0a22d90da8d825ba1c01da3875eb32b040'
+HEXV841_ACOUSTIC_RS_TS_V841_SHADER_HASH = 'b94eb0eaf66b3a8c3dbd019df1a7eb988902977411e7c83843bce87eabed2484'
+
+HEXV841_ACOUSTIC_RU_V841_RESOURCES = (('inv_dc_edge', 'float', 'read'), ('zz', 'float', 'read'), ('exner', 'float', 'read'), ('cqu', 'float', 'read'), ('zxu', 'float', 'read'), ('tend_ru', 'float', 'read'), ('rho_pp', 'float', 'read'), ('rtheta_pp', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('ru_p', 'float', 'read_write'), ('ru_avg', 'float', 'read_write'))
+HEXV841_ACOUSTIC_RU_V841_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV841_ACOUSTIC_RU_V841_SHAPES = (('inv_dc_edge', (('any_1d',), ('any_2d',))), ('zz', (('any_1d',), ('any_2d',))), ('exner', (('any_1d',), ('any_2d',))), ('cqu', (('any_1d',), ('any_2d',))), ('zxu', (('any_1d',), ('any_2d',))), ('tend_ru', (('any_1d',), ('any_2d',))), ('rho_pp', (('any_1d',), ('any_2d',))), ('rtheta_pp', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('ru_p', (('any_1d',), ('any_2d',))), ('ru_avg', (('any_1d',), ('any_2d',))))
+HEXV841_ACOUSTIC_RU_V841_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('small_step', 'ctypes.c_int32'), ('dts', 'ctypes.c_float'), ('gravity', 'ctypes.c_float'), ('rgas', 'ctypes.c_float'), ('cp', 'ctypes.c_float')]
+HEXV841_ACOUSTIC_RU_V841_THREADS_PER_GROUP = 128
+HEXV841_ACOUSTIC_RU_V841_LAYOUT_HASH = '4266ad0b1c55ae187d0b0ce729b98a96b6a4039c51c557bb505a148e2f2a178b'
+HEXV841_ACOUSTIC_RU_V841_SHADER_HASH = '5eaa0f0314b6e2f8d15eb5831f4a55a81a5dc679040078a2367adede07c962c8'
+
+HEXV841_ADD_INPLACE_F32_RESOURCES = (('increment', 'float', 'read'), ('target', 'float', 'read_write'))
+HEXV841_ADD_INPLACE_F32_ACCESS = ('read', 'read_write')
+HEXV841_ADD_INPLACE_F32_SHAPES = (('increment', (('any_1d',),)), ('target', (('any_1d',),)))
+HEXV841_ADD_INPLACE_F32_PARAM_FIELDS = [('nlevels', 'ctypes.c_int32'), ('nowners', 'ctypes.c_int32')]
+HEXV841_ADD_INPLACE_F32_THREADS_PER_GROUP = 128
+HEXV841_ADD_INPLACE_F32_LAYOUT_HASH = '7fe292f33dca8597a26c259b4c762798e8cecaa6a2fb6c45729f3a2898e2beb0'
+HEXV841_ADD_INPLACE_F32_SHADER_HASH = '18c4e1f934f3ea6c6173db3c3c6ec89ec6715306fe9d73e630cb76d8cab37727'
+
+HEXV841_CELL_DIAGNOSTICS_V841_F32_RESOURCES = (('normal_velocity', 'float', 'read'), ('ke_edge', 'float', 'read'), ('ke_vertex', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('vertices_on_cell', 'int32', 'read'), ('cells_on_vertex', 'int32', 'read'), ('dv_edge', 'float', 'read'), ('inv_area_cell', 'float', 'read'), ('kite_areas', 'float', 'read'), ('divergence', 'float', 'read_write'), ('kinetic_energy', 'float', 'read_write'))
+HEXV841_CELL_DIAGNOSTICS_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV841_CELL_DIAGNOSTICS_V841_F32_SHAPES = (('normal_velocity', (('any_1d',), ('any_2d',))), ('ke_edge', (('any_1d',), ('any_2d',))), ('ke_vertex', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('vertices_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_vertex', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('inv_area_cell', (('any_1d',), ('any_2d',))), ('kite_areas', (('any_1d',), ('any_2d',))), ('divergence', (('any_1d',), ('any_2d',))), ('kinetic_energy', (('any_1d',), ('any_2d',))))
+HEXV841_CELL_DIAGNOSTICS_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('nvertices', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32'), ('vertex_degree', 'ctypes.c_int32')]
+HEXV841_CELL_DIAGNOSTICS_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_CELL_DIAGNOSTICS_V841_F32_LAYOUT_HASH = 'ec6cd3655865249d0da7c2e88e13d5c770c578fed1831a773fa418c5330e4be4'
+HEXV841_CELL_DIAGNOSTICS_V841_F32_SHADER_HASH = '1dc00165c128e1476173b6b4689d32ef4883d563e647716bd75c0bb4963d2417'
+
+HEXV841_DENSITY_TENDENCY_F32_RESOURCES = (('mass_divergence', 'float', 'read'), ('rho_w', 'float', 'read'), ('rdzw', 'float', 'read'), ('physics_tendency', 'float', 'read'), ('tendency', 'float', 'read_write'))
+HEXV841_DENSITY_TENDENCY_F32_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
+HEXV841_DENSITY_TENDENCY_F32_SHAPES = (('mass_divergence', (('any_1d',), ('any_2d',))), ('rho_w', (('any_1d',), ('any_2d',))), ('rdzw', (('any_1d',), ('any_2d',))), ('physics_tendency', (('any_1d',), ('any_2d',))), ('tendency', (('any_1d',), ('any_2d',))))
+HEXV841_DENSITY_TENDENCY_F32_PARAM_FIELDS = [('has_physics', 'ctypes.c_int32'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32')]
+HEXV841_DENSITY_TENDENCY_F32_THREADS_PER_GROUP = 128
+HEXV841_DENSITY_TENDENCY_F32_LAYOUT_HASH = '99b3dbea3c539d35246fe45cc13176328352df54a815b435f463b60e51f15221'
+HEXV841_DENSITY_TENDENCY_F32_SHADER_HASH = 'ec5c99b846cee9c2ef1edda9053899133f7cf56311e5f0b678389cf6ee90fc48'
+
+HEXV841_DIVERGENCE_DAMPING_F32_RESOURCES = (('theta_m', 'float', 'read'), ('rtheta_pp', 'float', 'read'), ('rtheta_pp_old', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('spec_zone_mask_edge', 'float', 'read'), ('rho_u_perturbation', 'float', 'read_write'))
+HEXV841_DIVERGENCE_DAMPING_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_DIVERGENCE_DAMPING_F32_SHAPES = (('theta_m', (('any_1d',), ('any_2d',))), ('rtheta_pp', (('any_1d',), ('any_2d',))), ('rtheta_pp_old', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('spec_zone_mask_edge', (('any_1d',), ('any_2d',))), ('rho_u_perturbation', (('any_1d',), ('any_2d',))))
+HEXV841_DIVERGENCE_DAMPING_F32_PARAM_FIELDS = [('coefficient', 'ctypes.c_float'), ('n_cells_solve', 'ctypes.c_int32'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32')]
+HEXV841_DIVERGENCE_DAMPING_F32_THREADS_PER_GROUP = 128
+HEXV841_DIVERGENCE_DAMPING_F32_LAYOUT_HASH = 'bde48044ccb66522e72db3de451bbc22099193d33dfe8ec7b369e708d68f69b7'
+HEXV841_DIVERGENCE_DAMPING_F32_SHADER_HASH = '241d000d028e63c4c0ff53cee8f307086f18458c668d88e29dc8661db74bdfba'
+
+HEXV841_EDGE_FIELDS_FROM_SAVED_U_F32_RESOURCES = (('rho', 'float', 'read'), ('normal_velocity', 'float', 'read'), ('dc_edge', 'float', 'read'), ('dv_edge', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('rho_edge', 'float', 'read_write'), ('ke_edge', 'float', 'read_write'))
+HEXV841_EDGE_FIELDS_FROM_SAVED_U_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV841_EDGE_FIELDS_FROM_SAVED_U_F32_SHAPES = (('rho', (('any_1d',), ('any_2d',))), ('normal_velocity', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('rho_edge', (('any_1d',), ('any_2d',))), ('ke_edge', (('any_1d',), ('any_2d',))))
+HEXV841_EDGE_FIELDS_FROM_SAVED_U_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32')]
+HEXV841_EDGE_FIELDS_FROM_SAVED_U_F32_THREADS_PER_GROUP = 128
+HEXV841_EDGE_FIELDS_FROM_SAVED_U_F32_LAYOUT_HASH = '14a12fea03f4d0d8d600cb6d6ef718f992262c809cad07df1a8568a3a0ace369'
+HEXV841_EDGE_FIELDS_FROM_SAVED_U_F32_SHADER_HASH = 'f500e0d6e487b0c350f636ee496a5117e9a79f548bf2db0937a1bb3fab3959c3'
+
+HEXV841_ENFORCE_RW_ENDPOINTS_V841_F32_RESOURCES = (('rw', 'float', 'read_write'),)
+HEXV841_ENFORCE_RW_ENDPOINTS_V841_F32_ACCESS = ('read_write',)
+HEXV841_ENFORCE_RW_ENDPOINTS_V841_F32_SHAPES = (('rw', (('any_1d',),)),)
+HEXV841_ENFORCE_RW_ENDPOINTS_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32')]
+HEXV841_ENFORCE_RW_ENDPOINTS_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_ENFORCE_RW_ENDPOINTS_V841_F32_LAYOUT_HASH = '30af1d62764bcc0f852cf252cae1cca31820527ba9bc4fcb1264eeb06a446ed8'
+HEXV841_ENFORCE_RW_ENDPOINTS_V841_F32_SHADER_HASH = '48c8530e300f4936b5dbe67bd6355ba37f76dead49d10cf83bacb76debd68337'
+
+HEXV841_EULER_W_F32_RESOURCES = (('pressure_p', 'float', 'read'), ('dpdz', 'float', 'read'), ('rdzu', 'float', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('result', 'float', 'read_write'))
+HEXV841_EULER_W_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_EULER_W_F32_SHAPES = (('pressure_p', (('any_1d',),)), ('dpdz', (('any_1d',),)), ('rdzu', (('any_1d',),)), ('fzm', (('any_1d',),)), ('fzp', (('any_1d',),)), ('result', (('any_1d',),)))
+HEXV841_EULER_W_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32')]
+HEXV841_EULER_W_F32_THREADS_PER_GROUP = 128
+HEXV841_EULER_W_F32_LAYOUT_HASH = '9d99a08bc37012181409639259431c69049827e354f18c4d960ca4997a21a6a6'
+HEXV841_EULER_W_F32_SHADER_HASH = '797ae2016442afc9be832f5102d49998bca4773ceaa88999778e382f7c417bd4'
+
+HEXV841_LAPLACIAN_DIVERGENCE_F32_RESOURCES = (('delsq_u', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('dv_edge', 'float', 'read'), ('area_cell', 'float', 'read'), ('delsq_divergence', 'float', 'read_write'))
+HEXV841_LAPLACIAN_DIVERGENCE_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_LAPLACIAN_DIVERGENCE_F32_SHAPES = (('delsq_u', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('area_cell', (('any_1d',), ('any_2d',))), ('delsq_divergence', (('any_1d',), ('any_2d',))))
+HEXV841_LAPLACIAN_DIVERGENCE_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_LAPLACIAN_DIVERGENCE_F32_THREADS_PER_GROUP = 128
+HEXV841_LAPLACIAN_DIVERGENCE_F32_LAYOUT_HASH = 'ab745982e524dbdc0da75002453b4604af94158fa83ff58616b4a60e35cdc9f2'
+HEXV841_LAPLACIAN_DIVERGENCE_F32_SHADER_HASH = '3687cb99be3c0a4c8a1314f207b8992b6165926e1f5fc3147b787aec17e4e12d'
+
+HEXV841_LAPLACIAN_VORTICITY_F32_RESOURCES = (('delsq_u', 'float', 'read'), ('edges_on_vertex', 'int32', 'read'), ('vertices_on_edge', 'int32', 'read'), ('dc_edge', 'float', 'read'), ('area_triangle', 'float', 'read'), ('delsq_vorticity', 'float', 'read_write'))
+HEXV841_LAPLACIAN_VORTICITY_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_LAPLACIAN_VORTICITY_F32_SHAPES = (('delsq_u', (('any_1d',), ('any_2d',))), ('edges_on_vertex', (('any_1d',), ('any_2d',))), ('vertices_on_edge', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('area_triangle', (('any_1d',), ('any_2d',))), ('delsq_vorticity', (('any_1d',), ('any_2d',))))
+HEXV841_LAPLACIAN_VORTICITY_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('nvertices', 'ctypes.c_int32'), ('vertex_degree', 'ctypes.c_int32')]
+HEXV841_LAPLACIAN_VORTICITY_F32_THREADS_PER_GROUP = 128
+HEXV841_LAPLACIAN_VORTICITY_F32_LAYOUT_HASH = '5eb038f32eddf9ada9d00bdcfcea53553b07d7034bc65d496156886d0129d157'
+HEXV841_LAPLACIAN_VORTICITY_F32_SHADER_HASH = '14498339576139ab60754fc4377255783a396c612ed79628ce4c43c21191cca9'
+
+HEXV841_MASS_FLUX_DIVERGENCE_V841_F32_RESOURCES = (('rho_u', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('dv_edge', 'float', 'read'), ('inv_area_cell', 'float', 'read'), ('mass_divergence', 'float', 'read_write'))
+HEXV841_MASS_FLUX_DIVERGENCE_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_MASS_FLUX_DIVERGENCE_V841_F32_SHAPES = (('rho_u', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('inv_area_cell', (('any_1d',), ('any_2d',))), ('mass_divergence', (('any_1d',), ('any_2d',))))
+HEXV841_MASS_FLUX_DIVERGENCE_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_MASS_FLUX_DIVERGENCE_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_MASS_FLUX_DIVERGENCE_V841_F32_LAYOUT_HASH = '8178ab7a71e480d0a4ef17b81d8953d03755c2adee3147c57c06f03f261e181d'
+HEXV841_MASS_FLUX_DIVERGENCE_V841_F32_SHADER_HASH = '01484042f465be28a396022f8caa7a3a083e72db506f82873d9dcf409b58e7c1'
+
+HEXV841_MIXING_SCALING_F32_RESOURCES = (('cells_on_edge', 'int32', 'read'), ('mesh_density', 'float', 'read'), ('del2', 'float', 'read_write'), ('del4', 'float', 'read_write'))
+HEXV841_MIXING_SCALING_F32_ACCESS = ('read', 'read', 'read_write', 'read_write')
+HEXV841_MIXING_SCALING_F32_SHAPES = (('cells_on_edge', (('any_1d',), ('any_2d',))), ('mesh_density', (('any_1d',), ('any_2d',))), ('del2', (('any_1d',), ('any_2d',))), ('del4', (('any_1d',), ('any_2d',))))
+HEXV841_MIXING_SCALING_F32_PARAM_FIELDS = [('nedges', 'ctypes.c_int32'), ('scale_with_mesh', 'ctypes.c_int32')]
+HEXV841_MIXING_SCALING_F32_THREADS_PER_GROUP = 128
+HEXV841_MIXING_SCALING_F32_LAYOUT_HASH = 'faecad4f0b9a36dea2994a2f270aaefa204f12fb795be086808196d4602513b8'
+HEXV841_MIXING_SCALING_F32_SHADER_HASH = 'ce0654cfacf939dad073371fec4919dc91524625442d21cc37bf8cc8abfca022'
+
+HEXV841_MOMENTUM_FILTER_LAP2_F32_RESOURCES = (('rho_edge', 'float', 'read'), ('divergence', 'float', 'read'), ('vorticity', 'float', 'read'), ('kdiff', 'float', 'read'), ('del2', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('vertices_on_edge', 'int32', 'read'), ('dc_edge', 'float', 'read'), ('dv_edge', 'float', 'read'), ('delsq_u', 'float', 'read_write'), ('tendency', 'float', 'read_write'))
+HEXV841_MOMENTUM_FILTER_LAP2_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV841_MOMENTUM_FILTER_LAP2_F32_SHAPES = (('rho_edge', (('any_1d',), ('any_2d',))), ('divergence', (('any_1d',), ('any_2d',))), ('vorticity', (('any_1d',), ('any_2d',))), ('kdiff', (('any_1d',), ('any_2d',))), ('del2', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('vertices_on_edge', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('delsq_u', (('any_1d',), ('any_2d',))), ('tendency', (('any_1d',), ('any_2d',))))
+HEXV841_MOMENTUM_FILTER_LAP2_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('nvertices', 'ctypes.c_int32')]
+HEXV841_MOMENTUM_FILTER_LAP2_F32_THREADS_PER_GROUP = 128
+HEXV841_MOMENTUM_FILTER_LAP2_F32_LAYOUT_HASH = '46a69570aaa13bcfdbcc1195b94fde6bb045da095f2d612a4573f83cc167b4e4'
+HEXV841_MOMENTUM_FILTER_LAP2_F32_SHADER_HASH = '0bc43d7363766cb5945c1865ebef1e64091826e4352d94b9c23c2a3479e15d57'
+
+HEXV841_MOMENTUM_FILTER_LAP4_F32_RESOURCES = (('rho_edge', 'float', 'read'), ('delsq_divergence', 'float', 'read'), ('delsq_vorticity', 'float', 'read'), ('del4', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('vertices_on_edge', 'int32', 'read'), ('dc_edge', 'float', 'read'), ('dv_edge', 'float', 'read'), ('tendency', 'float', 'read_write'))
+HEXV841_MOMENTUM_FILTER_LAP4_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_MOMENTUM_FILTER_LAP4_F32_SHAPES = (('rho_edge', (('any_1d',), ('any_2d',))), ('delsq_divergence', (('any_1d',), ('any_2d',))), ('delsq_vorticity', (('any_1d',), ('any_2d',))), ('del4', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('vertices_on_edge', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('tendency', (('any_1d',), ('any_2d',))))
+HEXV841_MOMENTUM_FILTER_LAP4_F32_PARAM_FIELDS = [('h4', 'ctypes.c_float'), ('div_factor', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('nvertices', 'ctypes.c_int32')]
+HEXV841_MOMENTUM_FILTER_LAP4_F32_THREADS_PER_GROUP = 128
+HEXV841_MOMENTUM_FILTER_LAP4_F32_LAYOUT_HASH = '7de51e5e039f0eeed2972ed1e7aa541d94e55a4bc245cf2e01e2271889fd951f'
+HEXV841_MOMENTUM_FILTER_LAP4_F32_SHADER_HASH = '6c787343c7a99b88d3828e5efbddb482a6349874063bfe1e79f40edf290791a4'
+
+HEXV841_PRESSURE_GRADIENT_V841_F32_RESOURCES = (('pressure_p', 'float', 'read'), ('dpdz', 'float', 'read'), ('cqu', 'float', 'read'), ('zz', 'float', 'read'), ('zxu', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('inv_dc_edge', 'float', 'read'), ('tendency', 'float', 'read_write'))
+HEXV841_PRESSURE_GRADIENT_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_PRESSURE_GRADIENT_V841_F32_SHAPES = (('pressure_p', (('any_1d',), ('any_2d',))), ('dpdz', (('any_1d',), ('any_2d',))), ('cqu', (('any_1d',), ('any_2d',))), ('zz', (('any_1d',), ('any_2d',))), ('zxu', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('inv_dc_edge', (('any_1d',), ('any_2d',))), ('tendency', (('any_1d',), ('any_2d',))))
+HEXV841_PRESSURE_GRADIENT_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32')]
+HEXV841_PRESSURE_GRADIENT_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_PRESSURE_GRADIENT_V841_F32_LAYOUT_HASH = '24903c1ee151035ada86ab312fbba24836cf37a0dc4a889a3a9492ef815d29e7'
+HEXV841_PRESSURE_GRADIENT_V841_F32_SHADER_HASH = '0ea3a70f8e2f525c3f9e81e4e666ad6ec5a431c7fc17d45dc24c10d141435c51'
+
+HEXV841_PV_APVM_V841_F32_RESOURCES = (('normal_velocity', 'float', 'read'), ('tangential_velocity', 'float', 'read'), ('pv_vertex', 'float', 'read'), ('pv_cell', 'float', 'read'), ('vertices_on_edge', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('inv_dc_edge', 'float', 'read'), ('inv_dv_edge', 'float', 'read'), ('pv_edge', 'float', 'read_write'), ('grad_pv_normal', 'float', 'read_write'), ('grad_pv_tangential', 'float', 'read_write'))
+HEXV841_PV_APVM_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
+HEXV841_PV_APVM_V841_F32_SHAPES = (('normal_velocity', (('any_1d',), ('any_2d',))), ('tangential_velocity', (('any_1d',), ('any_2d',))), ('pv_vertex', (('any_1d',), ('any_2d',))), ('pv_cell', (('any_1d',), ('any_2d',))), ('vertices_on_edge', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('inv_dc_edge', (('any_1d',), ('any_2d',))), ('inv_dv_edge', (('any_1d',), ('any_2d',))), ('pv_edge', (('any_1d',), ('any_2d',))), ('grad_pv_normal', (('any_1d',), ('any_2d',))), ('grad_pv_tangential', (('any_1d',), ('any_2d',))))
+HEXV841_PV_APVM_V841_F32_PARAM_FIELDS = [('scale', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('nvertices', 'ctypes.c_int32')]
+HEXV841_PV_APVM_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_PV_APVM_V841_F32_LAYOUT_HASH = 'fe92bc8ea6bce37a1d5e76e9386e04650de37532e5a9c585c2fe8eb0e2556cc1'
+HEXV841_PV_APVM_V841_F32_SHADER_HASH = 'ef6dba191c3d2ba07d57a55ffac3c29aaa24b879ba4449e8384b1ba10ee7ce5d'
+
+HEXV841_PV_CELL_V841_F32_RESOURCES = (('pv_vertex', 'float', 'read'), ('vertices_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('cells_on_vertex', 'int32', 'read'), ('kite_areas', 'float', 'read'), ('inv_area_cell', 'float', 'read'), ('pv_cell', 'float', 'read_write'))
+HEXV841_PV_CELL_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_PV_CELL_V841_F32_SHAPES = (('pv_vertex', (('any_1d',), ('any_2d',))), ('vertices_on_cell', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_vertex', (('any_1d',), ('any_2d',))), ('kite_areas', (('any_1d',), ('any_2d',))), ('inv_area_cell', (('any_1d',), ('any_2d',))), ('pv_cell', (('any_1d',), ('any_2d',))))
+HEXV841_PV_CELL_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nvertices', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32'), ('vertex_degree', 'ctypes.c_int32')]
+HEXV841_PV_CELL_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_PV_CELL_V841_F32_LAYOUT_HASH = 'a86aaf6db0e269515b96032043aaf917ea3a6f056b4038ece0679c7da9d5a5cf'
+HEXV841_PV_CELL_V841_F32_SHADER_HASH = '3f9074e678832ce489b9abd4387eeb2dbebc688b7dbd3f3c325a52ef7e4c276e'
+
+HEXV841_PV_EDGE_BASE_F32_RESOURCES = (('pv_vertex', 'float', 'read'), ('vertices_on_edge', 'int32', 'read'), ('pv_edge', 'float', 'read_write'))
+HEXV841_PV_EDGE_BASE_F32_ACCESS = ('read', 'read', 'read_write')
+HEXV841_PV_EDGE_BASE_F32_SHAPES = (('pv_vertex', (('any_1d',), ('any_2d',))), ('vertices_on_edge', (('any_1d',), ('any_2d',))), ('pv_edge', (('any_1d',), ('any_2d',))))
+HEXV841_PV_EDGE_BASE_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('nvertices', 'ctypes.c_int32')]
+HEXV841_PV_EDGE_BASE_F32_THREADS_PER_GROUP = 128
+HEXV841_PV_EDGE_BASE_F32_LAYOUT_HASH = '845c11b0bd04e9077cba6d5172dfe67b5baba88cb1ceb08eb275dc73b7fb5022'
+HEXV841_PV_EDGE_BASE_F32_SHADER_HASH = '1e8e2f60a988e94592a223fd006a29c10858bc9c262e6dbcf6efca25637ac516'
+
+HEXV841_RECOVER_CELLS_F32_RESOURCES = (('rho_p_saved', 'float', 'read'), ('rtheta_p_saved', 'float', 'read'), ('rho_pp', 'float', 'read'), ('rtheta_pp', 'float', 'read'), ('rho_base', 'float', 'read'), ('rtheta_base', 'float', 'read'), ('exner_base', 'float', 'read'), ('zz', 'float', 'read'), ('exner_saved', 'float', 'read'), ('pressure_p_saved', 'float', 'read'), ('rho', 'float', 'read_write'), ('rtheta', 'float', 'read_write'), ('rho_p', 'float', 'read_write'), ('rtheta_p', 'float', 'read_write'), ('theta', 'float', 'read_write'), ('exner', 'float', 'read_write'), ('pressure_p', 'float', 'read_write'))
+HEXV841_RECOVER_CELLS_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+HEXV841_RECOVER_CELLS_F32_SHAPES = (('rho_p_saved', (('any_1d',),)), ('rtheta_p_saved', (('any_1d',),)), ('rho_pp', (('any_1d',),)), ('rtheta_pp', (('any_1d',),)), ('rho_base', (('any_1d',),)), ('rtheta_base', (('any_1d',),)), ('exner_base', (('any_1d',),)), ('zz', (('any_1d',),)), ('exner_saved', (('any_1d',),)), ('pressure_p_saved', (('any_1d',),)), ('rho', (('any_1d',),)), ('rtheta', (('any_1d',),)), ('rho_p', (('any_1d',),)), ('rtheta_p', (('any_1d',),)), ('theta', (('any_1d',),)), ('exner', (('any_1d',),)), ('pressure_p', (('any_1d',),)))
+HEXV841_RECOVER_CELLS_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('stage', 'ctypes.c_int32'), ('rgas', 'ctypes.c_float'), ('cp', 'ctypes.c_float'), ('p0', 'ctypes.c_float')]
+HEXV841_RECOVER_CELLS_F32_THREADS_PER_GROUP = 128
+HEXV841_RECOVER_CELLS_F32_LAYOUT_HASH = 'd6e30eed174fd8a64dbc71f26287b742b172ba4bdef3f2035153251a88e87ca6'
+HEXV841_RECOVER_CELLS_F32_SHADER_HASH = 'e742782a9f999b2bd0aba1cb5a8da2fe41e9080cf11892bfe34fc528d86fd03b'
+
+HEXV841_RECOVER_EDGE_F32_RESOURCES = (('rho', 'float', 'read'), ('rho_u', 'float', 'read'), ('dc_edge', 'float', 'read'), ('dv_edge', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('normal_velocity', 'float', 'read_write'), ('rho_edge', 'float', 'read_write'), ('ke_edge', 'float', 'read_write'))
+HEXV841_RECOVER_EDGE_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
+HEXV841_RECOVER_EDGE_F32_SHAPES = (('rho', (('any_1d',), ('any_2d',))), ('rho_u', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('normal_velocity', (('any_1d',), ('any_2d',))), ('rho_edge', (('any_1d',), ('any_2d',))), ('ke_edge', (('any_1d',), ('any_2d',))))
+HEXV841_RECOVER_EDGE_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32')]
+HEXV841_RECOVER_EDGE_F32_THREADS_PER_GROUP = 128
+HEXV841_RECOVER_EDGE_F32_LAYOUT_HASH = '23c1189fd9ea1b516c519e318ebfb310e2291e33b2f5f116c47f7c8bb697dce3'
+HEXV841_RECOVER_EDGE_F32_SHADER_HASH = '57f95440e5fc7d55feb136c416f4480bb4435297c868a85e8d7343552118623e'
+
+HEXV841_RECOVER_EDGE_VELOCITY_F32_RESOURCES = (('rho', 'float', 'read'), ('ru', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('u', 'float', 'read_write'))
+HEXV841_RECOVER_EDGE_VELOCITY_F32_ACCESS = ('read', 'read', 'read', 'read_write')
+HEXV841_RECOVER_EDGE_VELOCITY_F32_SHAPES = (('rho', (('any_1d',),)), ('ru', (('any_1d',),)), ('cells_on_edge', (('any_1d',),)), ('u', (('any_1d',),)))
+HEXV841_RECOVER_EDGE_VELOCITY_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32')]
+HEXV841_RECOVER_EDGE_VELOCITY_F32_THREADS_PER_GROUP = 128
+HEXV841_RECOVER_EDGE_VELOCITY_F32_LAYOUT_HASH = 'b602933453f7b55d0b9c3a5c49609bf9d12b440b54cfb2a2f7fd9249e189424a'
+HEXV841_RECOVER_EDGE_VELOCITY_F32_SHADER_HASH = 'c3bf1394d696e61a452e7b1c8e16892a074931f4b779d72f0558accc9ffff383'
+
+HEXV841_RECOVER_EDGES_F32_RESOURCES = (('ru_saved', 'float', 'read'), ('ru_p', 'float', 'read'), ('ru_avg_p', 'float', 'read'), ('ru', 'float', 'read_write'), ('flux_u', 'float', 'read_write'))
+HEXV841_RECOVER_EDGES_F32_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
+HEXV841_RECOVER_EDGES_F32_SHAPES = (('ru_saved', (('any_1d',),)), ('ru_p', (('any_1d',),)), ('ru_avg_p', (('any_1d',),)), ('ru', (('any_1d',),)), ('flux_u', (('any_1d',),)))
+HEXV841_RECOVER_EDGES_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('acoustic_steps', 'ctypes.c_int32')]
+HEXV841_RECOVER_EDGES_F32_THREADS_PER_GROUP = 128
+HEXV841_RECOVER_EDGES_F32_LAYOUT_HASH = 'ba77219307da456f6b7eb88a9df2d525d137cb38b1a1a518f1ce5ce23a6d3ba6'
+HEXV841_RECOVER_EDGES_F32_SHADER_HASH = 'fde54fbe04d0625c28164e6e5c39c81021d2e45c414767f4f840f4f9e03b2698'
+
+HEXV841_RECOVER_FLAT_W_F32_RESOURCES = (('rho', 'float', 'read'), ('rw', 'float', 'read'), ('zz', 'float', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('w', 'float', 'read_write'))
+HEXV841_RECOVER_FLAT_W_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_RECOVER_FLAT_W_F32_SHAPES = (('rho', (('any_1d',),)), ('rw', (('any_1d',),)), ('zz', (('any_1d',),)), ('fzm', (('any_1d',),)), ('fzp', (('any_1d',),)), ('w', (('any_1d',),)))
+HEXV841_RECOVER_FLAT_W_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32')]
+HEXV841_RECOVER_FLAT_W_F32_THREADS_PER_GROUP = 128
+HEXV841_RECOVER_FLAT_W_F32_LAYOUT_HASH = '6dc45a0f26f8f925c8d158a873bf2c96fae92c7567bbbe85d430176c1c9ed13d'
+HEXV841_RECOVER_FLAT_W_F32_SHADER_HASH = 'a47684a106ad376c762d18ee8c0d914fb7cc413cbec5341f52b72154112200c9'
+
+HEXV841_RECOVER_INTERFACES_F32_RESOURCES = (('rw_saved', 'float', 'read'), ('rw_p', 'float', 'read'), ('ww_avg_p', 'float', 'read'), ('rw', 'float', 'read_write'), ('flux_w', 'float', 'read_write'))
+HEXV841_RECOVER_INTERFACES_F32_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
+HEXV841_RECOVER_INTERFACES_F32_SHAPES = (('rw_saved', (('any_1d',),)), ('rw_p', (('any_1d',),)), ('ww_avg_p', (('any_1d',),)), ('rw', (('any_1d',),)), ('flux_w', (('any_1d',),)))
+HEXV841_RECOVER_INTERFACES_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('acoustic_steps', 'ctypes.c_int32')]
+HEXV841_RECOVER_INTERFACES_F32_THREADS_PER_GROUP = 128
+HEXV841_RECOVER_INTERFACES_F32_LAYOUT_HASH = '44b2a3e26cc6e59379b6fa4732668652ee0a8f4dfcd2c387c959c48ccf32b02f'
+HEXV841_RECOVER_INTERFACES_F32_SHADER_HASH = 'cadd590a28acc4f687df13be55228e7261ed29c5ded7b2b0f5e52672d5bbcd82'
+
+HEXV841_RECOVER_TERRAIN_W_F32_RESOURCES = (('rho', 'float', 'read'), ('ru', 'float', 'read'), ('rw', 'float', 'read'), ('zz', 'float', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('edge_sign_on_cell', 'float', 'read'), ('zb_cell', 'float', 'read'), ('zb3_cell', 'float', 'read'), ('w', 'float', 'read_write'))
+HEXV841_RECOVER_TERRAIN_W_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_RECOVER_TERRAIN_W_F32_SHAPES = (('rho', (('any_1d',),)), ('ru', (('any_1d',),)), ('rw', (('any_1d',),)), ('zz', (('any_1d',),)), ('fzm', (('any_1d',),)), ('fzp', (('any_1d',),)), ('edges_on_cell', (('any_1d',),)), ('n_edges_on_cell', (('any_1d',),)), ('edge_sign_on_cell', (('any_1d',),)), ('zb_cell', (('any_1d',),)), ('zb3_cell', (('any_1d',),)), ('w', (('any_1d',),)))
+HEXV841_RECOVER_TERRAIN_W_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32'), ('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float')]
+HEXV841_RECOVER_TERRAIN_W_F32_THREADS_PER_GROUP = 128
+HEXV841_RECOVER_TERRAIN_W_F32_LAYOUT_HASH = '04aeca093a339cd9412bfe60797212bdb9eac54951ae6b54083c27f73fe12396'
+HEXV841_RECOVER_TERRAIN_W_F32_SHADER_HASH = 'abf3f9ec1097ac233fe556c42dd4a953ec441e271dd2f4f27220d2659a86d031'
+
+HEXV841_REFERENCE_WIND_EDGE_V841_F32_RESOURCES = (('angle_edge', 'float', 'read'), ('u_init', 'float', 'read'), ('v_init', 'float', 'read'), ('reference_u', 'float', 'read_write'))
+HEXV841_REFERENCE_WIND_EDGE_V841_F32_ACCESS = ('read', 'read', 'read', 'read_write')
+HEXV841_REFERENCE_WIND_EDGE_V841_F32_SHAPES = (('angle_edge', (('any_1d',),)), ('u_init', (('any_1d',),)), ('v_init', (('any_1d',),)), ('reference_u', (('any_1d',),)))
+HEXV841_REFERENCE_WIND_EDGE_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32')]
+HEXV841_REFERENCE_WIND_EDGE_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_REFERENCE_WIND_EDGE_V841_F32_LAYOUT_HASH = 'c900ec99fb0e4513dfaf1507560b93033430e51b6eeae902bae3e68f26dd911b'
+HEXV841_REFERENCE_WIND_EDGE_V841_F32_SHADER_HASH = '43d7d8f83bb270749a8a5df9cd231d1b70ea504082969ac50cbf41465d2941ce'
+
+HEXV841_SCALE_F32_RESOURCES = (('source', 'float', 'read'), ('target', 'float', 'read_write'))
+HEXV841_SCALE_F32_ACCESS = ('read', 'read_write')
+HEXV841_SCALE_F32_SHAPES = (('source', (('any_1d',),)), ('target', (('any_1d',),)))
+HEXV841_SCALE_F32_PARAM_FIELDS = [('nlevels', 'ctypes.c_int32'), ('nowners', 'ctypes.c_int32'), ('scale', 'ctypes.c_float')]
+HEXV841_SCALE_F32_THREADS_PER_GROUP = 128
+HEXV841_SCALE_F32_LAYOUT_HASH = '8b850308d4953a3c23279c8e607fc7e1a864943827692594c9c413afab1f766a'
+HEXV841_SCALE_F32_SHADER_HASH = 'c67c89fc3f185ac7bfcf9590f65f04f6633106dbe37824d5ef12415903992ff6'
+
+HEXV841_SMAGORINSKY_V841_F32_RESOURCES = (('normal_velocity', 'float', 'read'), ('tangential_velocity', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('coef_c2', 'float', 'read'), ('coef_s2', 'float', 'read'), ('coef_cs', 'float', 'read'), ('kdiff', 'float', 'read_write'))
+HEXV841_SMAGORINSKY_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_SMAGORINSKY_V841_F32_SHAPES = (('normal_velocity', (('any_1d',), ('any_2d',))), ('tangential_velocity', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('coef_c2', (('any_1d',), ('any_2d',))), ('coef_s2', (('any_1d',), ('any_2d',))), ('coef_cs', (('any_1d',), ('any_2d',))), ('kdiff', (('any_1d',), ('any_2d',))))
+HEXV841_SMAGORINSKY_V841_F32_PARAM_FIELDS = [('strain_scale', 'ctypes.c_float'), ('ceiling', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_SMAGORINSKY_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_SMAGORINSKY_V841_F32_LAYOUT_HASH = '458eafef71415e596cd4d42df3a13e795f55718610cac26a4b6d7b985f10cf74'
+HEXV841_SMAGORINSKY_V841_F32_SHADER_HASH = 'e4ef5c9ae39838a9774c3377154d149c50dd7a748d2b05f126f4091f45cdcb44'
+
+HEXV841_SPLIT_FLUX_ADD_V841_F32_RESOURCES = (('current', 'float', 'read'), ('accumulator', 'float', 'read_write'))
+HEXV841_SPLIT_FLUX_ADD_V841_F32_ACCESS = ('read', 'read_write')
+HEXV841_SPLIT_FLUX_ADD_V841_F32_SHAPES = (('current', (('any_1d',),)), ('accumulator', (('any_1d',),)))
+HEXV841_SPLIT_FLUX_ADD_V841_F32_PARAM_FIELDS = [('nlevels', 'ctypes.c_int32'), ('nowners', 'ctypes.c_int32')]
+HEXV841_SPLIT_FLUX_ADD_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_SPLIT_FLUX_ADD_V841_F32_LAYOUT_HASH = '116061ab2f624cd133b5f3a401b3acbc1d8dfb723aa4ccd2a5e7ed80c70cb0ec'
+HEXV841_SPLIT_FLUX_ADD_V841_F32_SHADER_HASH = 'cafa7645febc24c6ba6aa6045043bbf1cb25d3a4e17cbbab7d0048d5ebd643a3'
+
+HEXV841_SPLIT_FLUX_FINISH_V841_F32_RESOURCES = (('accumulator', 'float', 'read'), ('average', 'float', 'read_write'))
+HEXV841_SPLIT_FLUX_FINISH_V841_F32_ACCESS = ('read', 'read_write')
+HEXV841_SPLIT_FLUX_FINISH_V841_F32_SHAPES = (('accumulator', (('any_1d',),)), ('average', (('any_1d',),)))
+HEXV841_SPLIT_FLUX_FINISH_V841_F32_PARAM_FIELDS = [('nlevels', 'ctypes.c_int32'), ('nowners', 'ctypes.c_int32'), ('reciprocal', 'ctypes.c_float')]
+HEXV841_SPLIT_FLUX_FINISH_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_SPLIT_FLUX_FINISH_V841_F32_LAYOUT_HASH = 'a3a7c65aefa713142da10769c78e177596b7418ded6b20de5a2c453ebacb6660'
+HEXV841_SPLIT_FLUX_FINISH_V841_F32_SHADER_HASH = 'f1f4bc495e6c3686082fba2d921c6bf250a24dcded0ba56d76d5077582b5f905'
+
+HEXV841_SPLIT_FLUX_FIRST_V841_F32_RESOURCES = (('current', 'float', 'read'), ('accumulator', 'float', 'read_write'))
+HEXV841_SPLIT_FLUX_FIRST_V841_F32_ACCESS = ('read', 'read_write')
+HEXV841_SPLIT_FLUX_FIRST_V841_F32_SHAPES = (('current', (('any_1d',),)), ('accumulator', (('any_1d',),)))
+HEXV841_SPLIT_FLUX_FIRST_V841_F32_PARAM_FIELDS = [('nlevels', 'ctypes.c_int32'), ('nowners', 'ctypes.c_int32')]
+HEXV841_SPLIT_FLUX_FIRST_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_SPLIT_FLUX_FIRST_V841_F32_LAYOUT_HASH = 'dd229e5f87ea7e06170d68f9c18bbe03ebc87b2de2ac4bec723966ce6165fbfd'
+HEXV841_SPLIT_FLUX_FIRST_V841_F32_SHADER_HASH = '0825f49cbf3197c7d82dc8dcf7d18977b5cfa219e9c62d56eb538e094a1d72e1'
+
+HEXV841_TANGENTIAL_VELOCITY_F32_RESOURCES = (('normal_velocity', 'float', 'read'), ('edges_on_edge', 'int32', 'read'), ('n_edges_on_edge', 'int32', 'read'), ('weights_on_edge', 'float', 'read'), ('tangential_velocity', 'float', 'read_write'))
+HEXV841_TANGENTIAL_VELOCITY_F32_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
+HEXV841_TANGENTIAL_VELOCITY_F32_SHAPES = (('normal_velocity', (('any_1d',), ('any_2d',))), ('edges_on_edge', (('any_1d',), ('any_2d',))), ('n_edges_on_edge', (('any_1d',), ('any_2d',))), ('weights_on_edge', (('any_1d',), ('any_2d',))), ('tangential_velocity', (('any_1d',), ('any_2d',))))
+HEXV841_TANGENTIAL_VELOCITY_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges2', 'ctypes.c_int32')]
+HEXV841_TANGENTIAL_VELOCITY_F32_THREADS_PER_GROUP = 128
+HEXV841_TANGENTIAL_VELOCITY_F32_LAYOUT_HASH = 'eea4363273786df25cec258fb9fc008c4ea16b1c5017e40e2954fe3f519d2cd6'
+HEXV841_TANGENTIAL_VELOCITY_F32_SHADER_HASH = 'a49144edbef3a39fb00fe649965ca355ebcf39d31182c24bafa6035257bbb2f8'
+
+HEXV841_TENDENCY_W_TO_OMEGA_RESOURCES = (('edge_sign_on_cell', 'float', 'read'), ('u_tendency', 'float', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('zz', 'float', 'read'), ('zb', 'float', 'read'), ('zb3', 'float', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('edges_on_cell', 'int32', 'read'), ('omega_tendency', 'float', 'read_write'))
+HEXV841_TENDENCY_W_TO_OMEGA_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_TENDENCY_W_TO_OMEGA_SHAPES = (('edge_sign_on_cell', (('any_1d',), ('any_2d',))), ('u_tendency', (('any_1d',), ('any_2d',))), ('fzm', (('any_1d',), ('any_2d',))), ('fzp', (('any_1d',), ('any_2d',))), ('zz', (('any_1d',), ('any_2d',))), ('zb', (('nlev+1', 'ncells', 'max_edges'),)), ('zb3', (('nlev+1', 'ncells', 'max_edges'),)), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('omega_tendency', (('any_1d',), ('any_2d',))))
+HEXV841_TENDENCY_W_TO_OMEGA_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_TENDENCY_W_TO_OMEGA_THREADS_PER_GROUP = 128
+HEXV841_TENDENCY_W_TO_OMEGA_LAYOUT_HASH = 'a885835b3f10673f6c6dab7be1a86d57e177b21822ff91b8ec991bb953a6daf3'
+HEXV841_TENDENCY_W_TO_OMEGA_SHADER_HASH = '05890b251055e768651cf3d374114d8cd45f2298ff6e13fc15e4e7e6cf1e46e5'
+
+HEXV841_THETA_EDGE_FLUX_F32_RESOURCES = (('theta', 'float', 'read'), ('theta_saved', 'float', 'read'), ('ru', 'float', 'read'), ('ru_saved', 'float', 'read'), ('dv_edge', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('adv', 'float', 'read'), ('adv3', 'float', 'read'), ('n_adv', 'int32', 'read'), ('adv_cells', 'int32', 'read'), ('flux', 'float', 'read_write'))
+HEXV841_THETA_EDGE_FLUX_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_THETA_EDGE_FLUX_F32_SHAPES = (('theta', (('any_1d',),)), ('theta_saved', (('any_1d',),)), ('ru', (('any_1d',),)), ('ru_saved', (('any_1d',),)), ('dv_edge', (('any_1d',),)), ('cells_on_edge', (('any_1d',),)), ('adv', (('any_1d',),)), ('adv3', (('any_1d',),)), ('n_adv', (('any_1d',),)), ('adv_cells', (('any_1d',),)), ('flux', (('any_1d',),)))
+HEXV841_THETA_EDGE_FLUX_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('width', 'ctypes.c_int32'), ('rk_step', 'ctypes.c_int32'), ('coefficient', 'ctypes.c_float')]
+HEXV841_THETA_EDGE_FLUX_F32_THREADS_PER_GROUP = 128
+HEXV841_THETA_EDGE_FLUX_F32_LAYOUT_HASH = '9496b67eaf60496939cb41d47183f01802bf2910654e3fae0148226dc2a98740'
+HEXV841_THETA_EDGE_FLUX_F32_SHADER_HASH = '864da6c0945adec1bd9d1f60a36a2911053f030019f3d093535a33f3c2516bc5'
+
+HEXV841_THETA_FILTER_LAP2_F32_RESOURCES = (('theta_m', 'float', 'read'), ('rho_edge', 'float', 'read'), ('kdiff', 'float', 'read'), ('del2', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('dc_edge', 'float', 'read'), ('dv_edge', 'float', 'read'), ('area_cell', 'float', 'read'), ('delsq_theta', 'float', 'read_write'), ('tendency', 'float', 'read_write'))
+HEXV841_THETA_FILTER_LAP2_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV841_THETA_FILTER_LAP2_F32_SHAPES = (('theta_m', (('any_1d',), ('any_2d',))), ('rho_edge', (('any_1d',), ('any_2d',))), ('kdiff', (('any_1d',), ('any_2d',))), ('del2', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('area_cell', (('any_1d',), ('any_2d',))), ('delsq_theta', (('any_1d',), ('any_2d',))), ('tendency', (('any_1d',), ('any_2d',))))
+HEXV841_THETA_FILTER_LAP2_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_THETA_FILTER_LAP2_F32_THREADS_PER_GROUP = 128
+HEXV841_THETA_FILTER_LAP2_F32_LAYOUT_HASH = '9ba97bdfc652dc4290e7685895f980fe8e3b049f4ccd2bd7ce3fa1219fa8e8a7'
+HEXV841_THETA_FILTER_LAP2_F32_SHADER_HASH = '4e00084ce692631c6d4f59c0c5ceae7340aa5c08279eb9f905f488fdbc549ca0'
+
+HEXV841_THETA_FILTER_LAP4_F32_RESOURCES = (('delsq_theta', 'float', 'read'), ('del4', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('dc_edge', 'float', 'read'), ('dv_edge', 'float', 'read'), ('area_cell', 'float', 'read'), ('tendency', 'float', 'read_write'))
+HEXV841_THETA_FILTER_LAP4_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_THETA_FILTER_LAP4_F32_SHAPES = (('delsq_theta', (('any_1d',), ('any_2d',))), ('del4', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('area_cell', (('any_1d',), ('any_2d',))), ('tendency', (('any_1d',), ('any_2d',))))
+HEXV841_THETA_FILTER_LAP4_F32_PARAM_FIELDS = [('h4', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_THETA_FILTER_LAP4_F32_THREADS_PER_GROUP = 128
+HEXV841_THETA_FILTER_LAP4_F32_LAYOUT_HASH = 'b36eee5fe35f00e0fa07d5b5b04b2493880183285b589dcd4cb37027a60a4423'
+HEXV841_THETA_FILTER_LAP4_F32_SHADER_HASH = 'cfcca45a71ebff3b9074960dab51bdb3d1ae1ae63708ac97cdec65c32929d86a'
+
+HEXV841_THETA_FINISH_V841_F32_RESOURCES = (('n_edges_on_cell', 'int32', 'read'), ('edges_on_cell', 'int32', 'read'), ('acoustic_sign', 'float', 'read'), ('inv_area_cell', 'float', 'read'), ('rdzw', 'float', 'read'), ('edge_flux', 'float', 'read'), ('vertical_flux', 'float', 'read'), ('result', 'float', 'read_write'))
+HEXV841_THETA_FINISH_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_THETA_FINISH_V841_F32_SHAPES = (('n_edges_on_cell', (('any_1d',),)), ('edges_on_cell', (('any_1d',),)), ('acoustic_sign', (('any_1d',),)), ('inv_area_cell', (('any_1d',),)), ('rdzw', (('any_1d',),)), ('edge_flux', (('any_1d',),)), ('vertical_flux', (('any_1d',),)), ('result', (('any_1d',),)))
+HEXV841_THETA_FINISH_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_THETA_FINISH_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_THETA_FINISH_V841_F32_LAYOUT_HASH = 'd07c5c5e2f2a95a40ec130ee4ff0fafd4f62171d776e9ebc85ba168c82ee0b1e'
+HEXV841_THETA_FINISH_V841_F32_SHADER_HASH = '68cfeef64a0324a9914b392ae8d00b95a7a96e7c925e6b2cd53e831ed135d768'
+
+HEXV841_THETA_VERTICAL_FLUX_F32_RESOURCES = (('theta', 'float', 'read'), ('theta_saved', 'float', 'read'), ('rw', 'float', 'read'), ('rw_saved', 'float', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('flux', 'float', 'read_write'))
+HEXV841_THETA_VERTICAL_FLUX_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_THETA_VERTICAL_FLUX_F32_SHAPES = (('theta', (('any_1d',),)), ('theta_saved', (('any_1d',),)), ('rw', (('any_1d',),)), ('rw_saved', (('any_1d',),)), ('fzm', (('any_1d',),)), ('fzp', (('any_1d',),)), ('flux', (('any_1d',),)))
+HEXV841_THETA_VERTICAL_FLUX_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('coefficient', 'ctypes.c_float')]
+HEXV841_THETA_VERTICAL_FLUX_F32_THREADS_PER_GROUP = 128
+HEXV841_THETA_VERTICAL_FLUX_F32_LAYOUT_HASH = '30e948b03f67003b707766a41421bdb3ef58dd05c99c598b89d10158d992b57f'
+HEXV841_THETA_VERTICAL_FLUX_F32_SHADER_HASH = '2a34135d6fe2052dc38612512c273e3db49f3055d356d90e1cbddf4ce88936ed'
+
+HEXV841_TRANSPORT_EDGE_VALUES_RESOURCES = (('stage', 'float32', 'read'), ('velocity', 'float32', 'read'), ('adv', 'float32', 'read'), ('adv3', 'float32', 'read'), ('n_adv', 'int32', 'read'), ('adv_cells', 'int32', 'read'), ('edge_values', 'float32', 'read_write'))
+HEXV841_TRANSPORT_EDGE_VALUES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_TRANSPORT_EDGE_VALUES_SHAPES = (('stage', (('ntracers', 'nlev', 'ncells'),)), ('velocity', (('nlev', 'nedges'),)), ('adv', (('nedges', 'width'),)), ('adv3', (('nedges', 'width'),)), ('n_adv', (('nedges',),)), ('adv_cells', (('nedges', 'width'),)), ('edge_values', (('ntracers', 'nlev', 'nedges'),)))
+HEXV841_TRANSPORT_EDGE_VALUES_PARAM_FIELDS = [('ntracers', 'ctypes.c_int32'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('width', 'ctypes.c_int32'), ('coefficient', 'ctypes.c_float')]
+HEXV841_TRANSPORT_EDGE_VALUES_THREADS_PER_GROUP = 128
+HEXV841_TRANSPORT_EDGE_VALUES_LAYOUT_HASH = '167167c410e8b3f9c9fc22f0d458d478285d302fed5d9ecbb9cdb395d95c90b4'
+HEXV841_TRANSPORT_EDGE_VALUES_SHADER_HASH = '63f969f5173010d7d165f390f09066feba9ac97ece9259433f24ae6e6e0108be'
+
+HEXV841_TRANSPORT_INTERPOLATE_TARGET_V841_RESOURCES = (('rho_old', 'float32', 'read'), ('rho_new', 'float32', 'read'), ('target', 'float32', 'read_write'))
+HEXV841_TRANSPORT_INTERPOLATE_TARGET_V841_ACCESS = ('read', 'read', 'read_write')
+HEXV841_TRANSPORT_INTERPOLATE_TARGET_V841_SHAPES = (('rho_old', (('any_1d',), ('any_2d',))), ('rho_new', (('any_1d',), ('any_2d',))), ('target', (('any_1d',), ('any_2d',))))
+HEXV841_TRANSPORT_INTERPOLATE_TARGET_V841_PARAM_FIELDS = [('nvalues', 'ctypes.c_int32'), ('weight', 'ctypes.c_float')]
+HEXV841_TRANSPORT_INTERPOLATE_TARGET_V841_THREADS_PER_GROUP = 128
+HEXV841_TRANSPORT_INTERPOLATE_TARGET_V841_LAYOUT_HASH = 'fa950c29fb640668cd9a175b4600ad4eeecd54eae509d4e0435b779019d041f2'
+HEXV841_TRANSPORT_INTERPOLATE_TARGET_V841_SHADER_HASH = '3ecf41dcb8f9bcdf9a76c7a209de70266f2cf72241afb23cfe4ce2df4d0a0674'
+
+HEXV841_TRANSPORT_STANDARD_FINISH_V841_RESOURCES = (('n_edges_on_cell', 'int32', 'read'), ('edges_on_cell', 'int32', 'read'), ('acoustic_sign', 'float32', 'read'), ('inv_area_cell', 'float32', 'read'), ('velocity', 'float32', 'read'), ('edge_values', 'float32', 'read'), ('vertical_flux', 'float32', 'read'), ('rdzw', 'float32', 'read'), ('old', 'float32', 'read'), ('rho_old', 'float32', 'read'), ('target_density', 'float32', 'read'), ('source', 'float32', 'read'), ('output', 'float32', 'read_write'))
+HEXV841_TRANSPORT_STANDARD_FINISH_V841_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_TRANSPORT_STANDARD_FINISH_V841_SHAPES = (('n_edges_on_cell', (('ncells',),)), ('edges_on_cell', (('ncells', 'max_edges'),)), ('acoustic_sign', (('ncells', 'max_edges'),)), ('inv_area_cell', (('ncells',),)), ('velocity', (('nlev', 'nedges'),)), ('edge_values', (('ntracers', 'nlev', 'nedges'),)), ('vertical_flux', (('ntracers', 'nlev+1', 'ncells'),)), ('rdzw', (('nlev',),)), ('old', (('ntracers', 'nlev', 'ncells'),)), ('rho_old', (('nlev', 'ncells'),)), ('target_density', (('nlev', 'ncells'),)), ('source', (('ntracers', 'nlev', 'ncells'),)), ('output', (('ntracers', 'nlev', 'ncells'),)))
+HEXV841_TRANSPORT_STANDARD_FINISH_V841_PARAM_FIELDS = [('ntracers', 'ctypes.c_int32'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32'), ('dt', 'ctypes.c_float')]
+HEXV841_TRANSPORT_STANDARD_FINISH_V841_THREADS_PER_GROUP = 128
+HEXV841_TRANSPORT_STANDARD_FINISH_V841_LAYOUT_HASH = '6ac728115cd534ae947f225bda0c08ec28034fc5298b349a210538d34a9f84c9'
+HEXV841_TRANSPORT_STANDARD_FINISH_V841_SHADER_HASH = '0b949603c5a236e27b4f9788b3abc136e7c4985204ab83544939858f1c3cb13f'
+
+HEXV841_TRANSPORT_VERTICAL_FLUX_RESOURCES = (('stage', 'float32', 'read'), ('velocity', 'float32', 'read'), ('fzm', 'float32', 'read'), ('fzp', 'float32', 'read'), ('vertical_flux', 'float32', 'read_write'))
+HEXV841_TRANSPORT_VERTICAL_FLUX_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
+HEXV841_TRANSPORT_VERTICAL_FLUX_SHAPES = (('stage', (('ntracers', 'nlev', 'ncells'),)), ('velocity', (('nlev+1', 'ncells'),)), ('fzm', (('nlev',),)), ('fzp', (('nlev',),)), ('vertical_flux', (('ntracers', 'nlev+1', 'ncells'),)))
+HEXV841_TRANSPORT_VERTICAL_FLUX_PARAM_FIELDS = [('ntracers', 'ctypes.c_int32'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('coefficient', 'ctypes.c_float')]
+HEXV841_TRANSPORT_VERTICAL_FLUX_THREADS_PER_GROUP = 128
+HEXV841_TRANSPORT_VERTICAL_FLUX_LAYOUT_HASH = '8f7640b5116f3845c4f7fbd243ef1d2b7c4007f2921fbdd10cc4324d530075c5'
+HEXV841_TRANSPORT_VERTICAL_FLUX_SHADER_HASH = '45c6df8fc4520155800c7f8bf7928a20e527f9b7ebd8a04fed48d454e79c360f'
+
+HEXV841_VALIDATE_DENSITY_V841_RESOURCES = (('density', 'float32', 'read'), ('invalid', 'int32', 'read_write'))
+HEXV841_VALIDATE_DENSITY_V841_ACCESS = ('read', 'read_write')
+HEXV841_VALIDATE_DENSITY_V841_SHAPES = (('density', (('any_1d',), ('any_2d',))), ('invalid', ((1,),)))
+HEXV841_VALIDATE_DENSITY_V841_PARAM_FIELDS = [('nvalues', 'ctypes.c_int32')]
+HEXV841_VALIDATE_DENSITY_V841_THREADS_PER_GROUP = 128
+HEXV841_VALIDATE_DENSITY_V841_LAYOUT_HASH = 'f0a11aa5fa3e7ec4768ce4825aadb3456d9197f041d0482a90514d9516384c7c'
+HEXV841_VALIDATE_DENSITY_V841_SHADER_HASH = 'bc1d859376b4e44099ab57b728af3b6ec64f9cfe1c2a05693a47bfcbca786d83'
+
+HEXV841_VALIDATE_FINITE_ARRAY_V841_F32_RESOURCES = (('values', 'float', 'read'), ('invalid', 'int32', 'read_write'))
+HEXV841_VALIDATE_FINITE_ARRAY_V841_F32_ACCESS = ('read', 'read_write')
+HEXV841_VALIDATE_FINITE_ARRAY_V841_F32_SHAPES = (('values', (('any_1d',),)), ('invalid', ((1,),)))
+HEXV841_VALIDATE_FINITE_ARRAY_V841_F32_PARAM_FIELDS = [('nvalues', 'ctypes.c_int32')]
+HEXV841_VALIDATE_FINITE_ARRAY_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_VALIDATE_FINITE_ARRAY_V841_F32_LAYOUT_HASH = '2ff34a51db6f4f263ce2f73a9fba371f727c2604440ca1aafb60dfbb588d60b6'
+HEXV841_VALIDATE_FINITE_ARRAY_V841_F32_SHADER_HASH = 'b5333d6f22bd4d33c3c1157c8b462ef2cb05f720295c5479e074b70a4bf55d1c'
+
+HEXV841_VALIDATE_POSITIVE_STATE_V841_F32_RESOURCES = (('rho', 'float', 'read'), ('rho_theta', 'float', 'read'), ('invalid', 'int32', 'read_write'))
+HEXV841_VALIDATE_POSITIVE_STATE_V841_F32_ACCESS = ('read', 'read', 'read_write')
+HEXV841_VALIDATE_POSITIVE_STATE_V841_F32_SHAPES = (('rho', (('any_1d',),)), ('rho_theta', (('any_1d',),)), ('invalid', ((1,),)))
+HEXV841_VALIDATE_POSITIVE_STATE_V841_F32_PARAM_FIELDS = [('nvalues', 'ctypes.c_int32')]
+HEXV841_VALIDATE_POSITIVE_STATE_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_VALIDATE_POSITIVE_STATE_V841_F32_LAYOUT_HASH = '96ee01a75c7e438b1b031252423c52f3eae20cb4139c508bc0296f316bc88d22'
+HEXV841_VALIDATE_POSITIVE_STATE_V841_F32_SHADER_HASH = '7adb36632b37e59ff610e2a33fd6ed5860d77ee02e88ad4df4dee358d7a6ad36'
+
+HEXV841_VALIDATE_RECOVERED_V841_F32_RESOURCES = (('rho', 'float', 'read'), ('rho_theta', 'float', 'read'), ('rho_u', 'float', 'read'), ('rho_w', 'float', 'read'), ('theta', 'float', 'read'), ('exner', 'float', 'read'), ('rho_p', 'float', 'read'), ('rtheta_p', 'float', 'read'), ('pressure_p', 'float', 'read'), ('normal_velocity', 'float', 'read'), ('vertical_velocity', 'float', 'read'), ('invalid', 'int32', 'read_write'))
+HEXV841_VALIDATE_RECOVERED_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_VALIDATE_RECOVERED_V841_F32_SHAPES = (('rho', (('any_1d',),)), ('rho_theta', (('any_1d',),)), ('rho_u', (('any_1d',),)), ('rho_w', (('any_1d',),)), ('theta', (('any_1d',),)), ('exner', (('any_1d',),)), ('rho_p', (('any_1d',),)), ('rtheta_p', (('any_1d',),)), ('pressure_p', (('any_1d',),)), ('normal_velocity', (('any_1d',),)), ('vertical_velocity', (('any_1d',),)), ('invalid', ((1,),)))
+HEXV841_VALIDATE_RECOVERED_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32')]
+HEXV841_VALIDATE_RECOVERED_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_VALIDATE_RECOVERED_V841_F32_LAYOUT_HASH = 'ed5caa58ce52473a7422a2354f7317390c89903bec87763b648b82cc3731fa33'
+HEXV841_VALIDATE_RECOVERED_V841_F32_SHADER_HASH = '46fb46069725bbf726e1b7dafb7dd4db527a08df377bad86f5741ae8b1e605cb'
+
+HEXV841_VALIDATE_TRANSPORT_INDICES_V841_RESOURCES = (('n_edges_on_cell', 'int32', 'read'), ('edges_on_cell', 'int32', 'read'), ('cells_on_cell', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('n_adv', 'int32', 'read'), ('adv_cells', 'int32', 'read'), ('invalid', 'int32', 'read_write'))
+HEXV841_VALIDATE_TRANSPORT_INDICES_V841_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_VALIDATE_TRANSPORT_INDICES_V841_SHAPES = (('n_edges_on_cell', (('ncells',),)), ('edges_on_cell', (('ncells', 'max_edges'),)), ('cells_on_cell', (('ncells', 'max_edges'),)), ('cells_on_edge', (('nedges', '2'),)), ('n_adv', (('nedges',),)), ('adv_cells', (('nedges', 'width'),)), ('invalid', ((1,),)))
+HEXV841_VALIDATE_TRANSPORT_INDICES_V841_PARAM_FIELDS = [('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32'), ('width', 'ctypes.c_int32')]
+HEXV841_VALIDATE_TRANSPORT_INDICES_V841_THREADS_PER_GROUP = 128
+HEXV841_VALIDATE_TRANSPORT_INDICES_V841_LAYOUT_HASH = '2cdc598e95ada48d8c2216d6ef3adcf2e33d7b9d331778acaec720876a403b04'
+HEXV841_VALIDATE_TRANSPORT_INDICES_V841_SHADER_HASH = '5043213c4c6effdda643b60db40ec8fe8c719d776d3a71a809d7e869c815d3b0'
+
+HEXV841_VECTOR_MOMENTUM_V841_F32_RESOURCES = (('u', 'float', 'read'), ('rho_edge', 'float', 'read'), ('pv_edge', 'float', 'read'), ('kinetic', 'float', 'read'), ('mass_divergence', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('edges_on_edge', 'int32', 'read'), ('n_edges_on_edge', 'int32', 'read'), ('weights_on_edge', 'float', 'read'), ('inv_dc_edge', 'float', 'read'), ('reference_u', 'float', 'read'), ('f_edge', 'float', 'read'), ('result', 'float', 'read_write'))
+HEXV841_VECTOR_MOMENTUM_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_VECTOR_MOMENTUM_V841_F32_SHAPES = (('u', (('any_1d',),)), ('rho_edge', (('any_1d',),)), ('pv_edge', (('any_1d',),)), ('kinetic', (('any_1d',),)), ('mass_divergence', (('any_1d',),)), ('cells_on_edge', (('any_1d',),)), ('edges_on_edge', (('any_1d',),)), ('n_edges_on_edge', (('any_1d',),)), ('weights_on_edge', (('any_1d',),)), ('inv_dc_edge', (('any_1d',),)), ('reference_u', (('any_1d',),)), ('f_edge', (('any_1d',),)), ('result', (('any_1d',),)))
+HEXV841_VECTOR_MOMENTUM_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges2', 'ctypes.c_int32')]
+HEXV841_VECTOR_MOMENTUM_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_VECTOR_MOMENTUM_V841_F32_LAYOUT_HASH = '87436b0aca390e0e035caa667054639206e11b049d7907fafe12d52e4ca00782'
+HEXV841_VECTOR_MOMENTUM_V841_F32_SHADER_HASH = '46a33db679f09d81b373a7205f22bda6b6e52f761aae165c3bb1cfc31f58c0bb'
+
+HEXV841_VERTEX_DIAGNOSTICS_V841_F32_RESOURCES = (('normal_velocity', 'float', 'read'), ('ke_edge', 'float', 'read'), ('edges_on_vertex', 'int32', 'read'), ('vertices_on_edge', 'int32', 'read'), ('dc_edge', 'float', 'read'), ('inv_area_triangle', 'float', 'read'), ('f_vertex', 'float', 'read'), ('vorticity', 'float', 'read_write'), ('ke_vertex', 'float', 'read_write'), ('pv_vertex', 'float', 'read_write'))
+HEXV841_VERTEX_DIAGNOSTICS_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
+HEXV841_VERTEX_DIAGNOSTICS_V841_F32_SHAPES = (('normal_velocity', (('any_1d',), ('any_2d',))), ('ke_edge', (('any_1d',), ('any_2d',))), ('edges_on_vertex', (('any_1d',), ('any_2d',))), ('vertices_on_edge', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('inv_area_triangle', (('any_1d',), ('any_2d',))), ('f_vertex', (('any_1d',), ('any_2d',))), ('vorticity', (('any_1d',), ('any_2d',))), ('ke_vertex', (('any_1d',), ('any_2d',))), ('pv_vertex', (('any_1d',), ('any_2d',))))
+HEXV841_VERTEX_DIAGNOSTICS_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('nvertices', 'ctypes.c_int32'), ('vertex_degree', 'ctypes.c_int32')]
+HEXV841_VERTEX_DIAGNOSTICS_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_VERTEX_DIAGNOSTICS_V841_F32_LAYOUT_HASH = '24abff53b7e166389c03d526c2a413f2c2f4b7bad28bc34ad9dab11693f11fd0'
+HEXV841_VERTEX_DIAGNOSTICS_V841_F32_SHADER_HASH = '14b37d5aa7d0d0c235642efbb6961f2897c78bbe2873668d9bf763211dc39d03'
+
+HEXV841_VERTICAL_U_FINISH_F32_RESOURCES = (('rdzw', 'float', 'read'), ('flux', 'float', 'read'), ('result', 'float', 'read_write'))
+HEXV841_VERTICAL_U_FINISH_F32_ACCESS = ('read', 'read', 'read_write')
+HEXV841_VERTICAL_U_FINISH_F32_SHAPES = (('rdzw', (('any_1d',),)), ('flux', (('any_1d',),)), ('result', (('any_1d',),)))
+HEXV841_VERTICAL_U_FINISH_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32')]
+HEXV841_VERTICAL_U_FINISH_F32_THREADS_PER_GROUP = 128
+HEXV841_VERTICAL_U_FINISH_F32_LAYOUT_HASH = '345e4f6981ac072c256ed5eac101bf2f224f1062394cf584e1d2516d7d015e0c'
+HEXV841_VERTICAL_U_FINISH_F32_SHADER_HASH = 'e71a3d5e4f272bf9f5e271f8e9bd50116570cee33ac52da31a2c1731a58f327a'
+
+HEXV841_VERTICAL_U_FLUX_F32_RESOURCES = (('u', 'float', 'read'), ('rw', 'float', 'read'), ('cells_on_edge', 'int32', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('flux', 'float', 'read_write'))
+HEXV841_VERTICAL_U_FLUX_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_VERTICAL_U_FLUX_F32_SHAPES = (('u', (('any_1d',),)), ('rw', (('any_1d',),)), ('cells_on_edge', (('any_1d',),)), ('fzm', (('any_1d',),)), ('fzp', (('any_1d',),)), ('flux', (('any_1d',),)))
+HEXV841_VERTICAL_U_FLUX_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32')]
+HEXV841_VERTICAL_U_FLUX_F32_THREADS_PER_GROUP = 128
+HEXV841_VERTICAL_U_FLUX_F32_LAYOUT_HASH = '1238ae0e8c903d3bba0baaafa4414966a3351ded53ebfe370128f1d31ea86a8a'
+HEXV841_VERTICAL_U_FLUX_F32_SHADER_HASH = 'f290e0ed0d8bfd2a38ae476ec42df4a736e3dae3ffaf3289605450202de48334'
+
+HEXV841_W_EDGE_FLUX_F32_RESOURCES = (('w', 'float', 'read'), ('ru', 'float', 'read'), ('fzm', 'float', 'read'), ('fzp', 'float', 'read'), ('adv', 'float', 'read'), ('adv3', 'float', 'read'), ('n_adv', 'int32', 'read'), ('adv_cells', 'int32', 'read'), ('flux', 'float', 'read_write'))
+HEXV841_W_EDGE_FLUX_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_W_EDGE_FLUX_F32_SHAPES = (('w', (('any_1d',),)), ('ru', (('any_1d',),)), ('fzm', (('any_1d',),)), ('fzp', (('any_1d',),)), ('adv', (('any_1d',),)), ('adv3', (('any_1d',),)), ('n_adv', (('any_1d',),)), ('adv_cells', (('any_1d',),)), ('flux', (('any_1d',),)))
+HEXV841_W_EDGE_FLUX_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('width', 'ctypes.c_int32'), ('coefficient', 'ctypes.c_float')]
+HEXV841_W_EDGE_FLUX_F32_THREADS_PER_GROUP = 128
+HEXV841_W_EDGE_FLUX_F32_LAYOUT_HASH = 'f0d50a197d954701dbc658e6268c741843890fd211ccd533a99f1f33879e98d9'
+HEXV841_W_EDGE_FLUX_F32_SHADER_HASH = '7e9a181300fd9b73b73253ba03eb366071cca99a686a5c561d7dec7e22a6306c'
+
+HEXV841_W_FILTER_LAP2_F32_RESOURCES = (('vertical_velocity', 'float', 'read'), ('rho_edge', 'float', 'read'), ('kdiff', 'float', 'read'), ('del2', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('dc_edge', 'float', 'read'), ('dv_edge', 'float', 'read'), ('area_cell', 'float', 'read'), ('delsq_w', 'float', 'read_write'), ('tendency', 'float', 'read_write'))
+HEXV841_W_FILTER_LAP2_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
+HEXV841_W_FILTER_LAP2_F32_SHAPES = (('vertical_velocity', (('any_1d',), ('any_2d',))), ('rho_edge', (('any_1d',), ('any_2d',))), ('kdiff', (('any_1d',), ('any_2d',))), ('del2', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('area_cell', (('any_1d',), ('any_2d',))), ('delsq_w', (('any_1d',), ('any_2d',))), ('tendency', (('any_1d',), ('any_2d',))))
+HEXV841_W_FILTER_LAP2_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_W_FILTER_LAP2_F32_THREADS_PER_GROUP = 128
+HEXV841_W_FILTER_LAP2_F32_LAYOUT_HASH = 'a15178b9638b78808b638b310466cee2ac8231169ce2adc8c0af07dc05e1ca84'
+HEXV841_W_FILTER_LAP2_F32_SHADER_HASH = 'a62c7c9d6f9d834979839dad1db8d1538cf2307f9ca3ae61a506b96839799f61'
+
+HEXV841_W_FILTER_LAP4_F32_RESOURCES = (('delsq_w', 'float', 'read'), ('del4', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('cells_on_edge', 'int32', 'read'), ('dc_edge', 'float', 'read'), ('dv_edge', 'float', 'read'), ('area_cell', 'float', 'read'), ('tendency', 'float', 'read_write'))
+HEXV841_W_FILTER_LAP4_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_W_FILTER_LAP4_F32_SHAPES = (('delsq_w', (('any_1d',), ('any_2d',))), ('del4', (('any_1d',), ('any_2d',))), ('edges_on_cell', (('any_1d',), ('any_2d',))), ('n_edges_on_cell', (('any_1d',), ('any_2d',))), ('cells_on_edge', (('any_1d',), ('any_2d',))), ('dc_edge', (('any_1d',), ('any_2d',))), ('dv_edge', (('any_1d',), ('any_2d',))), ('area_cell', (('any_1d',), ('any_2d',))), ('tendency', (('any_1d',), ('any_2d',))))
+HEXV841_W_FILTER_LAP4_F32_PARAM_FIELDS = [('h4', 'ctypes.c_float'), ('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_W_FILTER_LAP4_F32_THREADS_PER_GROUP = 128
+HEXV841_W_FILTER_LAP4_F32_LAYOUT_HASH = 'a6f9a8ff78e1994fd23e22eab79634ce82d7decdaa52565cd829d2857405f0bf'
+HEXV841_W_FILTER_LAP4_F32_SHADER_HASH = 'e5e6970da635dafa8d7f972a5378b83316a12930018486ac1e7fc699e8b00bf1'
+
+HEXV841_W_FINISH_V841_F32_RESOURCES = (('n_edges_on_cell', 'int32', 'read'), ('edges_on_cell', 'int32', 'read'), ('acoustic_sign', 'float', 'read'), ('inv_area_cell', 'float', 'read'), ('rdzu', 'float', 'read'), ('edge_flux', 'float', 'read'), ('vertical_flux', 'float', 'read'), ('result', 'float', 'read_write'))
+HEXV841_W_FINISH_V841_F32_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
+HEXV841_W_FINISH_V841_F32_SHAPES = (('n_edges_on_cell', (('any_1d',),)), ('edges_on_cell', (('any_1d',),)), ('acoustic_sign', (('any_1d',),)), ('inv_area_cell', (('any_1d',),)), ('rdzu', (('any_1d',),)), ('edge_flux', (('any_1d',),)), ('vertical_flux', (('any_1d',),)), ('result', (('any_1d',),)))
+HEXV841_W_FINISH_V841_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('nedges', 'ctypes.c_int32'), ('max_edges', 'ctypes.c_int32')]
+HEXV841_W_FINISH_V841_F32_THREADS_PER_GROUP = 128
+HEXV841_W_FINISH_V841_F32_LAYOUT_HASH = 'fe3a27156897410b12b9c95da5dd0f5b749543d52ace07a7dd1f2fb81a714458'
+HEXV841_W_FINISH_V841_F32_SHADER_HASH = '751c39dfafebaca0447bc486cbfcb7b625be4f63689a6acb6ecf1eabf00ec13b'
+
+HEXV841_W_VERTICAL_FLUX_F32_RESOURCES = (('w', 'float', 'read'), ('rw', 'float', 'read'), ('flux', 'float', 'read_write'))
+HEXV841_W_VERTICAL_FLUX_F32_ACCESS = ('read', 'read', 'read_write')
+HEXV841_W_VERTICAL_FLUX_F32_SHAPES = (('w', (('any_1d',),)), ('rw', (('any_1d',),)), ('flux', (('any_1d',),)))
+HEXV841_W_VERTICAL_FLUX_F32_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32')]
+HEXV841_W_VERTICAL_FLUX_F32_THREADS_PER_GROUP = 128
+HEXV841_W_VERTICAL_FLUX_F32_LAYOUT_HASH = 'aa6dc7ef78a8290047c29506dcc3afd332c2cbd42229f989522bae16442d8e74'
+HEXV841_W_VERTICAL_FLUX_F32_SHADER_HASH = '88061e6667828b671dac769b8b2ab097e40a76cff9a7853670f4e75ec2179ca5'
+
 RRTMGP_MYNN_CLOUD_MERGE_GSD41_RESOURCES = (('qc', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('cldfra', 'float', 'read_write'), ('qc_bl', 'float', 'read'), ('cldfra_bl', 'float', 'read'), ('tlay', 'float', 'read'))
 RRTMGP_MYNN_CLOUD_MERGE_GSD41_ACCESS = ('read_write', 'read_write', 'read_write', 'read', 'read', 'read')
 RRTMGP_MYNN_CLOUD_MERGE_GSD41_SHAPES = (('qc', (('ncol', 'nlay'),)), ('qi', (('ncol', 'nlay'),)), ('cldfra', (('ncol', 'nlay'),)), ('qc_bl', (('ncol', 'nlay'),)), ('cldfra_bl', (('ncol', 'nlay'),)), ('tlay', (('ncol', 'nlay'),)))

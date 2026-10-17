@@ -1039,6 +1039,14 @@ def build(output: Path) -> dict:
                   "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
                   "-c", str(source), "-o", str(air_path)])
             integration_fragment_airs.append(air_path)
+        for source in sorted((ROOT / "woof/metal/shaders").glob("hexv841_*.metal")):
+            air_path = temp / f"{source.stem}.air"
+            _run([str(metal), f"-fmodules-cache-path={module_cache}",
+                  "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+                  "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+                  "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+                  "-c", str(source), "-o", str(air_path)])
+            integration_fragment_airs.append(air_path)
         dudhia_shortwave_air = temp / "dudhia_shortwave.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",

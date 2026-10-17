@@ -1,0 +1,99 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_density_tendency_f32",
+      "module": "hexv841_density_tendency_f32",
+      "source": "woof/metal/shaders/hexv841_density_tendency_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal.py",
+      "cuda_symbol": "density_tendency_f32",
+      "resources": [
+        [
+          "mass_divergence",
+          "float",
+          "read"
+        ],
+        [
+          "rho_w",
+          "float",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float",
+          "read"
+        ],
+        [
+          "physics_tendency",
+          "float",
+          "read"
+        ],
+        [
+          "tendency",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mass_divergence": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rho_w": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "physics_tendency": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "has_physics",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

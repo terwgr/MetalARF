@@ -1,0 +1,116 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_laplacian_vorticity_f32",
+      "module": "hexv841_laplacian_vorticity_f32",
+      "source": "woof/metal/shaders/hexv841_laplacian_vorticity_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal.py",
+      "cuda_symbol": "laplacian_vorticity_f32",
+      "resources": [
+        [
+          "delsq_u",
+          "float",
+          "read"
+        ],
+        [
+          "edges_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dc_edge",
+          "float",
+          "read"
+        ],
+        [
+          "area_triangle",
+          "float",
+          "read"
+        ],
+        [
+          "delsq_vorticity",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "delsq_u": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "edges_on_vertex": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "dc_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "area_triangle": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "delsq_vorticity": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

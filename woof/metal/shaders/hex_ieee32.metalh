@@ -1,0 +1,141 @@
+#ifndef WOOF_HEX_IEEE32_METALH
+#define WOOF_HEX_IEEE32_METALH
+
+// IEEE binary32 helpers for the Hex v8.4.1 shaders.
+//
+// Apple GPUs flush float32 subnormal operands and results.  The CUDA Hex
+// kernels run with flush-to-zero too and recover IEEE results through the
+// mpas_* helpers of woof/hex/cuda_fp32.py.  These are the same helpers: the
+// ordinary path stays native float, and the operand and result conditions
+// that send CUDA to its binary64 fallback send this one to the integer
+// binary32 library, which rounds to the same IEEE result.
+
+#include <metal_stdlib>
+#include "soft_binary32.metalh"
+
+static inline uint mpas_f32_magnitude_bits(const float value)
+{ return as_type<uint>(value) & 0x7fffffffu; }
+
+static inline bool mpas_is_subnormal_f32(const float value)
+{
+    const uint magnitude = mpas_f32_magnitude_bits(value);
+    return magnitude != 0u && (magnitude & 0x7f800000u) == 0u;
+}
+
+static inline float mpas_soft(const uint bits) { return as_type<float>(bits); }
+
+static inline float mpas_add(const float left, const float right)
+{
+    const float ordinary = left + right;
+    const uint result_magnitude = mpas_f32_magnitude_bits(ordinary);
+    const uint result_exponent = result_magnitude >> 23;
+    if (result_exponent > 24u) return ordinary;
+    const uint left_magnitude = mpas_f32_magnitude_bits(left);
+    const uint right_magnitude = mpas_f32_magnitude_bits(right);
+    const uint left_exponent = left_magnitude >> 23;
+    const uint right_exponent = right_magnitude >> 23;
+    if ((left_exponent == 0u && left_magnitude != 0u)
+            || (right_exponent == 0u && right_magnitude != 0u)) {
+        return mpas_soft(soft32_add(as_type<uint>(left), as_type<uint>(right)));
+    }
+    if (left_exponent <= 23u && right_exponent <= 23u
+            && result_exponent == 0u
+            && left_magnitude != right_magnitude
+            && left_magnitude != 0u && right_magnitude != 0u) {
+        return mpas_soft(soft32_add(as_type<uint>(left), as_type<uint>(right)));
+    }
+    return ordinary;
+}
+
+static inline float mpas_sub(const float left, const float right)
+{
+    const float ordinary = left - right;
+    const uint result_magnitude = mpas_f32_magnitude_bits(ordinary);
+    const uint result_exponent = result_magnitude >> 23;
+    if (result_exponent > 24u) return ordinary;
+    const uint left_magnitude = mpas_f32_magnitude_bits(left);
+    const uint right_magnitude = mpas_f32_magnitude_bits(right);
+    const uint left_exponent = left_magnitude >> 23;
+    const uint right_exponent = right_magnitude >> 23;
+    if ((left_exponent == 0u && left_magnitude != 0u)
+            || (right_exponent == 0u && right_magnitude != 0u)) {
+        return mpas_soft(soft32_sub(as_type<uint>(left), as_type<uint>(right)));
+    }
+    if (left_exponent <= 23u && right_exponent <= 23u
+            && result_exponent == 0u
+            && left_magnitude != right_magnitude
+            && left_magnitude != 0u && right_magnitude != 0u) {
+        return mpas_soft(soft32_sub(as_type<uint>(left), as_type<uint>(right)));
+    }
+    return ordinary;
+}
+
+static inline float mpas_mul(const float left, const float right)
+{
+    const float ordinary = left * right;
+    if ((mpas_f32_magnitude_bits(ordinary) & 0x7f800000u) == 0u) {
+        const uint left_magnitude = mpas_f32_magnitude_bits(left);
+        const uint right_magnitude = mpas_f32_magnitude_bits(right);
+        if (left_magnitude != 0u && right_magnitude != 0u) {
+            return mpas_soft(
+                soft32_mul(as_type<uint>(left), as_type<uint>(right)));
+        }
+    }
+    return ordinary;
+}
+
+static inline float mpas_div(const float left, const float right)
+{
+    const uint left_magnitude = mpas_f32_magnitude_bits(left);
+    const uint right_magnitude = mpas_f32_magnitude_bits(right);
+    const uint left_exponent = left_magnitude >> 23;
+    const uint right_exponent = right_magnitude >> 23;
+    if ((left_exponent == 0u && left_magnitude != 0u)
+            || (right_exponent == 0u && right_magnitude != 0u)) {
+        return mpas_soft(soft32_div(as_type<uint>(left), as_type<uint>(right)));
+    }
+    const float ordinary = left / right;
+    if (left_magnitude != 0u && right_magnitude != 0u
+            && left_exponent + 126u <= right_exponent
+            && (mpas_f32_magnitude_bits(ordinary) & 0x7f800000u) == 0u) {
+        return mpas_soft(soft32_div(as_type<uint>(left), as_type<uint>(right)));
+    }
+    return ordinary;
+}
+
+static inline float mpas_sqrt(const float value)
+{
+    if (mpas_is_subnormal_f32(value)) {
+        return mpas_soft(soft32_sqrt(as_type<uint>(value)));
+    }
+    return metal::sqrt(value);
+}
+
+static inline float mpas_abs(const float value)
+{ return as_type<float>(as_type<uint>(value) & 0x7fffffffu); }
+
+static inline float mpas_copysign(const float magnitude, const float sign)
+{
+    return as_type<float>((as_type<uint>(magnitude) & 0x7fffffffu)
+                          | (as_type<uint>(sign) & 0x80000000u));
+}
+
+static inline float mpas_min(const float left, const float right)
+{
+    if (mpas_is_subnormal_f32(left) || mpas_is_subnormal_f32(right)) {
+        return soft32_less(as_type<uint>(right), as_type<uint>(left))
+            ? right : left;
+    }
+    return metal::fmin(left, right);
+}
+
+static inline float mpas_max(const float left, const float right)
+{
+    if (mpas_is_subnormal_f32(left) || mpas_is_subnormal_f32(right)) {
+        return soft32_greater(as_type<uint>(right), as_type<uint>(left))
+            ? right : left;
+    }
+    return metal::fmax(left, right);
+}
+
+#endif

@@ -1,11 +1,13 @@
-"""One explicit Metal caller slice for the Hex CPU preview driver.
+"""Metal launchers for the Hex dry driver's stage kernels.
 
-This module offloads only MPAS horizontal mass-flux divergence.  Mesh fields
-and ``rho_u`` are uploaded for the call, the cell tendency is read back, and
-the rest of the preview integration remains NumPy.  It therefore provides a
-real opt-in dispatch boundary, not a GPU-resident forecast claim.
+Each ``submit_*`` function dispatches one ``hex_*`` shader: mass-flux
+divergence, the acoustic edge update, solve and damping, pressure and edge
+diagnostics, vertical coefficients, momentum, theta, density and vertical
+velocity tendencies, and vertical transport.  Inputs are uploaded for the
+call and results are read back; the driver in ``driver.py`` keeps the state
+on the host between calls.
 
-The launcher requires the generated Metal registry and a bundle containing
+Each launcher requires the generated Metal registry and a bundle containing
 the matching shader; it refuses by capability if the entrypoint is absent.
 """
 

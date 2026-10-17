@@ -1,0 +1,104 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_theta_vertical_flux_f32",
+      "module": "hexv841_theta_vertical_flux_f32",
+      "source": "woof/metal/shaders/hexv841_theta_vertical_flux_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "theta_vertical_flux_f32",
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "theta_saved",
+          "float",
+          "read"
+        ],
+        [
+          "rw",
+          "float",
+          "read"
+        ],
+        [
+          "rw_saved",
+          "float",
+          "read"
+        ],
+        [
+          "fzm",
+          "float",
+          "read"
+        ],
+        [
+          "fzp",
+          "float",
+          "read"
+        ],
+        [
+          "flux",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_saved": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_saved": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "coefficient",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

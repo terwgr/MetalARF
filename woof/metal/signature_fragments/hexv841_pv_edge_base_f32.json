@@ -1,0 +1,73 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_pv_edge_base_f32",
+      "module": "hexv841_pv_edge_base_f32",
+      "source": "woof/metal/shaders/hexv841_pv_edge_base_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal.py",
+      "cuda_symbol": "pv_edge_base_f32",
+      "resources": [
+        [
+          "pv_vertex",
+          "float",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "pv_edge",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pv_vertex": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "pv_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

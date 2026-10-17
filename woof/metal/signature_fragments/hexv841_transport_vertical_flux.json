@@ -1,0 +1,93 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_transport_vertical_flux",
+      "module": "hexv841_transport_vertical_flux",
+      "source": "woof/metal/shaders/hexv841_transport_vertical_flux.metal",
+      "cuda_source": "woof/hex/cuda_transport.py",
+      "cuda_symbol": "transport_vertical_flux",
+      "resources": [
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "vertical_flux",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "stage": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "velocity": [
+          [
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "fzm": [
+          [
+            "nlev"
+          ]
+        ],
+        "fzp": [
+          [
+            "nlev"
+          ]
+        ],
+        "vertical_flux": [
+          [
+            "ntracers",
+            "nlev+1",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "coefficient",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

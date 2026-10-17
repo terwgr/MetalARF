@@ -1,0 +1,185 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_pv_apvm_v841_f32",
+      "module": "hexv841_pv_apvm_v841_f32",
+      "source": "woof/metal/shaders/hexv841_pv_apvm_v841_f32.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_v841.py",
+      "cuda_symbol": "pv_apvm_v841_f32",
+      "resources": [
+        [
+          "normal_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "tangential_velocity",
+          "float",
+          "read"
+        ],
+        [
+          "pv_vertex",
+          "float",
+          "read"
+        ],
+        [
+          "pv_cell",
+          "float",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float",
+          "read"
+        ],
+        [
+          "inv_dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "pv_edge",
+          "float",
+          "read_write"
+        ],
+        [
+          "grad_pv_normal",
+          "float",
+          "read_write"
+        ],
+        [
+          "grad_pv_tangential",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "normal_velocity": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "tangential_velocity": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "pv_vertex": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "pv_cell": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "inv_dv_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "pv_edge": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "grad_pv_normal": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ],
+        "grad_pv_tangential": [
+          [
+            "any_1d"
+          ],
+          [
+            "any_2d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "scale",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

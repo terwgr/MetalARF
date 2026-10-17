@@ -1,0 +1,216 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_recover_cells_f32",
+      "module": "hexv841_recover_cells_f32",
+      "source": "woof/metal/shaders/hexv841_recover_cells_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "recover_cells_f32",
+      "resources": [
+        [
+          "rho_p_saved",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_p_saved",
+          "float",
+          "read"
+        ],
+        [
+          "rho_pp",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float",
+          "read"
+        ],
+        [
+          "rho_base",
+          "float",
+          "read"
+        ],
+        [
+          "rtheta_base",
+          "float",
+          "read"
+        ],
+        [
+          "exner_base",
+          "float",
+          "read"
+        ],
+        [
+          "zz",
+          "float",
+          "read"
+        ],
+        [
+          "exner_saved",
+          "float",
+          "read"
+        ],
+        [
+          "pressure_p_saved",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta",
+          "float",
+          "read_write"
+        ],
+        [
+          "rho_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "rtheta_p",
+          "float",
+          "read_write"
+        ],
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "exner",
+          "float",
+          "read_write"
+        ],
+        [
+          "pressure_p",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_p_saved": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p_saved": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner_saved": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p_saved": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "stage",
+          "int32"
+        ],
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "p0",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

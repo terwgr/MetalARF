@@ -2170,8 +2170,9 @@ def add_forecast_parser(commands: Any) -> None:
              "(GPU)",
         description=(
             "Drive a forecast on a registered mesh. CUDA runs the full v8.4.1 "
-            "forecast; --backend metal runs the Metal-enabled Hex dry dycore "
-            "from a real MPAS init and writes MPAS history frames plus a receipt."
+            "forecast; --backend metal runs the v8.4.1 Hex dycore on Metal "
+            "from a real MPAS init, without physics, and writes MPAS history "
+            "frames plus a receipt. Flags it does not implement are refused."
         ),
     )
     add_forecast_arguments(parser)

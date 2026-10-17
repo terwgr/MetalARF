@@ -1,0 +1,156 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_theta_edge_flux_f32",
+      "module": "hexv841_theta_edge_flux_f32",
+      "source": "woof/metal/shaders/hexv841_theta_edge_flux_f32.metal",
+      "cuda_source": "woof/hex/cuda_driver.py",
+      "cuda_symbol": "theta_edge_flux_f32",
+      "resources": [
+        [
+          "theta",
+          "float",
+          "read"
+        ],
+        [
+          "theta_saved",
+          "float",
+          "read"
+        ],
+        [
+          "ru",
+          "float",
+          "read"
+        ],
+        [
+          "ru_saved",
+          "float",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "adv",
+          "float",
+          "read"
+        ],
+        [
+          "adv3",
+          "float",
+          "read"
+        ],
+        [
+          "n_adv",
+          "int32",
+          "read"
+        ],
+        [
+          "adv_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "flux",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_saved": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_saved": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "rk_step",
+          "int32"
+        ],
+        [
+          "coefficient",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}
