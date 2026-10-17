@@ -2,10 +2,10 @@
 
 Kernels (one shader each, ``hexv841_<cuda_name>``): ``couple_cells``,
 ``project_edges``, ``clamp_wsm6``, ``recover_wsm6``, ``commit_wsm6_state`` and
-``validate_wsm6_surface``.  ``nonnegative_qv_copy_v841_f32`` is dead code on
-CUDA and is not ported.
+``validate_wsm6_surface``.  The CUDA kernel ``nonnegative_qv_copy_v841_f32`` has no
+Metal counterpart because the CUDA route never calls it.
 
-Differences from the CUDA module, all forced by Metal and listed in PORT-NOTES:
+Differences from the CUDA module, all forced by Metal:
 
 * CUDA's device tables of per-array pointers (``const float *const *``) cannot
   exist on Metal.  Each becomes ONE stacked buffer whose slot ``s`` is the
@@ -18,8 +18,9 @@ Differences from the CUDA module, all forced by Metal and listed in PORT-NOTES:
       ``row.surface_accumulators`` order (``inc`` from ``<name>v``).
   The stacks are filled by device-to-device copies.
 * ``kernel_cache`` arguments are replaced by the context carried by the arrays.
-* The regional garbage-column handling (``regional_garbage_cell``) needs
-  ``array[..., column]`` indexing that ``MetalArray`` lacks; it is refused.
+* The regional garbage-column hold (``regional_garbage_cell``) runs through
+  the ``hexv841_copy_column_v841`` kernel, since ``MetalArray`` cannot index
+  ``array[..., column]``.
 """
 
 from __future__ import annotations
@@ -282,12 +283,6 @@ def couple_raw_column_physics_v841(
         )
     raw.validate(n_vert_levels=n_vert_levels, n_cells=n_cells)
     _require("physics.rho_edge", rho_edge, np.float32, (n_vert_levels, n_edges))
-    if geometry.regional_garbage_cell is not None:
-        raise ConfigurationRefusal(
-            "regional_garbage_cell", geometry.regional_garbage_cell,
-            "the Metal coupling has no regional garbage-column hold "
-            "(MetalArray cannot index [..., column])",
-            "a global (non-regional) mesh")
     mctx = _context(state.rho)
     arrays = _arrays(mctx)
     rho = arrays.empty(state.rho.shape, np.float32)
@@ -308,14 +303,33 @@ def couple_raw_column_physics_v841(
         dict(nlev=_i(n_vert_levels), ncells=_i(n_cells), nspecies=_i(len(names)),
              rvord=RV_OVER_RD_F32),
     )
-    _launch(
-        "project_edges_v841_f32", n_edges, mctx,
-        dict(cells=geometry.cells_on_edge, east=geometry.east_cell,
-             north=geometry.north_cell, normal=geometry.edge_normal_vectors,
-             du=raw.du, dv=raw.dv, rho_edge=rho_edge, out_ru=rho_u,
-             invalid=invalid),
-        dict(nlev=_i(n_vert_levels), ncells=_i(n_cells), nedges=_i(n_edges)),
-    )
+    # As on CUDA: native's physics tendency at the limited-area garbage
+    # element is zero, and the projection is the one place a real (ring-7,
+    # one-cell) edge reads it.  The zero is held across the projection only,
+    # since raw.du/raw.dv are the seam's own buffers.
+    from .metal_physics_prep_v841 import _copy_column
+
+    held: list[tuple[Any, Any]] = []
+    garbage = geometry.regional_garbage_cell
+    try:
+        if garbage is not None:
+            zero = arrays.zeros((n_vert_levels,), np.float32)
+            for field in (raw.du, raw.dv):
+                kept = arrays.empty((n_vert_levels,), np.float32)
+                _copy_column(mctx, field, kept, n_vert_levels, n_cells, int(garbage), 1, 0)
+                held.append((field, kept))
+                _copy_column(mctx, zero, field, n_vert_levels, 1, 0, n_cells, int(garbage))
+        _launch(
+            "project_edges_v841_f32", n_edges, mctx,
+            dict(cells=geometry.cells_on_edge, east=geometry.east_cell,
+                 north=geometry.north_cell, normal=geometry.edge_normal_vectors,
+                 du=raw.du, dv=raw.dv, rho_edge=rho_edge, out_ru=rho_u,
+                 invalid=invalid),
+            dict(nlev=_i(n_vert_levels), ncells=_i(n_cells), nedges=_i(n_edges)),
+        )
+    finally:
+        for field, kept in held:
+            _copy_column(mctx, kept, field, n_vert_levels, 1, 0, n_cells, int(garbage))
     invalid_value, validation_d2h = _validation_word(invalid)
     if invalid_value != 0:
         candidates: dict[str, Any] = {
@@ -461,19 +475,12 @@ def recover_post_rk_wsm6_state_v841(
         raise FloatingPointError(
             "post-RK WSM6 numeric validation refused the candidate state"
         )
-    if len(names) != 6:
-        # commit_wsm6_state_v841_f32 hard-codes ``s < 6`` (kept as CUDA has
-        # it).  Any other species count would read or write out of bounds.
-        raise ConfigurationRefusal(
-            "n_species", len(names),
-            "commit_wsm6_state_v841_f32 copies exactly six species",
-            "the six-species WSM6 row")
     _launch(
         "commit_wsm6_state_v841_f32", count, mctx,
         dict(candidate_rho_theta=candidate_rho_theta,
              candidate_scalars=candidate_scalars,
              rho_theta=state.rho_theta, scalars=state.scalars),
-        dict(count=_i(count)),
+        dict(count=_i(count), nspecies=_i(len(names))),
     )
     return MetalPostRkWsm6RecoveryV841(
         state=state,

@@ -2211,7 +2211,9 @@ class DryDycoreDriver:
     diagnostics, momentum, theta and density tendencies, vertical transport
     and scalar transport.  The host orchestrates the step and owns the
     prognostic state between calls.  Saved Euler mixing and 3-D divergence
-    damping still run in NumPy.  This is not the CUDA forecast route.
+    damping still run in NumPy.  This is the dry preview driver; the
+    v8.4.1 forecast with physics runs on Metal through
+    :mod:`woof.hex.metal_driver_v841` (``woof hex forecast --backend metal``).
     """
 
     def __init__(

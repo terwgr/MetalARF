@@ -5,7 +5,7 @@ Kernels (one shader each, ``hexv841_<cuda_name>``): ``prep_mass``,
 ``validate_prep``.  The CPU oracles, constants and result field inventory are
 the CUDA module's own; this module supplies the resident Metal flow.
 
-Differences from the CUDA module, all forced by Metal and listed in PORT-NOTES:
+Differences from the CUDA module, all forced by Metal:
 
 * CUDA's device pointer table of per-species outputs (``float *const *qout``
   in ``prep_mass``, ``const float *const *qspecies`` in ``validate_prep``)
@@ -13,11 +13,12 @@ Differences from the CUDA module, all forced by Metal and listed in PORT-NOTES:
   order (slot ``s`` is table entry ``s``).  The public per-species fields
   ``species_p[name]`` are leading-axis views of that stack.
 * ``kernel_cache`` is dropped; the context comes with the geometry upload.
-* ``regional_garbage_cell`` (a lend-and-restore of one column through
-  ``array[..., column]``) is refused: ``MetalArray`` cannot index that way.
+* ``regional_garbage_cell``'s lend-and-restore of one column runs through
+  the ``hexv841_copy_column_v841`` kernel, since ``MetalArray`` cannot index
+  ``array[..., column]``.
 * ``reconstruct_winds`` uses ``precise::cos/sin`` and ``prep_interfaces`` /
   ``validate_prep`` use ``precise::exp/log`` in place of CUDA ``cosf, sinf,
-  expf, logf``.  FOR OPUS.
+  expf, logf``.
 """
 
 from __future__ import annotations
@@ -329,6 +330,16 @@ def _diagnose_prep_failure(
     return "; ".join(findings)
 
 
+def _copy_column(context: Any, src: Any, dst: Any, rows: int, src_stride: int,
+                 src_col: int, dst_stride: int, dst_col: int) -> None:
+    """``dst[r, dst_col] = src[r, src_col]`` over the flattened leading rows."""
+
+    _launch("copy_column_v841", rows, context,
+            dict(src=src.view((int(src.size),)), dst=dst.view((int(dst.size),))),
+            dict(rows=_i(rows), src_stride=_i(src_stride), src_col=_i(src_col),
+                 dst_stride=_i(dst_stride), dst_col=_i(dst_col)))
+
+
 def prepare_mpas_to_phys_metal_v841(
     atmosphere: Any,
     *,
@@ -383,141 +394,159 @@ def prepare_mpas_to_phys_metal_v841(
 
     if regional_garbage_cell is None:
         regional_garbage_cell = geometry.regional_garbage_cell
+    # The limited-area garbage column, lent a real column for the duration of
+    # the preparation and given back after it, as on CUDA: the dycore's pool
+    # values there are not a column, and the preparation's validation refuses
+    # them.  Nothing real reads the garbage column's physics.
+    lent: list[tuple[Any, Any, int, int]] = []
     if regional_garbage_cell is not None:
-        raise ConfigurationRefusal(
-            "regional_garbage_cell", regional_garbage_cell,
-            "the Metal preparation has no regional garbage-column lend "
-            "(MetalArray cannot index [..., column])",
-            "a global (non-regional) mesh")
+        garbage = int(regional_garbage_cell)
+        if garbage != ncells - 1:
+            raise ValueError(
+                "the regional garbage column is the LAST element of the "
+                f"padded extent; got {garbage} with {ncells} columns")
+        lend_context = _context(state.rho)
+        for source in (state.rho, state.scalars, saved.theta_m, saved.exner,
+                       saved.pressure_perturbation, saved.vertical_velocity,
+                       reference.pressure_base, vertical.zz, vertical.zgrid):
+            rows = int(np.prod(source.shape[:-1]))
+            kept = _arrays(lend_context).empty((rows,), np.float32)
+            _copy_column(lend_context, source, kept, rows, ncells, garbage, 1, 0)
+            lent.append((source, kept, rows, garbage))
+            _copy_column(lend_context, source, source, rows, ncells, garbage - 1,
+                         ncells, garbage)
+    try:
+        mctx = _context(state.rho)
+        arrays = _arrays(mctx)
+        # The species outputs are one stack; table entry s of the CUDA qout /
+        # qspecies tables is slot s here, in model species order.
+        qstack = arrays.empty((len(species_names), nlev, ncells), np.float32)
+        output: dict[str, Any] = {
+            f"{name}_p": qstack[index] for index, name in enumerate(species_names)
+        }
+        output.update({
+            name: arrays.empty(mass_shape, np.float32)
+            for name in _MASS_NONSPECIES_FIELDS
+        })
+        output.update({
+            name: arrays.empty(interface_shape, np.float32) for name in _INTERFACE_FIELDS
+        })
+        output.update({
+            name: arrays.empty((ncells,), np.float32) for name in _SURFACE_FIELDS
+        })
+        noahmp_output = {
+            name: arrays.empty(mass_shape, np.float32) for name in _NOAHMP_NAMES
+        }
+        reconstructed_x = arrays.empty(mass_shape, np.float32)
+        reconstructed_y = arrays.empty(mass_shape, np.float32)
+        reconstructed_z = arrays.empty(mass_shape, np.float32)
+        invalid = arrays.zeros((1,), np.int32)
 
-    mctx = _context(state.rho)
-    arrays = _arrays(mctx)
-    # The species outputs are one stack; table entry s of the CUDA qout /
-    # qspecies tables is slot s here, in model species order.
-    qstack = arrays.empty((len(species_names), nlev, ncells), np.float32)
-    output: dict[str, Any] = {
-        f"{name}_p": qstack[index] for index, name in enumerate(species_names)
-    }
-    output.update({
-        name: arrays.empty(mass_shape, np.float32)
-        for name in _MASS_NONSPECIES_FIELDS
-    })
-    output.update({
-        name: arrays.empty(interface_shape, np.float32) for name in _INTERFACE_FIELDS
-    })
-    output.update({
-        name: arrays.empty((ncells,), np.float32) for name in _SURFACE_FIELDS
-    })
-    noahmp_output = {
-        name: arrays.empty(mass_shape, np.float32) for name in _NOAHMP_NAMES
-    }
-    reconstructed_x = arrays.empty(mass_shape, np.float32)
-    reconstructed_y = arrays.empty(mass_shape, np.float32)
-    reconstructed_z = arrays.empty(mass_shape, np.float32)
-    invalid = arrays.zeros((1,), np.int32)
-
-    _launch(
-        "prep_mass_v841_f32", ncells, mctx,
-        dict(rho_zz=state.rho, theta_m=saved.theta_m, scalars=state.scalars,
-             exner=saved.exner, pressure_base=reference.pressure_base,
-             pressure_p=saved.pressure_perturbation, zgrid=vertical.zgrid,
-             zz=vertical.zz, qout=qstack, zz_p=output["zz_p"],
-             rho_dry=output["rho_dry"], rho_p=output["rho_p"],
-             th_p=output["th_p"], t_p=output["t_p"], pi_p=output["pi_p"],
-             pres_p=output["pres_p"], zmid_p=output["zmid_p"],
-             dz_p=output["dz_p"], invalid=invalid),
-        dict(nlev=_i(nlev), ncells=_i(ncells), nspecies=_i(len(species_names)),
-             rvord=RV_OVER_RD_F32),
-    )
-    _launch(
-        "reconstruct_winds_v841_f32", ncells, mctx,
-        dict(normal_velocity=saved.normal_velocity,
-             edges_on_cell=geometry._edges_on_cell,
-             n_edges_on_cell=geometry._n_edges_on_cell,
-             coeffs_reconstruct=geometry._coeffs_reconstruct,
-             lat_cell=geometry._lat_cell, lon_cell=geometry._lon_cell,
-             sealed_edges_on_cell=geometry._sealed_edges_on_cell,
-             sealed_n_edges_on_cell=geometry._sealed_n_edges_on_cell,
-             sealed_coeffs_reconstruct=geometry._sealed_coeffs_reconstruct,
-             sealed_lat_cell=geometry._sealed_lat_cell,
-             sealed_lon_cell=geometry._sealed_lon_cell,
-             x=reconstructed_x, y=reconstructed_y, z=reconstructed_z,
-             u_p=output["u_p"], v_p=output["v_p"], invalid=invalid),
-        dict(nlev=_i(nlev), ncells=_i(ncells), nedges=_i(nedges),
-             maxedges=_i(geometry.max_edges)),
-    )
-    _launch(
-        "prep_noahmp_sounding_v841_f32", ncells, mctx,
-        dict(raw_qv=state.scalars, theta_m=saved.theta_m, exner=saved.exner,
-             pressure_base=reference.pressure_base,
-             pressure_p=saved.pressure_perturbation, zgrid=vertical.zgrid,
-             u_p=output["u_p"], v_p=output["v_p"],
-             dz8w=noahmp_output["dz8w"], qv_curr=noahmp_output["qv_curr"],
-             t_phy=noahmp_output["t_phy"], u_phy=noahmp_output["u_phy"],
-             v_phy=noahmp_output["v_phy"], p8w=noahmp_output["p8w"],
-             invalid=invalid),
-        dict(nlev=_i(nlev), ncells=_i(ncells), rvord=RV_OVER_RD_F32),
-    )
-    _launch(
-        "prep_interfaces_v841_f32", ncells, mctx,
-        dict(rho_zz=state.rho, zz=vertical.zz, qv_p=output["qv_p"],
-             pres_p=output["pres_p"], t_p=output["t_p"], rho_p=output["rho_p"],
-             dz_p=output["dz_p"], zgrid=vertical.zgrid,
-             w=saved.vertical_velocity, w_p=output["w_p"], z_p=output["z_p"],
-             t2_p=output["t2_p"], pres2_p=output["pres2_p"],
-             pres_hyd_p=output["pres_hyd_p"], pres2_hyd_p=output["pres2_hyd_p"],
-             pres_hydd_p=output["pres_hydd_p"],
-             pres2_hydd_p=output["pres2_hydd_p"], psfc_p=output["psfc_p"],
-             psfc_hyd_p=output["psfc_hyd_p"], psfc_hydd_p=output["psfc_hydd_p"],
-             znu_p=output["znu_p"], znu_hyd_p=output["znu_hyd_p"],
-             plrad=output["plrad"], invalid=invalid),
-        dict(nlev=_i(nlev), ncells=_i(ncells), gravity=GRAVITY_F32),
-    )
-    validate_arrays = dict(
-        edges_on_cell=geometry._edges_on_cell,
-        n_edges_on_cell=geometry._n_edges_on_cell,
-        coeffs_reconstruct=geometry._coeffs_reconstruct,
-        lat_cell=geometry._lat_cell, lon_cell=geometry._lon_cell,
-        source_scalars=state.scalars, source_theta_m=saved.theta_m,
-        source_exner=saved.exner, qspecies=qstack,
-        **{name: output[name] for name in _MASS_NONSPECIES_FIELDS},
-        **{name: output[name] for name in _INTERFACE_FIELDS},
-        **{name: output[name] for name in _SURFACE_FIELDS},
-        **{f"noah_{name}": noahmp_output[name] for name in _NOAHMP_NAMES},
-        invalid=invalid,
-    )
-    _launch(
-        "validate_prep_v841_f32", ncells, mctx, validate_arrays,
-        dict(nlev=_i(nlev), ncells=_i(ncells), nedges=_i(nedges),
-             maxedges=_i(geometry.max_edges),
-             wsm6_ready=_i(1 if post_rk_wsm6 else 0), gravity=GRAVITY_F32,
-             rvord=RV_OVER_RD_F32, nspecies=_i(len(species_names))),
-    )
-    started = time.perf_counter()
-    invalid_value = int(invalid.to_numpy()[0])
-    validation = TransferStats(int(invalid.nbytes), time.perf_counter() - started)
-    if invalid_value != 0:
-        raise FloatingPointError(
-            "MPAS_to_physics Metal preparation failed numeric/geometry "
-            "validation: "
-            + _diagnose_prep_failure(output, noahmp_output, n_cells=ncells)
+        _launch(
+            "prep_mass_v841_f32", ncells, mctx,
+            dict(rho_zz=state.rho, theta_m=saved.theta_m, scalars=state.scalars,
+                 exner=saved.exner, pressure_base=reference.pressure_base,
+                 pressure_p=saved.pressure_perturbation, zgrid=vertical.zgrid,
+                 zz=vertical.zz, qout=qstack, zz_p=output["zz_p"],
+                 rho_dry=output["rho_dry"], rho_p=output["rho_p"],
+                 th_p=output["th_p"], t_p=output["t_p"], pi_p=output["pi_p"],
+                 pres_p=output["pres_p"], zmid_p=output["zmid_p"],
+                 dz_p=output["dz_p"], invalid=invalid),
+            dict(nlev=_i(nlev), ncells=_i(ncells), nspecies=_i(len(species_names)),
+                 rvord=RV_OVER_RD_F32),
         )
-    species_outputs = frozenset(f"{name}_p" for name in species_names)
-    result = MetalMpasToPhysColumnsV841(
-        species_p={name: output[f"{name}_p"] for name in species_names},
-        **{
-            name: value for name, value in output.items()
-            if name not in species_outputs
-        },
-        noahmp_sounding=MetalNoahmpSoundingV841(**noahmp_output),
-        wsm6_ready=post_rk_wsm6,
-        _source_scalars=state.scalars,
-        time_seconds=float(state.time_seconds),
-        validation_d2h=validation,
-        geometry_receipt=MappingProxyType(geometry.receipt()),
-    )
-    result.validate()
-    return result
+        _launch(
+            "reconstruct_winds_v841_f32", ncells, mctx,
+            dict(normal_velocity=saved.normal_velocity,
+                 edges_on_cell=geometry._edges_on_cell,
+                 n_edges_on_cell=geometry._n_edges_on_cell,
+                 coeffs_reconstruct=geometry._coeffs_reconstruct,
+                 lat_cell=geometry._lat_cell, lon_cell=geometry._lon_cell,
+                 sealed_edges_on_cell=geometry._sealed_edges_on_cell,
+                 sealed_n_edges_on_cell=geometry._sealed_n_edges_on_cell,
+                 sealed_coeffs_reconstruct=geometry._sealed_coeffs_reconstruct,
+                 sealed_lat_cell=geometry._sealed_lat_cell,
+                 sealed_lon_cell=geometry._sealed_lon_cell,
+                 x=reconstructed_x, y=reconstructed_y, z=reconstructed_z,
+                 u_p=output["u_p"], v_p=output["v_p"], invalid=invalid),
+            dict(nlev=_i(nlev), ncells=_i(ncells), nedges=_i(nedges),
+                 maxedges=_i(geometry.max_edges)),
+        )
+        _launch(
+            "prep_noahmp_sounding_v841_f32", ncells, mctx,
+            dict(raw_qv=state.scalars, theta_m=saved.theta_m, exner=saved.exner,
+                 pressure_base=reference.pressure_base,
+                 pressure_p=saved.pressure_perturbation, zgrid=vertical.zgrid,
+                 u_p=output["u_p"], v_p=output["v_p"],
+                 dz8w=noahmp_output["dz8w"], qv_curr=noahmp_output["qv_curr"],
+                 t_phy=noahmp_output["t_phy"], u_phy=noahmp_output["u_phy"],
+                 v_phy=noahmp_output["v_phy"], p8w=noahmp_output["p8w"],
+                 invalid=invalid),
+            dict(nlev=_i(nlev), ncells=_i(ncells), rvord=RV_OVER_RD_F32),
+        )
+        _launch(
+            "prep_interfaces_v841_f32", ncells, mctx,
+            dict(rho_zz=state.rho, zz=vertical.zz, qv_p=output["qv_p"],
+                 pres_p=output["pres_p"], t_p=output["t_p"], rho_p=output["rho_p"],
+                 dz_p=output["dz_p"], zgrid=vertical.zgrid,
+                 w=saved.vertical_velocity, w_p=output["w_p"], z_p=output["z_p"],
+                 t2_p=output["t2_p"], pres2_p=output["pres2_p"],
+                 pres_hyd_p=output["pres_hyd_p"], pres2_hyd_p=output["pres2_hyd_p"],
+                 pres_hydd_p=output["pres_hydd_p"],
+                 pres2_hydd_p=output["pres2_hydd_p"], psfc_p=output["psfc_p"],
+                 psfc_hyd_p=output["psfc_hyd_p"], psfc_hydd_p=output["psfc_hydd_p"],
+                 znu_p=output["znu_p"], znu_hyd_p=output["znu_hyd_p"],
+                 plrad=output["plrad"], invalid=invalid),
+            dict(nlev=_i(nlev), ncells=_i(ncells), gravity=GRAVITY_F32),
+        )
+        validate_arrays = dict(
+            edges_on_cell=geometry._edges_on_cell,
+            n_edges_on_cell=geometry._n_edges_on_cell,
+            coeffs_reconstruct=geometry._coeffs_reconstruct,
+            lat_cell=geometry._lat_cell, lon_cell=geometry._lon_cell,
+            source_scalars=state.scalars, source_theta_m=saved.theta_m,
+            source_exner=saved.exner, qspecies=qstack,
+            **{name: output[name] for name in _MASS_NONSPECIES_FIELDS},
+            **{name: output[name] for name in _INTERFACE_FIELDS},
+            **{name: output[name] for name in _SURFACE_FIELDS},
+            **{f"noah_{name}": noahmp_output[name] for name in _NOAHMP_NAMES},
+            invalid=invalid,
+        )
+        _launch(
+            "validate_prep_v841_f32", ncells, mctx, validate_arrays,
+            dict(nlev=_i(nlev), ncells=_i(ncells), nedges=_i(nedges),
+                 maxedges=_i(geometry.max_edges),
+                 wsm6_ready=_i(1 if post_rk_wsm6 else 0), gravity=GRAVITY_F32,
+                 rvord=RV_OVER_RD_F32, nspecies=_i(len(species_names))),
+        )
+        started = time.perf_counter()
+        invalid_value = int(invalid.to_numpy()[0])
+        validation = TransferStats(int(invalid.nbytes), time.perf_counter() - started)
+        if invalid_value != 0:
+            raise FloatingPointError(
+                "MPAS_to_physics Metal preparation failed numeric/geometry "
+                "validation: "
+                + _diagnose_prep_failure(output, noahmp_output, n_cells=ncells)
+            )
+        species_outputs = frozenset(f"{name}_p" for name in species_names)
+        result = MetalMpasToPhysColumnsV841(
+            species_p={name: output[f"{name}_p"] for name in species_names},
+            **{
+                name: value for name, value in output.items()
+                if name not in species_outputs
+            },
+            noahmp_sounding=MetalNoahmpSoundingV841(**noahmp_output),
+            wsm6_ready=post_rk_wsm6,
+            _source_scalars=state.scalars,
+            time_seconds=float(state.time_seconds),
+            validation_d2h=validation,
+            geometry_receipt=MappingProxyType(geometry.receipt()),
+        )
+        result.validate()
+        return result
+    finally:
+        for source, kept, rows, garbage in lent:
+            _copy_column(_context(source), kept, source, rows, 1, 0, ncells, garbage)
 
 
 __all__ = [

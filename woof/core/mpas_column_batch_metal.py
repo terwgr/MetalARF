@@ -11,7 +11,7 @@ The orchestration is the shared one, not a rewrite: phase 1 calls
 ``initialize_physics``; phase 2 calls ``woof.core.microphysics.apply``
 followed by ``PhysicsDriver.accept_microphysics``.  The column state
 carries ``prepared_physics_atmosphere`` and sets ``_metal_setup_state`` and
-``_array_module``, so the regional Metal lanes of ``PhysicsDriver`` take
+``_array_module``, so the regional Metal paths of ``PhysicsDriver`` take
 it, with identity mass coupling (``c1h = 1``, ``c2h = 0``, total dry mass
 exactly 1, unit map factors) exactly as the frozen seam builds it.
 
@@ -21,8 +21,9 @@ The seam's own arithmetic (the ``max(qv, 0)`` clamp, ``exner``,
 the frozen formulas and operation order.  Plain copies use the
 ``MetalArray`` copy and view operations.
 
-Only the WSM6 scheme row is carried.  The P3 and aerosol-aware Thompson
-rows of the frozen seam refuse by name at construction.
+The scheme rows are the frozen seam's own (``_SPECIES_BY_SCHEME``): WSM6
+(``mp_physics = 6``), P3 (50) and aerosol-aware Thompson (28).  A scheme
+without a row refuses by name at construction.
 """
 
 from __future__ import annotations
@@ -37,7 +38,7 @@ from woof.core.microphysics import apply as _arw_microphysics_apply
 from woof.core.mpas_column_batch import (
     RESTART_SCHEMA, MpasColumnPhysicsTendencies, _GRAUPEL_SCHEMES,
     _LAZY_RESTART_KEYS, _MP_PHYSICS_BY_SCHEME, _OUTPUT_BUFFERS,
-    _PHASE1, _PHASE2, _SPECIES, _SPECIES_BY_SCHEME,
+    _PHASE1, _PHASE2, _RHO_DRY_REFUSAL_BY_SCHEME, _SPECIES, _SPECIES_BY_SCHEME,
     _STATE_RESTART_FIELDS_BY_SCHEME, _interface_weights,
     _require_positive, resolve_column_batch_cadences)
 from woof.core.physics import PhysicsDriver, initialize_physics
@@ -92,10 +93,24 @@ class _MetalColumnBatchState:
         self.w = zeros(nz + 1, ny, nx)
         for name in species:
             setattr(self, name, zeros(*shape3))
-        # WSM6 scheme-native radii (microns), the mp=6 cold start.
-        self.effc = full(shape3, 2.49)
-        self.effi = full(shape3, 4.99)
-        self.effs = full(shape3, 9.99)
+        if cfg.mp_physics == 50:
+            # P3, as the CUDA seam's state: one ice category, so no qs,
+            # qg or snow radius; p3_main's background radii (microns) and
+            # the zeroed cross-step supersaturation carriers.
+            self.qs = self.qg = self.effs = None
+            self.effc = full(shape3, 10.0)
+            self.effi = full(shape3, 25.0)
+            self.th_old = zeros(*shape3)
+            self.qv_old = zeros(*shape3)
+        else:
+            # The WSM6 radii (microns); mp=28 shares this cold start.
+            self.effc = full(shape3, 2.49)
+            self.effi = full(shape3, 4.99)
+            self.effs = full(shape3, 9.99)
+        if cfg.mp_physics == 28:
+            # mp=28's surface aerosol emission tendencies, seam-owned.
+            self.nwfa2d = zeros(ny, nx)
+            self.nifa2d = zeros(ny, nx)
         self.h_diabatic = zeros(*shape3)
 
         # Identity mass coupling: chm = c1h*(mub2d + mup) + c2h == 1.0.
@@ -185,10 +200,6 @@ class MetalMpasColumnBatchPhysics:
                 f"{microphysics_scheme!r}: each row names the exact "
                 "transported species set, and a scheme without a row "
                 "would run on substituted state")
-        if microphysics_scheme != "wsm6":
-            raise NotImplementedError(
-                f"the Metal column-batch seam carries only "
-                f"microphysics_scheme='wsm6', got {microphysics_scheme!r}")
         cadences = resolve_column_batch_cadences(
             dt=dt, radiation_seconds=radiation_seconds,
             surface_pbl_seconds=surface_pbl_seconds,
@@ -199,6 +210,11 @@ class MetalMpasColumnBatchPhysics:
         if int(wsm6_hail_opt) not in (0, 1):
             raise ValueError(
                 f"wsm6_hail_opt must be 0 or 1, got {wsm6_hail_opt!r}")
+        if microphysics_scheme != "wsm6" and int(wsm6_hail_opt) != 0:
+            raise ValueError(
+                "wsm6_hail_opt is a WSM6 hail-mode knob; on a "
+                f"microphysics_scheme={microphysics_scheme!r} seam it "
+                "would be silently ignored.  Leave it 0 (the default)")
         threshold = float(xice_threshold)
         if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
             raise ValueError(
@@ -249,11 +265,15 @@ class MetalMpasColumnBatchPhysics:
         from woof.physics_compat import RRTMG_VARIANT_LEGACY
         from woof.metal.array import MetalArrayModule
         mp_physics = _MP_PHYSICS_BY_SCHEME[microphysics_scheme]
+        # As the CUDA seam: mp=28 names its data-free aerosol start.
+        aerosol_source = ({"mp28_aerosol_source": "synthetic"}
+                          if microphysics_scheme == "thompson_aero" else {})
         cfg = RunConfig(
             nx=ncol, ny=1, nz=nz, dx=dx, dy=dx,
             ztop=top_nominal, dt=float(cadences["dt"]),
             run_seconds=0.0, moist=True, mp_physics=mp_physics,
             wsm6_hail_opt=int(wsm6_hail_opt),
+            **aerosol_source,
             ra_physics=4, ra_rrtmg_variant=RRTMG_VARIANT_LEGACY,
             sf_sfclay_physics=1, sf_surface_physics=4,
             bl_pbl_physics=1,
@@ -289,6 +309,9 @@ class MetalMpasColumnBatchPhysics:
             "xland_source": ("native" if xland is not None
                              else "derived-from-landmask"),
         }
+        if microphysics_scheme != "wsm6":
+            # As the CUDA seam: a cross-scheme restore refuses on identity.
+            self._identity["microphysics"] = microphysics_scheme
 
         # ---- device construction from here on --------------------------
         xp = array_module if array_module is not None else MetalArrayModule()
@@ -339,6 +362,11 @@ class MetalMpasColumnBatchPhysics:
             radiation_longitude=lon.reshape(1, ncol))
 
         self._aerosol_init = None
+        if microphysics_scheme == "thompson_aero":
+            # As the CUDA seam: the cold start ran on zero placeholder
+            # buffers; thompson_init runs for real at first contact.
+            for name in ("nwfa", "nifa", "nwfa2d"):
+                getattr(state, name)[...] = _F32(0.0)
         shape3 = (nz, 1, ncol)
         iface3 = (nz + 1, 1, ncol)
         self._gf_rthdynten = xp.zeros(shape3, dtype=_F32)
@@ -556,7 +584,7 @@ class MetalMpasColumnBatchPhysics:
                    nwfa=None, nifa=None, pressure,
                    rho_dry=None, z_interface,
                    refl_10cm_due: bool = False) -> dict:
-        """Run WSM6 in place on the caller's arrays; return the receipt."""
+        """Run the phase-2 scheme in place on the caller's arrays."""
         if self._pending_phase != _PHASE2:
             raise RuntimeError(
                 "run_phase2 called out of order: run_phase1 must run "
@@ -568,15 +596,22 @@ class MetalMpasColumnBatchPhysics:
             "run_phase2", qv=qv, qc=qc, qr=qr, qi=qi, qs=qs, qg=qg,
             ni=ni, nr=nr, qir=qir, qib=qib, nc=nc, nwfa=nwfa,
             nifa=nifa)
-        if rho_dry is None:
+        scheme = self._microphysics_scheme
+        wsm6 = scheme == "wsm6"
+        if wsm6 and rho_dry is None:
             raise ValueError(
                 "run_phase2: microphysics_scheme='wsm6' requires "
                 "rho_dry (WSM6's adapter derives rho = 1/alt, "
                 "woof/core/wsm6.py:109-112)")
+        if not wsm6 and rho_dry is not None:
+            raise ValueError(
+                f"run_phase2: microphysics_scheme={scheme!r} does not "
+                f"consume rho_dry -- {_RHO_DRY_REFUSAL_BY_SCHEME[scheme]}")
         for name, value in (("theta", theta), ("pressure", pressure),
                             *species.items()):
             self._require_input(name, value, level)
-        self._require_input("rho_dry", rho_dry, level)
+        if wsm6:
+            self._require_input("rho_dry", rho_dry, level)
         self._require_input("z_interface", z_interface, iface)
 
         state, cfg, driver = self._state, self._cfg, self._driver
@@ -586,17 +621,22 @@ class MetalMpasColumnBatchPhysics:
         for name, value in species.items():
             setattr(state, name, v3(value))
         state.p = v3(pressure)
-        alt = state.scratch((nz, 1, ncol), "physics_column_alt")
-        _launch(ctx, "alt", nz * ncol,
-                {"rho_dry": _flat(rho_dry), "alt": _flat(alt)},
-                {"n": nz * ncol})
-        state.alt = alt
+        if wsm6:
+            alt = state.scratch((nz, 1, ncol), "physics_column_alt")
+            _launch(ctx, "alt", nz * ncol,
+                    {"rho_dry": _flat(rho_dry), "alt": _flat(alt)},
+                    {"n": nz * ncol})
+            state.alt = alt
         php = state.scratch((nz + 1, 1, ncol), "physics_column_php")
         _launch(ctx, "geopotential", (nz + 1) * ncol,
                 {"z_interface": _flat(z_interface), "php": _flat(php)},
                 {"n": (nz + 1) * ncol, "g": _F32(_constants.G)})
         state.php = php
         try:
+            if scheme == "thompson_aero" and self._aerosol_init is None:
+                # FIRST CONTACT, as the CUDA seam: thompson_init once, on
+                # the caller's bound state and geometry.
+                self._aerosol_init = self._thompson_first_contact()
             diagnostics = type(self)._PHASE2_MICROPHYSICS(
                 state, cfg, self._dt, refl_10cm_due=refl_10cm_due)
             driver.accept_microphysics(diagnostics)
@@ -624,9 +664,36 @@ class MetalMpasColumnBatchPhysics:
         return receipt
 
     # ------------------------------------------------------------------
+    def _thompson_first_contact(self) -> dict:
+        """``thompson_init`` on the caller's bound mp=28 state, once.
+
+        As ``MpasColumnBatchPhysics._thompson_first_contact``: the
+        synthetic CCN/IN fill for each absent field, or, when the caller
+        brought water-friendly aerosol, real.exe's ``nwfa2d`` from the
+        lowest level (module_initialize_real.F:4518-4519), evaluated once
+        on the host in WRF's single-precision order.
+        """
+        from woof.core.microphysics_aerosol import thompson_aerosol_init_fill
+        state = self._state
+        filled = thompson_aerosol_init_fill(state, self._cfg)
+        ccn_filled, in_filled = bool(filled["ccn"]), bool(filled["in"])
+        if ccn_filled:
+            nwfa2d_source = "thompson_init"
+        else:
+            php = state.php.to_numpy()
+            nwfa = state.nwfa.to_numpy()
+            z1 = np.divide(np.subtract(php[1], php[0]), _F32(_constants.G))
+            nwfa2d = np.multiply(
+                np.multiply(nwfa[0], _F32(0.000196)),
+                np.divide(_F32(50.0), z1)).astype(_F32)
+            state.nwfa2d[...] = self._xp.asarray(nwfa2d)
+            nwfa2d_source = "caller-aerosol"
+        return {"ccn_filled": ccn_filled, "in_filled": in_filled,
+                "nwfa2d_source": nwfa2d_source}
+
     @property
     def aerosol_init_receipt(self):
-        return None
+        return None if self._aerosol_init is None else dict(self._aerosol_init)
 
     def accumulated_precipitation(self) -> dict:
         """Device copies: RAINNC/SNOWNC/GRAUPELNC/RAINC (mm)."""
@@ -701,6 +768,10 @@ class MetalMpasColumnBatchPhysics:
                                 else float(kf_time)),
             "carriers": driver.carriers.state(),
         }
+        if self._microphysics_scheme == "thompson_aero":
+            # As the CUDA seam: a restored mp=28 seam must know first
+            # contact already ran, or it would re-test checkpointed aerosol.
+            scalars["aerosol_init"] = self.aerosol_init_receipt
         return {
             "identity": dict(self._identity),
             "arrays": arrays,
@@ -724,8 +795,17 @@ class MetalMpasColumnBatchPhysics:
                 f"configuration: {payload['identity']} != "
                 f"{self._identity}")
         driver, state = self._driver, self._state
-        live = self._restart_manifest()
         stored = dict(payload["arrays"])
+        # A cumulus tendency the scheme couples beyond its initial set (GF
+        # couples rqi wherever the state carries ice) is born on the first
+        # cumulus call; a fresh seam gives it its carrier before restoring.
+        prefix = "driver/cumulus_tendencies/"
+        live = self._restart_manifest()
+        born = tuple(key[len(prefix):] for key in stored
+                     if key.startswith(prefix) and key not in live)
+        if born:
+            driver.cumulus_tendencies.materialize(born)
+            live = self._restart_manifest()
         lazy = {}
         for key in _LAZY_RESTART_KEYS:
             if key in stored and key not in live:
@@ -769,6 +849,14 @@ class MetalMpasColumnBatchPhysics:
         adapter = driver.cumulus_callable
         if adapter is not None and hasattr(adapter, "_history_time"):
             adapter._history_time = scalars["kf_history_time"]
+        if self._microphysics_scheme == "thompson_aero":
+            if "aerosol_init" not in scalars:
+                raise ValueError(
+                    "restart payload lacks scalars['aerosol_init']: an "
+                    "mp=28 payload records whether thompson_init's first "
+                    "contact ran")
+            receipt = scalars["aerosol_init"]
+            self._aerosol_init = None if receipt is None else dict(receipt)
         driver.carriers.restore(scalars["carriers"])
         self._pending_phase = _PHASE1
 

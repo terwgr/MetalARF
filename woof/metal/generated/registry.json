@@ -13472,6 +13472,22 @@
       "arithmetic_policies": [
         "default"
       ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "acoustic_column_solve_regional_v841",
+      "layout_hash": "06cd3a4056f3cad14ced108e4c8a83a27dd70f6d7705617da9e1302725d8af0e",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_acoustic_column_solve_regional_v841.metal",
+      "module": "hexv841_acoustic_column_solve_regional_v841",
+      "name": "hexv841_acoustic_column_solve_regional_v841",
+      "parameter_size": 12,
+      "resource_count": 31,
+      "shader_hash": "dca0547a318bdffea7a60076a1baa3fd0d83e2d4648d8d6deb40eea07d9c3720",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
       "cuda_source": "woof/hex/cuda_acoustic_v841.py",
       "cuda_symbol": "acoustic_column_solve_v841",
       "layout_hash": "274c03f941887f786842663c732530d5257e5c779bb8fbb9ed9f9df0b2c0b759",
@@ -13536,6 +13552,22 @@
       "arithmetic_policies": [
         "default"
       ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "acoustic_rs_ts_regional_v841",
+      "layout_hash": "e98aad0c31fcb2f95f3d494be5ab17e6e5c171eed63ecdec720e85ec4c45adb3",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_acoustic_rs_ts_regional_v841.metal",
+      "module": "hexv841_acoustic_rs_ts_regional_v841",
+      "name": "hexv841_acoustic_rs_ts_regional_v841",
+      "parameter_size": 20,
+      "resource_count": 20,
+      "shader_hash": "27735f1676376e2329612d7da0f28f39f446bc154cc2f754b5ae0378a9c2f00c",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
       "cuda_source": "woof/hex/cuda_acoustic_v841.py",
       "cuda_symbol": "acoustic_rs_ts_v841",
       "layout_hash": "6358bf7dbecefef68745feb8cee66a0a22d90da8d825ba1c01da3875eb32b040",
@@ -13562,6 +13594,22 @@
       "parameter_size": 36,
       "resource_count": 12,
       "shader_hash": "29468d5c43401788097e0841e7efc2b4516dc113b073f96e02371b42715ffd91",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "acoustic_ru_regional_v841",
+      "layout_hash": "81891193f42fc6ac6da95b222fe759a34cc77aa9d9017b9a925034a6fde451c4",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_acoustic_ru_regional_v841.metal",
+      "module": "hexv841_acoustic_ru_regional_v841",
+      "name": "hexv841_acoustic_ru_regional_v841",
+      "parameter_size": 32,
+      "resource_count": 13,
+      "shader_hash": "041de73e240c29b03f7c26eb44d13cd2499d8c2f98f31c8bcbca45897e27610b",
       "threads_per_group": 128
     },
     {
@@ -13650,14 +13698,14 @@
       ],
       "cuda_source": "woof/hex/cuda_physics_v841.py",
       "cuda_symbol": "commit_wsm6_state_v841_f32",
-      "layout_hash": "6f90564ad090b974fdfafedb7f1b6665ae5ce7e06ae3f84ebf62f1212b572cd4",
+      "layout_hash": "03802b164f0bf87cd7e5977f9e7cdae428a8ea2ec212dcc63b4c6c3dc40aefdc",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/hexv841_commit_wsm6_state_v841_f32.metal",
       "module": "hexv841_commit_wsm6_state_v841_f32",
       "name": "hexv841_commit_wsm6_state_v841_f32",
-      "parameter_size": 4,
+      "parameter_size": 8,
       "resource_count": 4,
-      "shader_hash": "d26bd49632ece4eee6ea0322b3609a5bd8069bc7fe0e5d33fa645a9a65c85d37",
+      "shader_hash": "686fed72054e70daac1ea8ac7a337d0c0b8b2f4dbfebd65afcf0cec496bcd8a1",
       "threads_per_group": 128
     },
     {
@@ -14320,6 +14368,310 @@
       "arithmetic_policies": [
         "default"
       ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_bdy_adjust_scalars_compute_v841",
+      "layout_hash": "00fddf2cb4e1543b0a31644a369f0f7b1bbe4b6c265abc12ae54a334d6b7fe53",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_compute_v841.metal",
+      "module": "hexv841_regional_bdy_adjust_scalars_compute_v841",
+      "name": "hexv841_regional_bdy_adjust_scalars_compute_v841",
+      "parameter_size": 40,
+      "resource_count": 13,
+      "shader_hash": "bac93559982f49900be6f403bc778194b875123fdc2ecb727abb4d41287cfc61",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_bdy_adjust_scalars_copyback_v841",
+      "layout_hash": "18776569f3cffaef317662492153946e827ac8ad0c1fe5d72c2e4d68812c910b",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_copyback_v841.metal",
+      "module": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
+      "name": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
+      "parameter_size": 16,
+      "resource_count": 3,
+      "shader_hash": "91c464cfbcf9d6ba926bcc79dd54043dee58da4719b9740ca7b6af15ee418822",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_bdy_set_scalars_v841",
+      "layout_hash": "26d98bceeef722a65e00d0f854ca41afe846b396ab2ff16723f73251439e0e73",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_bdy_set_scalars_v841.metal",
+      "module": "hexv841_regional_bdy_set_scalars_v841",
+      "name": "hexv841_regional_bdy_set_scalars_v841",
+      "parameter_size": 16,
+      "resource_count": 3,
+      "shader_hash": "585f6770e4f9697c3243b269320b0eba3ef090643acd878409baa5f8be45df9d",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_clamp_negative_scalars_v841",
+      "layout_hash": "fe66cc98cc20e9f322dd4f9c3ffdc7988d1cb8edc749451f710aa30e1e8d2883",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_clamp_negative_scalars_v841.metal",
+      "module": "hexv841_regional_clamp_negative_scalars_v841",
+      "name": "hexv841_regional_clamp_negative_scalars_v841",
+      "parameter_size": 4,
+      "resource_count": 1,
+      "shader_hash": "cf41ebcf2d9d5c3b8e5a757873bec8d2eef2929cc6bae1a64f429338421ddeb7",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_derive_v841",
+      "layout_hash": "090c1e14928f132e7c5d679d5ba7f2e1c740dc98add3d54bc6eeeca5296b430f",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_lbc_derive_v841.metal",
+      "module": "hexv841_regional_lbc_derive_v841",
+      "name": "hexv841_regional_lbc_derive_v841",
+      "parameter_size": 8,
+      "resource_count": 6,
+      "shader_hash": "a3413ff57c6834b86b3efca078c916d4886e173fe86ed75a3a2ad98b825fc7cb",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_rho_edge_v841",
+      "layout_hash": "e729badffea133e1831575b62b2ec6d60531d38410babeae2e04b8b7dff05153",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_lbc_rho_edge_v841.metal",
+      "module": "hexv841_regional_lbc_rho_edge_v841",
+      "name": "hexv841_regional_lbc_rho_edge_v841",
+      "parameter_size": 12,
+      "resource_count": 5,
+      "shader_hash": "07cfee42a3d478d049becb9a3ffe37bc57686f8d6110f7a7a9db0e06dfd87ca5",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_state_at_v841",
+      "layout_hash": "24d9c431cd7da550b08e80e697aa9b211a958d6fe28fcfb52fc6ea8cb3ad4493",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_lbc_state_at_v841.metal",
+      "module": "hexv841_regional_lbc_state_at_v841",
+      "name": "hexv841_regional_lbc_state_at_v841",
+      "parameter_size": 8,
+      "resource_count": 3,
+      "shader_hash": "7d6a28dc233d01022bc35a17e4f0c2d595526c587ac47622da8ae98c4f2e4d61",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_tendency_v841",
+      "layout_hash": "7be0be594abdfd2c56f6d2ee6bdb187099a9bacfd71b55a39bb7b202acdf359e",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_lbc_tendency_v841.metal",
+      "module": "hexv841_regional_lbc_tendency_v841",
+      "name": "hexv841_regional_lbc_tendency_v841",
+      "parameter_size": 8,
+      "resource_count": 3,
+      "shader_hash": "5d2a1de618e1a5e4f447e823b507a3b7f7cc0c2487092d2fdb64453948bbc815",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_forecast_v841.py",
+      "cuda_symbol": "CudaRegionalRuntimeV841.moist_coefficients",
+      "layout_hash": "a2d07c150262946ada9eb275ff699f73e34616b0aff197b36d2ff525a4e31308",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_moist_cell_coefficients.metal",
+      "module": "hexv841_regional_moist_cell_coefficients",
+      "name": "hexv841_regional_moist_cell_coefficients",
+      "parameter_size": 8,
+      "resource_count": 3,
+      "shader_hash": "26bac3ceded8ff3ae07c91515e1fb7b046f40bf2afbe7ffd1ab8653e4c970958",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_forecast_v841.py",
+      "cuda_symbol": "CudaRegionalRuntimeV841.moist_coefficients",
+      "layout_hash": "a6d435a69a84b386ca9e4ac72dd0e23dcf074f996cd66032af5584b8966d0c64",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_moist_edge_coefficients.metal",
+      "module": "hexv841_regional_moist_edge_coefficients",
+      "name": "hexv841_regional_moist_edge_coefficients",
+      "parameter_size": 12,
+      "resource_count": 3,
+      "shader_hash": "633bcf0b17aa531f1a5af0d5f62b02fb90b0446093395c01bcdca3698a088717",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_filter_cell_v841",
+      "layout_hash": "ed3c26fedb4b117553c2aa9ac6fba9efe7d8e291e3cd2c756dc4fb140d0cfd5c",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_relaxzone_filter_cell_v841.metal",
+      "module": "hexv841_regional_relaxzone_filter_cell_v841",
+      "name": "hexv841_regional_relaxzone_filter_cell_v841",
+      "parameter_size": 28,
+      "resource_count": 15,
+      "shader_hash": "533ad293fef5d051911e852ff5096eba511baaa8358b2d8a4a6ef980eb1652f1",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_filter_edge_v841",
+      "layout_hash": "a4c3be9a0d2adc81e3f2b6536400db4e4b0310c055612480d75ce544982390cd",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_relaxzone_filter_edge_v841.metal",
+      "module": "hexv841_regional_relaxzone_filter_edge_v841",
+      "name": "hexv841_regional_relaxzone_filter_edge_v841",
+      "parameter_size": 40,
+      "resource_count": 19,
+      "shader_hash": "10b97515ae415f0baf1e410c60557d18ec7a0bfc0100f9a0a27bf7727298ce8e",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_rayleigh_cell_v841",
+      "layout_hash": "63f2c784074e6a94eb5028f14479e9d3c72736fde6be9b103971d1be2d5019bb",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_relaxzone_rayleigh_cell_v841.metal",
+      "module": "hexv841_regional_relaxzone_rayleigh_cell_v841",
+      "name": "hexv841_regional_relaxzone_rayleigh_cell_v841",
+      "parameter_size": 20,
+      "resource_count": 9,
+      "shader_hash": "b67a3acebce9a3b0a881222302a4141f3778abd080cc7b082279a682c8ff32cc",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_rayleigh_edge_v841",
+      "layout_hash": "eaf17bb891a11baa95326927c62f3a0c6854caf2c343ccc91ddb00d145559a4b",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_relaxzone_rayleigh_edge_v841.metal",
+      "module": "hexv841_regional_relaxzone_rayleigh_edge_v841",
+      "name": "hexv841_regional_relaxzone_rayleigh_edge_v841",
+      "parameter_size": 20,
+      "resource_count": 6,
+      "shader_hash": "7e0ba3ce679b8d3ef107a5e09576dfc4202a25de4ad8567495d2f60ff7013419",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_reset_speczone_values_v841",
+      "layout_hash": "30d9b455945967d5360a42136191305984bd9c8e408c4c9ba8a76b133efeab46",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_reset_speczone_values_v841.metal",
+      "module": "hexv841_regional_reset_speczone_values_v841",
+      "name": "hexv841_regional_reset_speczone_values_v841",
+      "parameter_size": 12,
+      "resource_count": 7,
+      "shader_hash": "94ee9dfd86f757369130bab1f4b2bbc4b1c624b6358f17c10dd226a502f27ab9",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_speczone_tend_cell_v841",
+      "layout_hash": "d16659ecf26c3a2aeea79201a76510868265898b141ea3f51ce251602e4e1fcf",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_speczone_tend_cell_v841.metal",
+      "module": "hexv841_regional_speczone_tend_cell_v841",
+      "name": "hexv841_regional_speczone_tend_cell_v841",
+      "parameter_size": 12,
+      "resource_count": 6,
+      "shader_hash": "cb9ff11e83e4a8f72ad530459ed0401962ee9c4a4999160db08cf8f2a4efb643",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_speczone_tend_edge_v841",
+      "layout_hash": "edbe31569e623b4581a2a19d373cbb1f43213bf825745b79bdda65c3ab3f04f1",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_speczone_tend_edge_v841.metal",
+      "module": "hexv841_regional_speczone_tend_edge_v841",
+      "name": "hexv841_regional_speczone_tend_edge_v841",
+      "parameter_size": 12,
+      "resource_count": 3,
+      "shader_hash": "24f68d905d4a1a20905aed829a619a93faeb27592bd6f0fda58b54d0a85ebaf0",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_speczone_u_ru_v841",
+      "layout_hash": "3aed6f784ed7437bcbd25a7f85b756f7c9665b8052995aafc2449df488bb0688",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_speczone_u_ru_v841.metal",
+      "module": "hexv841_regional_speczone_u_ru_v841",
+      "name": "hexv841_regional_speczone_u_ru_v841",
+      "parameter_size": 12,
+      "resource_count": 5,
+      "shader_hash": "f3e90ab4574e61076d88ef0835a9549fbcfd9a4e99aca5baa8f4863e8fbdcae9",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_zero_speczone_w_v841",
+      "layout_hash": "c0d59af3d5da53e5076ff210523e2ab4bbcd5a3fcd0ba689e08a3e1153ee7643",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_regional_zero_speczone_w_v841.metal",
+      "module": "hexv841_regional_zero_speczone_w_v841",
+      "name": "hexv841_regional_zero_speczone_w_v841",
+      "parameter_size": 12,
+      "resource_count": 2,
+      "shader_hash": "4bf330485964e9a3e89d9dd6e7038b912e57966eeaf2cc2c982aea2e4404e70b",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
       "cuda_source": "woof/hex/cuda_driver.py",
       "cuda_symbol": "scale_f32",
       "layout_hash": "8b850308d4953a3c23279c8e607fc7e1a864943827692594c9c413afab1f766a",
@@ -14459,6 +14811,70 @@
       "resource_count": 8,
       "shader_hash": "e4ef5c9ae39838a9774c3377154d149c50dd7a748d2b05f126f4091f45cdcb44",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_envelope_finish_v841",
+      "layout_hash": "39587fbb52a04f5f2acd102883343600a98b307e1b4c30dd2c1b7956db26bd20",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_solve_region_envelope_finish_v841.metal",
+      "module": "hexv841_solve_region_envelope_finish_v841",
+      "name": "hexv841_solve_region_envelope_finish_v841",
+      "parameter_size": 8,
+      "resource_count": 2,
+      "shader_hash": "13cac220ac1ff62cf8476619b8f2ed98c2951a261ee09bca953b05aeaef424b7",
+      "threads_per_group": 256
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_envelope_v841",
+      "layout_hash": "da060335d8a598b8900186e5d5a18083d9465c0b153fba2ae7b54d03309e4541",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_solve_region_envelope_v841.metal",
+      "module": "hexv841_solve_region_envelope_v841",
+      "name": "hexv841_solve_region_envelope_v841",
+      "parameter_size": 20,
+      "resource_count": 2,
+      "shader_hash": "fa69ea17b7b40dcd69cd1800ed155d7470accdedc35c19fc4374367c52404729",
+      "threads_per_group": 256
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_scrub_columns_v841",
+      "layout_hash": "f63ad5c9b0e08de544171c79337583620008671763074cca8a6c97ef549e6424",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_solve_region_scrub_columns_v841.metal",
+      "module": "hexv841_solve_region_scrub_columns_v841",
+      "name": "hexv841_solve_region_scrub_columns_v841",
+      "parameter_size": 16,
+      "resource_count": 1,
+      "shader_hash": "e2771da128a5d8192e217c1d1e4da629b2c58df1bd4b0387c9f6e325ea0f3174",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_validate_v841",
+      "layout_hash": "c0136bbc79d6830ad3990c5f240efde0fba621709c80b5f0690bb93793d02712",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_solve_region_validate_v841.metal",
+      "module": "hexv841_solve_region_validate_v841",
+      "name": "hexv841_solve_region_validate_v841",
+      "parameter_size": 20,
+      "resource_count": 2,
+      "shader_hash": "ee1cc0b36de3a1605ed01cffa98c47050f7f891c168b009deeee119820325057",
+      "threads_per_group": 256
     },
     {
       "arithmetic_policies": [
@@ -14640,6 +15056,22 @@
       "arithmetic_policies": [
         "default"
       ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "transport_edge_values_regional_v841",
+      "layout_hash": "e58046d9d600b38c31b95717ab8becf79c80bab141e4f5b172133df18a528806",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_transport_edge_values_regional_v841.metal",
+      "module": "hexv841_transport_edge_values_regional_v841",
+      "name": "hexv841_transport_edge_values_regional_v841",
+      "parameter_size": 24,
+      "resource_count": 10,
+      "shader_hash": "45dcd0d333b173c01230c980a25d705a71ad305ab4c3f95dc13954ecb5deeac7",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
       "cuda_source": "woof/hex/cuda_transport_v841.py",
       "cuda_symbol": "transport_interpolate_target_v841",
       "layout_hash": "fa950c29fb640668cd9a175b4600ad4eeecd54eae509d4e0435b779019d041f2",
@@ -14650,6 +15082,22 @@
       "parameter_size": 8,
       "resource_count": 3,
       "shader_hash": "3ecf41dcb8f9bcdf9a76c7a209de70266f2cf72241afb23cfe4ce2df4d0a0674",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "transport_standard_finish_regional_v841",
+      "layout_hash": "0b7d4a6be44964b2b7b65798b89930f0a72d4c434f0f551bea3485955eaccba7",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/hexv841_transport_standard_finish_regional_v841.metal",
+      "module": "hexv841_transport_standard_finish_regional_v841",
+      "name": "hexv841_transport_standard_finish_regional_v841",
+      "parameter_size": 24,
+      "resource_count": 15,
+      "shader_hash": "5e59eb5bfadb1afcf437b993ade14fd282ca99ec812adcb7aff32d2d67a78bb6",
       "threads_per_group": 128
     },
     {
@@ -14960,465 +15408,32 @@
       "arithmetic_policies": [
         "default"
       ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "acoustic_column_solve_regional_v841",
-      "layout_hash": "06cd3a4056f3cad14ced108e4c8a83a27dd70f6d7705617da9e1302725d8af0e",
+      "cuda_source": "woof/hex/cuda_physics_prep_v841.py",
+      "cuda_symbol": "source[..., garbage] = source[..., garbage - 1]",
+      "layout_hash": "dd6c4845ca95ed36e402cbd26f6f31436bc50f684c01d35d1892835034d2ebef",
       "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_acoustic_column_solve_regional_v841.metal",
-      "module": "hexv841_acoustic_column_solve_regional_v841",
-      "name": "hexv841_acoustic_column_solve_regional_v841",
-      "parameter_size": 12,
-      "resource_count": 31,
-      "shader_hash": "dca0547a318bdffea7a60076a1baa3fd0d83e2d4648d8d6deb40eea07d9c3720",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "acoustic_rs_ts_regional_v841",
-      "layout_hash": "e98aad0c31fcb2f95f3d494be5ab17e6e5c171eed63ecdec720e85ec4c45adb3",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_acoustic_rs_ts_regional_v841.metal",
-      "module": "hexv841_acoustic_rs_ts_regional_v841",
-      "name": "hexv841_acoustic_rs_ts_regional_v841",
+      "metal_source": "woof/metal/shaders/hexv841_copy_column_v841.metal",
+      "module": "hexv841_copy_column_v841",
+      "name": "hexv841_copy_column_v841",
       "parameter_size": 20,
-      "resource_count": 20,
-      "shader_hash": "27735f1676376e2329612d7da0f28f39f446bc154cc2f754b5ae0378a9c2f00c",
+      "resource_count": 2,
+      "shader_hash": "5c3eba873f4c55abad0c6dd1cbd04f18807b480d2bbc8a2088a35ef6ae5e84fc",
       "threads_per_group": 128
     },
     {
       "arithmetic_policies": [
         "default"
       ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "acoustic_ru_regional_v841",
-      "layout_hash": "81891193f42fc6ac6da95b222fe759a34cc77aa9d9017b9a925034a6fde451c4",
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "layout_hash": "988c096930d35c9929738d572ecfe671e92c0c32c07f331fb2ca48731d2f7318",
       "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_acoustic_ru_regional_v841.metal",
-      "module": "hexv841_acoustic_ru_regional_v841",
-      "name": "hexv841_acoustic_ru_regional_v841",
-      "parameter_size": 32,
-      "resource_count": 13,
-      "shader_hash": "041de73e240c29b03f7c26eb44d13cd2499d8c2f98f31c8bcbca45897e27610b",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_bdy_adjust_scalars_compute_v841",
-      "layout_hash": "00fddf2cb4e1543b0a31644a369f0f7b1bbe4b6c265abc12ae54a334d6b7fe53",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_compute_v841.metal",
-      "module": "hexv841_regional_bdy_adjust_scalars_compute_v841",
-      "name": "hexv841_regional_bdy_adjust_scalars_compute_v841",
-      "parameter_size": 40,
-      "resource_count": 13,
-      "shader_hash": "bac93559982f49900be6f403bc778194b875123fdc2ecb727abb4d41287cfc61",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_bdy_adjust_scalars_copyback_v841",
-      "layout_hash": "18776569f3cffaef317662492153946e827ac8ad0c1fe5d72c2e4d68812c910b",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_copyback_v841.metal",
-      "module": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
-      "name": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
-      "parameter_size": 16,
-      "resource_count": 3,
-      "shader_hash": "91c464cfbcf9d6ba926bcc79dd54043dee58da4719b9740ca7b6af15ee418822",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_bdy_set_scalars_v841",
-      "layout_hash": "26d98bceeef722a65e00d0f854ca41afe846b396ab2ff16723f73251439e0e73",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_bdy_set_scalars_v841.metal",
-      "module": "hexv841_regional_bdy_set_scalars_v841",
-      "name": "hexv841_regional_bdy_set_scalars_v841",
-      "parameter_size": 16,
-      "resource_count": 3,
-      "shader_hash": "585f6770e4f9697c3243b269320b0eba3ef090643acd878409baa5f8be45df9d",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_clamp_negative_scalars_v841",
-      "layout_hash": "fe66cc98cc20e9f322dd4f9c3ffdc7988d1cb8edc749451f710aa30e1e8d2883",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_clamp_negative_scalars_v841.metal",
-      "module": "hexv841_regional_clamp_negative_scalars_v841",
-      "name": "hexv841_regional_clamp_negative_scalars_v841",
+      "metal_source": "woof/metal/shaders/bandwidth_family.metal",
+      "module": "bandwidth_glue",
+      "name": "glue_add_positive",
       "parameter_size": 4,
-      "resource_count": 1,
-      "shader_hash": "cf41ebcf2d9d5c3b8e5a757873bec8d2eef2929cc6bae1a64f429338421ddeb7",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_lbc_derive_v841",
-      "layout_hash": "090c1e14928f132e7c5d679d5ba7f2e1c740dc98add3d54bc6eeeca5296b430f",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_lbc_derive_v841.metal",
-      "module": "hexv841_regional_lbc_derive_v841",
-      "name": "hexv841_regional_lbc_derive_v841",
-      "parameter_size": 8,
-      "resource_count": 6,
-      "shader_hash": "a3413ff57c6834b86b3efca078c916d4886e173fe86ed75a3a2ad98b825fc7cb",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_lbc_rho_edge_v841",
-      "layout_hash": "e729badffea133e1831575b62b2ec6d60531d38410babeae2e04b8b7dff05153",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_lbc_rho_edge_v841.metal",
-      "module": "hexv841_regional_lbc_rho_edge_v841",
-      "name": "hexv841_regional_lbc_rho_edge_v841",
-      "parameter_size": 12,
-      "resource_count": 5,
-      "shader_hash": "07cfee42a3d478d049becb9a3ffe37bc57686f8d6110f7a7a9db0e06dfd87ca5",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_lbc_state_at_v841",
-      "layout_hash": "24d9c431cd7da550b08e80e697aa9b211a958d6fe28fcfb52fc6ea8cb3ad4493",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_lbc_state_at_v841.metal",
-      "module": "hexv841_regional_lbc_state_at_v841",
-      "name": "hexv841_regional_lbc_state_at_v841",
-      "parameter_size": 8,
-      "resource_count": 3,
-      "shader_hash": "7d6a28dc233d01022bc35a17e4f0c2d595526c587ac47622da8ae98c4f2e4d61",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_lbc_tendency_v841",
-      "layout_hash": "7be0be594abdfd2c56f6d2ee6bdb187099a9bacfd71b55a39bb7b202acdf359e",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_lbc_tendency_v841.metal",
-      "module": "hexv841_regional_lbc_tendency_v841",
-      "name": "hexv841_regional_lbc_tendency_v841",
-      "parameter_size": 8,
-      "resource_count": 3,
-      "shader_hash": "5d2a1de618e1a5e4f447e823b507a3b7f7cc0c2487092d2fdb64453948bbc815",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_forecast_v841.py",
-      "cuda_symbol": "CudaRegionalRuntimeV841.moist_coefficients",
-      "layout_hash": "a2d07c150262946ada9eb275ff699f73e34616b0aff197b36d2ff525a4e31308",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_moist_cell_coefficients.metal",
-      "module": "hexv841_regional_moist_cell_coefficients",
-      "name": "hexv841_regional_moist_cell_coefficients",
-      "parameter_size": 8,
-      "resource_count": 3,
-      "shader_hash": "26bac3ceded8ff3ae07c91515e1fb7b046f40bf2afbe7ffd1ab8653e4c970958",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_forecast_v841.py",
-      "cuda_symbol": "CudaRegionalRuntimeV841.moist_coefficients",
-      "layout_hash": "a6d435a69a84b386ca9e4ac72dd0e23dcf074f996cd66032af5584b8966d0c64",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_moist_edge_coefficients.metal",
-      "module": "hexv841_regional_moist_edge_coefficients",
-      "name": "hexv841_regional_moist_edge_coefficients",
-      "parameter_size": 12,
-      "resource_count": 3,
-      "shader_hash": "633bcf0b17aa531f1a5af0d5f62b02fb90b0446093395c01bcdca3698a088717",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_relaxzone_filter_cell_v841",
-      "layout_hash": "ed3c26fedb4b117553c2aa9ac6fba9efe7d8e291e3cd2c756dc4fb140d0cfd5c",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_relaxzone_filter_cell_v841.metal",
-      "module": "hexv841_regional_relaxzone_filter_cell_v841",
-      "name": "hexv841_regional_relaxzone_filter_cell_v841",
-      "parameter_size": 28,
-      "resource_count": 15,
-      "shader_hash": "533ad293fef5d051911e852ff5096eba511baaa8358b2d8a4a6ef980eb1652f1",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_relaxzone_filter_edge_v841",
-      "layout_hash": "a4c3be9a0d2adc81e3f2b6536400db4e4b0310c055612480d75ce544982390cd",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_relaxzone_filter_edge_v841.metal",
-      "module": "hexv841_regional_relaxzone_filter_edge_v841",
-      "name": "hexv841_regional_relaxzone_filter_edge_v841",
-      "parameter_size": 40,
-      "resource_count": 19,
-      "shader_hash": "10b97515ae415f0baf1e410c60557d18ec7a0bfc0100f9a0a27bf7727298ce8e",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_relaxzone_rayleigh_cell_v841",
-      "layout_hash": "63f2c784074e6a94eb5028f14479e9d3c72736fde6be9b103971d1be2d5019bb",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_relaxzone_rayleigh_cell_v841.metal",
-      "module": "hexv841_regional_relaxzone_rayleigh_cell_v841",
-      "name": "hexv841_regional_relaxzone_rayleigh_cell_v841",
-      "parameter_size": 20,
-      "resource_count": 9,
-      "shader_hash": "b67a3acebce9a3b0a881222302a4141f3778abd080cc7b082279a682c8ff32cc",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_relaxzone_rayleigh_edge_v841",
-      "layout_hash": "eaf17bb891a11baa95326927c62f3a0c6854caf2c343ccc91ddb00d145559a4b",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_relaxzone_rayleigh_edge_v841.metal",
-      "module": "hexv841_regional_relaxzone_rayleigh_edge_v841",
-      "name": "hexv841_regional_relaxzone_rayleigh_edge_v841",
-      "parameter_size": 20,
-      "resource_count": 6,
-      "shader_hash": "7e0ba3ce679b8d3ef107a5e09576dfc4202a25de4ad8567495d2f60ff7013419",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_reset_speczone_values_v841",
-      "layout_hash": "30d9b455945967d5360a42136191305984bd9c8e408c4c9ba8a76b133efeab46",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_reset_speczone_values_v841.metal",
-      "module": "hexv841_regional_reset_speczone_values_v841",
-      "name": "hexv841_regional_reset_speczone_values_v841",
-      "parameter_size": 12,
-      "resource_count": 7,
-      "shader_hash": "94ee9dfd86f757369130bab1f4b2bbc4b1c624b6358f17c10dd226a502f27ab9",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_speczone_tend_cell_v841",
-      "layout_hash": "d16659ecf26c3a2aeea79201a76510868265898b141ea3f51ce251602e4e1fcf",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_speczone_tend_cell_v841.metal",
-      "module": "hexv841_regional_speczone_tend_cell_v841",
-      "name": "hexv841_regional_speczone_tend_cell_v841",
-      "parameter_size": 12,
-      "resource_count": 6,
-      "shader_hash": "cb9ff11e83e4a8f72ad530459ed0401962ee9c4a4999160db08cf8f2a4efb643",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_speczone_tend_edge_v841",
-      "layout_hash": "edbe31569e623b4581a2a19d373cbb1f43213bf825745b79bdda65c3ab3f04f1",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_speczone_tend_edge_v841.metal",
-      "module": "hexv841_regional_speczone_tend_edge_v841",
-      "name": "hexv841_regional_speczone_tend_edge_v841",
-      "parameter_size": 12,
-      "resource_count": 3,
-      "shader_hash": "24f68d905d4a1a20905aed829a619a93faeb27592bd6f0fda58b54d0a85ebaf0",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_speczone_u_ru_v841",
-      "layout_hash": "3aed6f784ed7437bcbd25a7f85b756f7c9665b8052995aafc2449df488bb0688",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_speczone_u_ru_v841.metal",
-      "module": "hexv841_regional_speczone_u_ru_v841",
-      "name": "hexv841_regional_speczone_u_ru_v841",
-      "parameter_size": 12,
-      "resource_count": 5,
-      "shader_hash": "f3e90ab4574e61076d88ef0835a9549fbcfd9a4e99aca5baa8f4863e8fbdcae9",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_zero_speczone_w_v841",
-      "layout_hash": "c0d59af3d5da53e5076ff210523e2ab4bbcd5a3fcd0ba689e08a3e1153ee7643",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_regional_zero_speczone_w_v841.metal",
-      "module": "hexv841_regional_zero_speczone_w_v841",
-      "name": "hexv841_regional_zero_speczone_w_v841",
-      "parameter_size": 12,
       "resource_count": 2,
-      "shader_hash": "4bf330485964e9a3e89d9dd6e7038b912e57966eeaf2cc2c982aea2e4404e70b",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
-      "cuda_symbol": "solve_region_envelope_finish_v841",
-      "layout_hash": "39587fbb52a04f5f2acd102883343600a98b307e1b4c30dd2c1b7956db26bd20",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_solve_region_envelope_finish_v841.metal",
-      "module": "hexv841_solve_region_envelope_finish_v841",
-      "name": "hexv841_solve_region_envelope_finish_v841",
-      "parameter_size": 8,
-      "resource_count": 2,
-      "shader_hash": "13cac220ac1ff62cf8476619b8f2ed98c2951a261ee09bca953b05aeaef424b7",
-      "threads_per_group": 256
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
-      "cuda_symbol": "solve_region_envelope_v841",
-      "layout_hash": "da060335d8a598b8900186e5d5a18083d9465c0b153fba2ae7b54d03309e4541",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_solve_region_envelope_v841.metal",
-      "module": "hexv841_solve_region_envelope_v841",
-      "name": "hexv841_solve_region_envelope_v841",
-      "parameter_size": 20,
-      "resource_count": 2,
-      "shader_hash": "fa69ea17b7b40dcd69cd1800ed155d7470accdedc35c19fc4374367c52404729",
-      "threads_per_group": 256
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
-      "cuda_symbol": "solve_region_scrub_columns_v841",
-      "layout_hash": "f63ad5c9b0e08de544171c79337583620008671763074cca8a6c97ef549e6424",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_solve_region_scrub_columns_v841.metal",
-      "module": "hexv841_solve_region_scrub_columns_v841",
-      "name": "hexv841_solve_region_scrub_columns_v841",
-      "parameter_size": 16,
-      "resource_count": 1,
-      "shader_hash": "e2771da128a5d8192e217c1d1e4da629b2c58df1bd4b0387c9f6e325ea0f3174",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
-      "cuda_symbol": "solve_region_validate_v841",
-      "layout_hash": "c0136bbc79d6830ad3990c5f240efde0fba621709c80b5f0690bb93793d02712",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_solve_region_validate_v841.metal",
-      "module": "hexv841_solve_region_validate_v841",
-      "name": "hexv841_solve_region_validate_v841",
-      "parameter_size": 20,
-      "resource_count": 2,
-      "shader_hash": "ee1cc0b36de3a1605ed01cffa98c47050f7f891c168b009deeee119820325057",
-      "threads_per_group": 256
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "transport_edge_values_regional_v841",
-      "layout_hash": "e58046d9d600b38c31b95717ab8becf79c80bab141e4f5b172133df18a528806",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_transport_edge_values_regional_v841.metal",
-      "module": "hexv841_transport_edge_values_regional_v841",
-      "name": "hexv841_transport_edge_values_regional_v841",
-      "parameter_size": 24,
-      "resource_count": 10,
-      "shader_hash": "45dcd0d333b173c01230c980a25d705a71ad305ab4c3f95dc13954ecb5deeac7",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "default"
-      ],
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "transport_standard_finish_regional_v841",
-      "layout_hash": "0b7d4a6be44964b2b7b65798b89930f0a72d4c434f0f551bea3485955eaccba7",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/hexv841_transport_standard_finish_regional_v841.metal",
-      "module": "hexv841_transport_standard_finish_regional_v841",
-      "name": "hexv841_transport_standard_finish_regional_v841",
-      "parameter_size": 24,
-      "resource_count": 15,
-      "shader_hash": "5e59eb5bfadb1afcf437b993ade14fd282ca99ec812adcb7aff32d2d67a78bb6",
-      "threads_per_group": 128
-    },
-    {
-      "arithmetic_policies": [
-        "float32_ordered",
-        "wrf_mynn_thresholds"
-      ],
-      "cuda_source": "woof/core/kernels/rrtmg_legacy_adapter.cu",
-      "cuda_symbol": "rla_mynn_gsd41",
-      "layout_hash": "d42f0390169a581e02cda72100ee3e10096fc7dd216f88dc4025683f592c2dbe",
-      "layout_version": 1,
-      "metal_source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
-      "module": "rrtmgp_cloud_prep_family",
-      "name": "rrtmgp_mynn_cloud_merge_gsd41",
-      "parameter_size": 20,
-      "resource_count": 6,
-      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
+      "shader_hash": "fab2cccdca6e1fdf22e49dfacb1ea68c1a7d54078eb8165401d6718bda7e5374",
       "threads_per_group": 128
     },
     {
@@ -15535,18 +15550,19 @@
     },
     {
       "arithmetic_policies": [
-        "default"
+        "float32_ordered",
+        "wrf_mynn_thresholds"
       ],
-      "cuda_source": null,
-      "cuda_symbol": null,
-      "layout_hash": "988c096930d35c9929738d572ecfe671e92c0c32c07f331fb2ca48731d2f7318",
+      "cuda_source": "woof/core/kernels/rrtmg_legacy_adapter.cu",
+      "cuda_symbol": "rla_mynn_gsd41",
+      "layout_hash": "d42f0390169a581e02cda72100ee3e10096fc7dd216f88dc4025683f592c2dbe",
       "layout_version": 1,
-      "metal_source": "woof/metal/shaders/bandwidth_family.metal",
-      "module": "bandwidth_glue",
-      "name": "glue_add_positive",
-      "parameter_size": 4,
-      "resource_count": 2,
-      "shader_hash": "fab2cccdca6e1fdf22e49dfacb1ea68c1a7d54078eb8165401d6718bda7e5374",
+      "metal_source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "module": "rrtmgp_cloud_prep_family",
+      "name": "rrtmgp_mynn_cloud_merge_gsd41",
+      "parameter_size": 20,
+      "resource_count": 6,
+      "shader_hash": "0c11296e007b4f711c385509ebab85817ff9eda09693717bdcec6984778912e9",
       "threads_per_group": 128
     }
   ],

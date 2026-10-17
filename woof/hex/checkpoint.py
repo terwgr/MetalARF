@@ -1,8 +1,12 @@
-"""Restart checkpoints for the public Hex dry-dynamics runner.
+"""Restart checkpoints for the public Hex runner.
 
 The checkpoint stores the model state and the saved time-level diagnostics
 that seed the next RK step.  Mesh, reference columns, and run configuration
 remain caller-owned setup, just as they do for :func:`run_dry_dycore`.
+
+A physics run adds its column-physics state as a nested mapping: array
+leaves are stored as archive members, everything else as JSON, so the file
+still loads without pickle.
 """
 
 from __future__ import annotations
@@ -22,6 +26,41 @@ from .state import PrognosticState
 _SCHEMA = "woof.hex-dry-checkpoint/v1"
 _STATE_FIELDS = ("rho", "rho_theta", "rho_u", "rho_w", "scalars")
 _DIAGNOSTIC_FIELDS = tuple(DrySavedDiagnostics.__slots__)
+_PHYSICS_PREFIX = "physics/"
+
+
+def _flatten_physics(value: Any, path: str, arrays: dict[str, np.ndarray]) -> Any:
+    if isinstance(value, dict):
+        if not all(isinstance(key, str) for key in value):
+            raise TypeError(f"checkpoint physics mapping {path!r} needs string keys")
+        return {key: _flatten_physics(item, f"{path}/{key}", arrays)
+                for key, item in value.items()}
+    if hasattr(value, "to_numpy"):
+        value = value.to_numpy()
+    if isinstance(value, np.ndarray):
+        name = _PHYSICS_PREFIX + path.lstrip("/")
+        arrays[name] = np.ascontiguousarray(value)
+        return {"__array__": name}
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, (list, tuple)):
+        return [_flatten_physics(item, f"{path}/{index}", arrays)
+                for index, item in enumerate(value)]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    raise TypeError(
+        f"checkpoint physics leaf {path!r} is a {type(value).__name__}, "
+        "which a checkpoint cannot carry without pickle")
+
+
+def _rebuild_physics(value: Any, archive: Any) -> Any:
+    if isinstance(value, dict):
+        if set(value) == {"__array__"}:
+            return np.array(archive[value["__array__"]], copy=True)
+        return {key: _rebuild_physics(item, archive) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_rebuild_physics(item, archive) for item in value]
+    return value
 
 
 def write_checkpoint(
@@ -29,6 +68,7 @@ def write_checkpoint(
     state: PrognosticState,
     *,
     saved_diagnostics: DrySavedDiagnostics | None = None,
+    physics: dict[str, Any] | None = None,
 ) -> Path:
     """Atomically write one restart checkpoint for a committed Hex state."""
     destination = Path(path).expanduser().resolve()
@@ -67,6 +107,11 @@ def write_checkpoint(
                          for name in _STATE_FIELDS},
         "saved_diagnostic_fields": diagnostic_names,
     }
+    if physics is not None:
+        physics_arrays: dict[str, np.ndarray] = {}
+        metadata["physics"] = _flatten_physics(physics, "", physics_arrays)
+        metadata["physics_arrays"] = sorted(physics_arrays)
+        arrays.update(physics_arrays)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary_name: str | None = None
     try:
@@ -139,6 +184,7 @@ def read_checkpoint(
             if array.dtype.kind != "f" or not np.isfinite(array).all():
                 raise ValueError(f"Hex checkpoint diagnostic {name} is not finite floating data")
             diagnostics_arrays[name] = array
+        expected_files.update(metadata.get("physics_arrays", ()))
         if set(archive.files) != expected_files:
             raise ValueError("Hex checkpoint contains an unexpected payload field")
 
@@ -154,4 +200,16 @@ def read_checkpoint(
     return state, diagnostics
 
 
-__all__ = ["read_checkpoint", "write_checkpoint"]
+def read_checkpoint_physics(path: str | Path) -> dict[str, Any] | None:
+    """The column-physics mapping a physics run stored, or ``None``."""
+    source = Path(path).expanduser().resolve(strict=True)
+    with np.load(source, allow_pickle=False) as archive:
+        metadata = json.loads(str(archive["metadata"].item()))
+        if metadata.get("schema") != _SCHEMA:
+            raise ValueError("unsupported Hex checkpoint schema")
+        if "physics" not in metadata:
+            return None
+        return _rebuild_physics(metadata["physics"], archive)
+
+
+__all__ = ["read_checkpoint", "read_checkpoint_physics", "write_checkpoint"]

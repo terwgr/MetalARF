@@ -11,7 +11,7 @@ The package contains three models:
 | Model | Command | Status | Metal |
 | --- | --- | --- | --- |
 | Regional (WRF-ARW class, nests, DA) | `woof` | Upstream interface promise | Selected combinations; see backend guide |
-| Hex (MPAS-style unstructured mesh) | `woof hex` | Preview | Forecast, restart, history |
+| Hex (MPAS-style unstructured mesh) | `woof hex` | Preview | Forecast with the MPAS physics row, global and limited-area, restart, history |
 | Global (spectral, with ensemble DA) | `woof global` | Preview | `sl_si`, `ssprk3`, restart, DA cycle |
 
 The Metal backend includes callers for the HRRR physics forms (Thompson,
@@ -100,6 +100,15 @@ The Hex and Global models take the same backend choice:
 `woof hex forecast --backend metal` and `woof global run CONFIG.toml --metal`.
 `woof hex --help` and `woof global --help` list their options.
 
+`woof hex forecast --backend metal` runs the same physics row as the CUDA
+backend (WSM6, YSU with gravity-wave drag, Noah-MP with glacier, legacy RRTMG
+and, above 3 km spacing, Grell-Freitas) and needs `--grid` and `--static` as
+the CUDA backend does, and `--lbc-dir` on a limited-area mesh. `--checkpoint`
+and `--restart` carry the physics state, and on global and limited-area
+meshes a restarted run reproduces the uninterrupted one bit for bit.
+`--local-timestep` works on global meshes as
+it does on CUDA.
+
 ## Memory
 
 Before it allocates any forecast state, the Metal backend estimates how much
@@ -118,7 +127,8 @@ both numbers. Use a smaller domain or a Mac with more memory.
 `woof selftest` runs one tiny step of each model through its public path: a
 regional physics row, the 12-cell Hex dry mesh and the shipped Global moist
 smoke. It prints PASS, FAIL or SKIP for each, with the largest wind and the
-theta or temperature range, and finishes in seconds. `--backend auto` (the
+theta or temperature range, and finishes in seconds. On Metal the Hex step
+must also agree with the NumPy step. `--backend auto` (the
 default) uses Metal when a Metal device opens and NumPy otherwise; `--backend
 metal` or `--backend numpy` forces one. The regional engine needs a GPU
 backend, so it is skipped on NumPy. `--json` prints the results as one

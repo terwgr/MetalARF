@@ -25,7 +25,8 @@ kernel void hexv841_commit_wsm6_state_v841_f32(
     const int i = int(tid);
     if (i >= count) return;
     rho_theta[i] = candidate_rho_theta[i];
-    for (int s = 0; s < 6; ++s) {
+    // The run's species row (six for WSM6, eight for P3, eleven for mp=28).
+    for (int s = 0; s < p.nspecies; ++s) {
         scalars[s * count + i] = candidate_scalars[s * count + i];
     }
 }

@@ -1,0 +1,62 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_copy_column_v841",
+      "module": "hexv841_copy_column_v841",
+      "source": "woof/metal/shaders/hexv841_copy_column_v841.metal",
+      "cuda_source": "woof/hex/cuda_physics_prep_v841.py",
+      "cuda_symbol": "source[..., garbage] = source[..., garbage - 1]",
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ],
+      "resources": [
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "rows",
+          "int32"
+        ],
+        [
+          "src_stride",
+          "int32"
+        ],
+        [
+          "src_col",
+          "int32"
+        ],
+        [
+          "dst_stride",
+          "int32"
+        ],
+        [
+          "dst_col",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dst": [
+          [
+            "any_1d"
+          ]
+        ]
+      }
+    }
+  ]
+}

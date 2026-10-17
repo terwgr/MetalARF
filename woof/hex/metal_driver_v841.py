@@ -234,14 +234,15 @@ class MetalDycoreV841:
 
     def _vertical_coefficients(
         self, state: Any, dts: float, theta_m: Any, rtheta_p: Any, *,
-        exner: Any, validation_flag: Any, moist: Any | None = None,
+        exner: Any, validation_flag: Any, cqw: Any | None = None,
+        qtot: Any | None = None,
     ) -> Any:
         vertical = self.atmosphere.vertical
         reference = self.atmosphere.reference
-        cqw = (self.arrays.ones(state.rho.shape, np.float32)
-               if moist is None else moist.cqw)
-        qtot = (self.arrays.zeros(state.rho.shape, np.float32)
-                if moist is None else moist.qtot)
+        if cqw is None:
+            cqw = self.arrays.ones(state.rho.shape, np.float32)
+        if qtot is None:
+            qtot = self.arrays.zeros(state.rho.shape, np.float32)
         return compute_vertical_implicit_coefficients_metal_v841(
             dts=dts,
             context=self.v841_context,
@@ -280,7 +281,8 @@ class MetalDycoreV841:
             saved_state, schedule.stages[0].acoustic_timestep,
             saved_diag.theta_m, saved_diag.rho_theta_perturbation,
             exner=saved_diag.exner, validation_flag=validation_flag,
-            moist=moist)
+            cqw=None if moist is None else moist.cqw,
+            qtot=None if moist is None else moist.qtot)
         if moist is None:
             cqu = self.arrays.ones(saved_state.rho_u.shape, np.float32)
             dpdz = _scale(self, saved_diag.density_perturbation, -9.80616)
@@ -335,7 +337,8 @@ class MetalDycoreV841:
                     current_state, stage.acoustic_timestep,
                     current_diag.theta_m, current_diag.rho_theta_perturbation,
                     exner=saved_diag.exner, validation_flag=validation_flag,
-                    moist=moist)
+                    cqw=None if moist is None else moist.cqw,
+                    qtot=None if moist is None else moist.qtot)
             mass_divergence = self.horizontal.mass_flux_divergence(
                 current_state.rho_u)
             tend_ru = _vertical_u(self, current_diag.normal_velocity,
@@ -471,11 +474,6 @@ class MetalDycoreV841:
         time_level_one = _copy_saved(self, self.atmosphere.saved)
         if regional is not None:
             regional.bind_state_rho(outer_saved.rho)
-            if config.config_moist_physics or physics is not None:
-                raise ConfigurationRefusal(
-                    "config_moist_physics", True,
-                    "the regional moist coefficients join with the physics lane",
-                    "config_moist_physics=False")
         moist = None
         if physics is not None:
             row = species_row_for_scheme(config.config_microp_scheme)
@@ -506,6 +504,10 @@ class MetalDycoreV841:
             outer_saved.rho, outer_saved.rho_u, dt=outer_dt,
             apvm_upwinding=config.config_apvm_upwinding,
             normal_velocity=time_level_one.normal_velocity, rk_step=3)
+        if regional is not None and moist is None and config.config_moist_physics:
+            # Formed once per outer step from the step-start scalars and
+            # reused by every dynamics subcycle (driver.py:3090-3105).
+            moist = regional.moist_coefficients(outer_saved.scalars)
         current, carried = outer_saved, time_level_one
         split_flux_u_sum = split_flux_w_sum = None
         modified_theta_rate = None
@@ -542,7 +544,8 @@ class MetalDycoreV841:
                         fzm=vertical.fzm, fzp=vertical.fzp, rdzw=vertical.rdzw,
                         rk_step=stage.stage,
                         config_coef_3rd_order=config.config_coef_3rd_order,
-                        validation_flag=validation_flag)
+                        validation_flag=validation_flag,
+                        scalar_tendency=None if physics is None else physics.scalars)
                     regional.bdy_adjust_scalars(scalar_stage, stage.stage)
                     accumulate_finite_array_metal_v841(
                         scalar_stage, invalid_flag=validation_flag)
@@ -726,11 +729,6 @@ def assemble_regional_metal_dycore_v841(
 
     config.validate()
     CudaDryDycoreDriver._validate_config(config)
-    if config.config_moist_physics:
-        raise ConfigurationRefusal(
-            "config_moist_physics", True,
-            "the regional moist coefficients join with the physics lane",
-            "config_moist_physics=False")
     dtype = np.dtype(np.float32)
     padded = PaddedRegionalHostMesh(mesh, derive_regional_masks(mesh, dtype))
     nlev = int(np.asarray(state.rho).shape[0])

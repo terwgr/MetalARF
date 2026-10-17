@@ -527,8 +527,7 @@ def attach_local_timestep_metal(
             _refuse("config_local_timestep", True,
                     "cells are classed from the grid file's own dcEdge array, and "
                     "no grid file was supplied; nominalMinDc is not a substitute "
-                    "(measured 10.5%/23.6%/39.7% high on three meshes, wrong in "
-                    "the unsafe direction)",
+                    "(it can read high, which is the unsafe direction)",
                     "a grid file path")
         classing = classify_from_grid_file(
             grid_path, rates=rates,

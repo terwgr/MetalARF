@@ -54,6 +54,10 @@
         [
           "count",
           "int32"
+        ],
+        [
+          "nspecies",
+          "int32"
         ]
       ],
       "threads_per_group": 128,

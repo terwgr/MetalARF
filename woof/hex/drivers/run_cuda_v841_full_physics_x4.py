@@ -3456,8 +3456,16 @@ def _write_exclusive_json(path: Path, value: Any) -> None:
         stream.write(data)
 
 
-def write_snapshot_netcdf(path: Path, snapshot: Mapping[str, Any], static: Mapping[str, Any]) -> dict[str, Any]:
-    """Write one truthful native-grid CUDA history capsule for Rust rendering."""
+def write_snapshot_netcdf(
+    path: Path,
+    snapshot: Mapping[str, Any],
+    static: Mapping[str, Any],
+    *,
+    source: str = "MPAS-A v8.4.1 full-physics CUDA port",
+) -> dict[str, Any]:
+    """Write one truthful native-grid history capsule for Rust rendering.
+
+    ``source`` names the port that produced the frame."""
 
     from netCDF4 import Dataset
 
@@ -3472,7 +3480,7 @@ def write_snapshot_netcdf(path: Path, snapshot: Mapping[str, Any], static: Mappi
         dataset.createDimension("nVertLevelsP1", N_INTERFACES)
         dataset.createDimension("nSoilLevels", N_SOIL_LEVELS)
         dataset.setncattr("schema", SNAPSHOT_SCHEMA)
-        dataset.setncattr("source", "MPAS-A v8.4.1 full-physics CUDA port")
+        dataset.setncattr("source", source)
         dataset.setncattr("arwen_commit", ARWEN_COMMIT)
         dataset.setncattr("gf_native_parity_claim", "false")
         dataset.setncattr(

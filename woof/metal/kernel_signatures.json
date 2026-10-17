@@ -135537,6 +135537,346 @@
       ]
     },
     {
+      "name": "hexv841_acoustic_column_solve_regional_v841",
+      "module": "hexv841_acoustic_column_solve_regional_v841",
+      "source": "woof/metal/shaders/hexv841_acoustic_column_solve_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "acoustic_column_solve_regional_v841",
+      "resources": [
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "dss",
+          "float32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read"
+        ],
+        [
+          "rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_save",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rw",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rt",
+          "float32",
+          "read"
+        ],
+        [
+          "rs",
+          "float32",
+          "read"
+        ],
+        [
+          "ts",
+          "float32",
+          "read"
+        ],
+        [
+          "spec_zone_mask_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "etp",
+          "float32",
+          "read"
+        ],
+        [
+          "etm",
+          "float32",
+          "read"
+        ],
+        [
+          "ewp",
+          "float32",
+          "read"
+        ],
+        [
+          "ewm",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_save": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_zone_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "etp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "etm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ewp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ewm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
       "name": "hexv841_acoustic_column_solve_v841",
       "module": "hexv841_acoustic_column_solve_v841",
       "source": "woof/metal/shaders/hexv841_acoustic_column_solve_v841.metal",
@@ -136440,6 +136780,244 @@
       ]
     },
     {
+      "name": "hexv841_acoustic_rs_ts_regional_v841",
+      "module": "hexv841_acoustic_rs_ts_regional_v841",
+      "source": "woof/metal/shaders/hexv841_acoustic_rs_ts_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "acoustic_rs_ts_regional_v841",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_sign_on_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "spec_zone_mask_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read"
+        ],
+        [
+          "ewm",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_p",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rt",
+          "float32",
+          "read"
+        ],
+        [
+          "rs",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ts",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_zone_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ewm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
       "name": "hexv841_acoustic_rs_ts_v841",
       "module": "hexv841_acoustic_rs_ts_v841",
       "source": "woof/metal/shaders/hexv841_acoustic_rs_ts_v841.metal",
@@ -136926,6 +137504,186 @@
         [
           "lts_n_active",
           "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_acoustic_ru_regional_v841",
+      "module": "hexv841_acoustic_ru_regional_v841",
+      "source": "woof/metal/shaders/hexv841_acoustic_ru_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "acoustic_ru_regional_v841",
+      "resources": [
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "spec_zone_mask_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "exner",
+          "float32",
+          "read"
+        ],
+        [
+          "cqu",
+          "float32",
+          "read"
+        ],
+        [
+          "zxu",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_ru",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ru_avg",
+          "float32",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_zone_mask_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zxu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_avg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "small_step",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
         ]
       ],
       "threads_per_group": 128,
@@ -137837,6 +138595,10 @@
       "parameters": [
         [
           "count",
+          "int32"
+        ],
+        [
+          "nspecies",
           "int32"
         ]
       ],
@@ -142811,6 +143573,1798 @@
       ]
     },
     {
+      "name": "hexv841_regional_bdy_adjust_scalars_compute_v841",
+      "module": "hexv841_regional_bdy_adjust_scalars_compute_v841",
+      "source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_compute_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_bdy_adjust_scalars_compute_v841",
+      "resources": [
+        [
+          "relax_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "spec_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "bdy_mask_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_scaling_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_sign_on_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "scalars_new",
+          "float32",
+          "read"
+        ],
+        [
+          "scalars_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "updates",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "relax_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bdy_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_scaling_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_new": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "updates": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "nrelax",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ],
+        [
+          "ten_dt",
+          "float32"
+        ],
+        [
+          "dt_rk",
+          "float32"
+        ],
+        [
+          "relax_zone",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
+      "module": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
+      "source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_copyback_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_bdy_adjust_scalars_copyback_v841",
+      "resources": [
+        [
+          "nudged_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "updates",
+          "float32",
+          "read"
+        ],
+        [
+          "scalars_new",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "nudged_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "updates": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_new": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nnudged",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_bdy_set_scalars_v841",
+      "module": "hexv841_regional_bdy_set_scalars_v841",
+      "source": "woof/metal/shaders/hexv841_regional_bdy_set_scalars_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_bdy_set_scalars_v841",
+      "resources": [
+        [
+          "spec_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "scalars_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "scalars_new",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_new": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_clamp_negative_scalars_v841",
+      "module": "hexv841_regional_clamp_negative_scalars_v841",
+      "source": "woof/metal/shaders/hexv841_regional_clamp_negative_scalars_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_clamp_negative_scalars_v841",
+      "resources": [
+        [
+          "scalars",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "scalars": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nvalues",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_lbc_derive_v841",
+      "module": "hexv841_regional_lbc_derive_v841",
+      "source": "woof/metal/shaders/hexv841_regional_lbc_derive_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_derive_v841",
+      "resources": [
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "lbc_rho",
+          "float32",
+          "read"
+        ],
+        [
+          "lbc_theta",
+          "float32",
+          "read"
+        ],
+        [
+          "lbc_qv",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rtheta_m",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lbc_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lbc_theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lbc_qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_m": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nvalues",
+          "int32"
+        ],
+        [
+          "rvord",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_lbc_rho_edge_v841",
+      "module": "hexv841_regional_lbc_rho_edge_v841",
+      "source": "woof/metal/shaders/hexv841_regional_lbc_rho_edge_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_rho_edge_v841",
+      "resources": [
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "lbc_u",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_edge",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ru",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lbc_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_lbc_state_at_v841",
+      "module": "hexv841_regional_lbc_state_at_v841",
+      "source": "woof/metal/shaders/hexv841_regional_lbc_state_at_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_state_at_v841",
+      "resources": [
+        [
+          "state",
+          "float32",
+          "read"
+        ],
+        [
+          "tend",
+          "float32",
+          "read"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "state": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nvalues",
+          "int32"
+        ],
+        [
+          "dt_remaining",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_lbc_tendency_v841",
+      "module": "hexv841_regional_lbc_tendency_v841",
+      "source": "woof/metal/shaders/hexv841_regional_lbc_tendency_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_tendency_v841",
+      "resources": [
+        [
+          "new_state",
+          "float32",
+          "read"
+        ],
+        [
+          "old_state",
+          "float32",
+          "read"
+        ],
+        [
+          "tend",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "new_state": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old_state": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nvalues",
+          "int32"
+        ],
+        [
+          "inv_dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_moist_cell_coefficients",
+      "module": "hexv841_regional_moist_cell_coefficients",
+      "source": "woof/metal/shaders/hexv841_regional_moist_cell_coefficients.metal",
+      "cuda_source": "woof/hex/cuda_regional_forecast_v841.py",
+      "cuda_symbol": "CudaRegionalRuntimeV841.moist_coefficients",
+      "resources": [
+        [
+          "q",
+          "float32",
+          "read"
+        ],
+        [
+          "qtot",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cqw",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qtot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqw": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_moist_edge_coefficients",
+      "module": "hexv841_regional_moist_edge_coefficients",
+      "source": "woof/metal/shaders/hexv841_regional_moist_edge_coefficients.metal",
+      "cuda_source": "woof/hex/cuda_regional_forecast_v841.py",
+      "cuda_symbol": "CudaRegionalRuntimeV841.moist_coefficients",
+      "resources": [
+        [
+          "q",
+          "float32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "cqu",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqu": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_relaxzone_filter_cell_v841",
+      "module": "hexv841_regional_relaxzone_filter_cell_v841",
+      "source": "woof/metal/shaders/hexv841_regional_relaxzone_filter_cell_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_filter_cell_v841",
+      "resources": [
+        [
+          "relax_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "bdy_mask_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_scaling_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_sign_on_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "rt_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tend_rt",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "relax_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bdy_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_scaling_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rt_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "nrelax",
+          "int32"
+        ],
+        [
+          "ten_dt",
+          "float32"
+        ],
+        [
+          "relax_zone",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_relaxzone_filter_edge_v841",
+      "module": "hexv841_regional_relaxzone_filter_edge_v841",
+      "source": "woof/metal/shaders/hexv841_regional_relaxzone_filter_edge_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_filter_edge_v841",
+      "resources": [
+        [
+          "relax_edges",
+          "int32",
+          "read"
+        ],
+        [
+          "bdy_mask_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_scaling_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_sign_on_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "edge_sign_on_vertex",
+          "float32",
+          "read"
+        ],
+        [
+          "dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_triangle",
+          "float32",
+          "read"
+        ],
+        [
+          "ru",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_ru",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "relax_edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bdy_mask_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_scaling_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_sign_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_triangle": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_ru": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ],
+        [
+          "nrelax",
+          "int32"
+        ],
+        [
+          "ten_dt",
+          "float32"
+        ],
+        [
+          "divdamp",
+          "float32"
+        ],
+        [
+          "relax_zone",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_relaxzone_rayleigh_cell_v841",
+      "module": "hexv841_regional_relaxzone_rayleigh_cell_v841",
+      "source": "woof/metal/shaders/hexv841_regional_relaxzone_rayleigh_cell_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_rayleigh_cell_v841",
+      "resources": [
+        [
+          "relax_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "bdy_mask_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_scaling_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "rt_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tend_rt",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "relax_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bdy_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_scaling_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rt_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nrelax",
+          "int32"
+        ],
+        [
+          "fifty_dt",
+          "float32"
+        ],
+        [
+          "relax_zone",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_relaxzone_rayleigh_edge_v841",
+      "module": "hexv841_regional_relaxzone_rayleigh_edge_v841",
+      "source": "woof/metal/shaders/hexv841_regional_relaxzone_rayleigh_edge_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_rayleigh_edge_v841",
+      "resources": [
+        [
+          "relax_edges",
+          "int32",
+          "read"
+        ],
+        [
+          "bdy_mask_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_scaling_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "ru",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_ru",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "relax_edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bdy_mask_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_scaling_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_ru": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nrelax",
+          "int32"
+        ],
+        [
+          "fifty_dt",
+          "float32"
+        ],
+        [
+          "relax_zone",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_reset_speczone_values_v841",
+      "module": "hexv841_regional_reset_speczone_values_v841",
+      "source": "woof/metal/shaders/hexv841_regional_reset_speczone_values_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_reset_speczone_values_v841",
+      "resources": [
+        [
+          "spec_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "rt_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_theta_base",
+          "float32",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_theta",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_theta_perturbation",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rt_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_theta_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_theta_perturbation": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_speczone_tend_cell_v841",
+      "module": "hexv841_regional_speczone_tend_cell_v841",
+      "source": "woof/metal/shaders/hexv841_regional_speczone_tend_cell_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_speczone_tend_cell_v841",
+      "resources": [
+        [
+          "spec_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "rho_driving_tend",
+          "float32",
+          "read"
+        ],
+        [
+          "rt_driving_tend",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tend_rt",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tend_rw",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_driving_tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rt_driving_tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rw": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_speczone_tend_edge_v841",
+      "module": "hexv841_regional_speczone_tend_edge_v841",
+      "source": "woof/metal/shaders/hexv841_regional_speczone_tend_edge_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_speczone_tend_edge_v841",
+      "resources": [
+        [
+          "spec_edges",
+          "int32",
+          "read"
+        ],
+        [
+          "ru_driving_tend",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_ru",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_driving_tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_ru": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_speczone_u_ru_v841",
+      "module": "hexv841_regional_speczone_u_ru_v841",
+      "source": "woof/metal/shaders/hexv841_regional_speczone_u_ru_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_speczone_u_ru_v841",
+      "resources": [
+        [
+          "spec_edges",
+          "int32",
+          "read"
+        ],
+        [
+          "u_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "normal_velocity",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_u",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_u": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_regional_zero_speczone_w_v841",
+      "module": "hexv841_regional_zero_speczone_w_v841",
+      "source": "woof/metal/shaders/hexv841_regional_zero_speczone_w_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_zero_speczone_w_v841",
+      "resources": [
+        [
+          "spec_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nrows",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
       "name": "hexv841_scale_f32",
       "module": "hexv841_scale_f32",
       "source": "woof/metal/shaders/hexv841_scale_f32.metal",
@@ -143331,6 +145885,212 @@
         ]
       ],
       "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_solve_region_envelope_finish_v841",
+      "module": "hexv841_solve_region_envelope_finish_v841",
+      "source": "woof/metal/shaders/hexv841_solve_region_envelope_finish_v841.metal",
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_envelope_finish_v841",
+      "resources": [
+        [
+          "partials",
+          "int64",
+          "read"
+        ],
+        [
+          "out",
+          "int64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "partials": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n_fields",
+          "int32"
+        ],
+        [
+          "blocks_per_field",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_solve_region_envelope_v841",
+      "module": "hexv841_solve_region_envelope_v841",
+      "source": "woof/metal/shaders/hexv841_solve_region_envelope_v841.metal",
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_envelope_v841",
+      "resources": [
+        [
+          "field",
+          "float32",
+          "read"
+        ],
+        [
+          "partials",
+          "int64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "field": [
+          [
+            "any_1d"
+          ]
+        ],
+        "partials": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rows",
+          "int32"
+        ],
+        [
+          "stride",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "field_index",
+          "int32"
+        ],
+        [
+          "blocks_per_field",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_solve_region_scrub_columns_v841",
+      "module": "hexv841_solve_region_scrub_columns_v841",
+      "source": "woof/metal/shaders/hexv841_solve_region_scrub_columns_v841.metal",
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_scrub_columns_v841",
+      "resources": [
+        [
+          "field",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "field": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rows",
+          "int32"
+        ],
+        [
+          "stride",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "pool_bits",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_solve_region_validate_v841",
+      "module": "hexv841_solve_region_validate_v841",
+      "source": "woof/metal/shaders/hexv841_solve_region_validate_v841.metal",
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_validate_v841",
+      "resources": [
+        [
+          "field",
+          "float32",
+          "read"
+        ],
+        [
+          "flag",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "field": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flag": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rows",
+          "int32"
+        ],
+        [
+          "stride",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "positive",
+          "int32"
+        ],
+        [
+          "blocks",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
       "layout_version": 1,
       "arithmetic_policies": [
         "default"
@@ -144563,6 +147323,148 @@
       ]
     },
     {
+      "name": "hexv841_transport_edge_values_regional_v841",
+      "module": "hexv841_transport_edge_values_regional_v841",
+      "source": "woof/metal/shaders/hexv841_transport_edge_values_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "transport_edge_values_regional_v841",
+      "resources": [
+        [
+          "bdy_mask_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "adv",
+          "float32",
+          "read"
+        ],
+        [
+          "adv3",
+          "float32",
+          "read"
+        ],
+        [
+          "n_adv",
+          "int32",
+          "read"
+        ],
+        [
+          "adv_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_values",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "bdy_mask_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "stage": [
+          [
+            "any_1d"
+          ]
+        ],
+        "velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_values": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "coefficient",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
       "name": "hexv841_transport_interpolate_target_v841",
       "module": "hexv841_transport_interpolate_target_v841",
       "source": "woof/metal/shaders/hexv841_transport_interpolate_target_v841.metal",
@@ -144618,6 +147520,198 @@
         ],
         [
           "weight",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_transport_standard_finish_regional_v841",
+      "module": "hexv841_transport_standard_finish_regional_v841",
+      "source": "woof/metal/shaders/hexv841_transport_standard_finish_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "transport_standard_finish_regional_v841",
+      "resources": [
+        [
+          "bdy_mask_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "acoustic_sign",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "edge_values",
+          "float32",
+          "read"
+        ],
+        [
+          "vertical_flux",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "old",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_old",
+          "float32",
+          "read"
+        ],
+        [
+          "target_density",
+          "float32",
+          "read"
+        ],
+        [
+          "source",
+          "float32",
+          "read"
+        ],
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "output",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "bdy_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "acoustic_sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_values": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertical_flux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target_density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "stage": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dt",
           "float32"
         ]
       ],
@@ -147112,2695 +150206,97 @@
       ]
     },
     {
-      "name": "hexv841_acoustic_column_solve_regional_v841",
-      "module": "hexv841_acoustic_column_solve_regional_v841",
-      "source": "woof/metal/shaders/hexv841_acoustic_column_solve_regional_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "acoustic_column_solve_regional_v841",
-      "resources": [
-        [
-          "zz",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_zz",
-          "float32",
-          "read"
-        ],
-        [
-          "fzm",
-          "float32",
-          "read"
-        ],
-        [
-          "fzp",
-          "float32",
-          "read"
-        ],
-        [
-          "rdzw",
-          "float32",
-          "read"
-        ],
-        [
-          "dss",
-          "float32",
-          "read"
-        ],
-        [
-          "w",
-          "float32",
-          "read"
-        ],
-        [
-          "rw",
-          "float32",
-          "read"
-        ],
-        [
-          "rw_save",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_rw",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_rho",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_rt",
-          "float32",
-          "read"
-        ],
-        [
-          "rs",
-          "float32",
-          "read"
-        ],
-        [
-          "ts",
-          "float32",
-          "read"
-        ],
-        [
-          "spec_zone_mask_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "cofwr",
-          "float32",
-          "read"
-        ],
-        [
-          "cofwz",
-          "float32",
-          "read"
-        ],
-        [
-          "coftz",
-          "float32",
-          "read"
-        ],
-        [
-          "cofwt",
-          "float32",
-          "read"
-        ],
-        [
-          "cofrz",
-          "float32",
-          "read"
-        ],
-        [
-          "a_tri",
-          "float32",
-          "read"
-        ],
-        [
-          "alpha_tri",
-          "float32",
-          "read"
-        ],
-        [
-          "gamma_tri",
-          "float32",
-          "read"
-        ],
-        [
-          "etp",
-          "float32",
-          "read"
-        ],
-        [
-          "etm",
-          "float32",
-          "read"
-        ],
-        [
-          "ewp",
-          "float32",
-          "read"
-        ],
-        [
-          "ewm",
-          "float32",
-          "read"
-        ],
-        [
-          "rw_p",
-          "float32",
-          "read_write"
-        ],
-        [
-          "rho_pp",
-          "float32",
-          "read_write"
-        ],
-        [
-          "rtheta_pp",
-          "float32",
-          "read_write"
-        ],
-        [
-          "ww_avg",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "zz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_zz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "fzm": [
-          [
-            "any_1d"
-          ]
-        ],
-        "fzp": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rdzw": [
-          [
-            "any_1d"
-          ]
-        ],
-        "dss": [
-          [
-            "any_1d"
-          ]
-        ],
-        "w": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rw": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rw_save": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rw": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rho": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rt": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rs": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ts": [
-          [
-            "any_1d"
-          ]
-        ],
-        "spec_zone_mask_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cofwr": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cofwz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "coftz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cofwt": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cofrz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "a_tri": [
-          [
-            "any_1d"
-          ]
-        ],
-        "alpha_tri": [
-          [
-            "any_1d"
-          ]
-        ],
-        "gamma_tri": [
-          [
-            "any_1d"
-          ]
-        ],
-        "etp": [
-          [
-            "any_1d"
-          ]
-        ],
-        "etm": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ewp": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ewm": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rw_p": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_pp": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rtheta_pp": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ww_avg": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "dts",
-          "float32"
-        ]
-      ],
+      "name": "hexv841_copy_column_v841",
+      "module": "hexv841_copy_column_v841",
+      "source": "woof/metal/shaders/hexv841_copy_column_v841.metal",
+      "cuda_source": "woof/hex/cuda_physics_prep_v841.py",
+      "cuda_symbol": "source[..., garbage] = source[..., garbage - 1]",
       "threads_per_group": 128,
       "layout_version": 1,
       "arithmetic_policies": [
         "default"
-      ]
-    },
-    {
-      "name": "hexv841_acoustic_rs_ts_regional_v841",
-      "module": "hexv841_acoustic_rs_ts_regional_v841",
-      "source": "woof/metal/shaders/hexv841_acoustic_rs_ts_regional_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "acoustic_rs_ts_regional_v841",
+      ],
       "resources": [
         [
-          "n_edges_on_cell",
-          "int32",
+          "src",
+          "float",
           "read"
         ],
         [
-          "edges_on_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "cells_on_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "edge_sign_on_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "dv_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "inv_area_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "spec_zone_mask_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "theta_m",
-          "float32",
-          "read"
-        ],
-        [
-          "rdzw",
-          "float32",
-          "read"
-        ],
-        [
-          "cofrz",
-          "float32",
-          "read"
-        ],
-        [
-          "coftz",
-          "float32",
-          "read"
-        ],
-        [
-          "ewm",
-          "float32",
-          "read"
-        ],
-        [
-          "ru_p",
-          "float32",
-          "read"
-        ],
-        [
-          "rw_p",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_pp",
-          "float32",
-          "read"
-        ],
-        [
-          "rtheta_pp",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_rho",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_rt",
-          "float32",
-          "read"
-        ],
-        [
-          "rs",
-          "float32",
-          "read_write"
-        ],
-        [
-          "ts",
-          "float32",
+          "dst",
+          "float",
           "read_write"
         ]
       ],
-      "shapes": {
-        "n_edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cells_on_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edge_sign_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "dv_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "inv_area_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "spec_zone_mask_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "theta_m": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rdzw": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cofrz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "coftz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ewm": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru_p": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rw_p": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_pp": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rtheta_pp": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rho": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rt": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rs": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ts": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "max_edges",
-          "int32"
-        ],
-        [
-          "dts",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_acoustic_ru_regional_v841",
-      "module": "hexv841_acoustic_ru_regional_v841",
-      "source": "woof/metal/shaders/hexv841_acoustic_ru_regional_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "acoustic_ru_regional_v841",
-      "resources": [
-        [
-          "cells_on_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "inv_dc_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "spec_zone_mask_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "zz",
-          "float32",
-          "read"
-        ],
-        [
-          "exner",
-          "float32",
-          "read"
-        ],
-        [
-          "cqu",
-          "float32",
-          "read"
-        ],
-        [
-          "zxu",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_ru",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_pp",
-          "float32",
-          "read"
-        ],
-        [
-          "rtheta_pp",
-          "float32",
-          "read"
-        ],
-        [
-          "ru_p",
-          "float32",
-          "read_write"
-        ],
-        [
-          "ru_avg",
-          "float32",
-          "read_write"
-        ],
-        [
-          "invalid",
-          "int32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "cells_on_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "inv_dc_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "spec_zone_mask_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "zz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "exner": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cqu": [
-          [
-            "any_1d"
-          ]
-        ],
-        "zxu": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_ru": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_pp": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rtheta_pp": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru_p": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru_avg": [
-          [
-            "any_1d"
-          ]
-        ],
-        "invalid": [
-          [
-            1
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "small_step",
-          "int32"
-        ],
-        [
-          "dts",
-          "float32"
-        ],
-        [
-          "gravity",
-          "float32"
-        ],
-        [
-          "rgas",
-          "float32"
-        ],
-        [
-          "cp",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_bdy_adjust_scalars_compute_v841",
-      "module": "hexv841_regional_bdy_adjust_scalars_compute_v841",
-      "source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_compute_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_bdy_adjust_scalars_compute_v841",
-      "resources": [
-        [
-          "relax_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "spec_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "bdy_mask_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "mesh_scaling_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "n_edges_on_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "edges_on_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "cells_on_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "edge_sign_on_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "dv_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "inv_dc_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "scalars_new",
-          "float32",
-          "read"
-        ],
-        [
-          "scalars_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "updates",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "relax_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "spec_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "bdy_mask_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "mesh_scaling_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "n_edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cells_on_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edge_sign_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "dv_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "inv_dc_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "scalars_new": [
-          [
-            "any_1d"
-          ]
-        ],
-        "scalars_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "updates": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "ntracers",
-          "int32"
-        ],
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "max_edges",
-          "int32"
-        ],
-        [
-          "nrelax",
-          "int32"
-        ],
-        [
-          "nspec",
-          "int32"
-        ],
-        [
-          "ten_dt",
-          "float32"
-        ],
-        [
-          "dt_rk",
-          "float32"
-        ],
-        [
-          "relax_zone",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
-      "module": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
-      "source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_copyback_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_bdy_adjust_scalars_copyback_v841",
-      "resources": [
-        [
-          "nudged_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "updates",
-          "float32",
-          "read"
-        ],
-        [
-          "scalars_new",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "nudged_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "updates": [
-          [
-            "any_1d"
-          ]
-        ],
-        "scalars_new": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "ntracers",
-          "int32"
-        ],
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nnudged",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_bdy_set_scalars_v841",
-      "module": "hexv841_regional_bdy_set_scalars_v841",
-      "source": "woof/metal/shaders/hexv841_regional_bdy_set_scalars_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_bdy_set_scalars_v841",
-      "resources": [
-        [
-          "spec_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "scalars_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "scalars_new",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "spec_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "scalars_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "scalars_new": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "ntracers",
-          "int32"
-        ],
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nspec",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_clamp_negative_scalars_v841",
-      "module": "hexv841_regional_clamp_negative_scalars_v841",
-      "source": "woof/metal/shaders/hexv841_regional_clamp_negative_scalars_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_clamp_negative_scalars_v841",
-      "resources": [
-        [
-          "scalars",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "scalars": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nvalues",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_lbc_derive_v841",
-      "module": "hexv841_regional_lbc_derive_v841",
-      "source": "woof/metal/shaders/hexv841_regional_lbc_derive_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_lbc_derive_v841",
-      "resources": [
-        [
-          "zz",
-          "float32",
-          "read"
-        ],
-        [
-          "lbc_rho",
-          "float32",
-          "read"
-        ],
-        [
-          "lbc_theta",
-          "float32",
-          "read"
-        ],
-        [
-          "lbc_qv",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_zz",
-          "float32",
-          "read_write"
-        ],
-        [
-          "rtheta_m",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "zz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "lbc_rho": [
-          [
-            "any_1d"
-          ]
-        ],
-        "lbc_theta": [
-          [
-            "any_1d"
-          ]
-        ],
-        "lbc_qv": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_zz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rtheta_m": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nvalues",
-          "int32"
-        ],
-        [
-          "rvord",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_lbc_rho_edge_v841",
-      "module": "hexv841_regional_lbc_rho_edge_v841",
-      "source": "woof/metal/shaders/hexv841_regional_lbc_rho_edge_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_lbc_rho_edge_v841",
-      "resources": [
-        [
-          "cells_on_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "rho_zz",
-          "float32",
-          "read"
-        ],
-        [
-          "lbc_u",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_edge",
-          "float32",
-          "read_write"
-        ],
-        [
-          "ru",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "cells_on_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_zz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "lbc_u": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_lbc_state_at_v841",
-      "module": "hexv841_regional_lbc_state_at_v841",
-      "source": "woof/metal/shaders/hexv841_regional_lbc_state_at_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_lbc_state_at_v841",
-      "resources": [
-        [
-          "state",
-          "float32",
-          "read"
-        ],
-        [
-          "tend",
-          "float32",
-          "read"
-        ],
-        [
-          "out",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "state": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend": [
-          [
-            "any_1d"
-          ]
-        ],
-        "out": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nvalues",
-          "int32"
-        ],
-        [
-          "dt_remaining",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_lbc_tendency_v841",
-      "module": "hexv841_regional_lbc_tendency_v841",
-      "source": "woof/metal/shaders/hexv841_regional_lbc_tendency_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_lbc_tendency_v841",
-      "resources": [
-        [
-          "new_state",
-          "float32",
-          "read"
-        ],
-        [
-          "old_state",
-          "float32",
-          "read"
-        ],
-        [
-          "tend",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "new_state": [
-          [
-            "any_1d"
-          ]
-        ],
-        "old_state": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nvalues",
-          "int32"
-        ],
-        [
-          "inv_dt",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_moist_cell_coefficients",
-      "module": "hexv841_regional_moist_cell_coefficients",
-      "source": "woof/metal/shaders/hexv841_regional_moist_cell_coefficients.metal",
-      "cuda_source": "woof/hex/cuda_regional_forecast_v841.py",
-      "cuda_symbol": "CudaRegionalRuntimeV841.moist_coefficients",
-      "resources": [
-        [
-          "q",
-          "float32",
-          "read"
-        ],
-        [
-          "qtot",
-          "float32",
-          "read_write"
-        ],
-        [
-          "cqw",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "q": [
-          [
-            "any_1d"
-          ]
-        ],
-        "qtot": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cqw": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_moist_edge_coefficients",
-      "module": "hexv841_regional_moist_edge_coefficients",
-      "source": "woof/metal/shaders/hexv841_regional_moist_edge_coefficients.metal",
-      "cuda_source": "woof/hex/cuda_regional_forecast_v841.py",
-      "cuda_symbol": "CudaRegionalRuntimeV841.moist_coefficients",
-      "resources": [
-        [
-          "q",
-          "float32",
-          "read"
-        ],
-        [
-          "cells_on_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "cqu",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "q": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cells_on_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cqu": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_relaxzone_filter_cell_v841",
-      "module": "hexv841_regional_relaxzone_filter_cell_v841",
-      "source": "woof/metal/shaders/hexv841_regional_relaxzone_filter_cell_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_relaxzone_filter_cell_v841",
-      "resources": [
-        [
-          "relax_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "bdy_mask_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "mesh_scaling_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "n_edges_on_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "edges_on_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "cells_on_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "edge_sign_on_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "dv_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "inv_dc_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_zz",
-          "float32",
-          "read"
-        ],
-        [
-          "theta_m",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "rt_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_rho",
-          "float32",
-          "read_write"
-        ],
-        [
-          "tend_rt",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "relax_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "bdy_mask_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "mesh_scaling_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "n_edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cells_on_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edge_sign_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "dv_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "inv_dc_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_zz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "theta_m": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rt_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rho": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rt": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "max_edges",
-          "int32"
-        ],
-        [
-          "nrelax",
-          "int32"
-        ],
-        [
-          "ten_dt",
-          "float32"
-        ],
-        [
-          "relax_zone",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_relaxzone_filter_edge_v841",
-      "module": "hexv841_regional_relaxzone_filter_edge_v841",
-      "source": "woof/metal/shaders/hexv841_regional_relaxzone_filter_edge_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_relaxzone_filter_edge_v841",
-      "resources": [
-        [
-          "relax_edges",
-          "int32",
-          "read"
-        ],
-        [
-          "bdy_mask_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "mesh_scaling_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "n_edges_on_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "edges_on_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "cells_on_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "vertices_on_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "edges_on_vertex",
-          "int32",
-          "read"
-        ],
-        [
-          "edge_sign_on_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "edge_sign_on_vertex",
-          "float32",
-          "read"
-        ],
-        [
-          "dc_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "dv_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "inv_dc_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "inv_dv_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "inv_area_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "inv_area_triangle",
-          "float32",
-          "read"
-        ],
-        [
-          "ru",
-          "float32",
-          "read"
-        ],
-        [
-          "ru_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_ru",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "relax_edges": [
-          [
-            "any_1d"
-          ]
-        ],
-        "bdy_mask_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "mesh_scaling_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "n_edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cells_on_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "vertices_on_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edges_on_vertex": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edge_sign_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edge_sign_on_vertex": [
-          [
-            "any_1d"
-          ]
-        ],
-        "dc_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "dv_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "inv_dc_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "inv_dv_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "inv_area_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "inv_area_triangle": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_ru": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "nvertices",
-          "int32"
-        ],
-        [
-          "max_edges",
-          "int32"
-        ],
-        [
-          "vertex_degree",
-          "int32"
-        ],
-        [
-          "nrelax",
-          "int32"
-        ],
-        [
-          "ten_dt",
-          "float32"
-        ],
-        [
-          "divdamp",
-          "float32"
-        ],
-        [
-          "relax_zone",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_relaxzone_rayleigh_cell_v841",
-      "module": "hexv841_regional_relaxzone_rayleigh_cell_v841",
-      "source": "woof/metal/shaders/hexv841_regional_relaxzone_rayleigh_cell_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_relaxzone_rayleigh_cell_v841",
-      "resources": [
-        [
-          "relax_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "bdy_mask_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "mesh_scaling_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_zz",
-          "float32",
-          "read"
-        ],
-        [
-          "theta_m",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "rt_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_rho",
-          "float32",
-          "read_write"
-        ],
-        [
-          "tend_rt",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "relax_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "bdy_mask_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "mesh_scaling_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_zz": [
-          [
-            "any_1d"
-          ]
-        ],
-        "theta_m": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rt_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rho": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rt": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nrelax",
-          "int32"
-        ],
-        [
-          "fifty_dt",
-          "float32"
-        ],
-        [
-          "relax_zone",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_relaxzone_rayleigh_edge_v841",
-      "module": "hexv841_regional_relaxzone_rayleigh_edge_v841",
-      "source": "woof/metal/shaders/hexv841_regional_relaxzone_rayleigh_edge_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_relaxzone_rayleigh_edge_v841",
-      "resources": [
-        [
-          "relax_edges",
-          "int32",
-          "read"
-        ],
-        [
-          "bdy_mask_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "mesh_scaling_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "ru",
-          "float32",
-          "read"
-        ],
-        [
-          "ru_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_ru",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "relax_edges": [
-          [
-            "any_1d"
-          ]
-        ],
-        "bdy_mask_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "mesh_scaling_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_ru": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "nrelax",
-          "int32"
-        ],
-        [
-          "fifty_dt",
-          "float32"
-        ],
-        [
-          "relax_zone",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_reset_speczone_values_v841",
-      "module": "hexv841_regional_reset_speczone_values_v841",
-      "source": "woof/metal/shaders/hexv841_regional_reset_speczone_values_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_reset_speczone_values_v841",
-      "resources": [
-        [
-          "spec_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "rt_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_theta_base",
-          "float32",
-          "read"
-        ],
-        [
-          "theta_m",
-          "float32",
-          "read_write"
-        ],
-        [
-          "rho_theta",
-          "float32",
-          "read_write"
-        ],
-        [
-          "rho_theta_perturbation",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "spec_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rt_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_theta_base": [
-          [
-            "any_1d"
-          ]
-        ],
-        "theta_m": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_theta": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_theta_perturbation": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nspec",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_speczone_tend_cell_v841",
-      "module": "hexv841_regional_speczone_tend_cell_v841",
-      "source": "woof/metal/shaders/hexv841_regional_speczone_tend_cell_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_speczone_tend_cell_v841",
-      "resources": [
-        [
-          "spec_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "rho_driving_tend",
-          "float32",
-          "read"
-        ],
-        [
-          "rt_driving_tend",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_rho",
-          "float32",
-          "read_write"
-        ],
-        [
-          "tend_rt",
-          "float32",
-          "read_write"
-        ],
-        [
-          "tend_rw",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "spec_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_driving_tend": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rt_driving_tend": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rho": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rt": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_rw": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nspec",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_speczone_tend_edge_v841",
-      "module": "hexv841_regional_speczone_tend_edge_v841",
-      "source": "woof/metal/shaders/hexv841_regional_speczone_tend_edge_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_speczone_tend_edge_v841",
-      "resources": [
-        [
-          "spec_edges",
-          "int32",
-          "read"
-        ],
-        [
-          "ru_driving_tend",
-          "float32",
-          "read"
-        ],
-        [
-          "tend_ru",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "spec_edges": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru_driving_tend": [
-          [
-            "any_1d"
-          ]
-        ],
-        "tend_ru": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "nspec",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_speczone_u_ru_v841",
-      "module": "hexv841_regional_speczone_u_ru_v841",
-      "source": "woof/metal/shaders/hexv841_regional_speczone_u_ru_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_speczone_u_ru_v841",
-      "resources": [
-        [
-          "spec_edges",
-          "int32",
-          "read"
-        ],
-        [
-          "u_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "ru_driving",
-          "float32",
-          "read"
-        ],
-        [
-          "normal_velocity",
-          "float32",
-          "read_write"
-        ],
-        [
-          "rho_u",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "spec_edges": [
-          [
-            "any_1d"
-          ]
-        ],
-        "u_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "ru_driving": [
-          [
-            "any_1d"
-          ]
-        ],
-        "normal_velocity": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_u": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "nspec",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_regional_zero_speczone_w_v841",
-      "module": "hexv841_regional_zero_speczone_w_v841",
-      "source": "woof/metal/shaders/hexv841_regional_zero_speczone_w_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "regional_zero_speczone_w_v841",
-      "resources": [
-        [
-          "spec_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "w",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "spec_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "w": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "nrows",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nspec",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_solve_region_envelope_finish_v841",
-      "module": "hexv841_solve_region_envelope_finish_v841",
-      "source": "woof/metal/shaders/hexv841_solve_region_envelope_finish_v841.metal",
-      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
-      "cuda_symbol": "solve_region_envelope_finish_v841",
-      "resources": [
-        [
-          "partials",
-          "int64",
-          "read"
-        ],
-        [
-          "out",
-          "int64",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "partials": [
-          [
-            "any_1d"
-          ]
-        ],
-        "out": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "n_fields",
-          "int32"
-        ],
-        [
-          "blocks_per_field",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 256,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_solve_region_envelope_v841",
-      "module": "hexv841_solve_region_envelope_v841",
-      "source": "woof/metal/shaders/hexv841_solve_region_envelope_v841.metal",
-      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
-      "cuda_symbol": "solve_region_envelope_v841",
-      "resources": [
-        [
-          "field",
-          "float32",
-          "read"
-        ],
-        [
-          "partials",
-          "int64",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "field": [
-          [
-            "any_1d"
-          ]
-        ],
-        "partials": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
       "parameters": [
         [
           "rows",
           "int32"
         ],
         [
-          "stride",
+          "src_stride",
           "int32"
         ],
+        [
+          "src_col",
+          "int32"
+        ],
+        [
+          "dst_stride",
+          "int32"
+        ],
+        [
+          "dst_col",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dst": [
+          [
+            "any_1d"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "glue_add_positive",
+      "module": "bandwidth_glue",
+      "source": "woof/metal/shaders/bandwidth_family.metal",
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "resources": [
+        [
+          "src",
+          "float",
+          "read"
+        ],
+        [
+          "dst",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "n"
+          ]
+        ],
+        "dst": [
+          [
+            "n"
+          ]
+        ]
+      },
+      "parameters": [
         [
           "n",
           "int32"
-        ],
-        [
-          "field_index",
-          "int32"
-        ],
-        [
-          "blocks_per_field",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 256,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_solve_region_scrub_columns_v841",
-      "module": "hexv841_solve_region_scrub_columns_v841",
-      "source": "woof/metal/shaders/hexv841_solve_region_scrub_columns_v841.metal",
-      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
-      "cuda_symbol": "solve_region_scrub_columns_v841",
-      "resources": [
-        [
-          "field",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "field": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "rows",
-          "int32"
-        ],
-        [
-          "stride",
-          "int32"
-        ],
-        [
-          "solve",
-          "int32"
-        ],
-        [
-          "pool_bits",
-          "int32"
         ]
       ],
       "threads_per_group": 128,
@@ -149808,503 +150304,6 @@
       "arithmetic_policies": [
         "default"
       ]
-    },
-    {
-      "name": "hexv841_solve_region_validate_v841",
-      "module": "hexv841_solve_region_validate_v841",
-      "source": "woof/metal/shaders/hexv841_solve_region_validate_v841.metal",
-      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
-      "cuda_symbol": "solve_region_validate_v841",
-      "resources": [
-        [
-          "field",
-          "float32",
-          "read"
-        ],
-        [
-          "flag",
-          "int32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "field": [
-          [
-            "any_1d"
-          ]
-        ],
-        "flag": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "rows",
-          "int32"
-        ],
-        [
-          "stride",
-          "int32"
-        ],
-        [
-          "n",
-          "int32"
-        ],
-        [
-          "positive",
-          "int32"
-        ],
-        [
-          "blocks",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 256,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_transport_edge_values_regional_v841",
-      "module": "hexv841_transport_edge_values_regional_v841",
-      "source": "woof/metal/shaders/hexv841_transport_edge_values_regional_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "transport_edge_values_regional_v841",
-      "resources": [
-        [
-          "bdy_mask_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "dv_edge",
-          "float32",
-          "read"
-        ],
-        [
-          "cells_on_edge",
-          "int32",
-          "read"
-        ],
-        [
-          "stage",
-          "float32",
-          "read"
-        ],
-        [
-          "velocity",
-          "float32",
-          "read"
-        ],
-        [
-          "adv",
-          "float32",
-          "read"
-        ],
-        [
-          "adv3",
-          "float32",
-          "read"
-        ],
-        [
-          "n_adv",
-          "int32",
-          "read"
-        ],
-        [
-          "adv_cells",
-          "int32",
-          "read"
-        ],
-        [
-          "edge_values",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "bdy_mask_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "dv_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "cells_on_edge": [
-          [
-            "any_1d"
-          ]
-        ],
-        "stage": [
-          [
-            "any_1d"
-          ]
-        ],
-        "velocity": [
-          [
-            "any_1d"
-          ]
-        ],
-        "adv": [
-          [
-            "any_1d"
-          ]
-        ],
-        "adv3": [
-          [
-            "any_1d"
-          ]
-        ],
-        "n_adv": [
-          [
-            "any_1d"
-          ]
-        ],
-        "adv_cells": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edge_values": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "ntracers",
-          "int32"
-        ],
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "width",
-          "int32"
-        ],
-        [
-          "coefficient",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "name": "hexv841_transport_standard_finish_regional_v841",
-      "module": "hexv841_transport_standard_finish_regional_v841",
-      "source": "woof/metal/shaders/hexv841_transport_standard_finish_regional_v841.metal",
-      "cuda_source": "woof/hex/cuda_regional_v841.py",
-      "cuda_symbol": "transport_standard_finish_regional_v841",
-      "resources": [
-        [
-          "bdy_mask_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "n_edges_on_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "edges_on_cell",
-          "int32",
-          "read"
-        ],
-        [
-          "acoustic_sign",
-          "float32",
-          "read"
-        ],
-        [
-          "inv_area_cell",
-          "float32",
-          "read"
-        ],
-        [
-          "velocity",
-          "float32",
-          "read"
-        ],
-        [
-          "edge_values",
-          "float32",
-          "read"
-        ],
-        [
-          "vertical_flux",
-          "float32",
-          "read"
-        ],
-        [
-          "rdzw",
-          "float32",
-          "read"
-        ],
-        [
-          "old",
-          "float32",
-          "read"
-        ],
-        [
-          "rho_old",
-          "float32",
-          "read"
-        ],
-        [
-          "target_density",
-          "float32",
-          "read"
-        ],
-        [
-          "source",
-          "float32",
-          "read"
-        ],
-        [
-          "stage",
-          "float32",
-          "read"
-        ],
-        [
-          "output",
-          "float32",
-          "read_write"
-        ]
-      ],
-      "shapes": {
-        "bdy_mask_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "n_edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edges_on_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "acoustic_sign": [
-          [
-            "any_1d"
-          ]
-        ],
-        "inv_area_cell": [
-          [
-            "any_1d"
-          ]
-        ],
-        "velocity": [
-          [
-            "any_1d"
-          ]
-        ],
-        "edge_values": [
-          [
-            "any_1d"
-          ]
-        ],
-        "vertical_flux": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rdzw": [
-          [
-            "any_1d"
-          ]
-        ],
-        "old": [
-          [
-            "any_1d"
-          ]
-        ],
-        "rho_old": [
-          [
-            "any_1d"
-          ]
-        ],
-        "target_density": [
-          [
-            "any_1d"
-          ]
-        ],
-        "source": [
-          [
-            "any_1d"
-          ]
-        ],
-        "stage": [
-          [
-            "any_1d"
-          ]
-        ],
-        "output": [
-          [
-            "any_1d"
-          ]
-        ]
-      },
-      "parameters": [
-        [
-          "ntracers",
-          "int32"
-        ],
-        [
-          "nlev",
-          "int32"
-        ],
-        [
-          "ncells",
-          "int32"
-        ],
-        [
-          "nedges",
-          "int32"
-        ],
-        [
-          "max_edges",
-          "int32"
-        ],
-        [
-          "dt",
-          "float32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
-    },
-    {
-      "arithmetic_policies": [
-        "float32_ordered",
-        "wrf_mynn_thresholds"
-      ],
-      "cuda_source": "woof/core/kernels/rrtmg_legacy_adapter.cu",
-      "cuda_symbol": "rla_mynn_gsd41",
-      "layout_version": 1,
-      "module": "rrtmgp_cloud_prep_family",
-      "name": "rrtmgp_mynn_cloud_merge_gsd41",
-      "parameters": [
-        [
-          "ncell",
-          "int32"
-        ],
-        [
-          "ncol",
-          "int32"
-        ],
-        [
-          "nlay",
-          "int32"
-        ],
-        [
-          "has_cldfra",
-          "int32"
-        ],
-        [
-          "first_step",
-          "int32"
-        ]
-      ],
-      "resources": [
-        [
-          "qc",
-          "float",
-          "read_write"
-        ],
-        [
-          "qi",
-          "float",
-          "read_write"
-        ],
-        [
-          "cldfra",
-          "float",
-          "read_write"
-        ],
-        [
-          "qc_bl",
-          "float",
-          "read"
-        ],
-        [
-          "cldfra_bl",
-          "float",
-          "read"
-        ],
-        [
-          "tlay",
-          "float",
-          "read"
-        ]
-      ],
-      "shapes": {
-        "qc": [
-          [
-            "ncol",
-            "nlay"
-          ]
-        ],
-        "qi": [
-          [
-            "ncol",
-            "nlay"
-          ]
-        ],
-        "cldfra": [
-          [
-            "ncol",
-            "nlay"
-          ]
-        ],
-        "qc_bl": [
-          [
-            "ncol",
-            "nlay"
-          ]
-        ],
-        "cldfra_bl": [
-          [
-            "ncol",
-            "nlay"
-          ]
-        ],
-        "tlay": [
-          [
-            "ncol",
-            "nlay"
-          ]
-        ]
-      },
-      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
-      "threads_per_group": 128
     },
     {
       "arithmetic_policies": [
@@ -152047,46 +152046,109 @@
       "threads_per_group": 128
     },
     {
-      "name": "glue_add_positive",
-      "module": "bandwidth_glue",
-      "source": "woof/metal/shaders/bandwidth_family.metal",
-      "cuda_source": null,
-      "cuda_symbol": null,
+      "arithmetic_policies": [
+        "float32_ordered",
+        "wrf_mynn_thresholds"
+      ],
+      "cuda_source": "woof/core/kernels/rrtmg_legacy_adapter.cu",
+      "cuda_symbol": "rla_mynn_gsd41",
+      "layout_version": 1,
+      "module": "rrtmgp_cloud_prep_family",
+      "name": "rrtmgp_mynn_cloud_merge_gsd41",
+      "parameters": [
+        [
+          "ncell",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nlay",
+          "int32"
+        ],
+        [
+          "has_cldfra",
+          "int32"
+        ],
+        [
+          "first_step",
+          "int32"
+        ]
+      ],
       "resources": [
         [
-          "src",
+          "qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfra",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc_bl",
           "float",
           "read"
         ],
         [
-          "dst",
+          "cldfra_bl",
           "float",
-          "read_write"
+          "read"
+        ],
+        [
+          "tlay",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
-        "src": [
+        "qc": [
           [
-            "n"
+            "ncol",
+            "nlay"
           ]
         ],
-        "dst": [
+        "qi": [
           [
-            "n"
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "cldfra": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "qc_bl": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "cldfra_bl": [
+          [
+            "ncol",
+            "nlay"
+          ]
+        ],
+        "tlay": [
+          [
+            "ncol",
+            "nlay"
           ]
         ]
       },
-      "parameters": [
-        [
-          "n",
-          "int32"
-        ]
-      ],
-      "threads_per_group": 128,
-      "layout_version": 1,
-      "arithmetic_policies": [
-        "default"
-      ]
+      "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
+      "threads_per_group": 128
     }
   ],
   "schema": "woof-metal-kernel-signatures-v1"

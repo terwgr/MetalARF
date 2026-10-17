@@ -782,8 +782,12 @@ def advance_scalars_regional_metal_v841(
     rk_step: int,
     config_coef_3rd_order: float,
     validation_flag: Any,
+    scalar_tendency: Any | None = None,
 ) -> tuple[Any, Any]:
     """The regional split scalar transport, F:4764-4861.
+
+    ``scalar_tendency`` is the held physics source (``tend_scalars``), added
+    in the cell finish as the global transport adds it; none means zero.
 
     The edge-value zone split and the cell finish are the regional shaders;
     the vertical flux and the target-density interpolation are the shared
@@ -836,7 +840,8 @@ def advance_scalars_regional_metal_v841(
          "edge_values": edge_values, "vertical_flux": vertical_flux,
          "rdzw": rdzw, "old": scalar_old, "rho_old": rho_zz_old,
          "target_density": target,
-         "source": module.zeros(scalar_old.shape, np.float32),
+         "source": (module.zeros(scalar_old.shape, np.float32)
+                    if scalar_tendency is None else scalar_tendency),
          "stage": scalar_stage, "output": output},
         {"ntracers": _i(ntracers), "nlev": _i(nlev), "ncells": _i(ncells),
          "nedges": _i(nedges), "max_edges": _i(max_edges), "dt": _f(dt)})

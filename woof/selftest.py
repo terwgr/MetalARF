@@ -61,18 +61,36 @@ def regional_check(backend: str) -> dict:
             f"{status}: {detail}", **fields}
 
 
+#: Largest relative Metal-vs-NumPy difference the Hex check accepts.
+HEX_NUMPY_TOLERANCE = 1e-4
+
+
 def hex_check(backend: str) -> dict:
     import numpy as np
 
     from woof.hex.metal_dry_door import tiny_dry_steps
 
+    mesh, state, _ = tiny_dry_steps(1)
+    agreement = {}
     if backend == "metal":
         from woof.metal.runtime import MetalContext
 
+        reference = state
         with MetalContext() as context:
             mesh, state, _ = tiny_dry_steps(1, metal_context=context)
-    else:
-        mesh, state, _ = tiny_dry_steps(1)
+        # The Metal step must reproduce the NumPy step, not just stay finite.
+        worst = 0.0
+        for name in ("rho", "rho_theta", "rho_u", "rho_w", "scalars"):
+            metal = np.asarray(getattr(state, name), dtype=np.float64)
+            numpy_ = np.asarray(getattr(reference, name), dtype=np.float64)
+            scale = max(float(np.abs(numpy_).max()), 1e-30)
+            worst = max(worst, float(np.abs(metal - numpy_).max()) / scale)
+        agreement = {"numpy_max_rel_diff": worst}
+        if worst > HEX_NUMPY_TOLERANCE:
+            return {"status": "FAIL",
+                    "detail": f"12-cell dry mesh: Metal differs from NumPy by "
+                              f"{worst:.2e} (limit {HEX_NUMPY_TOLERANCE:.0e})",
+                    **agreement}
     rho = np.asarray(state.rho, dtype=np.float64)
     cells = np.asarray(mesh.arrays["cellsOnEdge"])
     rho_edge = 0.5 * (rho[:, cells[:, 0]] + rho[:, cells[:, 1]])
@@ -81,7 +99,8 @@ def hex_check(backend: str) -> dict:
             "max_wind_m_s": float(np.abs(
                 np.asarray(state.rho_u, dtype=np.float64) / rho_edge).max()),
             "theta_min_k": float(theta.min()),
-            "theta_max_k": float(theta.max())}
+            "theta_max_k": float(theta.max()),
+            **agreement}
 
 
 def global_check(backend: str) -> dict:

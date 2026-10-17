@@ -7,7 +7,8 @@ there is nothing to cover.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterable, Mapping
+from contextlib import contextmanager
+from typing import Any, Callable, Iterable, Iterator, Mapping
 
 #: Called as ``POST_LAUNCH(entrypoint, arrays)`` after every launch while a
 #: regional run is attached, as the CUDA kernel cache's ``post_launch``: the
@@ -43,4 +44,22 @@ def launch(
             _in_hook = False
 
 
-__all__ = ["launch"]
+@contextmanager
+def suspended() -> Iterator[None]:
+    """Run the enclosed launches without the post-launch hook.
+
+    The regional garbage discipline belongs to the dycore's arrays.  The
+    column physics runs its padded garbage column on duplicated, well-posed
+    values (``pad_regional_physics_column``, the preparation's lend), which a
+    pool-value restore would undo.
+    """
+
+    global POST_LAUNCH
+    hook, POST_LAUNCH = POST_LAUNCH, None
+    try:
+        yield
+    finally:
+        POST_LAUNCH = hook
+
+
+__all__ = ["launch", "suspended"]
