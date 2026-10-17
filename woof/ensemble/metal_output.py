@@ -100,10 +100,10 @@ class MetalEnsembleCollector:
 
     def finish_run(self):
         manifests = []
-        out = self.root / "d01" / "ensemble" / "products"
-        out.mkdir(parents=True, exist_ok=True)
         from woof.io.classic_product import ClassicProduct
         for (grid, episode, valid), frame in sorted(self.frames.items(), key=lambda item: item[0][2]):
+            out = self.root / f"d{grid:02d}" / "ensemble" / "products"
+            out.mkdir(parents=True, exist_ok=True)
             members = frame["members"]
             if set(members) != set(range(self.members)):
                 raise ValueError(f"Metal ensemble frame {valid} has {len(members)}/{self.members} members")

@@ -1030,16 +1030,20 @@ def _adapt_experiment_vertical_for_case(exp, case_data, catalog):
     return adapted
 
 
-def build_experiment(exp, case_data) -> ExperimentState:
+def build_experiment(exp, case_data, *,
+                     state_backend: str = "cuda") -> ExperimentState:
     """Build the all-resident domain tree parent before child.
 
     The real root follows the existing Task-2 preparation path.  Each child
     then follows Task 12's WRF-order initialization and receives its own
     physics driver and Task-13 coupler.  Every state is constructed against
     the one shared transient arena before any scratch slot is materialized.
+    ``state_backend="metal"`` holds every domain on the root's Metal context
+    with no shared CUDA workspaces.
     """
     from woof.experiment import _bind_physics_params
     exp = _bind_physics_params(exp, "woof.core.model.build_experiment")
+    metal_state = state_backend == "metal"
     from woof import runtime
     from woof.core.clock import build_schedule, resolve_clock
     from woof.core.preflight import estimate_experiment
@@ -1104,7 +1108,7 @@ def build_experiment(exp, case_data) -> ExperimentState:
         exp, forcing_interval_seconds=lbc_interval_s)
     dycore_state_workspace = (
         build_shared_dycore_state_workspace(exp.domains)
-        if len(exp.domains) > 1 else None)
+        if len(exp.domains) > 1 and not metal_state else None)
     if (dycore_state_workspace is not None
             and dycore_state_workspace.nbytes
             != estimate.dycore_state_workspace_bytes):
@@ -1113,34 +1117,45 @@ def build_experiment(exp, case_data) -> ExperimentState:
             f"ledger: {dycore_state_workspace.nbytes} != "
             f"{estimate.dycore_state_workspace_bytes} bytes")
     arena = (build_shared_scratch_arena(exp.domains)
-             if len(exp.domains) > 1 else None)
+             if len(exp.domains) > 1 and not metal_state else None)
     if arena is not None and arena.nbytes != estimate.scratch_arena_bytes:
         raise RuntimeError(
             "runtime scratch arena drifted from the memory ledger: "
             f"{arena.nbytes} != {estimate.scratch_arena_bytes} bytes")
-    # Variant-aware (F' contract): the shared chunk workspace is a modern
-    # RTE+RRTMGP object.  Under ra_rrtmg_variant='rrtmg_legacy' the
-    # estimator's workspace_bytes is the legacy transient call-peak
-    # envelope, not a persistent allocation, and the legacy adapter keeps
-    # its engine-default column_chunk=None contract -- so no workspace is
-    # built (and no chunking attributes are stamped onto the adapter).
-    radiation_workspace = (
-        SharedRRTMGPChunkWorkspace(
-            nz=exp.root.run.nz, column_chunk=exp.column_chunk,
-            p_top=exp.vertical.p_top)
-        if uses_modern_rrtmgp_workspace(exp) else None)
-    if (radiation_workspace is not None
-            and radiation_workspace.nbytes != estimate.workspace_bytes):
-        raise RuntimeError(
-            "runtime RRTMGP workspace drifted from the memory ledger: "
-            f"{radiation_workspace.nbytes} != {estimate.workspace_bytes} bytes")
-    ledger = ModelMemoryLedger(
-        estimate=estimate,
-        shared_scratch_arena_bytes=(0 if arena is None else arena.nbytes),
-        shared_dycore_state_workspace_bytes=(
-            0 if dycore_state_workspace is None
-            else dycore_state_workspace.nbytes),
-        radiation_workspace=radiation_workspace)
+
+    def shared_radiation_workspace(array_module=None):
+        # Variant-aware (F' contract): the shared chunk workspace is a modern
+        # RTE+RRTMGP object.  Under ra_rrtmg_variant='rrtmg_legacy' the
+        # estimator's workspace_bytes is the legacy transient call-peak
+        # envelope, not a persistent allocation, and the legacy adapter keeps
+        # its engine-default column_chunk=None contract -- so no workspace is
+        # built (and no chunking attributes are stamped onto the adapter).
+        workspace = (
+            SharedRRTMGPChunkWorkspace(
+                nz=exp.root.run.nz, column_chunk=exp.column_chunk,
+                p_top=exp.vertical.p_top,
+                **({"_array_module": array_module} if metal_state else {}))
+            if uses_modern_rrtmgp_workspace(exp) else None)
+        if (workspace is not None
+                and workspace.nbytes != estimate.workspace_bytes):
+            raise RuntimeError(
+                "runtime RRTMGP workspace drifted from the memory ledger: "
+                f"{workspace.nbytes} != {estimate.workspace_bytes} bytes")
+        return workspace
+
+    def memory_ledger(workspace):
+        return ModelMemoryLedger(
+            estimate=estimate,
+            shared_scratch_arena_bytes=(0 if arena is None else arena.nbytes),
+            shared_dycore_state_workspace_bytes=(
+                0 if dycore_state_workspace is None
+                else dycore_state_workspace.nbytes),
+            radiation_workspace=workspace)
+
+    # The Metal workspace lives on the root's context, which exists only
+    # once the root is prepared.
+    radiation_workspace = None if metal_state else shared_radiation_workspace()
+    ledger = None if metal_state else memory_ledger(radiation_workspace)
 
     # Numbered among the grids that start with the run, the grid id said
     # beside it: a dormant (spawn-declared) nest ahead of an active one
@@ -1159,7 +1174,14 @@ def build_experiment(exp, case_data) -> ExperimentState:
         prepared_root = runtime.prepare_root_experiment_case(
             exp, case_data, input_catalog=catalog,
             forcing_by_time=snapshots, scratch_arena=arena,
-            dycore_state_workspace=dycore_state_workspace)
+            dycore_state_workspace=dycore_state_workspace,
+            state_backend=state_backend)
+    metal_context = None
+    if metal_state:
+        array_module = prepared_root.initial_result.state._array_module
+        metal_context = array_module.context
+        radiation_workspace = shared_radiation_workspace(array_module)
+        ledger = memory_ledger(radiation_workspace)
     # The raw decode is spent: the root's initial state and every
     # boundary frame are built from it above, and nothing below reads it.
     # The children about to be initialized -- and the mid-run delayed
@@ -1227,6 +1249,8 @@ def build_experiment(exp, case_data) -> ExperimentState:
                 scratch_arena=arena,
                 dycore_state_workspace=dycore_state_workspace,
                 sfcp_to_sfcp=case_data.sfcp_to_sfcp,
+                **({"state_backend": "metal", "preprocess_backend": "cpu",
+                    "metal_context": metal_context} if metal_state else {}),
                 initial_perturbation=(
                     exp.perturbation if child_starts_at_t0 else None))
             if exp.perturbation is not None:
@@ -1243,6 +1267,7 @@ def build_experiment(exp, case_data) -> ExperimentState:
                 initialized, dc, exp=exp, data=case_data,
                 forcing_times=forcing_times,
                 radiation_workspace=radiation_workspace,
+                state_backend=state_backend,
                 # Legacy-RRTMG ozone routing (WRF computes o33d on the root
                 # domain only; children receive parent-interpolated fields):
                 # the child's adapter takes the parent's radiation callable

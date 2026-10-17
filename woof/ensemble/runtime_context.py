@@ -90,10 +90,16 @@ class MemberOutputCapture:
 _CAPTURE = ContextVar("gpuwm_ensemble_member_output", default=None)
 _SESSION = ContextVar("gpuwm_ensemble_session", default=None)
 _DISPATCHING = ContextVar("gpuwm_ensemble_dispatching", default=False)
+_METAL_ARRAYS = ContextVar("gpuwm_ensemble_metal_arrays", default=None)
 
 
 def current_capture():
     return _CAPTURE.get()
+
+
+def current_metal_array_module():
+    """The MetalArrayModule every member of a config-driven Metal ensemble shares."""
+    return _METAL_ARRAYS.get()
 
 
 def current_session():
@@ -219,6 +225,15 @@ def member_output_scope(capture):
     finally:
         _DISPATCHING.reset(dispatch_token)
         _CAPTURE.reset(token)
+
+
+@contextmanager
+def metal_array_module_scope(array_module):
+    token = _METAL_ARRAYS.set(array_module)
+    try:
+        yield array_module
+    finally:
+        _METAL_ARRAYS.reset(token)
 
 
 @contextmanager

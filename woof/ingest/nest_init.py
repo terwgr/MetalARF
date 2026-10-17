@@ -1528,7 +1528,7 @@ def initialize_child(
         vertical: VerticalConfig,
         source_orography: SourceOrographyDeclaration | None = None,
         *, scratch_arena=None, dycore_state_workspace=None,
-        state_backend: str = "cuda",
+        state_backend: str = "cuda", metal_context=None,
         sfcp_to_sfcp: bool = True,
         soil_layer_contract=None,
         preprocess_backend: str | object = "cuda",
@@ -1555,6 +1555,7 @@ def initialize_child(
         scratch_arena=scratch_arena,
         dycore_state_workspace=dycore_state_workspace,
         state_backend=state_backend,
+        metal_context=metal_context,
         sfcp_to_sfcp=sfcp_to_sfcp,
         soil_layer_contract=soil_layer_contract,
         initial_perturbation=initial_perturbation)

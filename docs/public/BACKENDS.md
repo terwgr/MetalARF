@@ -53,10 +53,13 @@ woof global run CONFIG.toml --metal
 Other commands select Metal the same way:
 
 - `woof run --backend metal` runs `--wrfinput` / `--met-em` inputs and
-  single-domain `[case_data]` configs in process (`woof branch` and
-  `woof resume` take the same flag). Nested `[case_data]` trees and
-  `[case_data]` ensembles still run on CUDA only and are refused before any
-  input is decoded; run those from a prepared bundle with `woof go`.
+  `[case_data]` configs in process, nested trees included (`woof branch` and
+  `woof resume` take the same flag). A `[case_data]` ensemble runs its
+  members serially on one Metal context; each member decodes its own
+  inputs, and stochastic members stay refused as on every Metal ensemble.
+  Nests must start with the root: a delayed, spawned or moving nest is
+  refused on this route before any output, and the tree is checked against
+  the Metal memory plan first, as `woof go` does.
 - `woof sim --backend metal`; `woof downscale --backend metal` (the parent is
   interpolated on the CPU, a microphysics change converts through the Metal
   edge kernel, and the child runs resident, so `[tiles]` and `--auto-vram`

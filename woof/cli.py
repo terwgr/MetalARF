@@ -673,6 +673,28 @@ def build_parser(*, render_only: bool = False) -> argparse.ArgumentParser:
     return parser
 
 
+def _refuse_metal_case_data(exp) -> None:
+    """Refuse a Metal ``[case_data]`` run before any output: an unported
+    shape, or a tree unified memory cannot hold (an oversized domain does
+    not fail cleanly there, it starves the machine)."""
+    from woof import runtime
+    from woof.metal import memory_gate as metal_memory
+    from woof.metal.runtime import MetalContext
+
+    refusals = runtime.metal_case_data_refusals(exp)
+    if refusals:
+        raise SystemExit("woof run: this experiment is not admitted on "
+                         "Metal: " + "; ".join(refusals))
+    with MetalContext() as context:
+        estimate = metal_memory.estimate_runs(
+            [d.run for d in exp.domains], context)
+    refusal = metal_memory.refusal_text(
+        estimate, [(int(d.run.nx), int(d.run.ny), int(d.run.nz))
+                   for d in exp.domains])
+    if refusal is not None:
+        raise SystemExit(f"woof run: {refusal}")
+
+
 def main(argv: list[str] | None = None) -> int:
     """The `woof` front door: parse one command line, dispatch, exit.
 
@@ -1475,6 +1497,8 @@ def _dispatch(args) -> int:
                 # run integrates in this process.
                 from woof.supervisor import supervise_from_cli
                 return supervise_from_cli(args)
+            if metal:
+                _refuse_metal_case_data(exp)
             if getattr(args, "preprocess_backend", None) is not None:
                 from dataclasses import replace
                 data = replace(data, preprocess_backend=args.preprocess_backend)

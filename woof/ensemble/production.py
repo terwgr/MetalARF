@@ -6,7 +6,7 @@ The ordinary fallback retains the original runner, clock and physics.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import asdict, is_dataclass, replace
 from collections.abc import Mapping
 import json
@@ -21,7 +21,8 @@ from woof.ensemble.execution import (
     name_failing_members, execute_concurrent_members,
 )
 from woof.ensemble.request import EnsembleRequest
-from woof.ensemble.runtime_context import MemberOutputCapture, member_output_scope
+from woof.ensemble.runtime_context import (
+    MemberOutputCapture, member_output_scope, metal_array_module_scope)
 from woof.ensemble.packing import CardBudget, MemberBatch, pack_members
 from woof.ensemble.radar_output import radar_enabled, member_history_required, finish_member_radar
 
@@ -70,6 +71,8 @@ def _json_scalar(value):
     from collections.abc import Mapping
     if isinstance(value, Mapping):
         return dict(value)
+    if is_dataclass(value) and not isinstance(value, type):
+        return asdict(value)
     if isinstance(value, Path):
         return str(value)
     from datetime import datetime
@@ -1193,23 +1196,35 @@ class PreparedEnsembleSession:
         from woof.ensemble.runtime_preparation import RuntimeMemberInputs, RuntimePreparationSource
         from woof.runtime import ExperimentRunSummary
         out = Path(output_directory)
-        source = RuntimePreparationSource(out / ".ensemble-preparation")
+        # The shared preparation restores CUDA state; each Metal member
+        # prepares its own, on the one context the ensemble holds.
+        metal = str(runner_options.get("state_backend", "cuda")).strip().lower() == "metal"
+        source = None if metal else RuntimePreparationSource(out / ".ensemble-preparation")
         shared = RuntimeMemberInputs(experiment, case_data)
         def member_runner(member_inputs, *, output_directory, first_products=None, **options):
             if not isinstance(member_inputs, RuntimeMemberInputs):
                 raise TypeError("config-driven source members require their native RuntimeMemberInputs binding")
-            with source.scope(member_inputs.member_input):
+            with (nullcontext() if metal else source.scope(member_inputs.member_input)), \
+                    metal_array_module_scope(options.pop("array_module", None)):
                 return runner(member_inputs.experiment, member_inputs.case_data,
                               output_directory, **options)
         try:
-            manifest = self.run_prepared(member_runner, shared,
-                output_directory=out, **runner_options)
-            preparation = source.receipt()
+            with ExitStack() as stack:
+                if metal:
+                    from woof.metal.array import MetalArrayModule
+                    from woof.metal.runtime import MetalContext
+                    runner_options["array_module"] = MetalArrayModule(
+                        stack.enter_context(MetalContext()))
+                manifest = self.run_prepared(member_runner, shared,
+                    output_directory=out, **runner_options)
+            preparation = None if metal else source.receipt()
         finally:
-            source.close()
-        preparation["deleted_files"] = source.receipt()["deleted_files"]
-        preparation["closed"] = True
-        manifest["shared_native_preparation"] = preparation
+            if not metal:
+                source.close()
+        if not metal:
+            preparation["deleted_files"] = source.receipt()["deleted_files"]
+            preparation["closed"] = True
+            manifest["shared_native_preparation"] = preparation
         _atomic_json(out / "ensemble-run.json", manifest)
         _atomic_json(out / "report.json", manifest)
         ensemble_manifest = out / "ensemble-run.json"

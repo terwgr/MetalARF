@@ -1311,8 +1311,10 @@ def prepare_real_case(cfg: RunConfig, *, grid, geog_root,
         # Every forcing frame must share one serial queue and pipeline cache.
         # The returned DomainState retains its array module, which retains
         # this context for later preparation/driver work.
+        from woof.ensemble.runtime_context import current_metal_array_module
         from woof.metal.runtime import MetalContext
-        metal_context = MetalContext()
+        shared = current_metal_array_module()
+        metal_context = MetalContext() if shared is None else shared.context
     if store_request is not None:
         # The store's identity and receipts record the backend that RAN.
         from dataclasses import replace as _replace
@@ -1699,11 +1701,18 @@ def _child_radiation_adapter(exp: ExperimentConfig, data: CaseDataConfig,
                 parent_nx=parent_dc.run.nx, parent_ny=parent_dc.run.ny,
                 stagger="", wrapper="interp")
             ozone_parent = ParentOzoneProvider(radiation_parent, registration)
-    radiation = make_radiation(
-        cfg, exp.start_time, lat, lon, p_top=float(state.p_top),
+    radiation_options = dict(
+        p_top=float(state.p_top),
         trace_gas_overrides=({"co2": data.co2_vmr}
                              if data.co2_vmr is not None else None),
         column_chunk=exp.column_chunk, ozone_parent=ozone_parent)
+    if getattr(state, "_metal_setup_state", False):
+        from woof.ingest.hrrr_physics import prepared_radiation
+        radiation = prepared_radiation(
+            cfg, state, exp.start_time, lat, lon, **radiation_options)
+    else:
+        radiation = make_radiation(
+            cfg, exp.start_time, lat, lon, **radiation_options)
     attach_modern_workspace(radiation, radiation_workspace)
     return radiation
 
@@ -1711,7 +1720,8 @@ def _child_radiation_adapter(exp: ExperimentConfig, data: CaseDataConfig,
 def prepare_child_case(initialized, child_dc, *, exp: ExperimentConfig,
                        data: CaseDataConfig, forcing_times,
                        radiation_workspace=None,
-                       radiation_parent=None) -> PreparedRealCase:
+                       radiation_parent=None,
+                       state_backend: str = "cuda") -> PreparedRealCase:
     """Attach one child's per-domain physics driver after T12 init.
 
     T12 returns the WRF-order atmospheric/static/Noah setup products.  This
@@ -1726,12 +1736,16 @@ def prepare_child_case(initialized, child_dc, *, exp: ExperimentConfig,
     callers supplying the original parent adapter; either way, the child
     consumes parent-interpolated ozone rather than local climatology.
     """
-    import cupy as cp
-
     from woof.core.diagnostics import update_diagnostics
     from woof.core.landuse import initialize_landuse
     from woof.core.physics import initialize_physics
     from woof.core.rrtmgp import RRTMGPRadiation
+
+    metal_state = state_backend == "metal"
+    if metal_state:
+        cp = initialized.state._array_module
+    else:
+        import cupy as cp
 
     if (initialized.real is None or initialized.static_fields is None
             or initialized.horizontal is None or initialized.soil is None):
@@ -1745,7 +1759,8 @@ def prepare_child_case(initialized, child_dc, *, exp: ExperimentConfig,
     soil = initialized.soil
     # A shared child input retains host words. Keep the fresh initializer's
     # original field precision while restoring those words on this card.
-    met0 = surface_fields_to_device(initialized.horizontal, cp, preserve_dtype=True)
+    met0 = surface_fields_to_device(
+        initialized.horizontal, cp, **({} if metal_state else {"preserve_dtype": True}))
     real = initialized.real
 
     update_diagnostics(state, cfg.hypsometric_opt)
@@ -1800,26 +1815,36 @@ def prepare_child_case(initialized, child_dc, *, exp: ExperimentConfig,
             cfg, static, landuse_attrs=landuse_attrs, xice=soil.xice,
             fractional_seaice=ruc_fractional_seaice(cfg)))
     from woof.core.landuse import surface_snow_albedo
-    driver.fields["snoalb"][...] = cp.asarray(
-        surface_snow_albedo(cfg, static, driver.noah_params),
-        dtype=cp.float32)
-    driver.fields["lai"][...] = cp.asarray(lai, dtype=cp.float32)
-    driver.fields["shdmin"][...] = cp.asarray(
-        100.0 * static["GREENFRAC"].min(axis=0), dtype=cp.float32)
-    driver.fields["shdmax"][...] = cp.asarray(
-        100.0 * static["GREENFRAC"].max(axis=0), dtype=cp.float32)
+    for name, value in (
+            ("snoalb", lambda: surface_snow_albedo(
+                cfg, static, driver.noah_params)),
+            ("lai", lambda: lai),
+            ("shdmin", lambda: 100.0 * static["GREENFRAC"].min(axis=0)),
+            ("shdmax", lambda: 100.0 * static["GREENFRAC"].max(axis=0))):
+        # Each Metal land model carries its own subset of these fields.
+        if not metal_state or name in driver.fields:
+            driver.fields[name][...] = cp.asarray(value(), dtype=cp.float32)
     driver.fields["psfc"][...] = cp.asarray(
         real.surface_pressure, dtype=cp.float32)
     driver.fields["t2"][...] = met0["T2"]
     driver.fields["q2"][...] = cp.asarray(real.surface_qv, dtype=cp.float32)
-    driver.fields["th2"][...] = (
-        driver.fields["t2"]
-        * (cp.float32(100000.0) / driver.fields["psfc"])
-        ** cp.float32(287.0 / 1004.0))
-    driver.fields["u10"][...] = 0.5 * (met0["U10"][:, :-1]
-                                         + met0["U10"][:, 1:])
-    driver.fields["v10"][...] = 0.5 * (met0["V10"][:-1]
-                                         + met0["V10"][1:])
+    if metal_state:
+        from woof.metal.surface_diagnostics_seed import (
+            submit_surface_diagnostics_seed)
+        submit_surface_diagnostics_seed(
+            cp.context, t2=driver.fields["t2"], psfc=driver.fields["psfc"],
+            u10_staggered=met0["U10"], v10_staggered=met0["V10"],
+            th2=driver.fields["th2"], u10=driver.fields["u10"],
+            v10=driver.fields["v10"])
+    else:
+        driver.fields["th2"][...] = (
+            driver.fields["t2"]
+            * (cp.float32(100000.0) / driver.fields["psfc"])
+            ** cp.float32(287.0 / 1004.0))
+        driver.fields["u10"][...] = 0.5 * (met0["U10"][:, :-1]
+                                             + met0["U10"][:, 1:])
+        driver.fields["v10"][...] = 0.5 * (met0["V10"][:-1]
+                                             + met0["V10"][1:])
     if getattr(cfg, "sf_surface_mosaic", 0) == 1:
         from woof.core.noah_mosaic_door import attach_noah_mosaic_to_driver
         # initialize_landuse above runs at its own default,
@@ -5440,6 +5465,38 @@ def _publish_receipt(outdir, name: str, document) -> Path:
     return path
 
 
+def metal_case_data_refusals(exp) -> list[str]:
+    """Why ``exp`` cannot run on the Metal ``[case_data]`` route, if at all.
+
+    The shared Metal admission, plus the nest lifecycles this route builds
+    only through its CUDA initializers: a nest that starts after the root,
+    a spawned nest, and a moving (followed) nest.
+    """
+    from woof.core.physics import metal_experiment_refusals
+
+    refusals = metal_experiment_refusals(exp)
+    for dc in exp.domains:
+        gid = int(dc.grid_id)
+        if not int(dc.parent_id or 0):
+            continue
+        if exp.domain_start_time(gid) > exp.start_time:
+            refusals.append(
+                f"d{gid:02d} starts after the root; a delayed nest is "
+                "rebuilt through the CUDA initializer on this route, so "
+                "start it with the forecast or run on CUDA")
+        if getattr(dc, "spawn", None) is not None:
+            refusals.append(f"d{gid:02d} is a spawned nest, which this "
+                            "route builds on CUDA only")
+        if getattr(dc, "follow", None) is not None:
+            refusals.append(f"d{gid:02d} follows a storm; moving nests "
+                            "relocate on CUDA only on this route")
+    relocation = getattr(exp, "relocation", None)
+    if relocation is not None and getattr(relocation, "enabled", False):
+        refusals.append("[relocation] moves a nest, which this route does "
+                        "on CUDA only")
+    return refusals
+
+
 def run_experiment(exp: ExperimentConfig, data: CaseDataConfig, outdir, *,
                    restart=None, progress_callback=None,
                    health_debug: bool = False,
@@ -5455,27 +5512,15 @@ def run_experiment(exp: ExperimentConfig, data: CaseDataConfig, outdir, *,
     exp = _bind_physics_params(exp, "woof.runtime.run_experiment")
     from woof.ensemble.runtime_context import current_session
     if state_backend == "metal":
-        # Before any input is decoded.  Nests on this route are initialized
-        # from the decoded parent, which only the CUDA path implements.
-        if current_session() is not None:
-            raise ValueError(
-                "a [case_data] ensemble runs on CUDA only; run a Metal "
-                "ensemble through woof go CONFIG --backend metal")
-        if len(exp.domains) > 1:
-            raise ValueError(
-                "the [case_data] route builds nested domains on CUDA only; "
-                "run a nested Metal case from a prepared bundle "
-                "(woof go CONFIG --backend metal without [case_data])")
+        # Refused before any input is decoded rather than deep in prepare.
         pinned_backend = getattr(data, "preprocess_backend", None)
         if str(pinned_backend).strip().lower() == "cuda":
             raise ValueError(
                 f"preprocess_backend={pinned_backend!r} "
                 "([case_data] preprocess_backend or --preprocess-backend) "
-                "selects CUDA preprocessing, which Metal state cannot use "
-                "on the single-domain or host-store route; set it to 'cpu' "
-                "or 'auto'")
-        from woof.core.physics import metal_experiment_refusals
-        refusals = metal_experiment_refusals(exp)
+                "selects CUDA preprocessing, which Metal state cannot use; "
+                "set it to 'cpu' or 'auto'")
+        refusals = metal_case_data_refusals(exp)
         if refusals:
             raise ValueError("this experiment is not admitted on Metal: "
                              + "; ".join(refusals))
@@ -5483,7 +5528,9 @@ def run_experiment(exp: ExperimentConfig, data: CaseDataConfig, outdir, *,
     if ensemble is not None:
         return ensemble.run_experiment(run_experiment, exp, data,
             output_directory=outdir, restart=restart,
-            progress_callback=progress_callback, health_debug=health_debug)
+            progress_callback=progress_callback, health_debug=health_debug,
+            **({"state_backend": state_backend}
+               if state_backend == "metal" else {}))
     from woof.io.wrfout import quarantine_orphan_wrfouts
     from woof.core.devices import refuse_unrouted_devices
     refuse_unrouted_devices(exp, "woof run")
@@ -5824,13 +5871,14 @@ def run_experiment(exp: ExperimentConfig, data: CaseDataConfig, outdir, *,
             machine=_streaming.cold_admission_machine(
                 planning_machine, options=getattr(exp, "tiles", None)),
             what="this domain tree, held resident on the card")
-    model = build_experiment(exp, data)
+    model = build_experiment(
+        exp, data, **({"state_backend": "metal"} if state_backend == "metal" else {}))
     print(resolved_tree_config_report(exp, data, model._input_catalog))
     return _run_built_experiment(
         exp, data, outdir, model, restart=restart,
         progress_callback=progress_callback, health_debug=health_debug,
         planning_machine=planning_machine, tree_decision=cold_tree,
-        tree_decisions=cold_decisions)
+        tree_decisions=cold_decisions, state_backend=state_backend)
 
 
 def _refine_single_streaming_plan(prepared, options, decision, machine,
@@ -5898,7 +5946,7 @@ def _run_built_experiment(exp, data, outdir, model, *, restart=None,
                           progress_callback=None, health_debug=False,
                           prepared_steppers=None, prepared_decisions=None,
                           planning_machine=None, tree_decision=None,
-                          tree_decisions=None):
+                          tree_decisions=None, state_backend="cuda"):
     """The shared scheduled runtime, independent of initialization storage."""
     from woof.core.model import execute_experiment
     from woof.io.restart import (read_tree_lifecycle_header,
@@ -6115,7 +6163,9 @@ def _run_built_experiment(exp, data, outdir, model, *, restart=None,
                 progress_callback=committed_progress,
                 health_debug=health_debug,
                 relocation_runner=relocation_runner,
-                steppers=steppers, experiment=exp)
+                steppers=steppers, experiment=exp,
+                **({"pool_trim_per_period": False}
+                   if state_backend == "metal" else {}))
         else:
             # The leg walk: dormant nests are born mid-run and integrate
             # from their birth boundary onward.
@@ -6137,8 +6187,12 @@ def _run_built_experiment(exp, data, outdir, model, *, restart=None,
         writers.drain(before_domain=_drain_progress(progress_callback))
         paths = writers.paths
     _finalizing_progress(progress_callback, "synchronize-device")
-    import cupy as cp
-    cp.cuda.runtime.deviceSynchronize()
+    if state_backend == "metal":
+        for node in model.walk_parent_first():
+            node.state._array_module.context._wait_submissions()
+    else:
+        import cupy as cp
+        cp.cuda.runtime.deviceSynchronize()
     # After the writer drain above and after the final device synchronization,
     # so the digest observes the trajectory and cannot participate in it.
     # A completed summary reports an observed final state, including a resume
