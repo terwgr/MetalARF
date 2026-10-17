@@ -105,7 +105,8 @@ def _submit(context, name: str, resources, parameters, count: int,
 
 
 def submit_mynn_tendencies(context, resource_arrays, *, nz: int, ncol: int,
-                           onoff, workspace=None, experimental=False):
+                           onoff, workspace=None, gsd41=False,
+                           experimental=False):
     """Experimentally solve MYNN momentum, heat, and moisture tendencies.
 
     ``resource_arrays`` maps the input and visible output names to contiguous
@@ -124,12 +125,14 @@ def submit_mynn_tendencies(context, resource_arrays, *, nz: int, ncol: int,
     nz, ncol = int(nz), int(ncol)
     if nz < 2:
         raise ValueError("MYNN tendencies require nz >= 2")
+    gsd41_names = ('qc_original', 'qi_original') if gsd41 else ()
     layer_names = ('dz', 'rho', 'u', 'v', 'th', 'tk', 'qv', 'p', 'exner', 'thl_in', 'sqv', 'sqc', 'sqi', 'sqs', 'ozone', 'tcd', 'qcd', 'dfm', 'dfh', 'diss_heat', 'sub_thl', 'sub_sqv', 'sub_u', 'sub_v', 'det_thl', 'det_sqv', 'det_sqc', 'det_u', 'det_v', 'du', 'dv', 'dth', 'dqv', 'dqc', 'dqi', 'dqs', 'dozone', 'thl', 'dtz', 'rhoinv', 'delp', 'a', 'b', 'c', 'd', 'cpw', 'dpw', 'sqv2', 'sqc2', 'sqi2', 'sqs2')
     scratch_names = ('dtz', 'rhoinv', 'delp', 'khdz', 'kmdz', 'a', 'b', 'c', 'd', 'cpw', 'dpw', 'sqv2', 'sqc2', 'sqi2', 'sqs2')
     visible_layer_names = tuple(n for n in layer_names if n not in scratch_names)
     interface_names = ('s_aw', 's_awthl', 's_awqv', 's_awqc', 's_awu', 's_awv', 'sd_aw', 'sd_awthl', 'sd_awqv', 'sd_awqc', 'sd_awu', 'sd_awv')
     column_names = ('delt', 'psfc', 'ust', 'wspd', 'uoce', 'voce', 'flt', 'flqv', 'flqc')
-    required = set(visible_layer_names) | set(interface_names) | set(column_names)
+    required = (set(visible_layer_names) | set(interface_names)
+                | set(column_names) | set(gsd41_names))
     # Accept legacy dictionaries that still carry caller-allocated work
     # arrays, but bind only the compact workspace below.
     accepted = required | set(scratch_names) | {'khdz', 'kmdz'}
@@ -158,6 +161,8 @@ def submit_mynn_tendencies(context, resource_arrays, *, nz: int, ncol: int,
                          (a.view((nz, ncol)) for a in layer_values)))
     resources.update(interface_values)
     resources.update({n: resource_arrays[n].view((ncol,)) for n in column_names})
+    resources.update({n: _reshape_fp32(resource_arrays[n], n, (nz, ncol))
+                      for n in gsd41_names})
     workspace_shape = (15, nz + 1, ncol)
     if workspace is None:
         workspace = MetalArray(
@@ -188,7 +193,8 @@ def submit_mynn_tendencies(context, resource_arrays, *, nz: int, ncol: int,
         "onoff": np.float32(onoff), "rd": rd, "p608": p608,
         "xlvcp": xlvcp, "xlscp": xlscp, "nz": nz, "ncol": ncol,
     }
-    return _submit(context, "mynn_tendencies_columns", resources,
+    return _submit(context, "mynn_tendencies_gsd41_columns" if gsd41
+                   else "mynn_tendencies_columns", resources,
                    parameters, ncol, experimental)
 
 
@@ -533,7 +539,8 @@ def submit_mynn_predict_default(context, dz, rho, dfq, pdk, pdt, pdq, pdc,
                                 el, s_aw, ust, pmz, phh, delt, qke_in,
                                 qsq_in, qke_out, tsq_out, qsq_out, cov_out,
                                 qkw, rhoinv, kqdz, kmdz, a, b, c, d, cp, dp,
-                                *, nz: int, ncol: int, experimental=False):
+                                *, nz: int, ncol: int, gsd41=False,
+                                experimental=False):
     """Experimentally submit the default MYNN prediction column solve.
 
     Layer buffers are level-major `(nz, ncol)` or flat with identical bytes;
@@ -574,7 +581,8 @@ def submit_mynn_predict_default(context, dz, rho, dfq, pdk, pdt, pdq, pdc,
     resources["s_aw"] = interface_values[0].view((nz + 1, ncol))
     resources.update(dict(zip(column_names,
                               (array.view((ncol,)) for array in column_values))))
-    return _submit(context, "mynn_predict_default_columns", resources,
+    return _submit(context, "mynn_predict_gsd41_columns" if gsd41
+                   else "mynn_predict_default_columns", resources,
                    {"nz": nz, "ncol": ncol}, ncol, experimental)
 
 
@@ -635,7 +643,7 @@ def submit_mynn_level2_columns(context, dz, u, v, thl, qw, vt, vq, dtl, dqw,
 
 def submit_mynn_pblh_scale(context, thetav, qke, zw, dz, landsea, dx, zi,
                            kzi, psig_bl, psig_shcu, *, nz: int, ncol: int,
-                           experimental=False):
+                           gsd41=False, experimental=False):
     """Experimentally compute the source's PBL height and scale columns.
 
     Layer arrays are level-major `(nz, ncol)`; `zw` is `(nz+1, ncol)`.
@@ -679,7 +687,8 @@ def submit_mynn_pblh_scale(context, thetav, qke, zw, dz, landsea, dx, zi,
     resources.update(dict(zip(column_names,
                               (array.view((ncol,)) for array in column_values))))
     resources["kzi"] = kzi.view((ncol,))
-    return _submit(context, "mynn_pblh_scale_columns", resources,
+    return _submit(context, "mynn_pblh_scale_gsd41_columns" if gsd41
+                   else "mynn_pblh_scale_columns", resources,
                    {"nz": nz, "ncol": ncol}, ncol, experimental)
 
 
@@ -687,7 +696,7 @@ def submit_mynn_turbulence_default(context, dz, u, v, cldfra, edmf_w,
                                    edmf_a, tkeprodtd, el, qkw, dtl, dqw,
                                    gm, gh, sm, sh, dfm, dfh, dfq, pdk, pdt,
                                    pdq, pdc, tcd, qcd, *, nz: int,
-                                   experimental=False):
+                                   gsd41=False, experimental=False):
     """Experimentally evaluate source-ordered interface turbulence updates.
 
     Resources use contiguous level-major storage. `nz` must divide the shared
@@ -714,7 +723,8 @@ def submit_mynn_turbulence_default(context, dz, u, v, cldfra, edmf_w,
     resources = dict(zip(names, arrays))
     resources["sm"] = resources["sm"].view((count,))
     resources["sh"] = resources["sh"].view((count,))
-    return _submit(context, "mynn_turbulence_default_interfaces", resources,
+    return _submit(context, "mynn_turbulence_gsd41_interfaces" if gsd41
+                   else "mynn_turbulence_default_interfaces", resources,
                    {"nz": nz, "count": count}, count, experimental)
 
 
@@ -816,8 +826,35 @@ def submit_mynn_condensation_gsd41(context, dz, zw, th, thl, qw, p, exner,
                    {"nz": nz, "ncol": ncol}, ncol, experimental)
 
 
+def submit_mynn_gsd41_thvl(context, th, exner, sqv, sqc, sqi, tk, qc_bl,
+                           cldfra_bl, thvl, *, experimental=False):
+    """Theta-v of the liquid-water theta that GSD 4.1 feeds to GET_PBLH."""
+    names = ("th", "exner", "sqv", "sqc", "sqi", "tk", "qc_bl",
+             "cldfra_bl", "thvl")
+    arrays, count = _flat_fp32_arrays(
+        (th, exner, sqv, sqc, sqi, tk, qc_bl, cldfra_bl, thvl), names)
+    return _submit(context, "mynn_gsd41_thvl_columns",
+                   dict(zip(names, arrays)), {"count": count}, count,
+                   experimental)
+
+
+def submit_mynn_gsd41_cloud_decay(context, cldfra_bl, qc_bl, cldfra_old, u,
+                                  v, dx, delt, *, nz: int, ncol: int,
+                                  experimental=False):
+    """Limit how fast the carried GSD 4.1 subgrid cloud may decay."""
+    layer_names = ("cldfra_bl", "qc_bl", "cldfra_old", "u", "v")
+    resources = {name: _reshape_fp32(array, name, (nz, ncol))
+                 for name, array in zip(
+                     layer_names, (cldfra_bl, qc_bl, cldfra_old, u, v))}
+    resources.update({name: _reshape_fp32(array, name, (ncol,))
+                      for name, array in (("dx", dx), ("delt", delt))})
+    return _submit(context, "mynn_gsd41_cloud_decay", resources,
+                   {"nz": nz, "ncol": ncol}, nz * ncol, experimental)
+
+
 def submit_mynn_driver_diss_heat(context, el, qke, p, diss_heat, *,
-                                 nz: int, ncol: int, experimental=False):
+                                 nz: int, ncol: int, gsd41=False,
+                                 experimental=False):
     """Experimentally compute source dissipation heating by column.
 
     Inputs and output are contiguous, level-major FP32 `(nz, ncol)` buffers.
@@ -839,7 +876,8 @@ def submit_mynn_driver_diss_heat(context, el, qke, p, diss_heat, *,
     layer_shape = (nz, ncol)
     resources = dict(zip(names,
                          (array.view(layer_shape) for array in arrays)))
-    return _submit(context, "mynn_driver_diss_heat_columns", resources,
+    return _submit(context, "mynn_driver_diss_heat_gsd41_columns" if gsd41
+                   else "mynn_driver_diss_heat_columns", resources,
                    {"nz": nz, "ncol": ncol}, ncol, experimental)
 
 

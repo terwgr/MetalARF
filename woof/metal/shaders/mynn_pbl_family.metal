@@ -29,6 +29,13 @@
 #include "mynn_dmp_mf_gsd41_columns_bindings.metalh"
 #include "mynn_condensation_gsd41_columns_bindings.metalh"
 #include "mynn_scalar_pblmix_columns_bindings.metalh"
+#include "mynn_pblh_scale_gsd41_columns_bindings.metalh"
+#include "mynn_turbulence_gsd41_interfaces_bindings.metalh"
+#include "mynn_predict_gsd41_columns_bindings.metalh"
+#include "mynn_driver_diss_heat_gsd41_columns_bindings.metalh"
+#include "mynn_tendencies_gsd41_columns_bindings.metalh"
+#include "mynn_gsd41_thvl_columns_bindings.metalh"
+#include "mynn_gsd41_cloud_decay_bindings.metalh"
 
 using namespace metal;
 
@@ -537,10 +544,11 @@ kernel void mynn_driver_prep_columns(
     }
 }
 
-kernel void mynn_predict_default_columns(
-    constant MynnPredictDefaultColumnsResources &r [[buffer(0)]],
-    constant MynnPredictDefaultColumnsParams &q [[buffer(1)]],
-    uint column [[thread_position_in_grid]])
+// gsd41 selects the GSD MYNN v4.1 mym_predict: unweighted diffusion with no
+// EDMF floor, an x(top)=x(top-1) upper row, and a 1e-4 TKE floor.
+template <typename Resources, typename Params>
+static inline void mynn_predict_column(
+    constant Resources &r, constant Params &q, uint column, bool gsd41)
 {
     if (column >= uint(q.ncol) || q.nz < 2) return;
     (void)r.phh;
@@ -548,75 +556,127 @@ kernel void mynn_predict_default_columns(
     const ulong ncol = ulong(q.ncol);
     const float step = r.delt[column];
 
-    for (int k = 0; k < nz; ++k) {
-        const ulong idx = ulong(k) * ncol + ulong(column);
-        r.qkw[idx] = mynn_f32_sqrt(max(r.qke_in[idx], 0.0f));
-        r.rhoinv[idx] = 1.0f / max(r.rho[idx], 1.0e-4f);
-    }
     const ulong base = ulong(column);
-    r.rhoinv[base] = 1.0f / r.rho[base];
-    float rhoz = r.rho[base];
-    r.kqdz[base] = rhoz * (3.0f * r.dfq[base]);
-    r.kmdz[base] = rhoz * r.dfq[base];
-    for (int k = 1; k < nz; ++k) {
-        const ulong idx = ulong(k) * ncol + ulong(column);
-        rhoz = (r.rho[idx] * r.dz[idx - ncol]
-              + r.rho[idx - ncol] * r.dz[idx])
-             / (r.dz[idx - ncol] + r.dz[idx]);
-        rhoz = max(rhoz, 1.0e-4f);
-        r.kqdz[idx] = rhoz * (3.0f * r.dfq[idx]);
-        r.kmdz[idx] = rhoz * r.dfq[idx];
-    }
     const ulong last = ulong(nz - 1) * ncol + ulong(column);
-    const float kqdz_top = rhoz * (3.0f * r.dfq[last]);
-    const float kmdz_top = rhoz * r.dfq[last];
-    for (int k = 1; k < nz - 1; ++k) {
-        const ulong idx = ulong(k) * ncol + ulong(column);
-        r.kqdz[idx] = max(r.kqdz[idx], 0.5f * r.s_aw[idx]);
-        r.kqdz[idx] = max(r.kqdz[idx],
-            -0.5f * (r.s_aw[idx] - r.s_aw[idx + ncol]));
-        r.kmdz[idx] = max(r.kmdz[idx], 0.5f * r.s_aw[idx]);
-        r.kmdz[idx] = max(r.kmdz[idx],
-            -0.5f * (r.s_aw[idx] - r.s_aw[idx + ncol]));
+    const ulong top = last;
+    float kqdz_top, kmdz_top;
+    if (gsd41) {
+        for (int k = 0; k < nz; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            r.qkw[idx] = mynn_f32_sqrt(max(r.qke_in[idx], 0.0f));
+            r.rhoinv[idx] = 1.0f;
+            r.kqdz[idx] = mynn_f32_mul(3.0f, r.dfq[idx]);
+            r.kmdz[idx] = r.dfq[idx];
+        }
+        kqdz_top = mynn_f32_mul(3.0f, r.dfq[last]);
+        kmdz_top = r.dfq[last];
+    } else {
+        for (int k = 0; k < nz; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            r.qkw[idx] = mynn_f32_sqrt(max(r.qke_in[idx], 0.0f));
+            r.rhoinv[idx] = 1.0f / max(r.rho[idx], 1.0e-4f);
+        }
+        r.rhoinv[base] = 1.0f / r.rho[base];
+        float rhoz = r.rho[base];
+        r.kqdz[base] = rhoz * (3.0f * r.dfq[base]);
+        r.kmdz[base] = rhoz * r.dfq[base];
+        for (int k = 1; k < nz; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            rhoz = (r.rho[idx] * r.dz[idx - ncol]
+                  + r.rho[idx - ncol] * r.dz[idx])
+                 / (r.dz[idx - ncol] + r.dz[idx]);
+            rhoz = max(rhoz, 1.0e-4f);
+            r.kqdz[idx] = rhoz * (3.0f * r.dfq[idx]);
+            r.kmdz[idx] = rhoz * r.dfq[idx];
+        }
+        kqdz_top = rhoz * (3.0f * r.dfq[last]);
+        kmdz_top = rhoz * r.dfq[last];
+        for (int k = 1; k < nz - 1; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            r.kqdz[idx] = max(r.kqdz[idx], 0.5f * r.s_aw[idx]);
+            r.kqdz[idx] = max(r.kqdz[idx],
+                -0.5f * (r.s_aw[idx] - r.s_aw[idx + ncol]));
+            r.kmdz[idx] = max(r.kmdz[idx], 0.5f * r.s_aw[idx]);
+            r.kmdz[idx] = max(r.kmdz[idx],
+                -0.5f * (r.s_aw[idx] - r.s_aw[idx + ncol]));
+        }
     }
 
-    const float vkz = 0.4f * 0.5f * r.dz[base];
-    const float ustar = r.ust[column];
-    const float pdk1 = 2.0f * (ustar * ustar * ustar) * r.pmz[column] / vkz;
-    const float pdk_bottom = pdk1 - r.pdk[base + ncol];
-    for (int k = 0; k < nz - 1; ++k) {
-        const ulong idx = ulong(k) * ncol + ulong(column);
-        const float next_kqdz = k == nz - 2 ? kqdz_top : r.kqdz[idx + ncol];
-        const float b1l = 24.0f * 0.5f * (r.el[idx + ncol] + r.el[idx]);
-        const float bp = 2.0f * r.qkw[idx] / b1l;
-        const float pdk_here = k == 0 ? pdk_bottom : r.pdk[idx];
-        const float rp = r.pdk[idx + ncol] + pdk_here;
-        const float dtz = step / r.dz[idx];
-        r.a[idx] = -dtz * r.kqdz[idx] * r.rhoinv[idx];
-        r.b[idx] = 1.0f + dtz * (r.kqdz[idx] + next_kqdz) * r.rhoinv[idx]
-            + bp * step;
-        r.c[idx] = -dtz * next_kqdz * r.rhoinv[idx];
-        r.d[idx] = rp * step + r.qke_in[idx];
-    }
-    const ulong top = last;
-    r.a[top] = 0.0f; r.b[top] = 1.0f; r.c[top] = 0.0f;
-    r.d[top] = r.qke_in[top];
-    r.cp[base] = r.c[base] / r.b[base];
-    r.dp[base] = r.d[base] / r.b[base];
-    for (int k = 1; k < nz; ++k) {
-        const ulong idx = ulong(k) * ncol + ulong(column);
-        const float m = r.b[idx] - r.cp[idx - ncol] * r.a[idx];
-        r.cp[idx] = r.c[idx] / m;
-        r.dp[idx] = (r.d[idx] - r.dp[idx - ncol] * r.a[idx]) / m;
+    if (gsd41) {
+        const float vkz = mynn_f32_mul(mynn_f32_mul(0.4f, 0.5f), r.dz[base]);
+        const float ustar = r.ust[column];
+        const float ustar3 = mynn_f32_mul(mynn_f32_mul(ustar, ustar), ustar);
+        const float pdk1 = mynn_f32_div(mynn_f32_mul(
+            mynn_f32_mul(2.0f, ustar3), r.pmz[column]), vkz);
+        const float pdk_bottom = mynn_f32_sub(pdk1, r.pdk[base + ncol]);
+        for (int k = 0; k < nz - 1; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            const float next_kqdz = k == nz - 2 ? kqdz_top : r.kqdz[idx + ncol];
+            const float b1l = mynn_f32_mul(mynn_f32_mul(24.0f, 0.5f),
+                mynn_f32_add(r.el[idx + ncol], r.el[idx]));
+            const float bp = mynn_f32_div(mynn_f32_mul(2.0f, r.qkw[idx]), b1l);
+            const float pdk_here = k == 0 ? pdk_bottom : r.pdk[idx];
+            const float rp = mynn_f32_add(r.pdk[idx + ncol], pdk_here);
+            const float dtz = mynn_f32_div(step, r.dz[idx]);
+            r.a[idx] = mynn_f32_negate(mynn_f32_mul(dtz, r.kqdz[idx]));
+            r.b[idx] = mynn_f32_add(mynn_f32_add(1.0f, mynn_f32_mul(dtz,
+                mynn_f32_add(r.kqdz[idx], next_kqdz))),
+                mynn_f32_mul(bp, step));
+            r.c[idx] = mynn_f32_negate(mynn_f32_mul(dtz, next_kqdz));
+            r.d[idx] = mynn_f32_add(mynn_f32_mul(rp, step), r.qke_in[idx]);
+        }
+        r.a[top] = -1.0f; r.b[top] = 1.0f; r.c[top] = 0.0f; r.d[top] = 0.0f;
+        r.cp[base] = mynn_f32_div(r.c[base], r.b[base]);
+        r.dp[base] = mynn_f32_div(r.d[base], r.b[base]);
+        for (int k = 1; k < nz; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            const float m = mynn_f32_sub(r.b[idx],
+                mynn_f32_mul(r.cp[idx - ncol], r.a[idx]));
+            r.cp[idx] = mynn_f32_div(r.c[idx], m);
+            r.dp[idx] = mynn_f32_div(mynn_f32_sub(r.d[idx],
+                mynn_f32_mul(r.dp[idx - ncol], r.a[idx])), m);
+        }
+    } else {
+        const float vkz = 0.4f * 0.5f * r.dz[base];
+        const float ustar = r.ust[column];
+        const float pdk1 = 2.0f * (ustar * ustar * ustar) * r.pmz[column] / vkz;
+        const float pdk_bottom = pdk1 - r.pdk[base + ncol];
+        for (int k = 0; k < nz - 1; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            const float next_kqdz = k == nz - 2 ? kqdz_top : r.kqdz[idx + ncol];
+            const float b1l = 24.0f * 0.5f * (r.el[idx + ncol] + r.el[idx]);
+            const float bp = 2.0f * r.qkw[idx] / b1l;
+            const float pdk_here = k == 0 ? pdk_bottom : r.pdk[idx];
+            const float rp = r.pdk[idx + ncol] + pdk_here;
+            const float dtz = step / r.dz[idx];
+            r.a[idx] = -dtz * r.kqdz[idx] * r.rhoinv[idx];
+            r.b[idx] = 1.0f + dtz * (r.kqdz[idx] + next_kqdz) * r.rhoinv[idx]
+                + bp * step;
+            r.c[idx] = -dtz * next_kqdz * r.rhoinv[idx];
+            r.d[idx] = rp * step + r.qke_in[idx];
+        }
+        r.a[top] = 0.0f; r.b[top] = 1.0f; r.c[top] = 0.0f;
+        r.d[top] = r.qke_in[top];
+        r.cp[base] = r.c[base] / r.b[base];
+        r.dp[base] = r.d[base] / r.b[base];
+        for (int k = 1; k < nz; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            const float m = r.b[idx] - r.cp[idx - ncol] * r.a[idx];
+            r.cp[idx] = r.c[idx] / m;
+            r.dp[idx] = (r.d[idx] - r.dp[idx - ncol] * r.a[idx]) / m;
+        }
     }
     r.d[top] = r.dp[top];
     for (int k = nz - 2; k >= 0; --k) {
         const ulong idx = ulong(k) * ncol + ulong(column);
-        r.d[idx] = r.dp[idx] - r.cp[idx] * r.d[idx + ncol];
+        r.d[idx] = gsd41 ? mynn_f32_sub(r.dp[idx],
+            mynn_f32_mul(r.cp[idx], r.d[idx + ncol]))
+            : r.dp[idx] - r.cp[idx] * r.d[idx + ncol];
     }
     for (int k = 0; k < nz; ++k) {
         const ulong idx = ulong(k) * ncol + ulong(column);
-        r.qke_out[idx] = min(max(r.d[idx], 1.0e-3f), 150.0f);
+        r.qke_out[idx] = gsd41 ? mynn_f32_max2(r.d[idx], 1.0e-4f)
+            : min(max(r.d[idx], 1.0e-3f), 150.0f);
     }
 
     for (int k = 0; k < nz - 1; ++k) {
@@ -663,6 +723,22 @@ kernel void mynn_predict_default_columns(
     }
     r.tsq_out[top] = r.tsq_out[top - ncol];
     r.cov_out[top] = r.cov_out[top - ncol];
+}
+
+kernel void mynn_predict_default_columns(
+    constant MynnPredictDefaultColumnsResources &r [[buffer(0)]],
+    constant MynnPredictDefaultColumnsParams &q [[buffer(1)]],
+    uint column [[thread_position_in_grid]])
+{
+    mynn_predict_column(r, q, column, false);
+}
+
+kernel void mynn_predict_gsd41_columns(
+    constant MynnPredictGsd41ColumnsResources &r [[buffer(0)]],
+    constant MynnPredictGsd41ColumnsParams &q [[buffer(1)]],
+    uint column [[thread_position_in_grid]])
+{
+    mynn_predict_column(r, q, column, true);
 }
 
 kernel void mynn_level2_pairs(
@@ -879,10 +955,11 @@ kernel void mynn_level2_columns(
     }
 }
 
-kernel void mynn_pblh_scale_columns(
-    constant MynnPblhScaleColumnsResources &r [[buffer(0)]],
-    constant MynnPblhScaleColumnsParams &q [[buffer(1)]],
-    uint column [[thread_position_in_grid]])
+// gsd41: KPBL blends the theta-v and TKE levels with the height weight, and
+// the scale-awareness ratio uses max(dx, 10) without the 2.5 factor.
+template <typename Resources, typename Params>
+static inline void mynn_pblh_scale_column(
+    constant Resources &r, constant Params &q, uint column, bool gsd41)
 {
     if (column >= uint(q.ncol) || q.nz < 2) return;
     const ulong ncol = ulong(q.ncol);
@@ -949,15 +1026,59 @@ kernel void mynn_pblh_scale_columns(
     }
 
     int kzi = 2;
-    for (k = 1; k < q.nz - 1; ++k) {
-        if (r.zw[ulong(k) * ncol + ulong(column)] >= zi) {
-            kzi = k;
-            break;
+    if (gsd41) {
+        int kzi2 = 2;
+        float zi_th = 0.0f;
+        for (k = 1; k < q.nz - 1; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            const float current = r.thetav[idx];
+            const float threshold = mynn_f32_add(minthv, delta);
+            if (current >= threshold) {
+                const float fraction = mynn_f32_div(
+                    mynn_f32_sub(current, threshold), mynn_f32_max2(
+                        mynn_f32_sub(current, r.thetav[idx - ncol]), 1.0e-6f));
+                zi_th = mynn_f32_sub(r.zw[idx], mynn_f32_mul(
+                    r.dz[idx - ncol], mynn_f32_min2(fraction, 1.0f)));
+                kzi = max(k, 1) + int(round(mynn_f32_div(
+                    mynn_f32_sub(zi_th, r.zw[idx - ncol]), r.dz[idx - ncol])));
+            }
+            if (k == q.nz - 2) zi_th = r.zw[ncol + ulong(column)];
+            if (zi_th != 0.0f) break;
+        }
+        float tke_h = 0.0f;
+        for (k = 1; k < q.nz - 1; ++k) {
+            const ulong idx = ulong(k) * ncol + ulong(column);
+            const float qtke = mynn_f32_max2(
+                mynn_f32_div(r.qke[idx], 2.0f), 0.0f);
+            const float qtkem1 = mynn_f32_max2(
+                mynn_f32_div(r.qke[idx - ncol], 2.0f), 0.0f);
+            if (qtke <= tkeeps) {
+                const float fraction = mynn_f32_div(
+                    mynn_f32_sub(tkeeps, qtke),
+                    mynn_f32_max2(mynn_f32_sub(qtkem1, qtke), 1.0e-6f));
+                tke_h = mynn_f32_sub(r.zw[idx], mynn_f32_mul(
+                    r.dz[idx - ncol], mynn_f32_min2(fraction, 1.0f)));
+                tke_h = mynn_f32_max2(tke_h, r.zw[ncol + ulong(column)]);
+                kzi2 = max(k, 1) + int(round(mynn_f32_div(
+                    mynn_f32_sub(tke_h, r.zw[idx - ncol]), r.dz[idx - ncol])));
+            }
+            if (k == q.nz - 2) tke_h = r.zw[ncol + ulong(column)];
+            if (tke_h != 0.0f) break;
+        }
+        kzi = max(int(mynn_f32_add(
+            mynn_f32_mul(float(kzi2), mynn_f32_sub(1.0f, weight)),
+            mynn_f32_mul(float(kzi), weight))), 1);
+    } else {
+        for (k = 1; k < q.nz - 1; ++k) {
+            if (r.zw[ulong(k) * ncol + ulong(column)] >= zi) {
+                kzi = k;
+                break;
+            }
         }
     }
 
-    const float dx_floor = mynn_f32_max2(
-        mynn_f32_mul(2.5f, r.dx[column]), 10.0f);
+    const float dx_floor = gsd41 ? mynn_f32_max2(r.dx[column], 10.0f)
+        : mynn_f32_max2(mynn_f32_mul(2.5f, r.dx[column]), 10.0f);
     float dxdh = mynn_f32_div(dx_floor,
         mynn_f32_min2(zi, 3000.0f));
     float power = mynn_gfk_powf(dxdh, 0.667f);
@@ -983,10 +1104,27 @@ kernel void mynn_pblh_scale_columns(
         mynn_f32_max2(psig_shcu, 0.0f), 1.0f);
 }
 
-kernel void mynn_turbulence_default_interfaces(
-    constant MynnTurbulenceDefaultInterfacesResources &r [[buffer(0)]],
-    constant MynnTurbulenceDefaultInterfacesParams &q [[buffer(1)]],
-    uint index [[thread_position_in_grid]])
+kernel void mynn_pblh_scale_columns(
+    constant MynnPblhScaleColumnsResources &r [[buffer(0)]],
+    constant MynnPblhScaleColumnsParams &q [[buffer(1)]],
+    uint column [[thread_position_in_grid]])
+{
+    mynn_pblh_scale_column(r, q, column, false);
+}
+
+kernel void mynn_pblh_scale_gsd41_columns(
+    constant MynnPblhScaleGsd41ColumnsResources &r [[buffer(0)]],
+    constant MynnPblhScaleGsd41ColumnsParams &q [[buffer(1)]],
+    uint column [[thread_position_in_grid]])
+{
+    mynn_pblh_scale_column(r, q, column, true);
+}
+
+// gsd41 selects the GSD MYNN v4.1 mym_turbulence: no sh floor before the
+// closure, no sh/sm clips after it, and a 0.03 cloud floor.
+template <typename Resources, typename Params>
+static inline void mynn_turbulence_interface(
+    constant Resources &r, constant Params &q, uint index, bool gsd41)
 {
     if (index >= uint(q.count) || q.nz <= 0) return;
     const uint ld = uint(q.count / q.nz);
@@ -1030,7 +1168,7 @@ kernel void mynn_turbulence_default_interfaces(
     ulong q3sq = mynn_f64_from_f32(qkw_square_f32);
     const ulong q2sq = soft64_mul(soft64_mul(
         mynn_f64_from_f32(b1), elsq), mynn_f64_from_f32(source_f32));
-    r.sh[idx] = mynn_f32_max2(r.sh[idx], 1.0e-5f);
+    if (!gsd41) r.sh[idx] = mynn_f32_max2(r.sh[idx], 1.0e-5f);
 
     const float du = mynn_f32_sub(r.u[idx], r.u[prev]);
     const float dv = mynn_f32_sub(r.v[idx], r.v[prev]);
@@ -1101,17 +1239,19 @@ kernel void mynn_turbulence_default_interfaces(
         r.sh[idx] = mynn_f64_to_f32(soft64_div(sh_num, eden));
     }
 
-    r.sh[idx] = mynn_f32_min2(
-        mynn_f32_max2(r.sh[idx], 0.0f), 4.0f);
-    r.sm[idx] = mynn_f32_min2(r.sm[idx],
-        mynn_f32_mul(5.0f, mynn_f32_max2(r.sh[idx], 0.02f)));
+    if (!gsd41) {
+        r.sh[idx] = mynn_f32_min2(
+            mynn_f32_max2(r.sh[idx], 0.0f), 4.0f);
+        r.sm[idx] = mynn_f32_min2(r.sm[idx],
+            mynn_f32_mul(5.0f, mynn_f32_max2(r.sh[idx], 0.02f)));
+    }
     const float cldavg = mynn_f32_mul(0.5f,
         mynn_f32_add(r.cldfra[prev], r.cldfra[idx]));
     if (r.edmf_a[idx] > 0.001f || cldavg > 0.02f) {
         const float plume_floor = mynn_f32_mul(0.03f,
             mynn_f32_min2(mynn_f32_mul(
                 mynn_f32_mul(10.0f, r.edmf_a[idx]), r.edmf_w[idx]), 1.0f));
-        const float cloud_floor = mynn_f32_mul(0.05f,
+        const float cloud_floor = mynn_f32_mul(gsd41 ? 0.03f : 0.05f,
             mynn_f32_min2(cldavg, 1.0f));
         const float floor_value = mynn_f32_max2(plume_floor, cloud_floor);
         r.sm[idx] = mynn_f32_max2(r.sm[idx], floor_value);
@@ -1141,6 +1281,22 @@ kernel void mynn_turbulence_default_interfaces(
     r.dfh[idx] = mynn_f32_div(
         mynn_f32_mul(elq, r.sh[idx]), dzk);
     r.dfq[idx] = r.dfm[idx];
+}
+
+kernel void mynn_turbulence_default_interfaces(
+    constant MynnTurbulenceDefaultInterfacesResources &r [[buffer(0)]],
+    constant MynnTurbulenceDefaultInterfacesParams &q [[buffer(1)]],
+    uint index [[thread_position_in_grid]])
+{
+    mynn_turbulence_interface(r, q, index, false);
+}
+
+kernel void mynn_turbulence_gsd41_interfaces(
+    constant MynnTurbulenceGsd41InterfacesResources &r [[buffer(0)]],
+    constant MynnTurbulenceGsd41InterfacesParams &q [[buffer(1)]],
+    uint index [[thread_position_in_grid]])
+{
+    mynn_turbulence_interface(r, q, index, true);
 }
 
 kernel void mynn_condensation_default_columns(
@@ -1543,10 +1699,10 @@ kernel void mynn_condensation_gsd41_columns(
     r.cldfra[top] = 0.0f;
 }
 
-kernel void mynn_driver_diss_heat_columns(
-    constant MynnDriverDissHeatColumnsResources &r [[buffer(0)]],
-    constant MynnDriverDissHeatColumnsParams &q [[buffer(1)]],
-    uint column [[thread_position_in_grid]])
+// gsd41: factor 0.5, held to 0..2e-5 K/s, no pressure taper.
+template <typename Resources, typename Params>
+static inline void mynn_diss_heat_column(
+    constant Resources &r, constant Params &q, uint column, bool gsd41)
 {
     if (column >= uint(q.ncol) || q.nz < 1) return;
     const ulong ncol = ulong(q.ncol);
@@ -1556,8 +1712,13 @@ kernel void mynn_driver_diss_heat_columns(
             mynn_f32_add(r.el[idx], r.el[idx + ncol])), 1.0f);
         const float powered = mynn_gfk_powf(r.qke[idx], 1.5f);
         const float value = mynn_f32_div(mynn_f32_div(
-            mynn_f32_mul(1.0f, powered),
+            mynn_f32_mul(gsd41 ? 0.5f : 1.0f, powered),
             mynn_f32_mul(24.0f, blend)), 1004.5f);
+        if (gsd41) {
+            r.diss_heat[idx] = mynn_f32_min2(
+                mynn_f32_max2(value, 0.0f), 0.00002f);
+            continue;
+        }
         const float bounded = mynn_f32_min2(
             mynn_f32_max2(value, 0.0f), 0.002f);
         const float damping_arg = mynn_f32_negate(mynn_f32_div(
@@ -1567,6 +1728,81 @@ kernel void mynn_driver_diss_heat_columns(
     }
     const ulong top = ulong(q.nz - 1) * ncol + ulong(column);
     r.diss_heat[top] = 0.0f;
+}
+
+kernel void mynn_driver_diss_heat_columns(
+    constant MynnDriverDissHeatColumnsResources &r [[buffer(0)]],
+    constant MynnDriverDissHeatColumnsParams &q [[buffer(1)]],
+    uint column [[thread_position_in_grid]])
+{
+    mynn_diss_heat_column(r, q, column, false);
+}
+
+kernel void mynn_driver_diss_heat_gsd41_columns(
+    constant MynnDriverDissHeatGsd41ColumnsResources &r [[buffer(0)]],
+    constant MynnDriverDissHeatGsd41ColumnsParams &q [[buffer(1)]],
+    uint column [[thread_position_in_grid]])
+{
+    mynn_diss_heat_column(r, q, column, true);
+}
+
+// GSD MYNN v4.1 module_bl_mynn.F:4084-4096, :4236-4264: theta-v of the
+// liquid-water theta, with the carried subgrid cloud (in-cloud QC_BL times
+// CLDFRA_BL, split by (T-254)/15) standing in where no resolved cloud is.
+kernel void mynn_gsd41_thvl_columns(
+    constant MynnGsd41ThvlColumnsResources &r [[buffer(0)]],
+    constant MynnGsd41ThvlColumnsParams &q [[buffer(1)]],
+    uint index [[thread_position_in_grid]])
+{
+    if (index >= uint(q.count)) return;
+    const float xlvcp = mynn_f32_div(2500000.0f, 1004.5f);
+    const float xlscp = mynn_f32_div(
+        mynn_f32_add(2500000.0f, 350000.0f), 1004.5f);
+    float sqc9 = r.sqc[index], sqi9 = r.sqi[index];
+    if (sqc9 < 1.0e-6f && sqi9 < 1.0e-8f && r.cldfra_bl[index] > 0.001f) {
+        const float liq = mynn_f32_min2(1.0f, mynn_f32_max2(0.0f,
+            mynn_f32_div(mynn_f32_sub(r.tk[index], 254.0f), 15.0f)));
+        sqc9 = mynn_f32_mul(mynn_f32_mul(r.qc_bl[index], liq),
+                            r.cldfra_bl[index]);
+        sqi9 = mynn_f32_mul(mynn_f32_mul(r.qc_bl[index],
+            mynn_f32_sub(1.0f, liq)), r.cldfra_bl[index]);
+    }
+    const float thlsg = mynn_f32_sub(mynn_f32_sub(r.th[index],
+        mynn_f32_mul(mynn_f32_div(xlvcp, r.exner[index]), sqc9)),
+        mynn_f32_mul(mynn_f32_div(xlscp, r.exner[index]), sqi9));
+    r.thvl[index] = mynn_f32_mul(thlsg, mynn_f32_add(1.0f,
+        mynn_f32_mul(0.61f, r.sqv[index])));
+}
+
+// GSD MYNN v4.1 module_bl_mynn.F:4690-4713, at the write-back: subgrid cloud
+// fraction may fall by at most 0.25*delt/ts_decay per call, ts_decay =
+// MIN(1800 s, 3*dx/MAX(|V|, 1 m/s)); a decayed fraction under 0.005 clears
+// both fields, and QC_BL is floored at 1e-8 where the fraction exceeds 0.005.
+kernel void mynn_gsd41_cloud_decay(
+    constant MynnGsd41CloudDecayResources &r [[buffer(0)]],
+    constant MynnGsd41CloudDecayParams &q [[buffer(1)]],
+    uint index [[thread_position_in_grid]])
+{
+    if (index >= uint(q.nz) * uint(q.ncol)) return;
+    const uint column = index % uint(q.ncol);
+    float cf = r.cldfra_bl[index];
+    const float old = r.cldfra_old[index];
+    if (cf < old) {
+        const float speed = mynn_f32_sqrt(mynn_f32_add(
+            mynn_f32_mul(r.u[index], r.u[index]),
+            mynn_f32_mul(r.v[index], r.v[index])));
+        const float ts_decay = mynn_f32_min2(1800.0f, mynn_f32_div(
+            mynn_f32_mul(3.0f, r.dx[column]), mynn_f32_max2(speed, 1.0f)));
+        cf = mynn_f32_max2(cf, mynn_f32_sub(old, mynn_f32_div(
+            mynn_f32_mul(0.25f, r.delt[column]), ts_decay)));
+        r.cldfra_bl[index] = cf;
+        if (cf < 0.005f) {
+            r.cldfra_bl[index] = 0.0f;
+            r.qc_bl[index] = 0.0f;
+        }
+    }
+    if (r.qc_bl[index] < 1.0e-8f && r.cldfra_bl[index] > 0.005f)
+        r.qc_bl[index] = 1.0e-8f;
 }
 
 // Source helpers for mynn_tendencies_columns. They are kept separate from an
@@ -2051,9 +2287,12 @@ static inline void mynn_mym_length_gsd41(
 {
     const ulong base = ulong(column);
     const float gtr = mynn_f32_div(9.81f, 300.0f);
-    const float cns = 3.5f, alp1 = 0.23f, alp2 = 0.3f;
-    const float alp3 = 2.0f, alp4 = 10.0f, alp5 = 0.3f;
-    const float alp6 = 10.0f, qmin = 0.0f, zmax = 1.0f;
+    const float cns = 3.5f, alp2 = 0.3f;
+    const float alp3 = 2.0f, alp4 = 20.0f, alp5 = 0.3f;
+    const float alp6 = 50.0f, qmin = 0.0f, zmax = 1.0f;
+    const float alp1 = mynn_f32_add(0.25f, mynn_f32_div(mynn_f32_mul(0.02f,
+        mynn_f32_min2(mynn_f32_max2(mynn_f32_sub(zi, 200.0f), 0.0f),
+                      1000.0f)), 1000.0f));
     const float zi2 = mynn_f32_max2(zi, 100.0f);
     const float h1 = mynn_f32_min2(mynn_f32_max2(
         mynn_f32_mul(0.3f, zi2), 300.0f), 750.0f);
@@ -2091,27 +2330,23 @@ static inline void mynn_mym_length_gsd41(
     }
     elt = mynn_f32_max2(mynn_f32_div(mynn_f32_mul(alp1, elt), vsc_sum),
                         10.0f);
-    const float tv0 = mynn_f32_mul(0.608f, 300.0f);
+    const float tv0 = mynn_f32_mul(
+        mynn_f32_sub(mynn_f32_div(461.6f, 287.0f), 1.0f), 300.0f);
     const float vflx = zero_profile_inputs ? 0.0f : mynn_f32_add(
         mynn_f32_mul(mynn_f32_add(vt[base], 1.0f), flt), mynn_f32_mul(
         mynn_f32_add(vq[base], tv0), flq));
     const float vsc = mynn_gfk_powf(mynn_f32_mul(mynn_f32_mul(gtr, elt),
-        mynn_f32_max2(vflx, 0.0f)), mynn_f32_div(1.0f, 3.0f));
+        mynn_f32_max2(vflx, 0.0f)), 0.33333f);
     el[base] = 0.0f;
     for (int k = 1; k < nz; ++k) {
         const ulong idx = ulong(k) * ulong(ncol) + ulong(column);
         const ulong prev = idx - ulong(ncol);
         const float zwk = zw[idx];
-        const float cldavg = zero_profile_inputs ? 0.0f :
-            mynn_f32_mul(0.5f, mynn_f32_add(cldfra[prev], cldfra[idx]));
         float elb_mf, elf;
         if (dtv[idx] > 0.0f) {
             const float bv = mynn_f32_sqrt(mynn_f32_mul(gtr, dtv[idx]));
-            const float cloud_weight = mynn_f32_sqrt(mynn_f32_max2(
-                mynn_f32_sub(1.0f, mynn_f32_mul(2.0f, cldavg)), 0.0f));
             const float plume = zero_profile_inputs ? 0.0f : mynn_f32_mul(
-                mynn_f32_mul(mynn_f32_mul(cloud_weight, alp6), edmf_a[idx]),
-                edmf_w[idx]);
+                mynn_f32_mul(alp6, edmf_a[idx]), edmf_w[idx]);
             const float numerator = mynn_f32_max2(
                 mynn_f32_mul(alp2, qkw[idx]), plume);
             elb_mf = mynn_f32_mul(mynn_f32_div(numerator, bv),
@@ -2123,19 +2358,19 @@ static inline void mynn_mym_length_gsd41(
             elf = mynn_f32_div(elb, mynn_f32_add(1.0f,
                                                   mynn_f32_div(elb, 600.0f)));
         } else {
-            const float zi_flux = mynn_f32_mul(gtr,
-                mynn_f32_mul(zi, mynn_f32_max2(flt, 1.0e-4f)));
+            const float zi_flux = mynn_f32_mul(mynn_f32_mul(gtr, zi),
+                mynn_f32_max2(flt, 1.0e-4f));
             const float tau_raw = mynn_f32_div(mynn_f32_mul(0.5f, zi),
-                mynn_gfk_powf(zi_flux, mynn_f32_div(1.0f, 3.0f)));
+                mynn_gfk_powf(zi_flux, 0.3333f));
             float tau_cloud = mynn_f32_min2(mynn_f32_max2(tau_raw,
-                                                           25.0f), 100.0f);
+                                                           50.0f), 150.0f);
             const float weight = mynn_f32_add(mynn_f32_mul(0.5f,
                 mynn_tanhf(mynn_f32_div(mynn_f32_sub(zwk,
                     mynn_f32_add(zi2, h1)), h2))), 0.5f);
             tau_cloud = mynn_f32_add(mynn_f32_mul(tau_cloud,
                 mynn_f32_sub(1.0f, weight)), mynn_f32_mul(50.0f, weight));
             elb_mf = mynn_f32_min2(mynn_f32_mul(tau_cloud,
-                mynn_f32_sqrt(mynn_f32_min2(qtke[idx], 50.0f))), zwk);
+                mynn_f32_sqrt(mynn_f32_min2(qtke[idx], 30.0f))), zwk);
             elf = elb_mf;
         }
         float els;
@@ -2335,6 +2570,7 @@ static inline void mynn_initialize_column(
         r.el[idx] = mynn_f32_div(vkz, mynn_f32_add(1.0f,
                                                    mynn_f32_div(vkz, 100.0f)));
     }
+    const float qkemin = mixlength == 2 ? 1.0e-12f : 1.0e-3f;
     for (int iteration = 0; iteration < 5; ++iteration) {
         if (mixlength == 2) {
             mynn_mym_length_gsd41(r.dz, r.zw, r.qke, dtv, r.theta,
@@ -2381,7 +2617,7 @@ static inline void mynn_initialize_column(
             const float b1l = mynn_f32_mul(mynn_f32_mul(24.0f, 0.25f),
                 mynn_f32_add(r.el[idx + ncol], r.el[idx]));
             const float tmpq = mynn_f32_min2(mynn_f32_max2(mynn_f32_mul(
-                b1l, mynn_f32_add(pdk[idx + ncol], pdk[idx])), 1.0e-3f), 125.0f);
+                b1l, mynn_f32_add(pdk[idx + ncol], pdk[idx])), qkemin), 125.0f);
             if (q.initialize_qke != 0)
                 r.qke[idx] = mynn_initialize_powf_candidate(tmpq,
                                                   mynn_f32_div(2.0f, 3.0f));
@@ -2423,11 +2659,16 @@ kernel void mynn_initialize_gsd41_columns(
     mynn_initialize_column(r, q, column, 2);
 }
 
-kernel void mynn_tendencies_columns(
-    constant MynnTendenciesColumnsResources &r [[buffer(0)]],
-    constant MynnTendenciesColumnsParams &q [[buffer(1)]],
-    uint column [[thread_position_in_grid]])
+// A non-null qc_orig/qi_orig selects the GSD MYNN v4.1 mynn_tendencies: no
+// density weighting, no mass-flux floors, no limit on a negative surface
+// vapour flux, and mixing-ratio tendencies rebuilt from the original
+// mixing ratios (r.qv is then the original vapour mixing ratio).
+template <typename Resources, typename Params>
+static inline void mynn_tendencies_column(
+    constant Resources &r, constant Params &q, uint column,
+    device const float *qc_orig, device const float *qi_orig)
 {
+    const bool gsd41 = qc_orig != nullptr;
     if (column >= uint(q.ncol) || q.nz < 2) return;
     const int nz = q.nz;
     const int ncol = q.ncol;
@@ -2470,14 +2711,14 @@ kernel void mynn_tendencies_columns(
     const float flqc = r.flqc[column];
 
     // ---- module_bl_mynn.F:4136-4163 diffusion "constants" ----------------
-    float rhosfc = mynn_f32_div(
+    float rhosfc = gsd41 ? 1.0f : mynn_f32_div(
         psfc,
         mynn_f32_mul(q.rd, mynn_f32_add(r.tk[ulong(base) * ulong(ncol) + column], mynn_f32_mul(p608, r.qv[ulong(base) * ulong(ncol) + column]))));
     dtz[ulong(base) * ulong(ncol) + column] = mynn_f32_div(delt, r.dz[ulong(base) * ulong(ncol) + column]);
     float rhoz = r.rho[ulong(base) * ulong(ncol) + column];
-    rhoinv[ulong(base) * ulong(ncol) + column] = mynn_f32_div(1.0f, r.rho[ulong(base) * ulong(ncol) + column]);
-    khdz[ulong(zbase) * ulong(ncol) + column] = mynn_f32_mul(rhoz, r.dfh[ulong(base) * ulong(ncol) + column]);
-    kmdz[ulong(zbase) * ulong(ncol) + column] = mynn_f32_mul(rhoz, r.dfm[ulong(base) * ulong(ncol) + column]);
+    rhoinv[ulong(base) * ulong(ncol) + column] = gsd41 ? 1.0f : mynn_f32_div(1.0f, r.rho[ulong(base) * ulong(ncol) + column]);
+    khdz[ulong(zbase) * ulong(ncol) + column] = gsd41 ? 0.0f : mynn_f32_mul(rhoz, r.dfh[ulong(base) * ulong(ncol) + column]);
+    kmdz[ulong(zbase) * ulong(ncol) + column] = gsd41 ? 0.0f : mynn_f32_mul(rhoz, r.dfm[ulong(base) * ulong(ncol) + column]);
     delp[ulong(base) * ulong(ncol) + column] = mynn_f32_sub(
         psfc,
         mynn_f32_div(mynn_f32_add(mynn_f32_mul(r.p[ulong(base + 1) * ulong(ncol) + column], r.dz[ulong(base) * ulong(ncol) + column]),
@@ -2491,9 +2732,9 @@ kernel void mynn_tendencies_columns(
                      mynn_f32_mul(r.rho[ulong(idx - 1) * ulong(ncol) + column], r.dz[ulong(idx) * ulong(ncol) + column])),
             mynn_f32_add(r.dz[ulong(idx - 1) * ulong(ncol) + column], r.dz[ulong(idx) * ulong(ncol) + column]));
         rhoz = mynn_f32_max2(rhoz, 1.0e-4f);
-        rhoinv[ulong(idx) * ulong(ncol) + column] = mynn_f32_div(1.0f, mynn_f32_max2(r.rho[ulong(idx) * ulong(ncol) + column], 1.0e-4f));
-        khdz[ulong(zbase + k) * ulong(ncol) + column] = mynn_f32_mul(rhoz, r.dfh[ulong(idx) * ulong(ncol) + column]);
-        kmdz[ulong(zbase + k) * ulong(ncol) + column] = mynn_f32_mul(rhoz, r.dfm[ulong(idx) * ulong(ncol) + column]);
+        rhoinv[ulong(idx) * ulong(ncol) + column] = gsd41 ? 1.0f : mynn_f32_div(1.0f, mynn_f32_max2(r.rho[ulong(idx) * ulong(ncol) + column], 1.0e-4f));
+        khdz[ulong(zbase + k) * ulong(ncol) + column] = gsd41 ? r.dfh[ulong(idx) * ulong(ncol) + column] : mynn_f32_mul(rhoz, r.dfh[ulong(idx) * ulong(ncol) + column]);
+        kmdz[ulong(zbase + k) * ulong(ncol) + column] = gsd41 ? r.dfm[ulong(idx) * ulong(ncol) + column] : mynn_f32_mul(rhoz, r.dfm[ulong(idx) * ulong(ncol) + column]);
     }
     for (int k = 1; k < nz - 1; ++k) {
         int idx = base + k;
@@ -2507,13 +2748,13 @@ kernel void mynn_tendencies_columns(
     }
     delp[ulong(top) * ulong(ncol) + column] = delp[ulong(top - 1) * ulong(ncol) + column];
     // rhoz(kte+1)=rhoz(kte): rhoz still holds the top mass-level value.
-    khdz[ulong(zbase + nz) * ulong(ncol) + column] = mynn_f32_mul(rhoz, r.dfh[ulong(top) * ulong(ncol) + column]);
-    kmdz[ulong(zbase + nz) * ulong(ncol) + column] = mynn_f32_mul(rhoz, r.dfm[ulong(top) * ulong(ncol) + column]);
+    khdz[ulong(zbase + nz) * ulong(ncol) + column] = gsd41 ? r.dfh[ulong(top) * ulong(ncol) + column] : mynn_f32_mul(rhoz, r.dfh[ulong(top) * ulong(ncol) + column]);
+    kmdz[ulong(zbase + nz) * ulong(ncol) + column] = gsd41 ? r.dfm[ulong(top) * ulong(ncol) + column] : mynn_f32_mul(rhoz, r.dfm[ulong(top) * ulong(ncol) + column]);
 
     // module_bl_mynn.F:4165-4171 mass-flux stability floors.  Inert while
     // s_aw is zero, but they are why khdz/kmdz cannot simply be reused from
     // mym_predict once DMP_mf is live.
-    for (int k = 1; k < nz - 1; ++k) {
+    for (int k = 1; !gsd41 && k < nz - 1; ++k) {
         int zk = zbase + k;
         khdz[ulong(zk) * ulong(ncol) + column] = mynn_f32_max2(khdz[ulong(zk) * ulong(ncol) + column], mynn_f32_mul(0.5f, r.s_aw[ulong(zk) * ulong(ncol) + column]));
         khdz[ulong(zk) * ulong(ncol) + column] = mynn_f32_max2(
@@ -2726,7 +2967,7 @@ kernel void mynn_tendencies_columns(
     // surface moisture flux.  For any positive sqv(kts) the MIN collapses to
     // 0.0, so a downward flux is not limited but deleted.
     float qvflux = flqv;
-    if (qvflux < 0.0f) {
+    if (!gsd41 && qvflux < 0.0f) {
         qvflux = mynn_f32_max2(
             qvflux,
             mynn_f32_div(
@@ -2798,6 +3039,25 @@ kernel void mynn_tendencies_columns(
     }
     mynn_moisture_check_column(delt, xlvcp, xlscp, delp, r.exner, sqv2, sqc2, sqi2, sqs2, r.thl, r.dqv, r.dqc, r.dqi, r.dqs, r.dth, uint(ncol), column, nz);
 
+    if (gsd41) {
+        // Fork :3404, :3417 and :3449: the updated specific humidity over
+        // (1 - updated vapour), less the original mixing ratio.
+        for (int k = 0; k < nz; ++k) {
+            const ulong idx = ulong(k) * ulong(ncol) + column;
+            const float denominator = mynn_f32_sub(1.0f, sqv2[idx]);
+            if (denominator == 0.0f) {
+                r.dqv[idx] = 0.0f; r.dqc[idx] = 0.0f; r.dqi[idx] = 0.0f;
+            } else {
+                r.dqv[idx] = mynn_f32_div(mynn_f32_sub(
+                    mynn_f32_div(sqv2[idx], denominator), r.qv[idx]), delt);
+                r.dqc[idx] = mynn_f32_div(mynn_f32_sub(
+                    mynn_f32_div(sqc2[idx], denominator), qc_orig[idx]), delt);
+                r.dqi[idx] = mynn_f32_div(mynn_f32_sub(
+                    mynn_f32_div(sqi2[idx], denominator), qi_orig[idx]), delt);
+            }
+        }
+    }
+
     // ---- module_bl_mynn.F:5024-5031 ozone --------------------------------
     for (int k = 0; k < nz; ++k) {
         int idx = base + k;
@@ -2820,6 +3080,22 @@ kernel void mynn_tendencies_columns(
             delt);
     }
 
+}
+
+kernel void mynn_tendencies_columns(
+    constant MynnTendenciesColumnsResources &r [[buffer(0)]],
+    constant MynnTendenciesColumnsParams &q [[buffer(1)]],
+    uint column [[thread_position_in_grid]])
+{
+    mynn_tendencies_column(r, q, column, nullptr, nullptr);
+}
+
+kernel void mynn_tendencies_gsd41_columns(
+    constant MynnTendenciesGsd41ColumnsResources &r [[buffer(0)]],
+    constant MynnTendenciesGsd41ColumnsParams &q [[buffer(1)]],
+    uint column [[thread_position_in_grid]])
+{
+    mynn_tendencies_column(r, q, column, r.qc_original, r.qi_original);
 }
 
 // module_bl_mynn.F:5679-6823, default EDMF mass-flux branch. The column
@@ -3248,6 +3524,7 @@ static inline void mynn_dmp_mf_body(constant Resources &r,
             }
         }
         for (int k = 0; k < nz - 1; ++k) for (int i = 0; i < nup; ++i) {
+            if (gsd41 && k >= ktop) break;
             const float a = DMP_PLUME(5, i, k);
             DMP_L(edmf_a, k) = mynn_f32_add(DMP_L(edmf_a, k), a);
             DMP_L(edmf_w, k) = mynn_f32_add(DMP_L(edmf_w, k),
@@ -3261,7 +3538,8 @@ static inline void mynn_dmp_mf_body(constant Resources &r,
             DMP_L(edmf_qc, k) = mynn_f32_add(DMP_L(edmf_qc, k),
                 mynn_f32_mul(a, DMP_PLUME(4, i, k)));
         }
-        for (int k = 0; k < nz - 1; ++k) if (DMP_L(edmf_a, k) > 0.0f) {
+        for (int k = 0; k < nz - 1; ++k) if (!(gsd41 && k >= ktop)
+                                          && DMP_L(edmf_a, k) > 0.0f) {
             DMP_L(edmf_w, k) = mynn_f32_div(DMP_L(edmf_w, k), DMP_L(edmf_a, k));
             DMP_L(edmf_qt, k) = mynn_f32_div(DMP_L(edmf_qt, k), DMP_L(edmf_a, k));
             DMP_L(edmf_thl, k) = mynn_f32_div(DMP_L(edmf_thl, k), DMP_L(edmf_a, k));

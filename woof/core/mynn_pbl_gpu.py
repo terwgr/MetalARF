@@ -1887,7 +1887,8 @@ def mynn_bl_driver_metal(
         submit_mynn_condensation_gsd41,
         submit_mynn_driver_diss_heat, submit_mynn_driver_exchange,
         submit_mynn_driver_prep, submit_mynn_driver_surface,
-        submit_mynn_driver_surface_gsd41,
+        submit_mynn_driver_surface_gsd41, submit_mynn_gsd41_cloud_decay,
+        submit_mynn_gsd41_thvl,
         submit_mynn_initialize_default, submit_mynn_pblh_scale,
         submit_mynn_initialize_gsd41, submit_mynn_level2_columns,
         submit_mynn_mixlength_default, submit_mynn_mixlength_gsd41,
@@ -1946,6 +1947,7 @@ def mynn_bl_driver_metal(
     scalars = {name: column(name) for name in (
         "ust", "hfx", "qfx", "ts", "xland", "dx", "ps", "wspd",
         "pblh", "rmol")}
+    gsd41 = bl_mynn_version == "gsd_41"
     zw, qv1, sqw, thl, thetav, qke_seed = (
         slot("zw", I), slot("qv1", L), slot("sqw", L), slot("thl", L),
         slot("thetav", L), slot("qke_seed", L))
@@ -1953,6 +1955,16 @@ def mynn_bl_driver_metal(
         layers["sqv"], layers["sqc"], layers["sqi"], layers["th"],
         scalars["ust"], zw, qv1, sqw, thl, thetav, qke_seed,
         nz=nz, ncol=ncol, experimental=True)
+
+    pblh_thetav = thetav
+    if gsd41:
+        # GET_PBLH reads theta-v of the liquid-water theta with the carried
+        # subgrid cloud; the other consumers keep thetav.
+        pblh_thetav = slot("thvl", L)
+        submit_mynn_gsd41_thvl(context, layers["th"], layers["exner"],
+            layers["sqv"], layers["sqc"], layers["sqi"], layers["tk"],
+            layers["qc_bl"], layers["cldfra_bl"], pblh_thetav,
+            experimental=True)
 
     zero = slot("zero_layer", L); zero.fill(np.float32(0))
     zero_column = slot("zero_column", C); zero_column.fill(np.float32(0))
@@ -1965,9 +1977,9 @@ def mynn_bl_driver_metal(
         for name in ("sh", "sm", "el", "tsq", "qsq", "cov", "cldfra_bl",
                      "qc_bl", "qke"):
             layers[name].fill(np.float32(0))
-        submit_mynn_pblh_scale(context, thetav, qke_seed, zw, layers["dz"],
+        submit_mynn_pblh_scale(context, pblh_thetav, qke_seed, zw, layers["dz"],
             scalars["xland"], scalars["dx"], pblh_out, kpbl, seed_scale,
-            seed_shcu, nz=nz, ncol=ncol, experimental=True)
+            seed_shcu, nz=nz, ncol=ncol, gsd41=gsd41, experimental=True)
         init_scratch = slot("initialize_workspace", (15 * nz * ncol,))
         sm_in = slot("initialize_sm_in", L); sm_in[...] = layers["sm"]
         sh_in = slot("initialize_sh_in", L); sh_in[...] = layers["sh"]
@@ -1984,9 +1996,9 @@ def mynn_bl_driver_metal(
             init_scratch, nz=nz, ncol=ncol, initialize_qke=True,
             experimental=True)
 
-    submit_mynn_pblh_scale(context, thetav, layers["qke"], zw, layers["dz"],
+    submit_mynn_pblh_scale(context, pblh_thetav, layers["qke"], zw, layers["dz"],
         scalars["xland"], scalars["dx"], pblh_out, kpbl, psig_bl,
-        psig_shcu, nz=nz, ncol=ncol, experimental=True)
+        psig_shcu, nz=nz, ncol=ncol, gsd41=gsd41, experimental=True)
     # Surface routine writes all flux controls and stability outputs.
     surf = {name: slot(f"surface_{name}", C) for name in (
         "flt", "fltv", "flq", "flqv", "flqc", "th_sfc", "rmol", "zet",
@@ -2068,7 +2080,7 @@ def mynn_bl_driver_metal(
         length["el"], length["qkw"], t["dtl"], t["dqw"], t["gm"], t["gh"],
         t["sm"], t["sh"], t["dfm"], t["dfh"], t["dfq"], t["pdk"],
         t["pdt"], t["pdq"], t["pdc"], t["tcd"], t["qcd"],
-        nz=nz, experimental=True)
+        nz=nz, gsd41=gsd41, experimental=True)
     pred = {name: slot(f"predict_{name}", L) for name in (
         "qke", "tsq", "qsq", "cov", "qkw", "rhoinv", "kqdz", "kmdz",
         "a", "b", "c", "d", "cp", "dp")}
@@ -2079,10 +2091,10 @@ def mynn_bl_driver_metal(
         layers["qke"], layers["qsq"], pred["qke"], pred["tsq"], pred["qsq"],
         pred["cov"], pred["qkw"], pred["rhoinv"], pred["kqdz"], pred["kmdz"],
         pred["a"], pred["b"], pred["c"], pred["d"], pred["cp"], pred["dp"],
-        nz=nz, ncol=ncol, experimental=True)
+        nz=nz, ncol=ncol, gsd41=gsd41, experimental=True)
     diss = slot("diss_heat", L)
     submit_mynn_driver_diss_heat(context, length["el"], pred["qke"], layers["p"],
-        diss, nz=nz, ncol=ncol, experimental=True)
+        diss, nz=nz, ncol=ncol, gsd41=gsd41, experimental=True)
     tend_names = ("du", "dv", "dth", "dqv", "dqc", "dqi", "dqs",
                   "dozone")
     tend = {name: slot(f"tendency_{name}", L) for name in tend_names}
@@ -2114,11 +2126,21 @@ def mynn_bl_driver_metal(
         "wspd": scalars["wspd"], "uoce": zero_column, "voce": zero_column,
         "flt": surf["flt"], "flqv": surf["flqv"], "flqc": surf["flqc"],
     }.items()}
+    if gsd41:
+        # The vapour tendency is rebuilt from the original mixing ratios.
+        resource.update(qv=layer("qv"), qc_original=layer("qc"),
+                        qi_original=layer("qi"))
     submit_mynn_tendencies(context, resource, nz=nz, ncol=ncol,
         onoff=np.float32(1), workspace=slot("tendency_workspace", (15, nz + 1, ncol)),
-        experimental=True)
+        gsd41=gsd41, experimental=True)
     submit_mynn_driver_exchange(context, layers["dz"], t["dfm"], t["dfh"],
         tr["exch_m"], tr["exch_h"], nz=nz, experimental=True)
+    if gsd41:
+        # The carried subgrid cloud fraction decays at most 0.25*delt/ts_decay
+        # per call; layers["cldfra_bl"] is still the field this call received.
+        submit_mynn_gsd41_cloud_decay(context, plumes.cldfra_bl,
+            plumes.qc_bl, layers["cldfra_bl"], layers["u"], layers["v"],
+            scalars["dx"], delta, nz=nz, ncol=ncol, experimental=True)
     return {"rublten": tend["du"], "rvblten": tend["dv"],
         "rthblten": tend["dth"], "rqvblten": tend["dqv"],
         "rqcblten": tend["dqc"], "rqiblten": tend["dqi"],
