@@ -363,6 +363,7 @@ def launch(path, *, backend=None, cycle_runner=None, forecast_runner=None,
     report = dict(schema='arwen.local-da-execution.v1', review_sha256=plan['review_sha256'],
                   status='PREPARING', forecast_started=False,
                   execution_backend=device_backend, cycles=[], products=None,
+                  radar_tten=bool(plan['cadence_settings']['applied'].get('radar_tten')),
                   warnings=list(getattr(backend, 'warnings', ())))
     lock = GPUFileLock('local-da-' + plan['review_sha256'], path=root / '.local-da.lock', run_id=plan['review_sha256'])
     with lock:
@@ -475,6 +476,73 @@ def launch(path, *, backend=None, cycle_runner=None, forecast_runner=None,
             raise
         finally:
             backend.close()
+
+
+class _LegRadarTten:
+    """HRRR's radar latent heating (``mp_tend_radar``) for one forecast leg.
+
+    The tendency is built from the restored analysis state, after the
+    restart is read and before the first step, from the radar file of the
+    window that analysis assimilated.  It heats for one cadence and then
+    stops: a second slot with no coverage takes over, so the short forecast
+    is forced only over its first cadence.  The forcing is external data,
+    detached before the state is released, and its receipt is written
+    beside the member's outputs.
+    """
+    def __init__(self, backend, window, restart):
+        self.backend, self.window, self.restart = backend, window, restart
+        self.forcing = None
+        self.state = None
+        self.reason = None
+
+    def hook(self, inner):
+        owner = self
+        class Hook:
+            def __getattr__(self, name):
+                return getattr(inner, name)
+            def __call__(self, **event):
+                if event.get('phase') == 'initialized-or-restored' and owner.forcing is None and owner.reason is None:
+                    owner.attach(float(event.get('model_elapsed_seconds', 0.)))
+                if inner is not None:
+                    return inner(**event)
+        return Hook()
+
+    def attach(self, model_elapsed):
+        from woof.da import radar_tten
+        from woof.ensemble.state_sha import checkpoint_elapsed_seconds
+        backend = self.backend
+        document = backend._observation_window(self.window, _analysis_time(backend, self.window), None)['radar']
+        if document is None:
+            self.reason = 'the analysis window holds no radar file'
+            return
+        state = backend.state
+        cadence = float(backend.plan['selected']['cadence_seconds'])
+        built = radar_tten.build_forcing_from_documents(state, [document], [cadence / 60.])
+        quiet = built.slots[0].copy()
+        quiet.fill(np.float32(radar_tten.NO_COVERAGE_TENDENCY))
+        forcing = radar_tten.RadarTtenForcing(
+            [built.slots[0], quiet], [cadence / 60., cadence / 60. + 1.],
+            receipts=built.receipts, provenance=built.provenance)
+        # A leg resumed inside itself keeps the leg's clock.
+        forcing.elapsed_seconds = max(0., model_elapsed - (checkpoint_elapsed_seconds(self.restart) or 0.))
+        radar_tten.attach(state, forcing, backend.exp.root.run)
+        self.forcing, self.state = forcing, state
+
+    def detach(self):
+        if self.state is not None:
+            from woof.da import radar_tten
+            radar_tten.detach(self.state)
+        self.state = None
+
+    def publish(self, member_dir):
+        receipt = dict(schema='arwen.local-da-radar-tten.v1', window=self.window,
+                       heating_seconds=float(self.backend.plan['selected']['cadence_seconds']))
+        if self.forcing is None:
+            receipt['applied'] = False
+            receipt['reason'] = self.reason or 'the leg did not restore an analysis state'
+        else:
+            receipt.update(applied=True, forcing=self.forcing.receipt())
+        _atomic(member_dir / 'radar-tten.json', receipt)
 
 
 class PreparedBackend:
@@ -714,8 +782,17 @@ class PreparedBackend:
 
     def member_runner(self, **kwargs):
         from woof.ensemble.member import run_member
+        radar = None
+        if (self.plan['cadence_settings']['applied'].get('radar_tten')
+                and kwargs.get('restart') is not None):
+            window = self._radar_tten_window(kwargs['member_dir'])
+            if window is not None:
+                radar = _LegRadarTten(self, window, kwargs['restart'])
+                kwargs['progress_callback'] = radar.hook(kwargs.get('progress_callback'))
         try:
             outcome = run_member(**kwargs, prepare=self._prepared_factory)
+            if radar is not None:
+                radar.publish(Path(kwargs['member_dir']))
             physics = getattr(self.state, 'physics', None)
             surface = {name: self._host(getattr(physics, 'fields', {}).get(name)) for name in ('t2', 'u10', 'v10')}
             surface = {k: v for k, v in surface.items() if v is not None}
@@ -727,7 +804,21 @@ class PreparedBackend:
                 np.savez(handle, **surface, receipt=np.frombuffer(canonical(receipt), dtype=np.uint8))
             return outcome
         finally:
-            self._release_state()
+            try:
+                if radar is not None:
+                    radar.detach()
+            finally:
+                self._release_state()
+
+    def _radar_tten_window(self, member_dir):
+        """The analysis window whose radar heats this leg: the one the leg
+        restarts from (cycle k starts from window k-1; the short forecast from
+        the last), or None for a leg that starts from no analysis."""
+        leg = Path(member_dir).resolve().parent
+        if leg.parent == (self.root / 'cycles').resolve() and leg.name.startswith('cycle_'):
+            index = int(leg.name[len('cycle_'):]) - 1
+            return index if index >= 0 else None
+        return self.plan['selected']['cycles'] - 1
 
     def _surface_for_members(self, member_states):
         values = []

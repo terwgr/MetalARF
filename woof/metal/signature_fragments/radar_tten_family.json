@@ -1,0 +1,1078 @@
+{
+  "kernels": [
+    {
+      "name": "rtt_background",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_background",
+      "resources": [
+        [
+          "thb",
+          "float",
+          "read"
+        ],
+        [
+          "thp",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "phb",
+          "float",
+          "read"
+        ],
+        [
+          "php",
+          "float",
+          "read"
+        ],
+        [
+          "theta",
+          "float",
+          "read_write"
+        ],
+        [
+          "p_hpa",
+          "float",
+          "read_write"
+        ],
+        [
+          "h_agl",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "thb": [
+          [
+            "nz"
+          ],
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "phb": [
+          [
+            "nz+1"
+          ],
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "php": [
+          [
+            "nz+1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "theta": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p_hpa": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_agl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "g",
+          "float32"
+        ],
+        [
+          "thb_full",
+          "int32"
+        ],
+        [
+          "phb_full",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_adapt",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_adapt",
+      "resources": [
+        [
+          "z_obs",
+          "float",
+          "read"
+        ],
+        [
+          "z_mask",
+          "int32",
+          "read"
+        ],
+        [
+          "z0_mask",
+          "int32",
+          "read"
+        ],
+        [
+          "ref",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "z_obs": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "z_mask": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "z0_mask": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "has_clear",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_pbl_height",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_pbl_height",
+      "resources": [
+        [
+          "q",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "q": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pblh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_cone_fill",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_cone_fill",
+      "resources": [
+        [
+          "ref",
+          "float",
+          "read_write"
+        ],
+        [
+          "h",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read"
+        ],
+        [
+          "levels",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "profiles",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pblh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "levels": [
+          [
+            31
+          ]
+        ],
+        "profiles": [
+          [
+            6,
+            31
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_probable_convection",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_probable_convection",
+      "resources": [
+        [
+          "ref",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "probable",
+          "int32",
+          "read_write"
+        ],
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "probable": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "dp": [
+          [
+            4
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_tendency",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_tendency",
+      "resources": [
+        [
+          "ref",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "t",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read"
+        ],
+        [
+          "tten",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "t": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pblh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "tten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dp": [
+          [
+            12
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "krad_bot_in",
+          "float32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_smooth_interior",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_smooth_interior",
+      "resources": [
+        [
+          "src",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "dst",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dst": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dp": [
+          [
+            3
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_smooth_edges",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_smooth_edges",
+      "resources": [
+        [
+          "field",
+          "float64_bits",
+          "read_write"
+        ],
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "field": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dp": [
+          [
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_store",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_store",
+      "resources": [
+        [
+          "tten",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ref",
+          "float",
+          "read"
+        ],
+        [
+          "ges",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "tten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ges": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_column_flag",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_column_flag",
+      "resources": [
+        [
+          "tten",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ref",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read"
+        ],
+        [
+          "probable",
+          "int32",
+          "read"
+        ],
+        [
+          "ges",
+          "float",
+          "read_write"
+        ],
+        [
+          "dp",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "tten": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "pblh": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "probable": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "ges": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "dp": [
+          [
+            2
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "krad_bot_in",
+          "float32"
+        ],
+        [
+          "convection_only",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_vinterp",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_vinterp",
+      "resources": [
+        [
+          "mosaic",
+          "float",
+          "read"
+        ],
+        [
+          "h_agl",
+          "float",
+          "read"
+        ],
+        [
+          "terrain",
+          "float",
+          "read"
+        ],
+        [
+          "levels",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "ref",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mosaic": [
+          [
+            "nlevels",
+            "ny",
+            "nx"
+          ]
+        ],
+        "h_agl": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "terrain": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "levels": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlevels",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_vinterp_edges",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_vinterp_edges",
+      "resources": [
+        [
+          "ref",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "ref": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    },
+    {
+      "name": "rtt_apply",
+      "module": "radar_tten_family",
+      "source": "woof/metal/shaders/radar_tten_family.metal",
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_apply",
+      "resources": [
+        [
+          "thp",
+          "float",
+          "read_write"
+        ],
+        [
+          "thp_before",
+          "float",
+          "read"
+        ],
+        [
+          "slot",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "thp": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "thp_before": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ],
+        "slot": [
+          [
+            "nz",
+            "ny",
+            "nx"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "ring",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "wrf-exact"
+      ]
+    }
+  ]
+}

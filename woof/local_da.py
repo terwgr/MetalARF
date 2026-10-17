@@ -96,7 +96,8 @@ REMEDY_FORCING = "Shorten the cycle run or select a later initial cycle."
 #: line in the protocol, or a check moved across the execution document,
 #: fails a test rather than a desktop.
 REVIEW_REFUSAL_CODES = ("FORCING_HORIZON", "INVALID_PLAN",
-                        "MISSING_DOMAIN", "REVIEW_CONTRACT")
+                        "MISSING_DOMAIN", "RADAR_TTEN_UNROUTED",
+                        "REVIEW_CONTRACT")
 LAUNCH_REFUSAL_CODES = ("CONFIGURATION_CHANGED",
                         "MISSING_GEOGRAPHY", "OBSERVATION_CHANGED",
                         "PLAN_SCHEMA", "REVIEW_CHANGED", "ROSTER_CHANGED")
@@ -235,6 +236,7 @@ class Request:
     base_seed: int = 0
     continuous_windows: int = 0
     precip_analysis: str = 'off'
+    radar_tten: bool = False
 
     def validate(self):
         if type(self.continuous_windows) is not int or self.continuous_windows < 0:
@@ -250,6 +252,11 @@ class Request:
             raise PlanError("base_seed must be a nonnegative integer; use 0 for repeatable defaults.")
         if self.precip_analysis not in ('off', 'clear'):
             raise PlanError("precip_analysis must be 'off' or 'clear'; an ensemble member takes NOAA's clear only.")
+        if type(self.radar_tten) is not bool:
+            raise PlanError("radar_tten must be true or false.")
+        if self.radar_tten and self.continuous_windows:
+            raise PlanError("radar_tten runs on the finite cycle only; continuous windows do not carry the radar forcing yet. "
+                            "Drop --continuous or --radar-tten.", code='RADAR_TTEN_UNROUTED')
         for name in ('budget_seconds', 'forecast_seconds', 'cadence_seconds'):
             value = getattr(self, name)
             if value is None and name == 'cadence_seconds':
@@ -552,6 +559,18 @@ def _advisory_text(opening: str, causes: list[tuple[str, str]], *,
             + '; '.join(remedy.rstrip('.') for remedy in distinct) + '.')
 
 
+def _require_radar_tten_inputs(exp, streams):
+    """Refuse --radar-tten before anything is fetched when it cannot act."""
+    if int(exp.domains[0].run.mp_physics) == 0:
+        raise PlanError("--radar-tten replaces the microphysics heating increment, and this configuration runs no "
+                        "microphysics (mp_physics = 0); choose a profile with microphysics or drop --radar-tten.",
+                        code='RADAR_TTEN_UNROUTED')
+    if not any(row['route'] == 'radar-grid' and row['status'] in ('ready', 'candidate') for row in streams):
+        raise PlanError("--radar-tten builds its heating from the radar-grid observations, and no radar route is "
+                        "available for this review; pass --radar-grid files or drop --radar-tten.",
+                        code='RADAR_TTEN_UNROUTED')
+
+
 def build_plan(request: Request, *, availability: Callable | None = None,
                price: Callable | None = None, background_probe=None) -> dict:
     """Inspect all owners without repairing bridge caches or keeping bindings."""
@@ -581,6 +600,8 @@ def _build_plan(request: Request, *, availability: Callable | None = None,
                 continue
             raise
         streams = availability(request, rung, exp)
+        if request.radar_tten:
+            _require_radar_tten_inputs(exp, streams)
         costs = (price(request, rung, exp, streams) if price is not None else
                  price_rung(request, rung, exp, streams,
                             forcing_interval_seconds=background['selection']['forcing_interval_seconds']))
@@ -624,7 +645,8 @@ def _build_plan(request: Request, *, availability: Callable | None = None,
                                               DEFAULT_VELOCITY_DISPERSION_RATIO)
     settings['applied'].update(velocity_dispersion_ratio=DEFAULT_VELOCITY_DISPERSION_RATIO,
                                velocity_dispersion_batch_ratio=DEFAULT_VELOCITY_DISPERSION_BATCH_RATIO,
-                               precip_analysis=request.precip_analysis)
+                               precip_analysis=request.precip_analysis,
+                               radar_tten=request.radar_tten)
     from woof.da.static_covariance import perturbation_options
     ensemble = {"ensemble": dict(base_config="experiment.toml", n_members=rung['members'],
         base_seed=request.base_seed, perturbation="none" if rung['members'] == 1 else "woof.da.perturb",
@@ -879,7 +901,8 @@ def main(args) -> int:
                         obs_tables=tuple(args.obs_table), radar_grids=tuple(args.radar_grid),
                         satellite_grids=tuple(args.satellite_grid), base_seed=args.seed,
                         continuous_windows=args.continuous or 0,
-                        precip_analysis=args.precip_analysis)
+                        precip_analysis=args.precip_analysis,
+                        radar_tten=args.radar_tten)
                 from functools import lru_cache
                 from woof.fetch import _head_answer
                 # One review samples each URL once; launch keeps its exact
@@ -951,6 +974,9 @@ def register_cli(subparsers):
     p.add_argument('--satellite-grid', action='append', default=[], help='existing cloud-water-path grid; repeatable')
     p.add_argument('--precip-analysis', choices=('off', 'clear'), default='off',
                    help="after each radar analysis, clear precipitating mass and its moments where the radar observed no echo (NOAA's HRRRDAS member rule); off by default")
+    p.add_argument('--radar-tten', action='store_true',
+                   help="heat each forecast leg after a radar analysis with that window's radar latent heating "
+                        "(HRRR's mp_tend_radar), for one cadence; needs a radar route and microphysics; off by default")
     p.add_argument('--capabilities', action='store_true', help='print the companion command and field contract without pricing')
     p.add_argument('--request-json', type=Path, help=f'{REQUEST_SCHEMA} file, or - for stdin')
     p.add_argument('--out', type=Path, help='new directory to publish experiment.toml, ensemble.toml, experiment.namelist.wps, every other file the published configuration is read with on its own input route, and local-da.json into; refused if it exists')

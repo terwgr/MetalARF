@@ -54,6 +54,13 @@ tree's own transcription of glibc's binary64 ``pow``
 (``woof/core/kernels/glibc_flt64.cuh``), because CUDA's is not the same
 function.
 
+The same kernels also run on Apple Metal (``woof/metal/shaders/
+radar_tten_family.metal``) in the CUDA kernels' operation order: Metal has
+no binary64, so every double node is the software binary64 operation of
+``soft_binary64.metalh`` and the powers are the Metal transcription of the
+glibc ``pow`` above (``soft_glibc_pow64.metalh``).  Arrays and states that
+are ``woof.metal.array.MetalArray`` take that path, CuPy arrays the CUDA one.
+
 Values in the reflectivity array (NOAA's convention, kept)
 ---------------------------------------------------------
 ``>= 0.001`` dBZ is echo; ``-99`` is "the radar looked and found nothing";
@@ -102,8 +109,8 @@ same heating where the radar covers, which shrinks their spread there.
 
 What is deliberately not here
 -----------------------------
-No NumPy implementation and no host fallback: without a CUDA device the
-builder refuses.  A second implementation would be a second authority for
+No NumPy implementation and no host fallback: without a CUDA device or a
+Metal array the builder refuses.  A second implementation would be a second authority for
 the same numbers.  The lightning proxy (``convert_lghtn2ref``) is not
 ported because the tree has no lightning reader.
 """
@@ -743,6 +750,7 @@ extern "C" __global__ void rtt_apply(
 #: Threads per block.  Every kernel is one thread per output element (or
 #: per column, or per edge), so the launch shape cannot move a result.
 _THREADS = 256
+_METAL_THREADS = 128
 
 
 def _full_source() -> str:
@@ -751,6 +759,58 @@ def _full_source() -> str:
 
     header = Path(kernel_loader.__file__).parent / "glibc_flt64.cuh"
     return header.read_text(encoding="utf-8") + "\n" + _SOURCE
+
+
+def _is_metal(value) -> bool:
+    """Whether ``value`` is a Metal array (the kernels run on Metal)."""
+    try:
+        from woof.metal.array import MetalArray
+    except Exception:
+        return False
+    return isinstance(value, MetalArray)
+
+
+def _metal_module(like):
+    from woof.metal.array import MetalArrayModule
+
+    return MetalArrayModule(like.buffer.context)
+
+
+def _metal_launch(name: str, count: int, arrays: dict, params: dict) -> None:
+    """One Metal kernel of ``radar_tten_family.metal``, in submission order."""
+    context = next(iter(arrays.values())).buffer.context
+    context.submit_kernel(
+        name, arrays, params, exact_policy=True,
+        grid_size=max(int(count), 1), threads_per_group=_METAL_THREADS)
+
+
+def _dims(shape) -> dict:
+    nz, ny, nx = (int(v) for v in shape)
+    return {"nz": nz, "ny": ny, "nx": nx}
+
+
+def _metal_volume(name: str, value, shape=None):
+    """A float32 Metal volume (always contiguous), or a refusal."""
+    if not _is_metal(value):
+        raise RadarTtenError(
+            f"{name} must be a Metal array like the other inputs; got "
+            f"{type(value).__name__}")
+    if value.dtype != np.float32 or value.ndim != 3:
+        raise RadarTtenError(
+            f"{name} must be float32 (nz, ny, nx); got {value.dtype} "
+            f"{value.shape}")
+    if shape is not None and tuple(value.shape) != tuple(shape):
+        raise RadarTtenError(
+            f"{name} has shape {tuple(value.shape)}, expected {tuple(shape)}")
+    return value
+
+
+def _metal_plane(name: str, value, shape, dtype=np.float32):
+    if (not _is_metal(value) or value.dtype != dtype
+            or tuple(value.shape) != tuple(shape)):
+        raise RadarTtenError(
+            f"{name} must be a {np.dtype(dtype).name} Metal array {tuple(shape)}")
+    return value
 
 
 def _require_device():
@@ -764,7 +824,7 @@ def _require_device():
 
     if no_local_gpu():
         raise RadarTtenError(
-            "radar latent heating runs only as CUDA kernels and "
+            "radar latent heating runs as CUDA kernels (or Metal kernels for Metal arrays) and "
             "GPUWM_NO_LOCAL_GPU forbids this process the local device. "
             "There is no host implementation to fall back to")
     try:
@@ -773,13 +833,13 @@ def _require_device():
         count = int(cp.cuda.runtime.getDeviceCount())
     except Exception as exc:
         raise RadarTtenError(
-            "radar latent heating runs only as CUDA kernels and this "
+            "radar latent heating runs as CUDA kernels (or Metal kernels for Metal arrays) and this "
             f"process has no usable CUDA device ({type(exc).__name__}: "
             f"{exc}). There is no host implementation to fall back to"
         ) from exc
     if count < 1:
         raise RadarTtenError(
-            "radar latent heating runs only as CUDA kernels and the CUDA "
+            "radar latent heating runs as CUDA kernels (or Metal kernels for Metal arrays) and the CUDA "
             "runtime reports zero devices. There is no host implementation "
             "to fall back to")
     return cp
@@ -830,6 +890,15 @@ def _require_extent(shape) -> None:
 def pbl_height(qv, theta):
     """NOAA's ``calc_pbl_height``: the boundary-layer top per column, as a
     fractional (one-based) level index, float32 ``(ny, nx)``."""
+    if _is_metal(theta) or _is_metal(qv):
+        theta = _metal_volume("theta", theta)
+        qv = _metal_volume("qv", qv, theta.shape)
+        _require_extent(theta.shape)
+        nz, ny, nx = theta.shape
+        out = _metal_module(theta).zeros((ny, nx), np.float32)
+        _metal_launch("rtt_pbl_height", ny * nx,
+                      {"q": qv, "t": theta, "pblh": out}, _dims(theta.shape))
+        return out
     cp = _require_device()
     theta = _volume(cp, "theta", theta)
     qv = _volume(cp, "qv", qv, theta.shape)
@@ -848,6 +917,21 @@ def cone_fill(ref, height_agl_m, pblh):
     and sets every level up to the boundary-layer top to no coverage, on
     interior columns.  Returns the new reflectivity volume.
     """
+    if _is_metal(ref):
+        ref = _metal_volume("ref", ref)
+        height_agl_m = _metal_volume("height_agl_m", height_agl_m, ref.shape)
+        _require_extent(ref.shape)
+        nz, ny, nx = ref.shape
+        pblh = _metal_plane("pblh", pblh, (ny, nx))
+        levels, profiles = _cone_tables()
+        module = _metal_module(ref)
+        out = ref.copy()
+        _metal_launch("rtt_cone_fill", ny * nx,
+                      {"ref": out, "h": height_agl_m, "pblh": pblh,
+                       "levels": module.asarray(levels),
+                       "profiles": module.asarray(profiles)},
+                      _dims(ref.shape))
+        return out
     cp = _require_device()
     ref = _volume(cp, "ref", ref)
     height_agl_m = _volume(cp, "height_agl_m", height_agl_m, ref.shape)
@@ -894,6 +978,36 @@ def vinterp_mosaic(mosaic, height_agl_m, terrain_m):
     them, including its corner quirk (``:147``): column (1, 1) keeps no
     coverage and column (1, ny) takes column (2, 2).
     """
+    if _is_metal(height_agl_m):
+        height_agl_m = _metal_volume("height_agl_m", height_agl_m)
+        _require_extent(height_agl_m.shape)
+        nz, ny, nx = (int(v) for v in height_agl_m.shape)
+        if (not _is_metal(mosaic) or mosaic.dtype != np.float32
+                or mosaic.ndim != 3 or tuple(mosaic.shape[1:]) != (ny, nx)):
+            raise RadarTtenError(
+                f"mosaic must be a float32 Metal (levels, {ny}, {nx}) volume")
+        nlevels = int(mosaic.shape[0])
+        if nlevels not in MOSAIC_LEVELS_KM:
+            raise RadarTtenError(
+                f"a {nlevels}-level mosaic has no level table: NOAA's "
+                f"routine knows {sorted(MOSAIC_LEVELS_KM)} and stops on any "
+                "other count, because interpolating against the wrong "
+                "heights puts every echo at the wrong altitude")
+        terrain_m = _metal_plane("terrain_m", terrain_m, (ny, nx))
+        levels = (np.asarray(MOSAIC_LEVELS_KM[nlevels], dtype=np.float32)
+                  .astype(np.float64) * 1000.0)
+        module = _metal_module(height_agl_m)
+        out = module.zeros((nz, ny, nx), np.float32)
+        dims = _dims((nz, ny, nx))
+        _metal_launch("rtt_vinterp", out.size,
+                      {"mosaic": mosaic, "h_agl": height_agl_m,
+                       "terrain": terrain_m,
+                       "levels": module.asarray(levels), "ref": out},
+                      {"nlevels": nlevels, **dims})
+        _metal_launch("rtt_vinterp_edges",
+                      nz * (2 * (nx - 2) + 2 * (ny - 2) + 3),
+                      {"ref": out}, dims)
+        return out
     cp = _require_device()
     height_agl_m = _volume(cp, "height_agl_m", height_agl_m)
     _require_extent(height_agl_m.shape)
@@ -935,6 +1049,15 @@ def _smooth_weights(weight: float):
 def smooth(field, passes: int = 1, weight: float = 0.5):
     """NOAA's ``SMOOTH`` applied ``passes`` times to every level of a
     float64 device volume ``(nz, ny, nx)``.  Returns a new array."""
+    if _is_metal(field):
+        if field.dtype != np.float64 or field.ndim != 3:
+            raise RadarTtenError("smooth wants a float64 device (nz, ny, nx)")
+        _require_extent((4,) + tuple(field.shape[1:]))
+        current = field.copy()
+        other = _metal_module(field).empty(field.shape, np.float64)
+        for _ in range(int(passes)):
+            current, other = _smooth_pass(current, other, weight)
+        return current
     cp = _require_device()
     if (not isinstance(field, cp.ndarray) or field.dtype != np.float64
             or field.ndim != 3):
@@ -949,6 +1072,17 @@ def smooth(field, passes: int = 1, weight: float = 0.5):
 
 def _smooth_pass(src, dst, weight):
     nz, ny, nx = src.shape
+    if _is_metal(src):
+        module = _metal_module(src)
+        w = _smooth_weights(weight)
+        dims = _dims(src.shape)
+        _metal_launch("rtt_smooth_interior", src.size,
+                      {"src": src, "dst": dst,
+                       "dp": module.asarray(np.array(w[:3], np.float64))}, dims)
+        _metal_launch("rtt_smooth_edges", nz * 4,
+                      {"field": dst,
+                       "dp": module.asarray(np.array(w[3:], np.float64))}, dims)
+        return dst, src
     s1, s2, s3, s4, s5 = (np.float64(v) for v in _smooth_weights(weight))
     dims = (np.int32(nz), np.int32(ny), np.int32(nx))
     _launch("rtt_smooth_interior", src.size, (src, dst, s1, s2, s3) + dims)
@@ -981,8 +1115,11 @@ def build_tendency(ref, theta, pressure_hpa, qv, height_agl_m,
     boundary-layer top and the cone-filled reflectivity (device arrays), for
     the oracle comparison.
     """
-    cp = _require_device()
     cfg = RadarTtenConfig() if config is None else config
+    if _is_metal(ref):
+        return _build_tendency_metal(
+            cfg, ref, theta, pressure_hpa, qv, height_agl_m, intermediates)
+    cp = _require_device()
     ref = _volume(cp, "ref", ref)
     shape = ref.shape
     _require_extent(shape)
@@ -1042,6 +1179,76 @@ def build_tendency(ref, theta, pressure_hpa, qv, height_agl_m,
     return slot, receipt
 
 
+def _build_tendency_metal(cfg, ref, theta, pressure_hpa, qv, height_agl_m,
+                          intermediates):
+    """:func:`build_tendency` on Metal: the same kernels in the same order."""
+    ref = _metal_volume("ref", ref)
+    shape = ref.shape
+    _require_extent(shape)
+    theta = _metal_volume("theta", theta, shape)
+    pressure_hpa = _metal_volume("pressure_hpa", pressure_hpa, shape)
+    qv = _metal_volume("qv", qv, shape)
+    height_agl_m = _metal_volume("height_agl_m", height_agl_m, shape)
+    nz, ny, nx = (int(v) for v in shape)
+    dims = _dims(shape)
+    module = _metal_module(ref)
+
+    pblh = pbl_height(qv, theta)
+    refc = cone_fill(ref, height_agl_m, pblh)
+    if intermediates is not None:
+        intermediates["pblh"] = pblh
+        intermediates["ref_cone"] = refc
+
+    probable = module.zeros((ny, nx), np.int32)
+    if cfg.convection_only:
+        _metal_launch(
+            "rtt_probable_convection", ny * nx,
+            {"ref": refc, "p": pressure_hpa, "t": theta, "probable": probable,
+             "dp": module.asarray(np.array(
+                 [cfg.convection_refl_threshold_dbz, cfg.warm_temperature_k,
+                  cfg.cold_echo_depth_hpa, _RD_OVER_CP], np.float64))}, dims)
+
+    tten = module.empty(shape, np.float64)
+    work = module.empty(shape, np.float64)
+    _metal_launch(
+        "rtt_tendency", tten.size,
+        {"ref": refc, "p": pressure_hpa, "t": theta, "pblh": pblh,
+         "tten": tten,
+         "dp": module.asarray(np.array(
+             [cfg.echo_floor_dbz, cfg.warm_temperature_k, cfg.warm_min_dbz,
+              cfg.z_scale_dbz, cfg.z_divisor, cfg.z_factor, 1.0 / _CPOVR_P,
+              _LV_P + _LF0_P, cfg.latent_heat_period_min, _CPD_P,
+              cfg.tendency_cap, _RD_OVER_CP], np.float64))},
+        {"krad_bot_in": float(np.float32(cfg.krad_bot)), **dims})
+    for _ in range(int(cfg.smooth_passes_tendency)):
+        tten, work = _smooth_pass(tten, work, cfg.smooth_weight)
+
+    slot = module.empty(shape, np.float32)
+    _metal_launch("rtt_store", slot.size,
+                  {"tten": tten, "ref": refc, "ges": slot}, dims)
+
+    for _ in range(int(cfg.smooth_passes_flag)):
+        tten, work = _smooth_pass(tten, work, cfg.smooth_weight)
+    _metal_launch(
+        "rtt_column_flag", ny * nx,
+        {"tten": tten, "ref": refc, "p": pressure_hpa, "pblh": pblh,
+         "probable": probable, "ges": slot,
+         "dp": module.asarray(np.array(
+             [cfg.coverage_depth_hpa, cfg.nearby_tendency], np.float64))},
+        {"krad_bot_in": float(np.float32(cfg.krad_bot)),
+         "convection_only": 1 if cfg.convection_only else 0, **dims})
+    del tten, work
+    receipt = tendency_receipt(slot)
+    receipt["probable_convection_columns"] = int(
+        np.count_nonzero(probable.to_numpy()))
+    pblh_host = pblh.to_numpy()
+    receipt["boundary_layer_top_level"] = {
+        "min": float(pblh_host.min()), "max": float(pblh_host.max())}
+    receipt["cone_changed_points"] = int(
+        np.count_nonzero(refc.to_numpy() != ref.to_numpy()))
+    return slot, receipt
+
+
 def tendency_receipt(slot) -> dict:
     """What a slot holds, counted on the device.
 
@@ -1049,7 +1256,10 @@ def tendency_receipt(slot) -> dict:
     partition the levels below the top; ``max_tendency_k_per_s`` is over the
     covered ones; ``flag_columns`` counts the top level's three values.
     """
-    cp = _require_device()
+    if _is_metal(slot):
+        cp, slot = np, slot.to_numpy()
+    else:
+        cp = _require_device()
     below = slot[:-1]
     flag = slot[-1]
     covered = (below >= np.float32(-1.0)) & (below <= np.float32(1.0))
@@ -1080,9 +1290,12 @@ def tendency_receipt(slot) -> dict:
 # adapters: the observation document and the model state
 # --------------------------------------------------------------------------
 
-def reflectivity_from_document(document, *, z_source: str = "z_obs"):
+def reflectivity_from_document(document, *, z_source: str = "z_obs",
+                               like=None):
     """Reflectivity in NOAA's convention from a ``gpuwm-obs.radar-grid``
     document: ``(ref, provenance)``, ``ref`` a float32 device volume.
+    ``like``, a Metal array, puts the result on that Metal context; omitted,
+    it lands on the CUDA device.
 
     ``z_mask`` true is echo, at the file's dBZ.  A clear-air mask true is
     "the radar looked and found nothing", -99.  Neither is no coverage,
@@ -1092,7 +1305,13 @@ def reflectivity_from_document(document, *, z_source: str = "z_obs"):
     outside the allow-list is refused: a range-folded gate may be a storm,
     and reading it as clear would withhold heating from it.
     """
-    cp = _require_device()
+    metal = like is not None
+    if metal and not _is_metal(like):
+        raise RadarTtenError("like must be a Metal array")
+    # Metal: the checks run on the host copies, which are then uploaded.
+    cp = np if metal else _require_device()
+    module = _metal_module(like) if metal else cp
+    mask_dtype = np.int32 if metal else np.int8
     variables = document["variables"]
     for name in (z_source, "z_mask"):
         if name not in variables:
@@ -1101,7 +1320,7 @@ def reflectivity_from_document(document, *, z_source: str = "z_obs"):
     z_obs = cp.asarray(np.ascontiguousarray(
         np.asarray(variables[z_source], dtype=np.float32)))
     z_mask = cp.asarray(np.ascontiguousarray(
-        np.asarray(variables["z_mask"]) != 0).astype(np.int8))
+        np.asarray(variables["z_mask"]) != 0).astype(mask_dtype))
     if z_obs.ndim != 3 or z_mask.shape != z_obs.shape:
         raise RadarTtenError(
             f"{z_source} {z_obs.shape} and z_mask {z_mask.shape} are not "
@@ -1122,7 +1341,7 @@ def reflectivity_from_document(document, *, z_source: str = "z_obs"):
                 "nothing or a return the radar could not place, and a "
                 "storm read as clear air loses its heating")
         z0_mask = cp.asarray(np.ascontiguousarray(
-            np.asarray(variables["z0_mask"]) != 0).astype(np.int8))
+            np.asarray(variables["z0_mask"]) != 0).astype(mask_dtype))
         if z0_mask.shape != z_obs.shape:
             raise RadarTtenError(
                 f"z0_mask {z0_mask.shape} is not on the grid of "
@@ -1135,10 +1354,18 @@ def reflectivity_from_document(document, *, z_source: str = "z_obs"):
                 "disagree about the same cell and no reading of it is safe")
     else:
         z0_mask = z_mask                      # never read: has_clear is 0
-    ref = cp.empty(z_obs.shape, dtype=np.float32)
-    _launch("rtt_adapt", ref.size,
-            (z_obs, z_mask, z0_mask, ref, np.int32(1 if has_clear else 0),
-             np.int64(ref.size)))
+    if metal:
+        ref = module.empty(z_obs.shape, np.float32)
+        _metal_launch(
+            "rtt_adapt", ref.size,
+            {"z_obs": module.asarray(z_obs), "z_mask": module.asarray(z_mask),
+             "z0_mask": module.asarray(z0_mask), "ref": ref},
+            {"has_clear": 1 if has_clear else 0, **_dims(z_obs.shape)})
+    else:
+        ref = cp.empty(z_obs.shape, dtype=np.float32)
+        _launch("rtt_adapt", ref.size,
+                (z_obs, z_mask, z0_mask, ref, np.int32(1 if has_clear else 0),
+                 np.int64(ref.size)))
     provenance = {
         "z_source": z_source,
         "echo_points": int(cp.count_nonzero(z_mask)),
@@ -1162,14 +1389,15 @@ def background_from_state(state) -> dict:
     instead rebuilds pressure and height hydrostatically from the surface
     pressure (``BackgroundCld.f90``); the model state is the authority here.
     """
-    cp = _require_device()
     from woof.core import constants as c
 
     thp = state.thp
-    if not isinstance(thp, cp.ndarray):
+    metal = _is_metal(thp)
+    cp = None if metal else _require_device()
+    if not metal and not isinstance(thp, cp.ndarray):
         raise RadarTtenError(
-            "the model state is not on a CUDA device; the builder has no "
-            "host path")
+            "the model state is not on a CUDA or Metal device; the builder "
+            "has no host path")
     if getattr(state, "qv", None) is None:
         raise RadarTtenError(
             "the model state carries no water vapour; the boundary-layer "
@@ -1177,6 +1405,20 @@ def background_from_state(state) -> dict:
     shape = thp.shape
     nz, ny, nx = (int(v) for v in shape)
     thb, phb = state.thb, state.phb
+    if metal:
+        module = _metal_module(thp)
+        theta, p_hpa, h_agl = (module.empty(shape, np.float32)
+                               for _ in range(3))
+        _metal_launch(
+            "rtt_background", theta.size,
+            {"thb": thb, "thp": thp, "p": state.p, "phb": phb,
+             "php": state.php, "theta": theta, "p_hpa": p_hpa,
+             "h_agl": h_agl},
+            {"g": float(np.float32(c.G)),
+             "thb_full": 1 if thb.ndim == 3 else 0,
+             "phb_full": 1 if phb.ndim == 3 else 0, **_dims(shape)})
+        return {"theta": theta, "pressure_hpa": p_hpa, "qv": state.qv,
+                "height_agl_m": h_agl}
     theta = cp.empty(shape, dtype=np.float32)
     p_hpa = cp.empty(shape, dtype=np.float32)
     h_agl = cp.empty(shape, dtype=np.float32)
@@ -1247,7 +1489,9 @@ class RadarTtenForcing:
 
     def __init__(self, slots, slot_minutes, *, receipts=(), provenance=None,
                  mp_tend_lim: float | None = HRRR_MP_TEND_LIM):
-        cp = _require_device()
+        slots = tuple(slots)
+        self._metal = bool(slots) and _is_metal(slots[0])
+        cp = None if self._metal else _require_device()
         if mp_tend_lim is not None:
             mp_tend_lim = float(mp_tend_lim)
             if not np.isfinite(mp_tend_lim) or mp_tend_lim <= 0.0:
@@ -1260,7 +1504,6 @@ class RadarTtenForcing:
         #: The case's clamp as the first microphysics call saw it.
         self.case_mp_tend_lim = None
         self._scheme_cfg = None
-        slots = tuple(slots)
         times = tuple(float(v) for v in slot_minutes)
         if not slots or len(slots) != len(times):
             raise RadarTtenError(
@@ -1271,8 +1514,13 @@ class RadarTtenForcing:
                 f"slot times {times} must increase: the slot rule walks "
                 "them in order")
         shape = tuple(slots[0].shape)
-        self.slots = tuple(_volume(cp, f"slot {index + 1}", slot, shape)
-                           for index, slot in enumerate(slots))
+        if self._metal:
+            self.slots = tuple(
+                _metal_volume(f"slot {index + 1}", slot, shape)
+                for index, slot in enumerate(slots))
+        else:
+            self.slots = tuple(_volume(cp, f"slot {index + 1}", slot, shape)
+                               for index, slot in enumerate(slots))
         _require_extent(shape)
         self.shape = shape
         self.slot_minutes = times
@@ -1284,14 +1532,25 @@ class RadarTtenForcing:
         self.calls_by_slot = [0] * len(self.slots)
         #: Calls on which ``no_mp_heating`` skipped the application.
         self.calls_skipped_no_mp_heating = 0
-        self._theta_before = cp.empty(shape, dtype=np.float32)
+        self._theta_before = (_metal_module(slots[0]).empty(shape, np.float32)
+                              if self._metal
+                              else cp.empty(shape, dtype=np.float32))
         self._pending = None
 
     @classmethod
-    def from_fields(cls, fields, slot_minutes, **kwargs):
+    def from_fields(cls, fields, slot_minutes, *, like=None, **kwargs):
         """A forcing from fields already in NOAA's file convention, for
         example ``RAD_TTEN_DFI_1..4`` and ``TTEN_TIMES`` of a start file.
-        Host arrays are uploaded; nothing is converted."""
+        Host arrays are uploaded; nothing is converted.  ``like``, a Metal
+        array (for example the state's theta), uploads to that Metal
+        context instead of the CUDA device."""
+        if like is not None:
+            if not _is_metal(like):
+                raise RadarTtenError("like must be a Metal array")
+            module = _metal_module(like)
+            return cls([field if _is_metal(field) else module.asarray(
+                np.ascontiguousarray(np.asarray(field, dtype=np.float32)))
+                for field in fields], slot_minutes, **kwargs)
         cp = _require_device()
         slots = [cp.asarray(np.ascontiguousarray(
             np.asarray(field, dtype=np.float32)))
@@ -1313,7 +1572,6 @@ class RadarTtenForcing:
         The breakage each refusal prevents is the same one: a whole-domain
         tendency read at the wrong place, or not read at all, with no error.
         """
-        cp = _require_device()
         if callable(getattr(type(state), "member_view", None)):
             raise RadarTtenError(
                 "this is a batched-ensemble state: its members share one "
@@ -1329,7 +1587,12 @@ class RadarTtenForcing:
                 "(0, 0) is not the domain's, so the radar tendency would "
                 "be skipped or read at the wrong offsets")
         thp = getattr(state, "thp", None)
-        if not isinstance(thp, cp.ndarray):
+        if self._metal:
+            if not _is_metal(thp):
+                raise RadarTtenError(
+                    "this forcing is on Metal and the model state's theta is "
+                    "not a Metal array; the forcing has no host path")
+        elif not isinstance(thp, _require_device().ndarray):
             raise RadarTtenError(
                 "the model state is not on a CUDA device; the forcing has "
                 "no host path")
@@ -1376,9 +1639,11 @@ class RadarTtenForcing:
     def before_microphysics(self, state, cfg, dt: float) -> None:
         """Keep theta as it is before the scheme, and pick this step's slot
         from the time at the beginning of the step."""
-        cp = _require_device()
         self.check_state(state, cfg)
-        cp.copyto(self._theta_before, state.thp)
+        if self._metal:
+            self._theta_before[...] = state.thp
+        else:
+            _require_device().copyto(self._theta_before, state.thp)
         self._pending = self.slot_index()
 
     def after_microphysics(self, state, cfg, dt: float, *,
@@ -1396,10 +1661,18 @@ class RadarTtenForcing:
         index, self._pending = self._pending, None
         if int(getattr(cfg, "no_mp_heating", 0)) == 0:
             nz, ny, nx = self.shape
-            _launch("rtt_apply", self._theta_before.size,
-                    (state.thp, self._theta_before, self.slots[index],
-                     np.float32(dt), np.int32(max(int(ring_width), 0)),
-                     np.int32(nz), np.int32(ny), np.int32(nx)))
+            if self._metal:
+                _metal_launch(
+                    "rtt_apply", self._theta_before.size,
+                    {"thp": state.thp, "thp_before": self._theta_before,
+                     "slot": self.slots[index]},
+                    {"dt": float(np.float32(dt)),
+                     "ring": max(int(ring_width), 0), **_dims(self.shape)})
+            else:
+                _launch("rtt_apply", self._theta_before.size,
+                        (state.thp, self._theta_before, self.slots[index],
+                         np.float32(dt), np.int32(max(int(ring_width), 0)),
+                         np.int32(nz), np.int32(ny), np.int32(nx)))
             self.calls_by_slot[index] += 1
         else:
             self.calls_skipped_no_mp_heating += 1
@@ -1466,9 +1739,10 @@ def build_forcing_from_documents(state, documents, slot_minutes,
     """
     documents = list(documents)
     background = background_from_state(state)
+    like = background["theta"] if _is_metal(background["theta"]) else None
     slots, receipts, provenance = [], [], []
     for document in documents:
-        ref, source = reflectivity_from_document(document)
+        ref, source = reflectivity_from_document(document, like=like)
         if tuple(ref.shape) != tuple(background["theta"].shape):
             raise RadarTtenError(
                 f"the observation grid {tuple(ref.shape)} is not the model "

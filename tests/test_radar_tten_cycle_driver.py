@@ -130,7 +130,7 @@ class _Recorder:
         self.read_on_execute = read_on_execute
         recorder = self
 
-        def reflectivity_from_document(document):
+        def reflectivity_from_document(document, like=None):
             recorder.calls.append(("reflectivity", id(document)))
             return ("ref", id(document)), {"echo_points": int(np.count_nonzero(
                 document["variables"]["z_mask"]))}
@@ -280,7 +280,7 @@ def test_the_help_states_the_divergence_and_the_clamp(monkeypatch, capsys):
 
     monkeypatch.setattr(sys, "argv", ["da_cycle_prepared", "--help"])
     with pytest.raises(SystemExit):
-        driver.cycle([])
+        driver.cycle([], None)
     text = " ".join(capsys.readouterr().out.split())
     assert "the reverse of HRRR's arrangement" in text
     assert "parm/hrrrdas/hrrrdas_wrf.nl:101" in text

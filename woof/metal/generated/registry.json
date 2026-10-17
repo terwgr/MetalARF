@@ -15894,6 +15894,214 @@
       "resource_count": 10,
       "shader_hash": "8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_background",
+      "layout_hash": "50acdc993bdbdd11d284ee92c4b3c004b51715b4a94db66de4147de9ed858e96",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_background",
+      "parameter_size": 24,
+      "resource_count": 8,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_adapt",
+      "layout_hash": "ac9757ad7d7e9f1f5ca3677202a15db95845c3c8bcb2df57c8df3d682f78d451",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_adapt",
+      "parameter_size": 16,
+      "resource_count": 4,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_pbl_height",
+      "layout_hash": "39c00ad559e7503ef54465bf6932980fb1af789864a0773515d5e96a00b19822",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_pbl_height",
+      "parameter_size": 12,
+      "resource_count": 3,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_cone_fill",
+      "layout_hash": "00d844b6b9cccd15a18ef7fecdbce53e4717c10cdfa3b52f10ea8d5b443ad1e2",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_cone_fill",
+      "parameter_size": 12,
+      "resource_count": 5,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_probable_convection",
+      "layout_hash": "6cc3e4b5d018e5baf468ecaddafb95f0ebcb55c9764e8bd982ad857facad2e3c",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_probable_convection",
+      "parameter_size": 12,
+      "resource_count": 5,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_tendency",
+      "layout_hash": "30ef5f50fe5142bd5e63d37dc730715af42557380052317127914d6a42b89ee5",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_tendency",
+      "parameter_size": 16,
+      "resource_count": 6,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_smooth_interior",
+      "layout_hash": "1aaa0ed9609194c3a12784fc9fad78e8c44a58b8ea2b1104021319737473ceae",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_smooth_interior",
+      "parameter_size": 12,
+      "resource_count": 3,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_smooth_edges",
+      "layout_hash": "6925d21e9463edd84894a1e87a79c4290cc97cd643c09b0c75cc7afdd7d4efe4",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_smooth_edges",
+      "parameter_size": 12,
+      "resource_count": 2,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_store",
+      "layout_hash": "db6d53597d28c0d2906435ac37c8c2d52e6f492f3fe63ac73fbc75c0bbda1e20",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_store",
+      "parameter_size": 12,
+      "resource_count": 3,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_column_flag",
+      "layout_hash": "ef821ede9f8299a05a6116a5e690b590652f88371ec91859df281e4626c82e56",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_column_flag",
+      "parameter_size": 20,
+      "resource_count": 7,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_vinterp",
+      "layout_hash": "f7562b5341b1e4ec6cf95da2374288868a1eb078c87620e79d7276196bdd579f",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_vinterp",
+      "parameter_size": 16,
+      "resource_count": 5,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_vinterp_edges",
+      "layout_hash": "5f19b319d94edba0f2b148824db47aadb76e4d2098551e0ff39e764191bf83d0",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_vinterp_edges",
+      "parameter_size": 12,
+      "resource_count": 1,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/da/radar_tten.py",
+      "cuda_symbol": "rtt_apply",
+      "layout_hash": "67e65bb1f1095a037b862a5796a1a079385a2e2784b9b891e84b357faeb0aefe",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/radar_tten_family.metal",
+      "module": "radar_tten_family",
+      "name": "rtt_apply",
+      "parameter_size": 20,
+      "resource_count": 3,
+      "shader_hash": "22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a",
+      "threads_per_group": 128
     }
   ],
   "schema": "woof-metal-registry-v1"

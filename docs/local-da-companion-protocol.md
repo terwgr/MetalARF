@@ -186,6 +186,10 @@ source's horizon; shorten the run or select a later initial cycle. It is
 raised when the requested rung lacks the required forcing. A lower rung's
 estimated resource overrun does not replace this concrete missing-data reason.
 `details.alternatives` retains the available comparisons and horizon row.
+`RADAR_TTEN_UNROUTED` means `--radar-tten` cannot be honoured: the
+experiment runs no microphysics, no radar-grid observation route is ready
+or a candidate, or the windows are continuous; drop the flag or supply
+the route.
 
 
 A **launch** refusal (`refusal_codes.launch`) is raised after a review was

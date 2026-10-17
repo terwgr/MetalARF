@@ -72,6 +72,14 @@ Other commands select Metal the same way:
   domains and are refused on Metal.
 - `woof local-da --precip-analysis clear` clears precipitation where the
   radar observed no echo, on either backend.
+- `woof local-da --radar-tten` (opt-in, either backend) adds HRRR's radar
+  latent heating (`mp_tend_radar`): each forecast leg that starts from a
+  radar analysis is heated from that window's radar file for one cadence,
+  and so is the first cadence of the short forecast. It needs a radar route
+  and microphysics, and is refused before anything is fetched otherwise;
+  continuous windows (`--continuous`) refuse it for now. Each member writes
+  `radar-tten.json` beside its outputs. The Metal kernels follow the CUDA
+  source's arithmetic operation for operation.
 
 Regional Metal
 coverage follows the capability table and admitted scheme combinations, and

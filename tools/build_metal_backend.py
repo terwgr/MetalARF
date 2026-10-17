@@ -67,6 +67,7 @@ NEST_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "nest_family.metal"
 NEST_INTERP_FRAGMENT_SHADER = ROOT / "woof" / "metal" / "shaders" / "nest_interp_fragment.metal"
 NEST_STREAM_TRANSFER_FRAGMENT_SHADER = ROOT / "woof" / "metal" / "shaders" / "nest_stream_transfer_fragment.metal"
 IEVA_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "ieva_family.metal"
+RADAR_TTEN_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "radar_tten_family.metal"
 IEVA_SOLVE_FAMILY_SHADER = ROOT / "woof" / "metal" / "shaders" / "ieva_solve_family.metal"
 FACE_MASS_SHADER = ROOT / "woof" / "metal" / "shaders" / "face_mass.metal"
 COMPLEX64_PRIMITIVES_SHADER = ROOT / "woof" / "metal" / "shaders" / "complex64_primitives.metal"
@@ -538,6 +539,13 @@ def build(output: Path) -> dict:
               "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
               "-DGPUWM_WRF_EXACT=1", "-c", str(IEVA_FAMILY_SHADER),
               "-o", str(ieva_family_air)])
+        radar_tten_family_air = temp / "radar_tten_family.air"
+        _run([str(metal), f"-fmodules-cache-path={module_cache}",
+              "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
+              "-I", str(GENERATED_DIR), "-fmetal-math-mode=safe",
+              "-fmetal-math-fp32-functions=precise", "-ffp-contract=off",
+              "-DGPUWM_WRF_EXACT=1", "-c", str(RADAR_TTEN_FAMILY_SHADER),
+              "-o", str(radar_tten_family_air)])
         ieva_solve_family_air = temp / "ieva_solve_family.air"
         _run([str(metal), f"-fmodules-cache-path={module_cache}",
               "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",
@@ -1212,6 +1220,7 @@ def build(output: Path) -> dict:
               str(tendency_coupling_air),
               str(nest_family_air), str(nest_interp_fragment_air),
               str(nest_stream_transfer_fragment_air), str(ieva_family_air),
+              str(radar_tten_family_air),
               str(ieva_solve_family_air),
               str(face_mass_air),
               str(complex64_exact_air),

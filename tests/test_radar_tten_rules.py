@@ -125,21 +125,22 @@ def test_the_builder_refuses_by_name_without_a_device(monkeypatch):
 
 
 def test_the_module_has_no_host_implementation():
-    """The kernels are the only numerics: the module never imports NumPy's
-    random, linear algebra or FFT, and every public builder routes through
-    the device check before touching an array."""
+    """The kernels are the only numerics: every public builder either runs
+    the Metal kernels for Metal arrays or routes through the CUDA device
+    check; none computes on the host."""
     source = (ROOT / "woof" / "da" / "radar_tten.py").read_text(
         encoding="utf-8")
     tree = ast.parse(source)
     checked = {"pbl_height", "cone_fill", "smooth", "build_tendency",
                "tendency_receipt", "reflectivity_from_document",
                "background_from_state", "vinterp_mosaic"}
+    seen = set()
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name in checked:
-            first = node.body[1] if isinstance(
-                node.body[0], ast.Expr) else node.body[0]
-            text = ast.unparse(first)
-            assert "_require_device()" in text, (node.name, text)
+            seen.add(node.name)
+            text = ast.unparse(node)
+            assert "_require_device()" in text, node.name
+    assert seen == checked
 
 
 def test_the_kernel_source_has_no_literal_float_division():

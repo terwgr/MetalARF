@@ -7832,3 +7832,107 @@ MYNN_MIX_SCALAR_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctyp
 MYNN_MIX_SCALAR_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_MIX_SCALAR_COLUMNS_LAYOUT_HASH = '7903b870f6647e1aa824da94e1a66aacd37a7aa7364fbe467e67cac946dec2d4'
 MYNN_MIX_SCALAR_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
+
+RTT_BACKGROUND_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('p', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('theta', 'float', 'read_write'), ('p_hpa', 'float', 'read_write'), ('h_agl', 'float', 'read_write'))
+RTT_BACKGROUND_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
+RTT_BACKGROUND_SHAPES = (('thb', (('nz',), ('nz', 'ny', 'nx'))), ('thp', (('nz', 'ny', 'nx'),)), ('p', (('nz', 'ny', 'nx'),)), ('phb', (('nz+1',), ('nz+1', 'ny', 'nx'))), ('php', (('nz+1', 'ny', 'nx'),)), ('theta', (('nz', 'ny', 'nx'),)), ('p_hpa', (('nz', 'ny', 'nx'),)), ('h_agl', (('nz', 'ny', 'nx'),)))
+RTT_BACKGROUND_PARAM_FIELDS = [('g', 'ctypes.c_float'), ('thb_full', 'ctypes.c_int32'), ('phb_full', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_BACKGROUND_THREADS_PER_GROUP = 128
+RTT_BACKGROUND_LAYOUT_HASH = '50acdc993bdbdd11d284ee92c4b3c004b51715b4a94db66de4147de9ed858e96'
+RTT_BACKGROUND_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_ADAPT_RESOURCES = (('z_obs', 'float', 'read'), ('z_mask', 'int32', 'read'), ('z0_mask', 'int32', 'read'), ('ref', 'float', 'read_write'))
+RTT_ADAPT_ACCESS = ('read', 'read', 'read', 'read_write')
+RTT_ADAPT_SHAPES = (('z_obs', (('nz', 'ny', 'nx'),)), ('z_mask', (('nz', 'ny', 'nx'),)), ('z0_mask', (('nz', 'ny', 'nx'),)), ('ref', (('nz', 'ny', 'nx'),)))
+RTT_ADAPT_PARAM_FIELDS = [('has_clear', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_ADAPT_THREADS_PER_GROUP = 128
+RTT_ADAPT_LAYOUT_HASH = 'ac9757ad7d7e9f1f5ca3677202a15db95845c3c8bcb2df57c8df3d682f78d451'
+RTT_ADAPT_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_PBL_HEIGHT_RESOURCES = (('q', 'float', 'read'), ('t', 'float', 'read'), ('pblh', 'float', 'read_write'))
+RTT_PBL_HEIGHT_ACCESS = ('read', 'read', 'read_write')
+RTT_PBL_HEIGHT_SHAPES = (('q', (('nz', 'ny', 'nx'),)), ('t', (('nz', 'ny', 'nx'),)), ('pblh', (('ny', 'nx'),)))
+RTT_PBL_HEIGHT_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_PBL_HEIGHT_THREADS_PER_GROUP = 128
+RTT_PBL_HEIGHT_LAYOUT_HASH = '39c00ad559e7503ef54465bf6932980fb1af789864a0773515d5e96a00b19822'
+RTT_PBL_HEIGHT_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_CONE_FILL_RESOURCES = (('ref', 'float', 'read_write'), ('h', 'float', 'read'), ('pblh', 'float', 'read'), ('levels', 'float64_bits', 'read'), ('profiles', 'float64_bits', 'read'))
+RTT_CONE_FILL_ACCESS = ('read_write', 'read', 'read', 'read', 'read')
+RTT_CONE_FILL_SHAPES = (('ref', (('nz', 'ny', 'nx'),)), ('h', (('nz', 'ny', 'nx'),)), ('pblh', (('ny', 'nx'),)), ('levels', ((31,),)), ('profiles', ((6, 31),)))
+RTT_CONE_FILL_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_CONE_FILL_THREADS_PER_GROUP = 128
+RTT_CONE_FILL_LAYOUT_HASH = '00d844b6b9cccd15a18ef7fecdbce53e4717c10cdfa3b52f10ea8d5b443ad1e2'
+RTT_CONE_FILL_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_PROBABLE_CONVECTION_RESOURCES = (('ref', 'float', 'read'), ('p', 'float', 'read'), ('t', 'float', 'read'), ('probable', 'int32', 'read_write'), ('dp', 'float64_bits', 'read'))
+RTT_PROBABLE_CONVECTION_ACCESS = ('read', 'read', 'read', 'read_write', 'read')
+RTT_PROBABLE_CONVECTION_SHAPES = (('ref', (('nz', 'ny', 'nx'),)), ('p', (('nz', 'ny', 'nx'),)), ('t', (('nz', 'ny', 'nx'),)), ('probable', (('ny', 'nx'),)), ('dp', ((4,),)))
+RTT_PROBABLE_CONVECTION_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_PROBABLE_CONVECTION_THREADS_PER_GROUP = 128
+RTT_PROBABLE_CONVECTION_LAYOUT_HASH = '6cc3e4b5d018e5baf468ecaddafb95f0ebcb55c9764e8bd982ad857facad2e3c'
+RTT_PROBABLE_CONVECTION_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_TENDENCY_RESOURCES = (('ref', 'float', 'read'), ('p', 'float', 'read'), ('t', 'float', 'read'), ('pblh', 'float', 'read'), ('tten', 'float64_bits', 'read_write'), ('dp', 'float64_bits', 'read'))
+RTT_TENDENCY_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read')
+RTT_TENDENCY_SHAPES = (('ref', (('nz', 'ny', 'nx'),)), ('p', (('nz', 'ny', 'nx'),)), ('t', (('nz', 'ny', 'nx'),)), ('pblh', (('ny', 'nx'),)), ('tten', (('nz', 'ny', 'nx'),)), ('dp', ((12,),)))
+RTT_TENDENCY_PARAM_FIELDS = [('krad_bot_in', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_TENDENCY_THREADS_PER_GROUP = 128
+RTT_TENDENCY_LAYOUT_HASH = '30ef5f50fe5142bd5e63d37dc730715af42557380052317127914d6a42b89ee5'
+RTT_TENDENCY_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_SMOOTH_INTERIOR_RESOURCES = (('src', 'float64_bits', 'read'), ('dst', 'float64_bits', 'read_write'), ('dp', 'float64_bits', 'read'))
+RTT_SMOOTH_INTERIOR_ACCESS = ('read', 'read_write', 'read')
+RTT_SMOOTH_INTERIOR_SHAPES = (('src', (('nz', 'ny', 'nx'),)), ('dst', (('nz', 'ny', 'nx'),)), ('dp', ((3,),)))
+RTT_SMOOTH_INTERIOR_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_SMOOTH_INTERIOR_THREADS_PER_GROUP = 128
+RTT_SMOOTH_INTERIOR_LAYOUT_HASH = '1aaa0ed9609194c3a12784fc9fad78e8c44a58b8ea2b1104021319737473ceae'
+RTT_SMOOTH_INTERIOR_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_SMOOTH_EDGES_RESOURCES = (('field', 'float64_bits', 'read_write'), ('dp', 'float64_bits', 'read'))
+RTT_SMOOTH_EDGES_ACCESS = ('read_write', 'read')
+RTT_SMOOTH_EDGES_SHAPES = (('field', (('nz', 'ny', 'nx'),)), ('dp', ((2,),)))
+RTT_SMOOTH_EDGES_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_SMOOTH_EDGES_THREADS_PER_GROUP = 128
+RTT_SMOOTH_EDGES_LAYOUT_HASH = '6925d21e9463edd84894a1e87a79c4290cc97cd643c09b0c75cc7afdd7d4efe4'
+RTT_SMOOTH_EDGES_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_STORE_RESOURCES = (('tten', 'float64_bits', 'read'), ('ref', 'float', 'read'), ('ges', 'float', 'read_write'))
+RTT_STORE_ACCESS = ('read', 'read', 'read_write')
+RTT_STORE_SHAPES = (('tten', (('nz', 'ny', 'nx'),)), ('ref', (('nz', 'ny', 'nx'),)), ('ges', (('nz', 'ny', 'nx'),)))
+RTT_STORE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_STORE_THREADS_PER_GROUP = 128
+RTT_STORE_LAYOUT_HASH = 'db6d53597d28c0d2906435ac37c8c2d52e6f492f3fe63ac73fbc75c0bbda1e20'
+RTT_STORE_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_COLUMN_FLAG_RESOURCES = (('tten', 'float64_bits', 'read'), ('ref', 'float', 'read'), ('p', 'float', 'read'), ('pblh', 'float', 'read'), ('probable', 'int32', 'read'), ('ges', 'float', 'read_write'), ('dp', 'float64_bits', 'read'))
+RTT_COLUMN_FLAG_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read')
+RTT_COLUMN_FLAG_SHAPES = (('tten', (('nz', 'ny', 'nx'),)), ('ref', (('nz', 'ny', 'nx'),)), ('p', (('nz', 'ny', 'nx'),)), ('pblh', (('ny', 'nx'),)), ('probable', (('ny', 'nx'),)), ('ges', (('nz', 'ny', 'nx'),)), ('dp', ((2,),)))
+RTT_COLUMN_FLAG_PARAM_FIELDS = [('krad_bot_in', 'ctypes.c_float'), ('convection_only', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_COLUMN_FLAG_THREADS_PER_GROUP = 128
+RTT_COLUMN_FLAG_LAYOUT_HASH = 'ef821ede9f8299a05a6116a5e690b590652f88371ec91859df281e4626c82e56'
+RTT_COLUMN_FLAG_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_VINTERP_RESOURCES = (('mosaic', 'float', 'read'), ('h_agl', 'float', 'read'), ('terrain', 'float', 'read'), ('levels', 'float64_bits', 'read'), ('ref', 'float', 'read_write'))
+RTT_VINTERP_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
+RTT_VINTERP_SHAPES = (('mosaic', (('nlevels', 'ny', 'nx'),)), ('h_agl', (('nz', 'ny', 'nx'),)), ('terrain', (('ny', 'nx'),)), ('levels', (('any_1d',),)), ('ref', (('nz', 'ny', 'nx'),)))
+RTT_VINTERP_PARAM_FIELDS = [('nlevels', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_VINTERP_THREADS_PER_GROUP = 128
+RTT_VINTERP_LAYOUT_HASH = 'f7562b5341b1e4ec6cf95da2374288868a1eb078c87620e79d7276196bdd579f'
+RTT_VINTERP_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_VINTERP_EDGES_RESOURCES = (('ref', 'float', 'read_write'),)
+RTT_VINTERP_EDGES_ACCESS = ('read_write',)
+RTT_VINTERP_EDGES_SHAPES = (('ref', (('nz', 'ny', 'nx'),)),)
+RTT_VINTERP_EDGES_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_VINTERP_EDGES_THREADS_PER_GROUP = 128
+RTT_VINTERP_EDGES_LAYOUT_HASH = '5f19b319d94edba0f2b148824db47aadb76e4d2098551e0ff39e764191bf83d0'
+RTT_VINTERP_EDGES_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
+
+RTT_APPLY_RESOURCES = (('thp', 'float', 'read_write'), ('thp_before', 'float', 'read'), ('slot', 'float', 'read'))
+RTT_APPLY_ACCESS = ('read_write', 'read', 'read')
+RTT_APPLY_SHAPES = (('thp', (('nz', 'ny', 'nx'),)), ('thp_before', (('nz', 'ny', 'nx'),)), ('slot', (('nz', 'ny', 'nx'),)))
+RTT_APPLY_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('ring', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+RTT_APPLY_THREADS_PER_GROUP = 128
+RTT_APPLY_LAYOUT_HASH = '67e65bb1f1095a037b862a5796a1a079385a2e2784b9b891e84b357faeb0aefe'
+RTT_APPLY_SHADER_HASH = '22b94a85ba89b180e1f49d4ea33e5fc269302cd5ac109b0bda5aa359874a637a'
