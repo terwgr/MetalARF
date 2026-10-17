@@ -4869,6 +4869,7 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
                 hierarchy=lambda: hierarchy(observe_stage=False),
                 config_path=config_path, forecast_dir=forecast_dir,
                 observer=observer, devices=plan.run_options.get("devices"),
+                state_backend=plan.run_options.get("state_backend"),
                 prepare_only=prepare_only)
             if beside is not None:
                 beside.result()
@@ -4882,7 +4883,8 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
         _hrrr_tree_forecast(
             tree_root=tree_root, config_path=config_path,
             forecast_dir=forecast_dir, observer=observer,
-            devices=plan.run_options.get("devices"))
+            devices=plan.run_options.get("devices"),
+            state_backend=plan.run_options.get("state_backend"))
         return _chain_render(plan, forecast_dir=forecast_dir,
                             run_dir=run_dir, observer=observer)
     else:
@@ -4895,7 +4897,8 @@ def _hrrr_chain(plan: RunPlan, *, config_path: Path, exp,
         _hrrr_tree_forecast(
             tree_root=tree_root, config_path=config_path,
             forecast_dir=forecast_dir, observer=observer,
-            devices=plan.run_options.get("devices"))
+            devices=plan.run_options.get("devices"),
+            state_backend=plan.run_options.get("state_backend"))
         return _chain_render(plan, forecast_dir=forecast_dir,
                             run_dir=run_dir, observer=observer)
 
@@ -5286,6 +5289,7 @@ def _hrrr_single_chain(*, prep_root: Path, preparation, forecast_dir: Path,
 def _hrrr_tree_chain(*, prep_root: Path, tree_root: Path, preparation,
                      hierarchy, config_path: Path, forecast_dir: Path,
                      observer: RunObserver, devices: int | None = None,
+                     state_backend: str | None = None,
                      prepare_only: bool = False):
     """Run the native HRRR root preparation and hierarchy beside a forecast.
 
@@ -5384,7 +5388,8 @@ def _hrrr_tree_chain(*, prep_root: Path, tree_root: Path, preparation,
             return head_sha256
         _hrrr_tree_forecast(tree_root=tree_root, config_path=config_path,
                             forecast_dir=forecast_dir, observer=observer,
-                            head_sha256=head_sha256, devices=devices)
+                            head_sha256=head_sha256, devices=devices,
+                            state_backend=state_backend)
         return head_sha256
 
     return run_chained(prepared_root=tree_root, prepare=tree_preparation,
@@ -5522,7 +5527,8 @@ def _hrrr_tree_forecast(*, tree_root: Path, config_path: Path,
                         forecast_dir: Path,
                         observer: RunObserver,
                         head_sha256: str | None = None,
-                        devices: int | None = None) -> None:
+                        devices: int | None = None,
+                        state_backend: str | None = None) -> None:
     """The same tree runner the GFS tree route drives.
 
     The relay is the same shape too -- one preparation-receipt digest
@@ -5570,6 +5576,8 @@ def _hrrr_tree_forecast(*, tree_root: Path, config_path: Path,
         # user's config already carries to the runner (the reason [tiles]
         # needs no flag above), so it is relayed as the count alone.
         *([] if devices is None else ["--devices", str(int(devices))]),
+        *([] if state_backend is None
+          else ["--state-backend", str(state_backend)]),
         "--io-mode", "history", "--outdir", str(forecast_dir),
     ]
     observer.enter_stage("forecast", phase="forecast")
@@ -7235,6 +7243,10 @@ def execute_plan(plan: RunPlan, *, events: EventStream) -> int:
         # it resolves the plan and stops before any device work, so it
         # is exactly the thing a reader with no runtime should be able
         # to run.
+        if plan.run_options.get("state_backend") is not None:
+            # The plan's own choice reaches every stage this run starts,
+            # as woof go --backend does.
+            os.environ["WOOF_STATE_BACKEND"] = plan.run_options["state_backend"]
         if not plan.run_options.get("dry_run"):
             if os.environ.get("WOOF_STATE_BACKEND") == "metal":
                 from woof.metal.bundle_integrity import verify_metal_bundle
@@ -9254,9 +9266,12 @@ def probe_environment(*, readiness: bool = True) -> dict[str, Any]:
             # The requirements a RUN needs are asked here directly, by
             # the same registry the run's own front door refuses with,
             # so the two cannot disagree.
-            unmet = capabilities.unmet_run_requirements()
+            backend = os.environ.get("WOOF_STATE_BACKEND") or (
+                "metal" if capabilities.apple_silicon() else "cuda")
+            unmet = capabilities.unmet_run_requirements(backend)
             document["readiness"] = {
                 "collected": True,
+                "backend": backend,
                 "checks": [dataclasses.asdict(check)
                            if dataclasses.is_dataclass(check)
                            else dict(check.__dict__) for check in checks],

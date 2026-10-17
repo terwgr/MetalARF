@@ -37,6 +37,7 @@ Three properties are essential, and each has a test:
 from __future__ import annotations
 
 import importlib.util
+import platform
 import re
 import sys
 from dataclasses import dataclass
@@ -116,6 +117,31 @@ GPU_RUNTIME_REMEDY = (
     "  #   pip install 'recast-woof[gpu-cu13]'\n"
     "  # `woof doctor` reads the major off the driver, names\n"
     "  # the matching extra, and checks the runtime estate.")
+
+#: What a CUDA door says on an Apple Silicon host instead of the CuPy
+#: install line, which cannot work there.
+METAL_ALTERNATIVE = (
+    "  CUDA does not run on this Mac; most commands take --backend metal\n"
+    "  (docs/public/BACKENDS.md lists them), for example:\n"
+    "  remedy: woof go CONFIG --backend metal\n"
+    "  #   or: woof prep ... --state-backend metal, then woof sim")
+
+
+def apple_silicon() -> bool:
+    """Whether this host is an Apple Silicon Mac, where only Metal runs."""
+
+    return sys.platform == "darwin" and platform.machine().lower() == "arm64"
+
+
+#: What a CUDA door says on an Apple Silicon host when the command has
+#: no Metal route.
+NO_METAL_ROUTE = "  CUDA does not run on this Mac; this command has no Metal route.\n"
+
+#: The front doors that take ``--backend metal``; only these point the
+#: reader at it.
+METAL_DOORS = frozenset(
+    ("woof go", "woof ensemble", "woof sim", "woof verify"))
+
 
 GPU_RUNTIME = Requirement(
     module="cupy",
@@ -527,7 +553,13 @@ def refusal(door: str, requirement: Requirement, *,
               f"  What needs it: {requirement.unlocks}.\n")
     if before:
         action += f"  {before}\n"
-    action += requirement.remedy
+    if requirement is GPU_RUNTIME and apple_silicon():
+        # No CUDA wheel exists for this host, so the install line would
+        # send the reader somewhere that cannot work.
+        action += (METAL_ALTERNATIVE if door in METAL_DOORS
+                   else NO_METAL_ROUTE)
+    else:
+        action += requirement.remedy
     return layered(action, _WHY.format(
         module=requirement.module,
         distribution=requirement.distribution,
@@ -613,6 +645,13 @@ COMMAND_REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
     # failure this table was added to close, re-opened by a new door.
     "sim": (GPU_RUNTIME,),
     "verify": (GPU_RUNTIME,),
+    # Each of these integrates the model only through CUDA, so without a
+    # row a Mac failed at a CuPy import after writing its run directory
+    # (branch) or reading the parent archive (downscale).  `stream` asks
+    # in its production backend instead, for the reason given above.
+    "branch": (GPU_RUNTIME,),
+    "downscale": (GPU_RUNTIME,),
+    "warm-kernels": (GPU_RUNTIME,),
 }
 
 #: What each command would have spent before the old failure point.
@@ -631,6 +670,10 @@ _BEFORE = {
     "sim": ("Refusing here, before the prepared tree is opened and its "
             "identity recomputed."),
     "verify": "Refusing here, before the case allocates anything.",
+    "branch": "Refusing here, before the branched run directory is written.",
+    "downscale": ("Refusing here, before the parent archive is read and "
+                  "the child domain prepared."),
+    "warm-kernels": "Refusing here, before a kernel is compiled.",
 }
 
 
@@ -648,23 +691,27 @@ def require_for_command(command: str) -> None:
     require(f"woof {command}", *requirements, before=_BEFORE.get(command))
 
 
-def unmet_run_requirements() -> tuple[Requirement, ...]:
+def unmet_run_requirements(backend: str = "cuda") -> tuple[Requirement, ...]:
     """Every gap that stops this install from executing a model run.
 
     The readiness half of ``woof run-plan --probe`` reads this, so that
     document cannot report ``"ready": true`` on an install whose very
-    next step would refuse.
+    next step would refuse.  A Metal run needs no module from this
+    registry; doctor's Metal runtime check answers for it.
     """
 
+    if backend == "metal":
+        return ()
     unmet = missing((GPU_RUNTIME,))
     if not unmet and outdated_gpu_runtime() is not None:
         return (GPU_RUNTIME,)
     return unmet
 
 
-__all__ = ["CapabilityMissing", "COMMAND_REQUIREMENTS", "COMPANION_DATA",
+__all__ = ["apple_silicon", "CapabilityMissing", "COMMAND_REQUIREMENTS", "COMPANION_DATA",
            "GPU_RUNTIME", "GPU_RUNTIME_MINIMUM",
-           "GPU_RUNTIME_REMEDY", "gpu_runtime_floor_refusal",
+           "GPU_RUNTIME_REMEDY", "gpu_runtime_floor_refusal", "METAL_ALTERNATIVE",
+           "METAL_DOORS", "NO_METAL_ROUTE",
            "installed_cupy_version", "outdated_gpu_runtime", "PILLOW", "PYPROJ", "RASTERIO",
            "REQUIREMENTS", "Requirement", "SCIENCE_CORE", "SCIPY",
            "SHAPEFILE_READER", "is_installed", "missing",

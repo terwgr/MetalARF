@@ -1236,7 +1236,12 @@ class ProductionBackend:
         return self._engine
 
     def preflight_fetch(self, _plan: StreamPlan) -> None:
-        """Resolve and probe the required Rust fetcher before a long wait."""
+        """Refuse an install that cannot integrate the cycles, then resolve
+        and probe the required Rust fetcher, both before a long wait."""
+        from woof import capabilities
+        capabilities.require(
+            "woof stream", capabilities.GPU_RUNTIME,
+            before="Refusing here, before any cycle is fetched or prepared.")
         self._ensure_fetch_engine()
 
     def fetch_prefix(self, plan: StreamPlan, cycle: datetime, lead: int,

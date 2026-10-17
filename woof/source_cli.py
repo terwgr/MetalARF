@@ -2911,7 +2911,8 @@ def dispatch(args: argparse.Namespace, *,
               file=sys.stderr)
         return EXIT_USAGE
     if args.state_backend is not None and args.source != "gfs":
-        print("--state-backend is currently exposed only by --source gfs",
+        print("--state-backend is currently exposed only by --source gfs; "
+              "any prepared bundle runs on Metal with woof sim --backend metal",
               file=sys.stderr)
         return EXIT_USAGE
     if args.dry_run and (

@@ -835,12 +835,18 @@ def _dispatch_argv(argv: list[str] | None = None) -> int:
              and (getattr(args, "dry_run", False)
                   or getattr(args, "readiness", False)))
             or (args.command == "sim"
-                and getattr(args, "print_command", False)))
-        metal_prepared_sim = False
+                and getattr(args, "print_command", False))
+            or (args.command == "branch"
+                and getattr(args, "prepare_only", False))
+            or (args.command == "downscale"
+                and getattr(args, "dry_run", False)))
+        metal_prepared_sim = (args.command == "sim"
+                              and getattr(args, "backend", None) == "metal")
         metal_prepared_ensemble = (
             args.command in ("go", "ensemble")
             and getattr(args, "backend", None) == "metal")
-        if args.command == "sim" and not _spends_nothing:
+        if (args.command == "sim" and not _spends_nothing
+                and not metal_prepared_sim):
             # CUDA integrations require CuPy; a prepared Metal bundle owns
             # its backend identity and must reach the Metal runner without
             # being refused for an unrelated CUDA dependency. Resolve only

@@ -3011,6 +3011,7 @@ def run_prepared_tree(
             progress_options=progress_options, initialization=initialization,
             first_products=first_products, ensemble_bootstrap=ensemble_bootstrap,
             health_retry_products=health_retry_products,
+            state_backend=state_backend, array_module=array_module,
             **({} if schedule_dispatch is None else {"schedule_dispatch": schedule_dispatch}))
 
     if io_mode not in {"history", "none"}:

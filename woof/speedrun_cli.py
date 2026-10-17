@@ -962,6 +962,11 @@ def speedrun_main(args) -> int:
         if args.course is None:
             args._speedrun_parser.error(
                 "name a course to run, or pass --list to see them")
+        from woof import capabilities
+        capabilities.require(
+            "woof speedrun", capabilities.GPU_RUNTIME,
+            before="Refusing here, before the course's case directory is "
+                   "written.")
         return run_course(args)
     except SpeedrunRefusal as refusal:
         print(f"woof speedrun: {refusal}", file=sys.stderr)

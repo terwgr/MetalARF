@@ -1172,6 +1172,7 @@ def sim_main(args) -> int:
             progress_format=getattr(args, "progress_format", None),
             runner=getattr(args, "runner", "auto"),
             restart=getattr(args, "restart", None),
+            state_backend=getattr(args, "backend", None),
             sealed_forcing_extension=getattr(args, "sealed_forcing_extension", False),
             health_debug=getattr(args, "health_debug", False),
             render_products=getattr(args, "render_products", None),
@@ -1279,6 +1280,10 @@ def register_cli(subparsers) -> None:
                      help="a prepared tree written by `woof prep "
                           "--output-root`, by the rw-wps console script, "
                           "or by `woof go`'s preparation stage")
+    sim.add_argument("--backend", choices=("cuda", "metal"), default=None,
+                     help="state and forecast backend, as woof go "
+                          "--backend; default: the one the bundle names, "
+                          "else cuda")
     sim.add_argument("--experiment-config", type=Path, required=True,
                      metavar="TOML", dest="experiment_config",
                      help="the experiment TOML this preparation was "
