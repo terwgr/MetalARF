@@ -2068,7 +2068,16 @@ def _apply_metal(state, cfg, dt: float, *, refl_10cm_due: bool):
                        mp_tend_lim=cfg.mp_tend_lim,
                        no_mp_heating=bool(cfg.no_mp_heating))
     if refl_10cm_due:
+        from woof.core.microphysics import _metal_ring_copy, _ring_guard_slices
         from woof.core.refl import stash_refl_10cm
+        ring_slices = _ring_guard_slices(state, cfg)
+        if ring_slices is not None:
+            # The P3 kernel writes dBZ in every column; WRF's ring value
+            # is zero, as the generic ring guard pins it.
+            zero_source = state.scratch((1,), "mp_ring_zero_source")
+            for slc in ring_slices:
+                _metal_ring_copy(diagnostics["zdbz"], zero_source, slc,
+                                 direction=2)
         stash_refl_10cm(state, diagnostics["zdbz"])
     return MicrophysicsDiagnostics(
         rainnc=outputs.rainnc, rainncv=outputs.rainncv, sr=outputs.sr,
