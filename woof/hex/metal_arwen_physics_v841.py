@@ -568,6 +568,50 @@ def execute_composite_step_metal_v841(
     )
 
 
+def step_health_gate_metal_v841(stack: Mapping[str, Any], step: int) -> dict[str, Any]:
+    """Measure and gate the solved state with the resident envelope kernels."""
+    from .metal_regional_v841 import MetalSolveRegionKernels
+
+    atmosphere = stack["driver"].atmosphere
+    state, saved = atmosphere.state, atmosphere.saved
+    groups = [(name, getattr(state, name)) for name in
+              ("rho", "rho_theta", "rho_u", "rho_w", "scalars")]
+    groups += [(name, getattr(saved, name)) for name in
+               ("theta_m", "exner", "density_perturbation",
+                "rho_theta_perturbation", "pressure_perturbation",
+                "normal_velocity", "vertical_velocity")]
+    padded = {int(value) + 1: int(value)
+              for value in (stack.get("solve_cells"), stack.get("solve_edges"))
+              if value is not None}
+    fields = [(name, value, padded.get(int(value.shape[-1])))
+              for name, value in groups]
+    fields += [("qv", state.scalars[0], padded.get(int(state.scalars.shape[-1]))),
+               ("hydrometeors", state.scalars[1:],
+                padded.get(int(state.scalars.shape[-1])))]
+    measured = MetalSolveRegionKernels(state.rho.buffer.context).envelope(fields)
+    for name, (low, high, has_nan, _argmax) in measured.items():
+        if has_nan or not (math.isfinite(low) and math.isfinite(high)):
+            raise FloatingPointError(f"step {step} produced non-finite {name}")
+    for name in ("rho", "theta_m", "exner"):
+        if measured[name][0] <= 0.0:
+            raise FloatingPointError(f"step {step} {name} is not strictly positive")
+    w_low, w_high = measured["vertical_velocity"][:2]
+    w_max = max(abs(w_low), abs(w_high))
+    if w_max > 200.0:
+        raise FloatingPointError(
+            f"step {step} vertical velocity {w_max} m/s exceeds the 200 m/s refusal")
+    if measured["hydrometeors"][0] < 0.0:
+        raise FloatingPointError(f"step {step} left a negative hydrometeor")
+    return {"step": int(step), "finite": True,
+            "rho_min": measured["rho"][0],
+            "theta_m_min": measured["theta_m"][0],
+            "theta_m_max": measured["theta_m"][1],
+            "exner_min": measured["exner"][0],
+            "vertical_velocity_abs_max": w_max,
+            "qv_min": measured["qv"][0], "qv_max": measured["qv"][1],
+            "hydrometeor_min": measured["hydrometeors"][0]}
+
+
 def capture_snapshot_metal_v841(
     *,
     driver: Any,
@@ -649,6 +693,18 @@ def capture_snapshot_metal_v841(
     for name, value in arrays.items():
         if not np.isfinite(value).all():
             raise FloatingPointError(f"snapshot field {name!r} is not finite")
+    for name in ("rho", "theta", "pressure", "surface_pressure"):
+        if np.min(arrays[name]) <= 0.0:
+            raise FloatingPointError(f"snapshot {name} must be strictly positive")
+    nonnegative = (*tuple(scalar_names)[1:], "rainc",
+                   *(item.name for item in row.surface_accumulators))
+    if step > 0:
+        nonnegative += ("qv",)
+    for name in nonnegative:
+        if np.min(arrays[name]) < 0.0:
+            raise FloatingPointError(f"snapshot {name} contains negative values")
+    if np.min(arrays["smois"]) < 0.0 or np.max(arrays["smois"]) > 1.0:
+        raise FloatingPointError("snapshot soil moisture lies outside [0,1]")
     return {"arrays": arrays, "receipt": receipt}
 
 

@@ -472,6 +472,13 @@ def prepare_mpas_to_phys_metal_v841(
             dict(nlev=_i(nlev), ncells=_i(ncells), nedges=_i(nedges),
                  maxedges=_i(geometry.max_edges)),
         )
+        if regional_garbage_cell is not None:
+            # Match the lent sounding: a zero-shear garbage column can make
+            # YSU's Richardson-number calculation non-finite.
+            garbage = int(regional_garbage_cell)
+            for name in ("u_p", "v_p"):
+                _copy_column(mctx, output[name], output[name], nlev, ncells,
+                             garbage - 1, ncells, garbage)
         _launch(
             "prep_noahmp_sounding_v841_f32", ncells, mctx,
             dict(raw_qv=state.scalars, theta_m=saved.theta_m, exner=saved.exner,

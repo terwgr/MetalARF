@@ -87,6 +87,31 @@ def _start_stamp(value: datetime) -> str:
     return value.strftime("%Y-%m-%d_%H:%M:%S")
 
 
+def _restart_setup(host: Any, paths: dict[str, Path], *,
+                   local_timestep: bool, rates: Any, rings: int) -> dict[str, Any]:
+    """Bind the dynamics configuration and caller-owned static carriers."""
+    from dataclasses import asdict
+    from hashlib import sha256
+
+    def digest(path: Path) -> str:
+        result = sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                result.update(chunk)
+        return result.hexdigest()
+
+    return {
+        "config": json.loads(json.dumps(asdict(host["config"]))),
+        "physics_backend": host["physics_backend"],
+        "scalar_names": list(host["scalar_names"]),
+        "grid_sha256": digest(paths["grid"]),
+        "static_sha256": digest(paths["static"]),
+        "init_sha256": digest(paths["init"]),
+        "local_timestep": ({"rates": list(rates), "buffer_rings": int(rings)}
+                           if local_timestep else None),
+    }
+
+
 def run_metal_forecast(arguments: Any) -> int:
     """Run the registered public forecast request from an initialized MPAS file."""
     from netCDF4 import Dataset
@@ -210,10 +235,12 @@ def _run_physics(
         capture_snapshot_metal_v841,
         execute_composite_step_metal_v841,
         open_metal_physics_stack_v841,
+        step_health_gate_metal_v841,
     )
     from woof.metal.runtime import MetalContext
 
     from .checkpoint import read_checkpoint, read_checkpoint_physics, write_checkpoint
+    from . import metal_v841_launch
     from .metal_driver_v841 import MetalGfDynamicsTendenciesV841
 
     restart = getattr(arguments, "restart", None)
@@ -262,10 +289,22 @@ def _run_physics(
         pbl_cadence=pbl_cadence or "auto", local_timestep=local_timestep,
         local_timestep_rates=rates, local_timestep_buffer_rings=rings,
         lbc_paths=lbc_paths)
+    setup = _restart_setup(
+        host, paths, local_timestep=local_timestep, rates=rates, rings=rings)
+    # Older physics checkpoints predate setup binding. Keep their existing
+    # restore path, without claiming their caller-owned setup was verified.
+    restart_setup_verified = None
+    if restored_physics is not None:
+        restart_setup_verified = "setup" in restored_physics
+    if restart_setup_verified and restored_physics["setup"] != setup:
+        raise _refuse(
+            "--restart configuration or static carriers differ from the "
+            "checkpoint")
     static = runner.proof._static_output_fields(host)
     stride = history_minutes * 60 // int(row.dt_seconds)
     frames = []
-    with MetalContext() as context:
+    health = []
+    with MetalContext() as context, metal_v841_launch.preserve_post_launch():
         stack = open_metal_physics_stack_v841(
             context, host, state=restored, saved_diagnostics=restored_saved)
         driver, backend = stack["driver"], stack["backend"]
@@ -302,6 +341,7 @@ def _run_physics(
                 previous_surface_updates=previous,
                 dynamics_tendencies=forcing, refl_10cm_due=due)
             previous, forcing = result.surface_updates, result.dynamics_tendencies
+            health.append(step_health_gate_metal_v841(stack, step))
             if due:
                 snapshot = capture_snapshot_metal_v841(
                     driver=driver, backend=backend,
@@ -323,6 +363,7 @@ def _run_physics(
                 saved_diagnostics=_solve_region(
                     driver.atmosphere.saved.to_host(), n_cells, n_edges),
                 physics={
+                    "setup": setup,
                     "backend": backend.restart_state(),
                     "gf_forcing": None if forcing is None else {
                         "rthdynten": forcing.rthdynten.to_numpy(),
@@ -331,10 +372,6 @@ def _run_physics(
                     "previous_surface": {name: value.to_numpy()
                                          for name, value in previous.items()},
                 })
-        if lbc_paths is not None:
-            from . import metal_v841_launch
-
-            metal_v841_launch.POST_LAUNCH = None
     final.validate(n_cells=int(row.cells), n_edges=int(final.rho_u.shape[1]),
                    n_vert_levels=int(final.rho.shape[0]))
     receipt_path.write_text(json.dumps({
@@ -364,9 +401,11 @@ def _run_physics(
         "steps": steps,
         "first_step": first_step,
         "restart": None if restart is None else str(Path(restart).resolve()),
+        "restart_setup_verified": restart_setup_verified,
         "checkpoint": None if checkpoint is None else str(checkpoint),
         "history_every_minutes": history_minutes,
         "history": frames,
+        "step_health": health,
         "finite": True,
         "state": final.bounds_receipt(),
     }, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")

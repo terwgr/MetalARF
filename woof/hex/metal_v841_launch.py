@@ -45,6 +45,17 @@ def launch(
 
 
 @contextmanager
+def preserve_post_launch() -> Iterator[None]:
+    """Restore the caller's garbage discipline even when a forecast fails."""
+    global POST_LAUNCH
+    hook = POST_LAUNCH
+    try:
+        yield
+    finally:
+        POST_LAUNCH = hook
+
+
+@contextmanager
 def suspended() -> Iterator[None]:
     """Run the enclosed launches without the post-launch hook.
 
@@ -62,4 +73,4 @@ def suspended() -> Iterator[None]:
         POST_LAUNCH = hook
 
 
-__all__ = ["launch", "suspended"]
+__all__ = ["launch", "preserve_post_launch", "suspended"]
