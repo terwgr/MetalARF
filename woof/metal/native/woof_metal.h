@@ -10,7 +10,7 @@ extern "C" {
 
 typedef uint64_t woof_metal_handle;
 
-#define WOOF_METAL_ABI_VERSION ((1u << 16) | 7u)
+#define WOOF_METAL_ABI_VERSION ((1u << 16) | 8u)
 
 enum {
     WOOF_METAL_ALLOCATION_BACKING = 0,

@@ -28,7 +28,7 @@ _I32 = ctypes.c_int32
 _U32 = ctypes.c_uint32
 _HANDLE = _U64
 _ABI_MAJOR = 1
-_ABI_MINIMUM_MINOR = 7
+_ABI_MINIMUM_MINOR = 8
 _MAX_IN_FLIGHT_SUBMISSIONS = 64
 
 
