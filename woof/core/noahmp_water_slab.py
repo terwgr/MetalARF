@@ -66,7 +66,11 @@ consumes.
 
 from __future__ import annotations
 
-from woof.core.noahmp_slab_libm import copy_slab_slots, split_slab_slots
+from functools import partial
+
+from woof.core.noahmp_slab_libm import (copy_slab_slots, run_metal_leaf,
+                                         slab_arrays, slab_metal_context,
+                                         split_slab_slots)
 
 import numpy as np
 
@@ -147,7 +151,7 @@ def pack_water_slab(fields: dict, n: int):
     _slots_par = []
     _slots_fin = []
     _slots_iin = []
-    import cupy as cp
+    cp = slab_arrays()
 
     if n < 0:
         raise ValueError(f"WATER slab needs a non-negative width, got {n}")
@@ -217,14 +221,19 @@ def evaluate_water_slab(fields: dict, n: int) -> dict:
     ``zsnso``, ``dzsnso``, ``sh2o``, ``sice``) and every ``WaterFluxes``
     member the device row carries.  Layer axis last, as on the way in.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     from woof.core.kernels import get_kernel
 
     par, fin, iin = pack_water_slab(fields, n)
     fout = cp.zeros((n, OUT_STRIDE), dtype=cp.float32)
     iout = cp.zeros(n, dtype=cp.int32)
-    if n:
+    context = slab_metal_context()
+    if n and context is not None:
+        from woof.metal.noahmp_water_family import submit_water
+        run_metal_leaf(partial(submit_water, context), (par, fin, iin),
+                       (fout, iout))
+    elif n:
         kernel = get_kernel("noahmp_water", "k_water")
         blocks = (n + THREADS - 1) // THREADS
         # Every *input* pointer is made contiguous first.  All three are

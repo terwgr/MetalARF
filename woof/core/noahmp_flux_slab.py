@@ -43,9 +43,13 @@ caller does the selection.
 
 from __future__ import annotations
 
+from functools import partial
+
 from typing import Mapping, NamedTuple, Sequence
 
-from woof.core.noahmp_slab_libm import copy_slab_slots, split_slab_slots
+from woof.core.noahmp_slab_libm import (copy_slab_slots, run_metal_leaf,
+                                         slab_arrays, slab_metal_context,
+                                         split_slab_slots)
 
 import numpy as np
 
@@ -93,9 +97,7 @@ class VegeFluxSlabInputs(NamedTuple):
 # field access
 # --------------------------------------------------------------------------
 def _cupy():
-    import cupy as cp
-
-    return cp
+    return slab_arrays()
 
 
 def _field(fields: Mapping[str, object], name: str, leaf: str):
@@ -244,6 +246,12 @@ def evaluate_vege_flux_slab(fields: Mapping[str, object], n: int, *,
 
     packed = pack_vege_flux_slab(fields, n)
     device_out = cp.empty((n, _vege.N_OUTPUT), dtype=cp.float32)
+    context = slab_metal_context()
+    if context is not None:
+        from woof.metal.noahmp_vegeflux_family import submit_vegeflux
+        run_metal_leaf(partial(submit_vegeflux, context), packed,
+                       (device_out,))
+        return _unpack(cp, device_out, _vege.OUTPUT_NAMES)
     kernel = _vege._module(use_device_libm).get_function("k_vegeflux")
     blocks = (n + _vege.THREADS - 1) // _vege.THREADS
     kernel(
@@ -312,9 +320,17 @@ def evaluate_bare_flux_slab(fields: Mapping[str, object], n: int) -> dict:
         return {name: cp.empty(0, dtype=cp.float32)
                 for name in _bare.OUTPUT_NAMES}
 
+    inputs, ints = pack_bare_flux_slab(fields, n)
+    context = slab_metal_context()
+    if context is not None:
+        from woof.metal.noahmp_bareflux_family import submit_bare_flux
+        out = np.zeros((n, _bare.N_OUTPUT), dtype=np.float32)
+        run_metal_leaf(partial(submit_bare_flux, context), (inputs, ints),
+                       (out,))
+        return _unpack(cp, out, _bare.OUTPUT_NAMES)
+
     from woof.core.kernels import get_kernel
 
-    inputs, ints = pack_bare_flux_slab(fields, n)
     device_out = cp.empty(n * _bare.N_OUTPUT, dtype=cp.float32)
     kernel = get_kernel("noahmp_bareflux", "noahmp_bare_flux")
     blocks = (n + _bare.THREADS - 1) // _bare.THREADS

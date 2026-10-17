@@ -37,6 +37,11 @@ Measured twice at 360,000 land columns on one RTX 5090, that call costs
 process; the assembled slab is bitwise against the scalar column and against
 the staged path at every width checked.
 
+On Metal, :func:`_metal_lsm_slab` runs the same composition over host NumPy
+arrays -- binary32 statements, with the glibc transcriptions vectorised in
+:mod:`woof.core.noahmp_libm` -- and launches each leaf as the Metal kernel the
+staged path uses, so the two Metal paths are bitwise equal.
+
 The per-column seam this module grew up around is **kept, not dead**: it is
 the paired second implementation.  :func:`sflx_steps` starts one generator
 frame per column, suspends at each physical leaf call that has a device
@@ -2376,6 +2381,23 @@ def noahmp_lsm_step(
         staged.clear()
 
     land_j, land_i = np.nonzero(is_land & ~glacier)
+    if metal and os.environ.get(STAGED_COLUMNS_ENV, "") != "1":
+        # The whole-slab composition on host arrays, Metal leaves; the
+        # staged columns below stay the paired second implementation.
+        _metal_lsm_slab(
+            host, host_3d, land_j, land_i, params=params,
+            context=metal_arrays.context, vegtyp_2d=vegtyp_2d,
+            soiltyp_2d=soiltyp_2d, ficeold_3d=ficeold_3d, local={
+                "lat": latitude, "shdmax": fvgmax_2d, "uu": u, "vv": v,
+                "zlvl": z_ml_2d, "co2air": co2air_2d, "o2air": o2air_2d,
+                "dz8w": dz1, "psfc": p_int0, "sfcprs": p_ml_2d,
+                "sfctmp": temperature, "q2": q_ml_2d, "cosz": cosz,
+                **{name: precip_rates[name] for name in (
+                    "prcpconv", "prcpnonc", "prcpshcv", "prcpsnow",
+                    "prcpgrpl", "prcphail")}},
+            zsoil=zsoil, julian=julian32, yearlen=yearlen, dt=dt32f,
+            dx=dx32, foln=foln32, undefined=undefined32, nsoil=nsoil)
+        land_j = land_i = np.empty(0, dtype=np.intp)
     for j, i in zip(land_j.tolist(), land_i.tolist()):
         vegtyp = int(vegtyp_2d[j, i])
         soiltyp = (int(soiltyp_2d[j, i]),) * nsoil
@@ -2828,6 +2850,80 @@ def _lsm_step_slab(
     return census
 
 
+def _metal_lsm_slab(host, host_3d, land_j, land_i, *, params, context,
+                    vegtyp_2d, soiltyp_2d, ficeold_3d, local, zsoil, julian,
+                    yearlen, dt, dx, foln, undefined, nsoil) -> None:
+    """The ordinary land columns of one Metal ``noahmplsm`` call, as a slab.
+
+    The prologue and the carriers are the staged path's host arrays; the
+    composition is :func:`woof.core.noahmp_column_slab.evaluate_sflx_slab`
+    over NumPy binary32 arrays (the IEEE operations the CPython column
+    performs, with the glibc transcriptions vectorised) and every leaf is the
+    Metal kernel the staged path launches.  Writes ``host``/``host_3d`` in
+    place with :func:`_write_back_slab`, chunk by chunk.
+    """
+    from woof.core.noahmp_column_slab import (evaluate_sflx_slab,
+                                              parameter_fields)
+    from woof.core.noahmp_slab_libm import gather_slab_fields, metal_slab
+
+    n_land = int(land_j.size)
+    if not n_land:
+        return
+    keys, inverse = np.unique(
+        vegtyp_2d[land_j, land_i].astype(np.int64) * 1000
+        + soiltyp_2d[land_j, land_i].astype(np.int64), return_inverse=True)
+    rows = [params.slab_row(vegtyp=int(key // 1000),
+                            soiltyp=(int(key % 1000),) * nsoil,
+                            slopetype=1, soilcolor=4, nsoil=nsoil)
+            for key in keys]
+    carriers = {**host, **host_3d}
+    gather_2d = {
+        "canliq": "canliqxy", "canice": "canicexy", "sneqv": "snow",
+        "wa": "waxy", "snowh": "snowh", "tv": "tvxy", "tg": "tgxy",
+        "lwdn": "glw", "eah": "eahxy", "tah": "tahxy",
+        "sneqvo": "sneqvoxy", "albold": "alboldxy", "cm": "cmxy",
+        "ch": "chxy", "tauss": "taussxy", "qsfc": "qsfc", "tbot": "tmn",
+        "soldn": "swdown", "wslake": "wslakexy",
+    }
+    sources = {name: host[carrier] for name, carrier in gather_2d.items()}
+    sources.update(local)
+    sources.update({
+        "smc": host_3d["smois"], "sh2o": host_3d["sh2o"],
+        "zsnso": host_3d["zsnsoxy"], "snice": host_3d["snicexy"],
+        "snliq": host_3d["snliqxy"], "ficeold": ficeold_3d,
+        "_snow_temperature": host_3d["tsnoxy"],
+        "_soil_temperature": host_3d["tslb"],
+        "isnow": host["isnowxy"], "vegtyp": vegtyp_2d})
+    zsoil = np.asarray(zsoil, dtype=np.float32)
+    with metal_slab(context), np.errstate(all="ignore"):
+        for start in range(0, n_land, SLAB_COLUMN_CHUNK):
+            stop = min(start + SLAB_COLUMN_CHUNK, n_land)
+            jc, ic, m = land_j[start:stop], land_i[start:stop], stop - start
+            chunk = gather_slab_fields(jc, ic, sources, host["tsk"].shape)
+            chunk["stc"] = np.concatenate(
+                (chunk.pop("_snow_temperature"),
+                 chunk.pop("_soil_temperature")), axis=1)
+            chunk["zsoil"] = np.broadcast_to(zsoil[None, :], (m, nsoil))
+            chunk["isnow"] = chunk["isnow"].astype(np.int32)
+            chunk["vegtyp"] = chunk["vegtyp"].astype(np.int32)
+            chunk.update({
+                "acc_ssoil": np.zeros(m, dtype=np.float32),
+                "julian": np.full(m, julian, dtype=np.float32),
+                "dt": np.full(m, dt, dtype=np.float32),
+                "dx": np.full(m, dx, dtype=np.float32),
+                "foln": np.full(m, foln, dtype=np.float32),
+                "qc": np.full(m, undefined, dtype=np.float32),
+                "yearlen": np.full(m, yearlen, dtype=np.int32),
+                "ist": np.ones(m, dtype=np.int32),
+                "ice": np.zeros(m, dtype=np.int32),
+                "croptype": np.zeros(m, dtype=np.int32),
+            })
+            chunk.update(parameter_fields(rows, inverse[start:stop]))
+            out = evaluate_sflx_slab(chunk, m)
+            _write_back_slab(carriers, jc, ic, out, nsoil=nsoil,
+                             dt=np.float32(dt))
+
+
 def _write_back_slab(fields, j, i, r, *, nsoil, dt) -> None:
     """``module_sf_noahmpdrv.F:1223-1400`` on the device, for one slab chunk.
 
@@ -2841,8 +2937,10 @@ def _write_back_slab(fields, j, i, r, *, nsoil, dt) -> None:
     and the docstring of :func:`_write_back_batch` already argues why that
     contribution is the identity.
     """
-    import cupy as cp
-    from woof.core.noahmp_slab_libm import scatter_slab_fields, write_slab_arithmetic
+    from woof.core.noahmp_slab_libm import (scatter_slab_fields, slab_arrays,
+                                            write_slab_arithmetic)
+
+    cp = slab_arrays()
 
     at = (j, i)
     zero = np.float32(0.0)

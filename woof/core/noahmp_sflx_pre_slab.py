@@ -92,7 +92,9 @@ from __future__ import annotations
 
 from dataclasses import fields as dc_fields
 
-from woof.core.noahmp_slab_libm import copy_slab_slots, split_slab_slots
+from woof.core.noahmp_slab_libm import (copy_slab_slots, run_metal_leaf,
+                                         slab_arrays, slab_metal_context,
+                                         split_slab_slots)
 
 import numpy as np
 
@@ -187,7 +189,7 @@ def evaluate_sflx_pre_slab(fields: dict, n: int) -> dict:
     names, :class:`EnergyCall`'s under ``"call." + name``.
     """
     _slots_atm_x = []
-    import cupy as cp
+    cp = slab_arrays()
 
     if int(n) < 0:
         raise ValueError(f"evaluate_sflx_pre_slab: n must not be negative: {n}")
@@ -234,8 +236,14 @@ def evaluate_sflx_pre_slab(fields: dict, n: int) -> dict:
         _slots_atm_x.append((slot, x[name]))
     atm_y = cp.zeros((n, len(_batch._ATM_OUT)), dtype=cp.float32)
     copy_slab_slots(atm_x, _slots_atm_x)
-    _launch(get_kernel("noahmp_leaves", "noahmp_leaf_atm"), n,
-            (atm_x, cp.zeros((n, 1), dtype=cp.int32), atm_y, np.int32(n)))
+    metal = slab_metal_context() is not None and n > 0
+    if metal:
+        from woof.metal.noahmp_leaves_family import submit_leaf_atm
+        run_metal_leaf(submit_leaf_atm, (atm_x,), (atm_y,))
+    else:
+        _launch(get_kernel("noahmp_leaves", "noahmp_leaf_atm"), n,
+                (atm_x, cp.zeros((n, 1), dtype=cp.int32), atm_y,
+                 np.int32(n)))
     # Contiguous, not the strided column view; see the module docstring.
     atm = split_slab_slots(atm_y, {name: (slot, 1)
                                   for slot, name in enumerate(_batch._ATM_OUT)})
@@ -244,11 +252,22 @@ def evaluate_sflx_pre_slab(fields: dict, n: int) -> dict:
     dzsnso = cp.zeros((n, _NFULL), dtype=cp.float32)
     troot = cp.zeros(n, dtype=cp.float32)
     beg_wb = cp.zeros(n, dtype=cp.float32)
-    _launch(get_kernel("noahmp_sflx", "k_sflx_marshal"), n,
-            (x["zsnso"], x["stc"], x["smc"], x["zsoil"],
-             x["canliq"], x["canice"], x["sneqv"], x["wa"],
-             x["isnow"], x["nroot"], x["ist"],
-             dzsnso, troot, beg_wb, np.int32(n)))
+    marshal_in = (x["zsnso"], x["stc"], x["smc"], x["zsoil"],
+                  x["canliq"], x["canice"], x["sneqv"], x["wa"],
+                  x["isnow"], x["nroot"], x["ist"])
+    if metal:
+        from woof.metal.noahmp_sflx_family import submit_k_sflx_marshal
+
+        def marshal(zsnso, stc, smc, zsoil, canliq, canice, sneqv, wa,
+                    isnow, nroot, ist, dzsnso, troot, beg_wb):
+            submit_k_sflx_marshal(
+                zsnso=zsnso, stc=stc, smc=smc, zsoil=zsoil, canliq=canliq,
+                canice=canice, sneqv=sneqv, wa=wa, isnow=isnow, nroot=nroot,
+                ist=ist, dzsnso=dzsnso, troot=troot, beg_wb=beg_wb)
+        run_metal_leaf(marshal, marshal_in, (dzsnso, troot, beg_wb))
+    else:
+        _launch(get_kernel("noahmp_sflx", "k_sflx_marshal"), n,
+                (*marshal_in, dzsnso, troot, beg_wb, np.int32(n)))
 
     # ---- PHENOLOGY, 853-854 -----------------------------------------------
     # DVEG is not a kernel argument: noahmp_phenology transcribes the
@@ -257,13 +276,29 @@ def evaluate_sflx_pre_slab(fields: dict, n: int) -> dict:
         raise ValueError(f"the phenology kernel is not written for dveg={DVEG}")
     urban = cp.ascontiguousarray((x["urban_flag"] != 0).astype(cp.int32))
     phen = {name: cp.zeros(n, dtype=cp.float32) for name in _batch._PHEN_OUT}
-    _launch(get_kernel("noahmp_vegprecip", "noahmp_phenology"), n,
-            (np.int32(n), x["vegtyp"], x["yearlen"], x["iswater"],
-             x["isbarren"], x["isice"], urban,
-             x["snowh"], x["tv"], x["lat"], x["julian"],
-             x["hvt"], x["hvb"], x["tmin"],
-             x["laim"].ravel(), x["saim"].ravel(),
-             *(phen[name] for name in _batch._PHEN_OUT)))
+    if metal:
+        # The Metal leaf reads one packed row per column (31 floats, 6 ints).
+        from woof.metal.noahmp_vegprecip_family import submit_phenology
+        phen_x = np.concatenate(
+            [np.stack([x[name] for name in ("snowh", "tv", "lat", "julian",
+                                             "hvt", "hvb", "tmin")], axis=1),
+             x["laim"], x["saim"]], axis=1).astype(np.float32)
+        phen_ix = np.stack([x["vegtyp"], x["yearlen"], x["iswater"],
+                            x["isbarren"], x["isice"], urban],
+                           axis=1).astype(np.int32)
+        phen_y = np.zeros((n, len(_batch._PHEN_OUT)), dtype=np.float32)
+        run_metal_leaf(lambda xs, ixs, ys: submit_phenology(
+            x=xs, ix=ixs, y=ys, ncase=n), (phen_x, phen_ix), (phen_y,))
+        phen = {name: np.ascontiguousarray(phen_y[:, slot])
+                for slot, name in enumerate(_batch._PHEN_OUT)}
+    else:
+        _launch(get_kernel("noahmp_vegprecip", "noahmp_phenology"), n,
+                (np.int32(n), x["vegtyp"], x["yearlen"], x["iswater"],
+                 x["isbarren"], x["isice"], urban,
+                 x["snowh"], x["tv"], x["lat"], x["julian"],
+                 x["hvt"], x["hvb"], x["tmin"],
+                 x["laim"].ravel(), x["saim"].ravel(),
+                 *(phen[name] for name in _batch._PHEN_OUT)))
     elai, esai = phen["elai"], phen["esai"]
 
     # ---- FVEG, 857-875 ----------------------------------------------------
@@ -281,13 +316,24 @@ def evaluate_sflx_pre_slab(fields: dict, n: int) -> dict:
 
     # ---- PRECIP_HEAT, 940-946 ---------------------------------------------
     prcp = {name: cp.zeros(n, dtype=cp.float32) for name in _batch._PRCP_OUT}
-    _launch(get_kernel("noahmp_vegprecip", "noahmp_precip_heat"), n,
-            (np.int32(n), x["ist"], x["dt"], x["uu"], x["vv"],
-             elai, esai, fveg,
-             atm["bdfall"], atm["rain"], atm["snow"], atm["fp"],
-             x["canliq"], x["canice"], x["tv"], x["sfctmp"], x["tg"],
-             x["ch2op"],
-             *(prcp[name] for name in _batch._PRCP_OUT)))
+    prcp_in = (x["dt"], x["uu"], x["vv"], elai, esai, fveg,
+               atm["bdfall"], atm["rain"], atm["snow"], atm["fp"],
+               x["canliq"], x["canice"], x["tv"], x["sfctmp"], x["tg"],
+               x["ch2op"])
+    if metal:
+        # The Metal leaf reads one packed row per column (16 floats, IST).
+        from woof.metal.noahmp_vegprecip_family import submit_precip_heat
+        prcp_x = np.stack(prcp_in, axis=1).astype(np.float32)
+        prcp_y = np.zeros((n, len(_batch._PRCP_OUT)), dtype=np.float32)
+        run_metal_leaf(lambda xs, ixs, ys: submit_precip_heat(
+            x=xs, ix=ixs, y=ys, ncase=n),
+            (prcp_x, x["ist"][:, None].astype(np.int32)), (prcp_y,))
+        prcp = {name: np.ascontiguousarray(prcp_y[:, slot])
+                for slot, name in enumerate(_batch._PRCP_OUT)}
+    else:
+        _launch(get_kernel("noahmp_vegprecip", "noahmp_precip_heat"), n,
+                (np.int32(n), x["ist"], *prcp_in,
+                 *(prcp[name] for name in _batch._PRCP_OUT)))
 
     # ---- the two records, as columns --------------------------------------
     solad = cp.ascontiguousarray(

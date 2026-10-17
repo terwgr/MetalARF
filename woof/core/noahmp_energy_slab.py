@@ -72,8 +72,8 @@ import numpy as np
 
 from woof.core.noahmp_energy import (CPAIR, GRAV, HSUB, HVAP, MPE, NSNOW,
                                       NSOIL, RW, SB, TFRZ, Z0)
-from woof.core.noahmp_slab_libm import (fmn, fmx, slab_expf, slab_powf,
-                                         slab_sqrtf, slab_tanhf)
+from woof.core.noahmp_slab_libm import (fmn, fmx, slab_arrays, slab_expf,
+                                         slab_powf, slab_sqrtf, slab_tanhf)
 
 
 def _f32(value):
@@ -95,7 +95,7 @@ def _layer(sequence, k, nsnow: int = NSNOW):
 
 def _refuse_unadmitted(ice, ist):
     """``ICE != 0`` and ``IST != 1`` are refused, with the column named."""
-    import cupy as cp
+    cp = slab_arrays()
 
     bad_ice = cp.asnumpy(cp.asarray(ice) != 0)
     if bad_ice.any():
@@ -122,7 +122,7 @@ def energy_seg1(s):
     ``s`` maps the scalar generator's argument names to CuPy arrays over the
     column axis.  The returned dict is what seg2 and the THERMOPROP batch read.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     _refuse_unadmitted(s["ice"], s["ist"])
 
@@ -188,7 +188,7 @@ def energy_seg2(s, g):
 
     ``g`` is seg1's output; ``s`` is the entry state plus RADIATION's.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     fsno = g["fsno"]
 
@@ -261,7 +261,7 @@ def energy_seg3(s, g, e, v, b):
     which is exactly what the scalar path holds at this point.  ``b`` is
     BARE_FLUX's, which every land column has.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     from woof.core.noahmp_slab_libm import energy_average_slabs
 
@@ -290,7 +290,7 @@ def energy_seg4(s, g, e, out):
     comprehensions and this does it with one comparison against the layer
     ladder.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     isnow = s["isnow"]
     nlay = NSNOW + NSOIL

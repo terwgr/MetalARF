@@ -77,7 +77,11 @@ it reads the wrong words.  Two rules follow, and both are tested:
 
 from __future__ import annotations
 
-from woof.core.noahmp_slab_libm import copy_slab_slots, split_slab_slots
+from functools import partial
+
+from woof.core.noahmp_slab_libm import (copy_slab_slots, run_metal_leaf,
+                                         slab_arrays, slab_metal_context,
+                                         split_slab_slots)
 
 import numpy as np
 
@@ -311,7 +315,7 @@ def pack_thermoprop_slab(fields, n: int):
     :func:`woof.core.noahmp_thermal_gpu.pack_thermoprop_calls` writes them.
     """
     _slots_ix = []
-    import cupy as cp
+    cp = slab_arrays()
 
     _width(n, "THERMOPROP")
     x = cp.zeros((n, THERMOPROP_N_IN), dtype=cp.float32)
@@ -334,11 +338,16 @@ def evaluate_thermoprop_slab(fields, n: int) -> dict:
     ``fact``, in the order :func:`evaluate_thermoprop_calls` returns them,
     with the layer axis last.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     x, ix = pack_thermoprop_slab(fields, n)
     y = cp.zeros((n, THERMOPROP_N_OUT), dtype=cp.float32)
-    if n:
+    context = slab_metal_context()
+    if n and context is not None:
+        from woof.metal.noahmp_thermal_family import submit_thermal_thermoprop
+        run_metal_leaf(partial(submit_thermal_thermoprop, context), (x, ix),
+                       (y,))
+    elif n:
         assert y.flags.c_contiguous
         _thermoprop_kernel()(
             (_blocks(n, THERMAL_THREADS),), (THERMAL_THREADS,),
@@ -349,7 +358,7 @@ def evaluate_thermoprop_slab(fields, n: int) -> dict:
 
 def pack_tsnosoi_slab(fields, n: int):
     """``(float32[n, 42], int32[n, 5])`` for ``n`` land columns."""
-    import cupy as cp
+    cp = slab_arrays()
 
     _width(n, "TSNOSOI")
     x = cp.zeros((n, TSNOSOI_N_IN), dtype=cp.float32)
@@ -360,11 +369,16 @@ def pack_tsnosoi_slab(fields, n: int):
 
 def evaluate_tsnosoi_slab(fields, n: int) -> dict:
     """One launch of TSNOSOI over ``n`` columns; ``{"stc", "eflxb"}``."""
-    import cupy as cp
+    cp = slab_arrays()
 
     x, ix = pack_tsnosoi_slab(fields, n)
     y = cp.zeros((n, TSNOSOI_N_OUT), dtype=cp.float32)
-    if n:
+    context = slab_metal_context()
+    if n and context is not None:
+        from woof.metal.noahmp_thermal_family import submit_thermal_tsnosoi
+        run_metal_leaf(partial(submit_thermal_tsnosoi, context), (x, ix),
+                       (y,))
+    elif n:
         assert y.flags.c_contiguous
         thermal_module().get_function("noahmp_thermal_tsnosoi")(
             (_blocks(n, THERMAL_THREADS),), (THERMAL_THREADS,),
@@ -375,7 +389,7 @@ def evaluate_tsnosoi_slab(fields, n: int) -> dict:
 
 def pack_phasechange_slab(fields, n: int):
     """``(float32[n, 57], int32[n, 4])`` for ``n`` land columns."""
-    import cupy as cp
+    cp = slab_arrays()
 
     _width(n, "PHASECHANGE")
     x = cp.zeros((n, PHASECHANGE_N_IN), dtype=cp.float32)
@@ -391,11 +405,16 @@ def evaluate_phasechange_slab(fields, n: int) -> dict:
     ``imelt`` comes back ``int32``, as the per-column unpacker's
     ``.astype(np.int32)`` gives it; everything else is ``float32``.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     x, ix = pack_phasechange_slab(fields, n)
     y = cp.zeros((n, PHASECHANGE_N_OUT), dtype=cp.float32)
-    if n:
+    context = slab_metal_context()
+    if n and context is not None:
+        from woof.metal.noahmp_thermal_family import submit_thermal_phasechange
+        run_metal_leaf(partial(submit_thermal_phasechange, context), (x, ix),
+                       (y,))
+    elif n:
         assert y.flags.c_contiguous
         thermal_module().get_function("noahmp_thermal_phasechange")(
             (_blocks(n, THERMAL_THREADS),), (THERMAL_THREADS,),
@@ -411,7 +430,7 @@ def pack_radiation_slab(fields, n: int):
     module docstring for why the per-parameter-handle row cache does not
     survive the conversion.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     _width(n, "RADIATION")
     inputs = cp.zeros((n, RADIATION_N_IN), dtype=cp.float32)
@@ -431,13 +450,18 @@ def evaluate_radiation_slab(fields, n: int) -> dict:
     ``wgap``, ``albold`` and ``tauss``.  ``albsnd`` and ``albsni`` are
     ``(n, 2)`` slabs rather than per-column pairs.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     from woof.core.kernels import get_kernel
 
     inputs, ist = pack_radiation_slab(fields, n)
     out = cp.zeros((n, RADIATION_N_OUT), dtype=cp.float32)
-    if n:
+    if n and slab_metal_context() is not None:
+        from woof.metal.noahmp_radiation_family import (
+            submit_noahmp_radiation_batch)
+        run_metal_leaf(partial(submit_noahmp_radiation_batch, n=n),
+                       (inputs, ist), (out,))
+    elif n:
         assert out.flags.c_contiguous
         get_kernel("noahmp_radiation", "noahmp_radiation_batch")(
             (_blocks(n, RADIATION_THREADS),), (RADIATION_THREADS,),

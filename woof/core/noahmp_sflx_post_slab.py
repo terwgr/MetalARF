@@ -96,7 +96,8 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
-from woof.core.noahmp_slab_libm import copy_slab_slots, split_slab_slots
+from woof.core.noahmp_slab_libm import (copy_slab_slots, run_metal_leaf,
+                                         slab_metal_context, split_slab_slots)
 
 import numpy as np
 
@@ -106,7 +107,7 @@ from woof.core.noahmp_sflx import (EnergyBalanceError, NIGHT_ALBEDO,
                                     NSNOW_DEFAULT, NSOIL_DEFAULT,
                                     ShortwaveBalanceError, WaterBalanceError,
                                     _SNOW_EPS)
-from woof.core.noahmp_slab_libm import fmn, fmx, slab_fabsf
+from woof.core.noahmp_slab_libm import fmn, fmx, slab_arrays, slab_fabsf
 
 #: WRF's ``-NSNOW+1 : NSOIL`` extent, as a 0-based width.
 _NFULL = NSNOW_DEFAULT + NSOIL_DEFAULT
@@ -238,7 +239,7 @@ def sflx_post_seg1(s) -> dict:
     mutates NOAHMP_SFLX's own arrays, and the caller's ENERGY slab does not
     move underneath it.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     where = "sflx_post_seg1"
     n = _width(s, "sneqv", where)
@@ -330,7 +331,7 @@ def sflx_post_seg2(s) -> dict:
     :class:`~woof.core.noahmp_sflx.WaterBalanceError` for the slab, naming the
     first offending column, where WRF calls ``wrf_error_fatal`` for the column.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     where = "sflx_post_seg2"
     n = _width(s, "swdown", where)
@@ -459,7 +460,14 @@ def _error_slab(cp, s, n, where, *, prcp, fsh) -> dict:
     out = cp.zeros((n, len(outs)), dtype=cp.float32)
     status = cp.zeros(n, dtype=cp.int32)
     copy_slab_slots(sc, _slots_sc)
-    if n:
+    if n and slab_metal_context() is not None:
+        from woof.metal.noahmp_sflx_family import submit_k_sflx_error
+
+        def submit(sc, smc, dzsnso, ist, calc, out, status):
+            submit_k_sflx_error(sc=sc, smc=smc, dzsnso=dzsnso, ist=ist,
+                                calc=calc, out=out, status=status)
+        run_metal_leaf(submit, (sc, smc, dzsnso, ist, calc), (out, status))
+    elif n:
         # A grid of zero blocks is a CUDA configuration error, so an empty
         # tile skips the launch and still answers with well-formed arrays.
         get_kernel(_ERROR_UNIT, _ERROR_KERNEL)(

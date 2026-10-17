@@ -148,6 +148,9 @@ __all__ = [
     "sqrtf",
     "expm1f",
     "tanhf",
+    "expf_array",
+    "expm1f_array",
+    "tanhf_array",
     "log1pf",
     "log1pf_array",
 ]
@@ -1008,6 +1011,145 @@ def tanhf(x) -> np.float32:
         z = F(one - _EXPM1F_TINY)
     return z if jx >= 0 else F(-z)
 
+
+
+# ---------------------------------------------------------------------------
+# expf / expm1f / tanhf over arrays.  The same binary64, binary32 and integer
+# operations as the scalar routines above, one masked branch at a time, for
+# the whole-slab Noah-MP composition on a host.  Elements outside the ranges
+# written out here (overflow, NaN) go through the scalar routine itself.
+# ---------------------------------------------------------------------------
+
+def _scalar_rest(function, flat, out, rest) -> None:
+    for position in np.flatnonzero(rest):
+        out[position] = function(flat[position])
+
+
+def expf_array(x) -> np.ndarray:
+    """:func:`expf` elementwise over a float32 array, the same bits."""
+    x = np.ascontiguousarray(x, dtype=np.float32)
+    out = np.empty_like(x)
+    flat, flat_out = x.reshape(-1), out.reshape(-1)
+    abstop = (flat.view(np.uint32) >> np.uint32(20)) & np.uint32(0x7FF)
+    special = abstop >= np.uint32(_asuint(F(88.0)) >> 20)
+    with np.errstate(over="ignore", invalid="ignore"):
+        z = _EXP2F_INVLN2_SCALED * flat.astype(np.float64)
+        shifted = z + _EXP2F_SHIFT
+        ki = shifted.view(np.uint64)
+        r = z - (shifted - _EXP2F_SHIFT)
+        t = (_EXP2F_TAB_U64[ki & np.uint64(_EXP2F_N - 1)]
+             + (ki << np.uint64(47)))
+        s = t.view(np.float64)
+        p0, p1, p2 = _EXP2F_POLY_SCALED
+        y = (p0 * r + p1) * (r * r) + (p2 * r + 1.0)
+        flat_out[...] = (y * s).astype(np.float32)
+    _scalar_rest(expf, flat, flat_out, special)
+    return out
+
+
+def _with_exponent(y, k):
+    """``asfloat(asuint(y) + (k << 23))`` with 32-bit wraparound."""
+    bits = (y.view(np.uint32).astype(np.int64) + (k.astype(np.int64) << 23))
+    return (bits & _U32).astype(np.uint32).view(np.float32)
+
+
+def expm1f_array(x) -> np.ndarray:
+    """:func:`expm1f` elementwise over a float32 array, the same bits."""
+    x = np.ascontiguousarray(x, dtype=np.float32)
+    out = np.empty_like(x)
+    flat, flat_out = x.reshape(-1), out.reshape(-1)
+    one = _EXPM1F_ONE
+    bits = flat.view(np.uint32)
+    negative = (bits & np.uint32(0x80000000)) != 0
+    hx = bits & np.uint32(0x7FFFFFFF)
+    special = hx >= np.uint32(0x42B17218)
+    saturated = ~special & (hx >= np.uint32(0x4195B844)) & negative
+    reduced = ~special & ~saturated & (hx > np.uint32(0x3EB17218))
+    tiny = ~special & ~saturated & ~reduced & (hx < np.uint32(0x33000000))
+    with np.errstate(all="ignore"):
+        near = reduced & (hx < np.uint32(0x3F851592))
+        half = np.where(negative, F(-0.5), F(0.5))
+        k_far = np.trunc((F(_EXPM1F_INVLN2) * flat) + half).astype(np.int32)
+        k = np.where(near, np.where(negative, -1, 1), k_far).astype(np.int32)
+        k = np.where(reduced, k, 0).astype(np.int32)
+        t = k.astype(np.float32)
+        hi = np.where(near, np.where(negative, flat + _EXPM1F_LN2_HI,
+                                     flat - _EXPM1F_LN2_HI),
+                      flat - t * _EXPM1F_LN2_HI)
+        lo = np.where(near, np.where(negative, F(-_EXPM1F_LN2_LO),
+                                     _EXPM1F_LN2_LO),
+                      t * _EXPM1F_LN2_LO)
+        xr = np.where(reduced, hi - lo, flat)
+        c = np.where(reduced, (hi - xr) - lo, F(0.0))
+
+        hfx = F(0.5) * xr
+        hxs = xr * hfx
+        q1, q2, q3, q4, q5 = _EXPM1F_Q
+        r1 = hxs * q5
+        r1 = hxs * (q4 + r1)
+        r1 = hxs * (q3 + r1)
+        r1 = hxs * (q2 + r1)
+        r1 = hxs * (q1 + r1)
+        r1 = one + r1
+        tt = F(3.0) - r1 * hfx
+        e = hxs * ((r1 - tt) / (F(6.0) - xr * tt))
+        answer = xr - (xr * e - hxs)                         # k == 0
+
+        e = (xr * (e - c)) - c
+        e = e - hxs
+        answer = np.where(k == -1, (F(0.5) * (xr - e)) - F(0.5), answer)
+        k_one = np.where(xr < F(-0.25), F(-2.0) * (e - (xr + F(0.5))),
+                         one + F(2.0) * (xr - e))
+        answer = np.where(k == 1, k_one, answer)
+        wide = (k <= -2) | (k > 56)
+        y = one - (e - xr)
+        answer = np.where(wide, _with_exponent(y, k) - one, answer)
+        low = (k >= 2) & (k < 23)
+        shift = (np.int64(0x1000000) >> np.clip(k, 0, 63).astype(np.int64))
+        t_low = (np.int64(0x3F800000) - shift).astype(np.uint32).view(
+            np.float32)
+        answer = np.where(low, _with_exponent(t_low - (e - xr), k), answer)
+        high = (k >= 23) & (k <= 56)
+        t_high = (((np.int64(0x7F) - k.astype(np.int64)) << 23) & _U32
+                  ).astype(np.uint32).view(np.float32)
+        answer = np.where(high, _with_exponent((xr - (e + t_high)) + one, k),
+                          answer)
+
+        big = _EXPM1F_HUGE + flat
+        answer = np.where(tiny, flat - ((_EXPM1F_HUGE + flat) - big), answer)
+        answer = np.where(saturated, _EXPM1F_TINY - one, answer)
+        flat_out[...] = answer
+    _scalar_rest(expm1f, flat, flat_out, special)
+    return out
+
+
+def tanhf_array(x) -> np.ndarray:
+    """:func:`tanhf` elementwise over a float32 array, the same bits."""
+    x = np.ascontiguousarray(x, dtype=np.float32)
+    out = np.empty_like(x)
+    flat, flat_out = x.reshape(-1), out.reshape(-1)
+    one = F(1.0)
+    bits = flat.view(np.uint32)
+    negative = (bits & np.uint32(0x80000000)) != 0
+    ix = bits & np.uint32(0x7FFFFFFF)
+    nonfinite = ix >= np.uint32(0x7F800000)
+    middle = ~nonfinite & (ix < np.uint32(0x41B00000))
+    tiny = middle & (ix < np.uint32(0x24000000))
+    ge_one = ix >= np.uint32(0x3F800000)
+    with np.errstate(all="ignore"):
+        ax = np.abs(flat)
+        t = expm1f_array(np.where(middle, np.where(ge_one, F(2.0) * ax,
+                                                   F(-2.0) * ax), F(0.0)))
+        z = np.where(ge_one, one - (F(2.0) / (t + F(2.0))),
+                     (-t) / (t + F(2.0)))
+        z = np.where(middle, z, one - _EXPM1F_TINY)
+        z = np.where(negative, -z, z)
+        z = np.where(tiny, flat * (one + flat), z)
+        inverse = one / flat
+        z = np.where(nonfinite, np.where(negative, inverse - one,
+                                         inverse + one), z)
+        flat_out[...] = z
+    return out
 
 # ---------------------------------------------------------------------------
 # log1pf -- glibc 2.39 sysdeps/ieee754/flt-32/s_log1pf.c, the FDLIBM routine

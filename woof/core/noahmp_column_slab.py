@@ -65,7 +65,7 @@ from __future__ import annotations
 import numpy as np
 
 from woof.core import noahmp_vegeflux_gpu as _vege
-from woof.core.noahmp_slab_libm import take_slab_rows
+from woof.core.noahmp_slab_libm import slab_arrays, take_slab_rows
 from woof.core.noahmp_energy import PINNED_OPTIONS
 from woof.core.noahmp_energy_slab import (energy_seg1, energy_seg2,
                                            energy_seg3, energy_seg4)
@@ -184,7 +184,7 @@ def parameter_fields(rows, index) -> dict:
     here is proportional to the number of parameter names and never to the
     number of columns.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     if not rows:
         raise ValueError("parameter_fields needs at least one identity row")
@@ -285,7 +285,7 @@ def evaluate_sflx_slab(fields: dict, n: int) -> dict:
     check, and the three balance aborts, each naming the first offending
     column.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     n = int(n)
     if n < 0:

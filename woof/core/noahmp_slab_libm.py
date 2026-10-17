@@ -47,10 +47,70 @@ passes, and ``__double2float_rn`` is shown still flushing the subnormals that
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import numpy as np
 
 from woof.core.noahmp_kernel_sources import (compile_runtime_unit,
                                               compile_generated_slab_kernel)
+
+#: The Metal context of a slab composed on host arrays, or ``None`` for the
+#: CuPy slab.  On Metal the composition between leaves runs as NumPy binary32
+#: statements -- the same IEEE operations the staged CPython column performs
+#: -- and each leaf launches the Metal kernel the staged path launches.
+_METAL_CONTEXT = None
+
+
+@contextmanager
+def metal_slab(context):
+    """Compose the slab on host arrays and launch its leaves on ``context``."""
+    global _METAL_CONTEXT
+    previous, _METAL_CONTEXT = _METAL_CONTEXT, context
+    try:
+        yield
+    finally:
+        _METAL_CONTEXT = previous
+
+
+def slab_metal_context():
+    """The bound Metal context, or ``None`` on the CuPy slab."""
+    return _METAL_CONTEXT
+
+
+class _HostArrays:
+    """NumPy under the CuPy spellings the slab modules use."""
+
+    def __getattr__(self, name):
+        return getattr(np, name)
+
+    @staticmethod
+    def asnumpy(value):
+        return np.asarray(value)
+
+
+_HOST_ARRAYS = _HostArrays()
+
+
+def slab_arrays():
+    """The array module of the current slab: NumPy on Metal, else CuPy."""
+    if _METAL_CONTEXT is not None:
+        return _HOST_ARRAYS
+    import cupy
+
+    return cupy
+
+
+def run_metal_leaf(submit, inputs, outputs) -> None:
+    """Upload ``inputs``, run ``submit(*inputs, *outputs)`` on the bound Metal
+    context, and copy each device output back into its host array."""
+    from woof.metal.array import MetalArrayModule
+
+    xp = MetalArrayModule(_METAL_CONTEXT)
+    device_in = [xp.asarray(np.ascontiguousarray(value)) for value in inputs]
+    device_out = [xp.asarray(value) for value in outputs]
+    submit(*device_in, *device_out)
+    for host, device in zip(outputs, device_out):
+        host[...] = device.to_numpy()
 
 #: One CUDA thread per column; these kernels are memory bound and elementwise.
 THREADS = 128
@@ -120,6 +180,9 @@ def slab_powf(x, y):
     ``y`` may be a scalar; it is broadcast to ``x``'s shape *before* the
     launch, because the kernel reads one exponent per element.
     """
+    if _METAL_CONTEXT is not None:
+        from woof.core.noahmp_libm import powf_array
+        return powf_array(x, y)
     import cupy as cp
 
     x = _contiguous(x)
@@ -134,22 +197,33 @@ def slab_powf(x, y):
 
 def slab_expf(x):
     """glibc 2.39 ``expf`` over arrays, elementwise."""
+    if _METAL_CONTEXT is not None:
+        from woof.core.noahmp_libm import expf_array
+        return expf_array(x)
     return _unary("nmp_slab_expf", x)
 
 
 def slab_logf(x):
     """glibc 2.39 ``logf`` over arrays, elementwise."""
+    if _METAL_CONTEXT is not None:
+        from woof.core.noahmp_libm import logf
+        flat = np.asarray(x, dtype=np.float32)
+        return np.array([logf(v) for v in flat.reshape(-1)],
+                        dtype=np.float32).reshape(flat.shape)
     return _unary("nmp_slab_logf", x)
 
 
 def slab_tanhf(x):
     """glibc 2.39 ``tanhf`` over arrays, elementwise."""
+    if _METAL_CONTEXT is not None:
+        from woof.core.noahmp_libm import tanhf_array
+        return tanhf_array(x)
     return _unary("nmp_slab_tanhf", x)
 
 
 def slab_sqrtf(x):
     """IEEE-754 square root: correctly rounded, so CuPy's is glibc's."""
-    import cupy as cp
+    cp = slab_arrays()
 
     return cp.sqrt(cp.asarray(x, dtype=cp.float32))
 
@@ -160,7 +234,7 @@ def fmn(a, b):
     ``a if a < b else b``.  On a tie -- including ``(-0.0, +0.0)`` -- this
     returns ``b``, which ``cupy.minimum`` does not.
     """
-    import cupy as cp
+    cp = slab_arrays()
 
     a = cp.asarray(a, dtype=cp.float32)
     b = cp.asarray(b, dtype=cp.float32)
@@ -169,7 +243,7 @@ def fmn(a, b):
 
 def fmx(a, b):
     """``woof.core.noahmp_energy._mx`` over arrays: ``a if a > b else b``."""
-    import cupy as cp
+    cp = slab_arrays()
 
     a = cp.asarray(a, dtype=cp.float32)
     b = cp.asarray(b, dtype=cp.float32)
@@ -178,7 +252,7 @@ def fmx(a, b):
 
 def slab_fabsf(x):
     """Fortran ``ABS`` on ``REAL(4)``: a sign-bit clear, ``-0.0 -> +0.0``."""
-    import cupy as cp
+    cp = slab_arrays()
 
     return cp.abs(cp.asarray(x, dtype=cp.float32))
 
@@ -204,6 +278,14 @@ def copy_slab_slots(out, blocks):
     Strides remain explicit so broadcast rows and sliced columns do not need
     temporary copies. Integer loads and stores preserve every floating bit.
     """
+    if _METAL_CONTEXT is not None:
+        for start, value in blocks:
+            value = np.asarray(value, dtype=out.dtype)
+            if value.ndim <= 1:
+                out[:, start] = value
+            else:
+                out[:, start:start + value.shape[1]] = value
+        return out
     import cupy as cp
 
     n, stride = out.shape
@@ -243,6 +325,10 @@ _SPLIT_SLOT_KERNELS = {}
 
 def split_slab_slots(matrix, specs):
     """Copy row slots to owned contiguous slabs with one integer-only launch."""
+    if _METAL_CONTEXT is not None:
+        return {name: np.ascontiguousarray(
+            matrix[:, start] if width == 1 else matrix[:, start:start + width])
+            for name, (start, width) in specs.items()}
     import cupy as cp
 
     n, stride = matrix.shape
@@ -276,6 +362,13 @@ _SCATTER_SLOT_KERNELS = {}
 
 def scatter_slab_fields(j, i, blocks):
     """Store independent land-column outputs together without floating arithmetic."""
+    if _METAL_CONTEXT is not None:
+        for target, value in blocks:
+            if target.ndim == 2:
+                target[j, i] = value
+            else:
+                target[:, j, i] = np.asarray(value).T
+        return
     import cupy as cp
 
     n = int(j.size)
@@ -325,6 +418,10 @@ _GATHER_SLOT_KERNELS = {}
 
 def gather_slab_fields(j, i, sources, grid_shape):
     """Gather known-valid grid coordinates together with integer-only transfers."""
+    if _METAL_CONTEXT is not None:
+        return {name: np.ascontiguousarray(
+            value[j, i] if value.ndim == 2 else value[:, j, i].T)
+            for name, value in sources.items()}
     import cupy as cp
 
     n = int(j.size)
@@ -370,6 +467,9 @@ _TAKE_ROW_KERNELS = {}
 
 def take_slab_rows(index, sources, n):
     """Compact a proven in-range row selection with integer-only transfers."""
+    if _METAL_CONTEXT is not None:
+        return {name: np.ascontiguousarray(np.asarray(value)[index])
+                for name, value in sources.items()}
     import cupy as cp
 
     count = int(index.size)
@@ -413,6 +513,8 @@ _WRITE_ARITHMETIC_KERNELS = {}
 
 def write_slab_arithmetic(fields, j, i, values, *, nsoil, dt):
     """Preserve the separate CuPy roundings while reducing arithmetic launches."""
+    if _METAL_CONTEXT is not None:
+        return False
     import cupy as cp
 
     outputs = ("qfx", "lh", "smstav", "smstot", "sfcrunoff", "udrunoff",
@@ -493,6 +595,8 @@ _ENERGY_AVERAGE_KERNELS = {}
 
 def energy_average_slabs(s, g, e, v, b, sb):
     """Keep each tile-average operation rounded as in the separate CuPy calls."""
+    if _METAL_CONTEXT is not None:
+        return _energy_average_host(s, g, e, v, b, sb)
     import cupy as cp
 
     spec = {
@@ -572,6 +676,8 @@ _ROOT_FRACTION_KERNELS = {}
 
 def root_fraction_slabs(s, nsnow, nsoil, mpe):
     """Accumulate root fractions in layer order with explicit FP32 rounding."""
+    if _METAL_CONTEXT is not None:
+        return _root_fractions_host(s, nsnow, nsoil, mpe)
     import cupy as cp
 
     inputs = tuple(cp.ascontiguousarray(s[name], dtype=cp.float32)
@@ -612,4 +718,87 @@ for(int layer=0;layer<NSOIL;layer++){
         _ROOT_FRACTION_KERNELS[key] = kernel
     kernel((_blocks(n),), (THREADS,),
            (*inputs, roots, np.int32(n), np.float32(mpe), total, fractions))
+    return total, fractions
+
+
+def _energy_average_host(s, g, e, v, b, sb):
+    """``noahmp_energy_average`` above as NumPy binary32 statements."""
+    f32 = np.float32
+    one_f = f32(1.0)
+    t = np.asarray(e["tile_veg"], dtype=bool)
+    f = s["fveg"]
+    one = one_f - f
+    out = {}
+    with np.errstate(all="ignore"):
+        for name, (veg, bare) in {
+                "taux": ("tauxv", "tauxb"), "tauy": ("tauyv", "tauyb"),
+                "fgev": ("evg", "evb"), "ssoil": ("ghv", "ghb"),
+                "tg": ("tgv", "tgb"), "t2m": ("t2mv", "t2mb"),
+                "cm": ("cmv", "cmb"), "ch": ("chv", "chb"),
+                "q2e": ("q2v", "q2b")}.items():
+            out[name] = np.where(t, f * v[veg] + one * b[bare], b[bare])
+        out["fira"] = np.where(t, (f * v["irg"] + one * b["irb"]) + v["irc"],
+                               b["irb"])
+        out["fsh"] = np.where(t, (f * v["shg"] + one * b["shb"]) + v["shc"],
+                              b["shb"])
+        out["fcev"] = np.where(t, v["evc"], f32(0.0))
+        out["fctr"] = np.where(t, v["tr"], f32(0.0))
+        out["pah"] = np.where(t, (f * s["pahg"] + one * s["pahb"]) + s["pahv"],
+                              s["pahb"])
+        out["ts"] = np.where(t, f * v["tv"] + one * b["tgb"], out["tg"])
+        q_veg = (v["eah"] * f32(0.622)) / (s["sfcprs"] - f32(0.378) * v["eah"])
+        out["q1"] = np.where(t, f * q_veg + one * b["qsfc"], b["qsfc"])
+        out["z0wrf"] = np.where(t, g["z0m"], g["z0mg"])
+        out["rssun"] = np.where(t, v["rssun"], f32(0.0))
+        out["rssha"] = np.where(t, v["rssha"], f32(0.0))
+        out["tgv"] = np.where(t, v["tgv"], b["tgb"])
+        out["chv"] = np.where(t, v["chv"], b["chb"])
+        fire = s["lwdn"] + out["fira"]
+        emv, emg = e["emv"], e["emg"]
+        om = one_f - emv
+        emiss = (f * ((emg * om + emv) + (emv * om) * (one_f - emg))
+                 + one * emg)
+        out["emissi"] = emiss
+        out["apar"] = s["parsun"] * s["laisun"] + s["parsha"] * s["laisha"]
+        out["psn"] = v["psnsun"] * s["laisun"] + v["psnsha"] * s["laisha"]
+        steps = f32(s["soil_update_steps"])
+        accum = s["acc_ssoil"] + out["ssoil"]
+        out["acc_ssoil"] = accum
+        out["ssoil_avg"] = accum / steps
+        out["dt_soil"] = s["dt"] * steps
+        out["_fire"] = fire
+        out["_trad_base"] = ((fire - (one_f - emiss) * s["lwdn"])
+                             / (emiss * f32(sb)))
+    return {name: np.ascontiguousarray(value, dtype=np.float32)
+            for name, value in out.items()}
+
+
+def _root_fractions_host(s, nsnow, nsoil, mpe):
+    """``noahmp_root_fractions`` above as NumPy binary32 statements."""
+    f32 = np.float32
+    mpe = f32(mpe)
+    water, wilt, ref, zsoil, dz = (np.asarray(s[name], dtype=np.float32)
+                                   for name in ("sh2o", "smcwlt", "smcref",
+                                                "zsoil", "dzsnso"))
+    roots = np.asarray(s["nroot"], dtype=np.int32)
+    n = roots.size
+    depth = -zsoil[np.arange(n), (roots - 1) % nsoil]
+    total = np.zeros(n, dtype=np.float32)
+    fractions = np.empty((n, nsoil), dtype=np.float32)
+    with np.errstate(all="ignore"):
+        for layer in range(nsoil):
+            gx = (water[:, layer] - wilt[:, layer]) / (ref[:, layer]
+                                                      - wilt[:, layer])
+            gx = np.where(f32(0.0) > gx, f32(0.0), gx)
+            gx = np.where(f32(1.0) < gx, f32(1.0), gx)
+            value = (dz[:, nsnow + layer] / depth) * gx
+            value = np.where(mpe > value, mpe, value)
+            value = np.where(roots >= layer + 1, value, f32(0.0))
+            fractions[:, layer] = value
+            total = total + value
+        total = np.where(mpe > total, mpe, total).astype(np.float32)
+        for layer in range(nsoil):
+            fractions[:, layer] = np.where(roots >= layer + 1,
+                                           fractions[:, layer] / total,
+                                           fractions[:, layer])
     return total, fractions
