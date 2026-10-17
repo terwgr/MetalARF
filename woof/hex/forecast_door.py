@@ -48,6 +48,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import time
 from typing import Any, Mapping, Sequence
@@ -1528,9 +1529,17 @@ def render_command(request: ForecastRequest, history: Sequence[Path]) -> list[st
 
 
 def history_files(out: Path) -> list[Path]:
-    """The history frames the driver wrote, in valid-time order."""
+    """The history frames the driver wrote, in valid-time order.
 
-    return sorted(Path(out).glob("cuda-history.*.nc"))
+    The CUDA driver names them by valid time, the Metal door by step.
+    """
+
+    cuda = sorted(Path(out).glob("cuda-history.*.nc"))
+    if cuda:
+        return cuda
+    # The Metal writer's exact frame name: history.<step, six digits>.nc.
+    return sorted(path for path in Path(out).glob("history.[0-9]*.nc")
+                  if re.fullmatch(r"history\.\d{6}\.nc", path.name))
 
 
 def build_receipt(
@@ -2002,7 +2011,7 @@ def add_forecast_arguments(parser: argparse.ArgumentParser) -> None:
         help="registered mesh row (src/hexcore/drivers/mpas_mesh_binding.py)")
     parser.add_argument(
         "--backend", choices=("cuda", "metal"), default="cuda",
-        help="integration backend (CUDA full forecast or the Metal Hex dycore)")
+        help="integration backend: cuda or metal (both run the full forecast)")
     parser.add_argument(
         "--grid", type=Path, default=None, metavar="FILE",
         help="the row's grid netCDF; pinned by byte count and SHA-256")
@@ -2181,9 +2190,10 @@ def add_forecast_parser(commands: Any) -> None:
              "(GPU)",
         description=(
             "Drive a forecast on a registered mesh. CUDA runs the full v8.4.1 "
-            "forecast; --backend metal runs the v8.4.1 Hex dycore on Metal "
-            "from a real MPAS init, without physics, and writes MPAS history "
-            "frames plus a receipt. Flags it does not implement are refused."
+            "forecast; --backend metal runs the same v8.4.1 dycore and "
+            "full-physics row on Metal from a real MPAS init and writes MPAS "
+            "history frames plus a receipt. Flags it does not implement are "
+            "refused."
         ),
     )
     add_forecast_arguments(parser)

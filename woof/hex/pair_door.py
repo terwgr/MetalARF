@@ -531,6 +531,17 @@ def resolve_pair_request(arguments: argparse.Namespace) -> PairRequest:
     for dest, why in OWNED_BY_THIS_DOOR.items():
         if getattr(arguments, dest, None) is not None:
             raise _refuse(why)
+    if getattr(arguments, "backend", None) == "metal":
+        raise _refuse(
+            f"--backend metal has no {SOURCE_TABLE_FLAG}, the one thing the "
+            "treatment leg adds, so a pair runs on CUDA only.  Omit --backend "
+            "metal.")
+
+    for dest, flag in (("checkpoint", "--checkpoint"), ("restart", "--restart")):
+        if getattr(arguments, dest, None) is not None:
+            raise _refuse(
+                f"{flag} is implemented by --backend metal only, and a pair runs "
+                "on CUDA only.  Omit it.")
 
     table_argument = getattr(arguments, "source_table", None)
     if table_argument is None:

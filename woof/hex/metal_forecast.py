@@ -11,6 +11,7 @@ implement is refused by name rather than dropped.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -50,8 +51,22 @@ _IMPLEMENTED = frozenset({
     "horiz_mixing", "checkpoint", "restart", "lbc_dir",
     "grid", "static", "convection", "pbl_cadence",
     "local_timestep", "local_timestep_rates", "local_timestep_buffer_rings",
-    "preflight",
+    "preflight", "preset", "stop_on_refusal",
 })
+
+# Flags that configure CUDA machinery Metal does not have, and why.
+_CUDA_ONLY = {
+    "scratch": "is the CUDA kernel cache; Metal runs its prebuilt library",
+    "gpuwm_checkout": "names the tree the CUDA seam files run from",
+    "headroom_mib": ("is a CUDA card admission term; Metal admits against "
+                     "WOOF_METAL_MEMORY_FRACTION of its working set"),
+    "device_fixed_mib": ("is a CUDA card admission term; Metal admits against "
+                         "WOOF_METAL_MEMORY_FRACTION of its working set"),
+    "device_bytes_per_cell": ("is a CUDA card admission term; Metal admits "
+                              "against WOOF_METAL_MEMORY_FRACTION of its "
+                              "working set"),
+    "local_timestep_classing": "is an instrument of the CUDA local-timestep lane",
+}
 
 
 def _refuse_unimplemented(arguments: Any, refuse: Any) -> None:
@@ -64,6 +79,9 @@ def _refuse_unimplemented(arguments: Any, refuse: Any) -> None:
         if dest in _IMPLEMENTED or not hasattr(arguments, dest):
             continue
         if getattr(arguments, dest) != action.default:
+            if dest in _CUDA_ONLY:
+                raise refuse(f"{action.option_strings[0]} {_CUDA_ONLY[dest]}; "
+                             "omit it with --backend metal")
             raise refuse(
                 f"{action.option_strings[0]} is not implemented by "
                 "--backend metal"
@@ -177,7 +195,6 @@ def run_metal_forecast(arguments: Any) -> int:
             f"--start-time {start_time} does not match the init's "
             f"{_start_stamp(valid_time)}"
         )
-    out.mkdir()
 
     # The init is a self-contained MPAS state file: it carries topology,
     # geography, static fields, and the native vertical metric contract.
@@ -188,7 +205,7 @@ def run_metal_forecast(arguments: Any) -> int:
             or actual_edges != int(binding.n_edges)):
         raise _refuse(
             f"--init has {actual_cells} cells and {actual_edges} edges, but "
-            f"mesh row {mesh_name} declares {row.cells} cells and "
+            f"mesh row {mesh_name} declares {binding.n_cells} cells and "
             f"{binding.n_edges} edges"
         )
     horiz_mixing = str(getattr(arguments, "horiz_mixing", "2d_smagorinsky"))
@@ -269,7 +286,9 @@ def _run_physics(
     import importlib
 
     from .forecast_door import _parse_rates, _refuse
-    from .metal_driver_lts import attach_local_timestep_metal
+    from .metal_driver_lts import (
+        attach_local_timestep_metal, detach_local_timestep_metal,
+    )
     from .metal_arwen_physics_v841 import (
         capture_snapshot_metal_v841,
         execute_composite_step_metal_v841,
@@ -282,6 +301,7 @@ def _run_physics(
     from . import metal_v841_launch
     from .metal_driver_v841 import MetalGfDynamicsTendenciesV841
 
+    stride = history_minutes * 60 // int(row.dt_seconds)
     restart = getattr(arguments, "restart", None)
     restored = restored_saved = restored_physics = None
     first_step = 0
@@ -292,12 +312,23 @@ def _run_physics(
             raise _refuse(
                 f"--restart {restart} carries no physics state; a physics run "
                 "restarts only from a physics checkpoint")
+        if "setup" not in restored_physics:
+            raise _refuse(
+                f"--restart {restart} records no setup binding, so its grid, "
+                "static and configuration cannot be checked; write the "
+                "checkpoint again with --checkpoint")
         elapsed = float(restored.time_seconds)
         first_step = int(round(elapsed / float(row.dt_seconds)))
         if first_step * float(row.dt_seconds) != elapsed:
             raise _refuse(
                 f"--restart {restart} time {elapsed} s is not a whole number "
                 f"of {row.dt_seconds:.0f} s steps")
+        if first_step % stride:
+            raise _refuse(
+                f"--restart {restart} is at step {first_step}, which is not a "
+                f"multiple of the {stride}-step history stride; history frames "
+                "fall on an absolute step grid, so restart from a checkpoint "
+                "taken at a history time")
     paths = {"init": init}
     for flag, dest in (("--grid", "grid"), ("--static", "static")):
         value = getattr(arguments, dest, None)
@@ -308,7 +339,17 @@ def _run_physics(
         paths[dest] = Path(value).expanduser().resolve(strict=True)
     runner = importlib.import_module("woof.hex.drivers.run_cuda_v841_forecast")
     convection = str(getattr(arguments, "convection", "auto") or "auto")
+    # The preset resolves into the surface/PBL cadence, as on CUDA; an
+    # explicit --pbl-cadence wins.
+    from . import forecast_preset
+    from .errors import ConfigurationRefusal
+    try:
+        preset = forecast_preset.resolve_preset(getattr(arguments, "preset", None))
+    except ConfigurationRefusal as error:
+        raise _refuse(str(error)) from None
     pbl_cadence = getattr(arguments, "pbl_cadence", None)
+    if pbl_cadence is None:
+        pbl_cadence = forecast_preset.pbl_cadence_request(preset, row.dt_seconds)
     try:
         binding_module.bind_mesh(
             runner.proof, mesh_name, grid=paths["grid"], static=paths["static"],
@@ -333,26 +374,29 @@ def _run_physics(
     setup = (_restart_setup(host, paths, local_timestep=local_timestep,
                             rates=rates, rings=rings)
              if restored_physics is not None or checkpoint is not None else None)
-    # Older physics checkpoints predate setup binding. Keep their existing
-    # restore path, without claiming their caller-owned setup was verified.
-    restart_setup_verified = None
-    if restored_physics is not None:
-        restart_setup_verified = "setup" in restored_physics
-    if restart_setup_verified and restored_physics["setup"] != setup:
+    if restored_physics is not None and restored_physics["setup"] != setup:
         raise _refuse(
             "--restart configuration or static carriers differ from the "
             "checkpoint")
     static = runner.proof._static_output_fields(host)
-    stride = history_minutes * 60 // int(row.dt_seconds)
     frames = []
     health = []
-    with MetalContext() as context, metal_v841_launch.preserve_post_launch():
+    with (MetalContext() as context, metal_v841_launch.preserve_post_launch(),
+          ExitStack() as cleanup):
+        # Without --stop-on-refusal a failed step ends this run, so the seam
+        # keeps no rollback copy; with it, a refused step rolls back to the
+        # last committed boundary, as on CUDA.
+        stop_on_refusal = bool(getattr(arguments, "stop_on_refusal", False))
         stack = open_metal_physics_stack_v841(
-            context, host, state=restored, saved_diagnostics=restored_saved)
+            context, host, state=restored, saved_diagnostics=restored_saved,
+            rollback=stop_on_refusal)
         driver, backend = stack["driver"], stack["backend"]
         scalar_names = stack["scalar_names"]
         # None, rebinding nothing, unless the config asks for local time stepping.
         lts = attach_local_timestep_metal(driver, grid_path=str(paths["grid"]))
+        # The attachment rebinds module-level dycore entry points; put them
+        # back when the run ends, however it ends.
+        cleanup.callback(detach_local_timestep_metal, driver)
         if restored_physics is None:
             previous = backend.accumulated_precipitation()
             forcing = None
@@ -371,35 +415,82 @@ def _run_physics(
                 rthdynten=upload(carried["rthdynten"]),
                 rqvdynten=upload(carried["rqvdynten"]),
                 time_seconds=float(carried["time_seconds"]))
+        out.mkdir()
         if restored_physics is None:
             frames.append(_write_f000_frame(
                 runner, host, stack, static, out,
                 valid_time=valid_time))
+        def capture(step: int, *, expect_refl10cm: bool = True) -> None:
+            snapshot = capture_snapshot_metal_v841(
+                driver=driver, backend=backend,
+                prep_geometry=stack["prep_geometry"],
+                scalar_names=scalar_names, step=step,
+                expect_refl10cm=expect_refl10cm,
+                solve_cells=stack["solve_cells"], solve_edges=stack["solve_edges"])
+            path = out / f"history.{step:06d}.nc"
+            runner.proof.write_snapshot_netcdf(
+                path, snapshot, static,
+                source="MPAS-A v8.4.1 full-physics Metal port")
+            frames.append({"step": step, "file": path.name,
+                           "valid_time": (valid_time + timedelta(
+                               seconds=step * float(row.dt_seconds))).isoformat()})
+
+        def refused(error: Exception, step: int, where: str,
+                    last_committed: int) -> dict[str, Any]:
+            # Recorded verbatim; no guard is relaxed.
+            return {"refused": True, "refused_in": where, "step": step,
+                    "model_seconds": step * float(row.dt_seconds),
+                    "exception": type(error).__name__, "message": str(error),
+                    "last_committed_step": last_committed}
+
+        refusal = None
+        last_step = first_step + steps
         for step in range(first_step + 1, first_step + steps + 1):
             due = step % stride == 0
-            result = execute_composite_step_metal_v841(
-                driver=driver, backend=backend, scalar_names=scalar_names,
-                physics_geometry=stack["physics_geometry"],
-                previous_surface_updates=previous,
-                dynamics_tendencies=forcing, refl_10cm_due=due)
+            try:
+                result = execute_composite_step_metal_v841(
+                    driver=driver, backend=backend, scalar_names=scalar_names,
+                    physics_geometry=stack["physics_geometry"],
+                    previous_surface_updates=previous,
+                    dynamics_tendencies=forcing, refl_10cm_due=due)
+            except Exception as error:
+                # Only a step that rolled back to its boundary is a refusal.
+                if not stop_on_refusal or backend.phase != "boundary":
+                    raise
+                refusal = refused(error, step, "composite step", step - 1)
+                last_step = step - 1
+                break
             previous, forcing = result.surface_updates, result.dynamics_tendencies
-            health.append(step_health_gate_metal_v841(stack, step))
+            try:
+                health.append(step_health_gate_metal_v841(stack, step))
+            except FloatingPointError as error:
+                if not stop_on_refusal:
+                    raise
+                refusal = refused(error, step, "step health gate", step)
+                last_step = step
+                break
             if due:
-                snapshot = capture_snapshot_metal_v841(
-                    driver=driver, backend=backend,
-                    prep_geometry=stack["prep_geometry"],
-                    scalar_names=scalar_names, step=step, expect_refl10cm=True,
-                    solve_cells=stack["solve_cells"], solve_edges=stack["solve_edges"])
-                path = out / f"history.{step:06d}.nc"
-                runner.proof.write_snapshot_netcdf(
-                    path, snapshot, static,
-                    source="MPAS-A v8.4.1 full-physics Metal port")
-                frames.append({"step": step, "file": path.name,
-                               "valid_time": (valid_time + timedelta(
-                                   seconds=step * float(row.dt_seconds))).isoformat()})
+                try:
+                    capture(step)
+                except (FloatingPointError, RuntimeError, ValueError) as error:
+                    if not stop_on_refusal:
+                        raise
+                    refusal = refused(error, step, "history capture", step)
+                    last_step = step
+                    break
+        if (refusal is not None and last_step > first_step
+                and all(frame["step"] != last_step for frame in frames)):
+            # Keep the last committed state renderable when it can be.
+            try:
+                capture(last_step, expect_refl10cm=False)
+            except Exception as error:  # noqa: BLE001 - never fatal here
+                refusal["final_state_capture_failed"] = True
+                refusal["final_state_capture_error"] = str(error)
         n_cells, n_edges = int(row.cells), int(static["latEdge"].size)
         final = _solve_region(driver.atmosphere.state.to_host(), n_cells, n_edges)
-        if checkpoint is not None:
+        if checkpoint is not None and refusal is not None:
+            refusal["checkpoint_written"] = False
+        if checkpoint is not None and refusal is None:
             write_checkpoint(
                 checkpoint, final,
                 saved_diagnostics=_solve_region(
@@ -414,11 +505,14 @@ def _run_physics(
                     "previous_surface": {name: value.to_numpy()
                                          for name, value in previous.items()},
                 })
-    final.validate(n_cells=int(row.cells), n_edges=int(final.rho_u.shape[1]),
-                   n_vert_levels=int(final.rho.shape[0]))
+    if refusal is None:
+        final.validate(n_cells=int(row.cells), n_edges=int(final.rho_u.shape[1]),
+                       n_vert_levels=int(final.rho.shape[0]))
     receipt_path.write_text(json.dumps({
         "schema": "woof.hex.metal-forecast/v1",
         "backend": "metal",
+        "status": "passed" if refusal is None else "truncated_by_model_refusal",
+        "refusal": refusal,
         "case_label": getattr(arguments, "case_label", None),
         "physics": {
             "row": host.get("physics_backend"),
@@ -426,6 +520,8 @@ def _run_physics(
             "convection": host.get("convection"),
             "pbl_cadence": host.get("pbl_cadence"),
         },
+        "preset": preset.receipt(),
+        "pbl_cadence_request": pbl_cadence,
         "horiz_mixing": horiz_mixing,
         "local_timestep": None if not local_timestep else {
             "rates": list(rates), "buffer_rings": rings,
@@ -440,23 +536,63 @@ def _run_physics(
         "initial_time": valid_time.isoformat(),
         "hours": hours,
         "dt_seconds": float(row.dt_seconds),
-        "steps": steps,
+        "steps": last_step - first_step,
         "first_step": first_step,
         "restart": None if restart is None else str(Path(restart).resolve()),
-        "restart_setup_verified": restart_setup_verified,
-        "checkpoint": None if checkpoint is None else str(checkpoint),
+        "restart_setup_verified": restart is not None,
+        "checkpoint": (str(checkpoint)
+                       if checkpoint is not None and refusal is None else None),
         "history_every_minutes": history_minutes,
         "history": frames,
+        # The CUDA door's frame index, so the swath and cascade readers
+        # take a Metal run as they take a CUDA one.
+        "forecast": _forecast_index(out, frames, paths),
         "step_health": health,
-        "finite": True,
-        "state": final.bounds_receipt(),
+        "finite": refusal is None,
+        "state": final.bounds_receipt() if refusal is None else None,
     }, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
     print(json.dumps({
-        "backend": "metal", "mesh": mesh_name, "steps": steps,
-        "hours": hours, "physics": True, "finite": True,
+        "backend": "metal", "mesh": mesh_name, "steps": last_step - first_step,
+        "hours": hours, "physics": True, "finite": refusal is None,
+        "refused": refusal is not None,
+        **({"checkpoint_written": False}
+           if checkpoint is not None and refusal is not None else {}),
         "out": str(out), "receipt": str(receipt_path),
     }, sort_keys=True))
+    if frames:
+        print("NEXT " + " ".join([
+            "woof hex", "render", "--history",
+            *(str(out / frame["file"]) for frame in frames),
+            "--mesh", str(paths["grid"]), "--out", str(out / "png"),
+            "--simulation-start", _start_stamp(valid_time)]), flush=True)
     return 0
+
+
+def _forecast_index(out: Path, frames: list[dict[str, Any]],
+                    paths: dict[str, Path]) -> dict[str, Any]:
+    """Frame files with their SHA-256s, valid-time labels and authorities."""
+    from hashlib import sha256
+
+    def digest(path: Path) -> str:
+        result = sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                result.update(chunk)
+        return result.hexdigest()
+
+    return {
+        "snapshot_files": {
+            str(frame["step"]): {"path": str(out / frame["file"]),
+                                 "sha256": digest(out / frame["file"])}
+            for frame in frames},
+        "history_labels": {
+            str(frame["step"]): datetime.fromisoformat(
+                frame["valid_time"]).strftime("%Y-%m-%d_%H.%M.%S")
+            for frame in frames},
+        "authority": {"files": {
+            name: {"path": str(paths[name]), "sha256": digest(paths[name])}
+            for name in ("grid", "static")}},
+    }
 
 
 def _write_f000_frame(runner: Any, host: Any, stack: Any, static: Any,

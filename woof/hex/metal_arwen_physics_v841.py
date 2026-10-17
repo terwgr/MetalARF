@@ -69,7 +69,11 @@ class MetalTwoPhasePhysicsBackendV841:
         prep_geometry: MetalMpasToPhysGeometryV841,
         array_module: Any,
         gwdo_static: MetalYsuGwdoStaticV841 | None = None,
+        rollback: bool = True,
     ) -> None:
+        """``rollback=False`` skips the per-step host copy of the seam that
+        :meth:`abort_step` restores, for a caller that ends the run on a
+        failed step rather than retrying it."""
         from woof.core.mpas_column_batch_metal import run_mpas_column_batch_metal
 
         prep_geometry.validate()
@@ -89,6 +93,7 @@ class MetalTwoPhasePhysicsBackendV841:
         self._prep_geometry = prep_geometry
         self._gwdo_static = gwdo_static
         self._seam = self._new_seam()
+        self._rollback = bool(rollback)
         self._phase = "boundary"
         self._snapshot: Mapping[str, Any] | None = None
         self._step_start: float | None = None
@@ -111,7 +116,12 @@ class MetalTwoPhasePhysicsBackendV841:
     def seam(self) -> Any:
         return self._seam
 
-    def _restore_boundary(self, snapshot: Mapping[str, Any]) -> None:
+    def _restore_boundary(self, snapshot: Mapping[str, Any] | None) -> None:
+        if snapshot is None:
+            # No rollback copy was kept: the seam cannot return to the
+            # boundary, and the caller's own error stands.
+            self._phase = "broken"
+            return
         try:
             fresh = self._new_seam()
             fresh.restore_state(snapshot)
@@ -173,7 +183,7 @@ class MetalTwoPhasePhysicsBackendV841:
             raise ValueError(
                 "physics and MPAS clocks differ at begin_step: "
                 f"{self._seam.elapsed_seconds} != {start}")
-        snapshot = self._seam.export_state()
+        snapshot = self._seam.export_state() if self._rollback else None
         self._snapshot = snapshot
         self._step_start = start
         self._pending_gwdo = None
@@ -247,7 +257,7 @@ class MetalTwoPhasePhysicsBackendV841:
     ) -> MetalPostRkWsm6UpdateV841:
         """Run WSM6 once on the clamped endpoint and stage its outputs."""
 
-        if self._phase != "begun" or self._snapshot is None:
+        if self._phase != "begun" or (self._rollback and self._snapshot is None):
             raise RuntimeError("finish_step requires one successful begin_step")
         snapshot = self._snapshot
         try:
@@ -329,8 +339,14 @@ class MetalTwoPhasePhysicsBackendV841:
     def abort_step(self) -> None:
         """Roll back a begun or finished-unpublished step."""
 
-        if self._phase not in ("begun", "finished") or self._snapshot is None:
+        if self._phase not in ("begun", "finished") or (
+                self._rollback and self._snapshot is None):
             raise RuntimeError("abort_step requires a begun or finished transaction")
+        if not self._rollback:
+            # No rollback copy was kept, so the seam cannot continue; the
+            # caller's own exception is the one that should surface.
+            self._phase = "broken"
+            return
         restore_error = None
         if self._phase == "finished":
             try:
@@ -346,7 +362,7 @@ class MetalTwoPhasePhysicsBackendV841:
     def commit_step(self) -> None:
         """Publish a finished seam after the dycore commit succeeded."""
 
-        if self._phase != "finished" or self._snapshot is None:
+        if self._phase != "finished" or (self._rollback and self._snapshot is None):
             raise RuntimeError("commit_step requires a finished-unpublished transaction")
         if self._gwdo_static is not None and self._pending_gwdo is None:
             self._restore_boundary(self._snapshot)
@@ -714,6 +730,7 @@ def open_metal_physics_stack_v841(
     *,
     state: Any | None = None,
     saved_diagnostics: Any | None = None,
+    rollback: bool = True,
 ) -> dict[str, Any]:
     """Build the dycore, seam, geometries and GWDO statics from the CPU host prep.
 
@@ -765,6 +782,7 @@ def open_metal_physics_stack_v841(
         prep_geometry=prep_geometry,
         array_module=MetalArrayModule(context),
         gwdo_static=gwdo_static,
+        rollback=rollback,
     )
     return {
         "driver": driver,
