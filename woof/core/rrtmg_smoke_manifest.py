@@ -248,6 +248,19 @@ def describe_smoke_source(path, *, start_time=None, nz=None):
     return validate_smoke_manifest(path, start_time=start_time, nz=nz).source_identity()
 
 
+def _array_module():
+    """CuPy where the CUDA runtime is installed, else NumPy (the Metal host).
+
+    Metal's radiation consumes the prescribed profile from host columns, so
+    a Mac binds and blends it with the same float32 operations on the host.
+    """
+    import importlib.util
+    if importlib.util.find_spec("cupy") is None:
+        return np
+    import cupy
+    return cupy
+
+
 class BoundSmokeManifest:
     """A prescribed input source congruent with one local radiation grid."""
 
@@ -268,17 +281,18 @@ class BoundSmokeManifest:
 
     @staticmethod
     def _device_member(member):
-        import cupy as cp
+        cp = _array_module()
         member.verify()
         mapped = np.memmap(member.path, dtype=member.dtype, mode="r", shape=member.shape)
-        result = cp.asarray(mapped)
-        cp.cuda.get_current_stream().synchronize()
+        result = cp.array(mapped)
+        if cp is not np:
+            cp.cuda.get_current_stream().synchronize()
         del mapped
         member.verify()
         return result
 
     def _bind_geometry(self, latitude_deg, longitude_deg):
-        import cupy as cp
+        cp = _array_module()
         m = self._manifest
         lat = self._device_member(m.geometry["latitude"]).astype(cp.float64, copy=False)
         lon = self._device_member(m.geometry["longitude"]).astype(cp.float64, copy=False)
@@ -378,7 +392,7 @@ class BoundSmokeManifest:
     def _load_frame(self, index):
         if index in self._cache:
             return self._cache[index]
-        import cupy as cp
+        cp = _array_module()
         j0, i0 = self.offset
         ny, nx = self.local_shape[1:]
         loaded = {}
@@ -428,15 +442,21 @@ class BoundSmokeManifest:
             fraction = np.float32((moment - m.times[lower]).total_seconds() /
                                   (m.times[upper] - m.times[lower]).total_seconds())
             left, right = self._load_frame(lower), self._load_frame(upper)
-            from woof.core.kernels import load_module
-            import cupy as cp
             result = {"quantity": m.quantity}
-            kernel = load_module("rrtmg_smoke_manifest").get_function("rrtmg_smoke_time_blend")
-            for name in left:
-                value = cp.empty(self.local_shape, cp.float32)
-                kernel(((value.size + 127) // 128,), (128,),
-                    (np.int64(value.size), fraction, left[name], right[name], value))
-                result[name] = value
+            if _array_module() is np:
+                # rrtmg_smoke_time_blend's three rounded float32 operations.
+                old_weight = np.float32(1.0) - fraction
+                for name in left:
+                    result[name] = old_weight * left[name] + fraction * right[name]
+            else:
+                from woof.core.kernels import load_module
+                import cupy as cp
+                kernel = load_module("rrtmg_smoke_manifest").get_function("rrtmg_smoke_time_blend")
+                for name in left:
+                    value = cp.empty(self.local_shape, cp.float32)
+                    kernel(((value.size + 127) // 128,), (128,),
+                        (np.int64(value.size), fraction, left[name], right[name], value))
+                    result[name] = value
         self._cache = {index: value for index, value in self._cache.items() if index in keep}
         m.verify()
         return result

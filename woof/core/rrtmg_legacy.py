@@ -1407,6 +1407,27 @@ class RRTMGLegacyRadiation:
             return a.get()
         return np.asarray(a)
 
+    def _metal_smoke_aod(self, state, atmosphere):
+        """The prescribed smoke layer AOD on the host grid, for Metal.
+
+        The same conversions as the CUDA path, through their NumPy twins,
+        which perform the kernels' rounded float32 operations in order.
+        """
+        profile = self._smoke_provider.at(
+            float(state.elapsed_seconds), latitude_deg=self.latitude_deg,
+            longitude_deg=self.longitude_deg)
+        if profile["quantity"] == "layer_aod":
+            return profile["value"]
+        smoke_mass = profile["value"]
+        if profile["quantity"] == "posted_mass_concentration":
+            smoke_mass = _aer3.smoke_dry_mixing_ratio_from_posted_density(
+                smoke_mass, profile["donor_p"], profile["donor_t"])
+        # ALT is dry specific volume, as on CUDA.
+        dry_density = np.float32(1.0) / np.asarray(self._host(state.alt), np.float32)
+        return _aer3.smoke_aod_from_dry_mixing_ratio(
+            smoke_mass, dry_density,
+            np.asarray(self._host(atmosphere["dz"]), np.float32))
+
     def _cols(self, a, nk):
         """(nk, ny, nx) device/host -> host float32 (ny*nx, nk) columns."""
         h = np.asarray(self._host(a), np.float32)
@@ -1773,6 +1794,9 @@ class RRTMGLegacyRadiation:
             if (swddir is not None or getattr(
                     self, "surface_diffuse_requested", False)):
                 swddif = np.zeros(ncol, dtype=np.float32)
+            smoke_cols = (None if getattr(self, "_smoke_provider", None) is None
+                          else self._cols(self._metal_smoke_aod(
+                              state, atmosphere), nz))
             for chunk in _metal_column_chunks(day_idx.size, chunk_cols):
                 idx = day_idx[chunk]
                 sw_prepared = prep.swrad_prep_batch(
@@ -1846,7 +1870,10 @@ class RRTMGLegacyRadiation:
                         xp.asarray(np.ascontiguousarray(dz8w[idx], dtype=np.float32)),
                         xp.asarray(aerosol_profiles[0]),
                         xp.asarray(aerosol_profiles[1]),
-                        sw_prepared["nlay"])
+                        sw_prepared["nlay"],
+                        **({} if smoke_cols is None else dict(
+                            smoke_aod=xp.asarray(np.ascontiguousarray(
+                                smoke_cols[idx])), smoke_feedback=True)))
                     aerosol = aerosol_device[:3]
                     aer_opt = 3
                 sw_result = engine.rrtmg_sw_batched_device(
