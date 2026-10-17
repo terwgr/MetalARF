@@ -4589,6 +4589,9 @@ class PhysicsDriver:
                     sea_inputs, f["mol_sea"], f["ustm_sea"],
                     self.mynn_sfclay_sea_result,
                     dx=cfg.dx, itimestep=itimestep, isfflx=cfg.isfflx,
+                    spp_pbl=cfg.spp_pbl,
+                    pattern_spp_pbl=(self.spp_patterns["pbl"][0]
+                                     if cfg.spp_pbl else None),
                     variant=cfg.mynn_sfclay_variant,
                 )
                 for name in (

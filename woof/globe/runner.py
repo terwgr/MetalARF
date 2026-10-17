@@ -1018,6 +1018,15 @@ def metal_refusal(cfg: ArwenGlobalConfig) -> str | None:
     if cfg.physics_mode == "arwen-native":
         return ("--metal has no real-data physics: physics mode "
                 "'arwen-native' runs on CUDA only. Next: drop --metal")
+    cards = int(getattr(cfg, "cards", 1) or 1)
+    if cards > 1:
+        return (f"--metal runs on one card; this one sets cards = {cards}. "
+                "Next: set [memory] cards = 1, or drop --metal")
+    bands = resolve_latitude_bands(cfg)
+    if bands > 1:
+        return (f"--metal runs the whole grid as one latitude band; this one "
+                f"sets latitude_bands = {bands}. Next: set "
+                "[memory] latitude_bands = 1, or drop --metal")
     return None
 
 def run(

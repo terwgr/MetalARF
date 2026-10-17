@@ -1718,6 +1718,11 @@ def _refuse_metal(args: argparse.Namespace, cfg) -> None:
     if getattr(args, "metal", False):
         from .runner import metal_refusal
 
+        # The command-line memory levers apply after this door, so the
+        # refusal reads the config they will make.
+        overrides = _memory_lever_overrides(args)
+        if overrides:
+            cfg = dataclasses.replace(cfg, **overrides)
         refusal = metal_refusal(cfg)
         if refusal is not None:
             raise ValueError(refusal)

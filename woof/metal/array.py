@@ -112,6 +112,14 @@ class MetalArray:
                 raise ValueError("Metal copy requires equal shape and dtype")
             if self.size == 0:
                 return
+            if value.buffer is self.buffer:
+                if value.byte_offset == self.byte_offset:
+                    return
+                # The copy kernel works in place, so a source that overlaps
+                # its target is first copied to a buffer of its own.
+                if (value.byte_offset < self.byte_offset + self.nbytes
+                        and self.byte_offset < value.byte_offset + value.nbytes):
+                    value = value.copy()
             self.buffer.context.submit_bookkeeping(((value, self),))
         else:
             host = np.asarray(value, dtype=self.dtype)
