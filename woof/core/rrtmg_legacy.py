@@ -1599,6 +1599,7 @@ class RRTMGLegacyRadiation:
         from woof.metal.rrtmgp_cloud_prep_family import (
             submit_cal_cldfra1, submit_mynn_cloud_merge_gsd41)
         source_bl = getattr(cfg, "bl_mynn_version", "wrf_461") == "gsd_41"
+        optics_form = getattr(cfg, "rrtmg_cloud_optics_form", "wrf_461")
         cloud_moisture = {
             name: (value if value is not None else
                    np.zeros((ncol, nz), dtype=np.float32))
@@ -1654,7 +1655,7 @@ class RRTMGLegacyRadiation:
             cloudfrac = cloudfrac_device.to_numpy()
         radii = {name: cols(getattr(state, name, None), nz)
                  for name in ("effc", "effi", "effs")}
-        if active_bl and not source_bl:
+        if active_bl and not source_bl and optics_form != "noaa_wrf39":
             from woof.core.rrtmgp import (
                 SCHEME_RADII_COUPLINGS, cloud_optics_scheme,
                 cloudy_background_radii)
@@ -1731,6 +1732,7 @@ class RRTMGLegacyRadiation:
             f_qi=moisture["qi"] is not None, f_qs=moisture["qs"] is not None,
             f_qg=moisture["qg"] is not None, yr=year, julian=julian,
             nlayers=nlayers, mp_physics=mp,
+            rrtmg_cloud_optics_form=optics_form,
             trace_gas_overrides=trace_gas_subset(
                 self.trace_gas_overrides, LEGACY_LW_GASES) or None)
         # An all-column pass holds every (ncol, nl, ngpt) slab at once: 34 GB
@@ -1810,6 +1812,7 @@ class RRTMGLegacyRadiation:
                     f_qr=moisture["qr"] is not None, f_qi=f_qi,
                     f_qs=f_qs, f_qg=moisture["qg"] is not None,
                     yr=year, julian=julian, mp_physics=mp,
+                    rrtmg_cloud_optics_form=optics_form,
                     sf_surface_physics=int(getattr(
                         cfg, "sf_surface_physics", 2)),
                     trace_gas_overrides=trace_gas_subset(
