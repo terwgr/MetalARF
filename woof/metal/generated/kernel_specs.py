@@ -695,7 +695,7 @@ GLOBAL_SEMILAG_GATHER5_FRAGMENT_SHAPES = (('destination', (('any_1d',),)), ('lat
 GLOBAL_SEMILAG_GATHER5_FRAGMENT_PARAM_FIELDS = [('nfield', 'ctypes.c_int32'), ('nlevel', 'ctypes.c_int32'), ('nlat', 'ctypes.c_int32'), ('nlon', 'ctypes.c_int32'), ('lookup_bins', 'ctypes.c_int32'), ('quasi_monotone', 'ctypes.c_int32'), ('surface_mode', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_GATHER5_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_GATHER5_FRAGMENT_LAYOUT_HASH = 'ccb463330169601cb2749f46819d4099755a060457371b129b67eafb11b0f911'
-GLOBAL_SEMILAG_GATHER5_FRAGMENT_SHADER_HASH = '921ae1c9b6b446f9b8d55ab474b901b49ade9e54fd374489634854a8d7cb16fa'
+GLOBAL_SEMILAG_GATHER5_FRAGMENT_SHADER_HASH = '6d171463e676ea9036542ec1ea99639f37778bec9223eff0cc0e6380676b9b1c'
 
 GLOBAL_SEMILAG_GATHER_FRAGMENT_RESOURCES = (('source', 'float64_bits', 'read'), ('xi', 'float64_bits', 'read'), ('phi', 'float64_bits', 'read'), ('level', 'float64_bits', 'read'), ('lat_ext', 'float64_bits', 'read'), ('mrden', 'float64_bits', 'read'), ('mlut', 'int32', 'read'), ('rowoff', 'int32', 'read'), ('rowshift', 'int32', 'read'), ('lut_scale', 'float64_bits', 'read'), ('destination', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_GATHER_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -703,7 +703,7 @@ GLOBAL_SEMILAG_GATHER_FRAGMENT_SHAPES = (('destination', (('any_1d',),)), ('lat_
 GLOBAL_SEMILAG_GATHER_FRAGMENT_PARAM_FIELDS = [('nfield', 'ctypes.c_int32'), ('nlevel', 'ctypes.c_int32'), ('nlat', 'ctypes.c_int32'), ('nlon', 'ctypes.c_int32'), ('lookup_bins', 'ctypes.c_int32'), ('quasi_monotone', 'ctypes.c_int32'), ('surface_mode', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_GATHER_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_GATHER_FRAGMENT_LAYOUT_HASH = '525788bca293352ca2af452efd44c574fbab1836a333a43f377031f5753daa09'
-GLOBAL_SEMILAG_GATHER_FRAGMENT_SHADER_HASH = '7456583d7f94fd298e1349df580b2e63e36207c40e8a174f6293cafa7647906c'
+GLOBAL_SEMILAG_GATHER_FRAGMENT_SHADER_HASH = '28b1b745bd4bc8f3d3ad4efb3e594f161b6e1c2ec09ec9892dbc46e308957155'
 
 GLOBAL_SEMILAG_LEVEL_RATE_EXTRAPOLATE_FRAGMENT_RESOURCES = (('current', 'float64_bits', 'read'), ('previous', 'float64_bits', 'read'), ('extrapolated', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_LEVEL_RATE_EXTRAPOLATE_FRAGMENT_ACCESS = ('read', 'read', 'read_write')

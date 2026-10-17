@@ -108,8 +108,8 @@ kernel void global_semilag_gather_fragment(
     for (uint c = 0; c < 4; ++c) wz[c] = soft64_div(wz[c], wsum);
 
     ulong acc = 0ul;
-    ulong lo = 0xfff0000000000000ul;
-    ulong hi = 0x7ff0000000000000ul;
+    ulong lo = 0x7ff0000000000000ul;
+    ulong hi = 0xfff0000000000000ul;
     const uint field_offset = field * npoint;
     for (int c = 0; c < 4; ++c) {
         ulong rowsum = 0ul;

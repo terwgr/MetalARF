@@ -1428,7 +1428,7 @@
       "name": "global_semilag_gather5_fragment",
       "parameter_size": 28,
       "resource_count": 11,
-      "shader_hash": "921ae1c9b6b446f9b8d55ab474b901b49ade9e54fd374489634854a8d7cb16fa",
+      "shader_hash": "6d171463e676ea9036542ec1ea99639f37778bec9223eff0cc0e6380676b9b1c",
       "threads_per_group": 128
     },
     {
@@ -1444,7 +1444,7 @@
       "name": "global_semilag_gather_fragment",
       "parameter_size": 28,
       "resource_count": 11,
-      "shader_hash": "7456583d7f94fd298e1349df580b2e63e36207c40e8a174f6293cafa7647906c",
+      "shader_hash": "28b1b745bd4bc8f3d3ad4efb3e594f161b6e1c2ec09ec9892dbc46e308957155",
       "threads_per_group": 128
     },
     {
