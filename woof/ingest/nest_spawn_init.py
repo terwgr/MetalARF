@@ -94,6 +94,9 @@ def _host(value) -> np.ndarray:
     get = getattr(value, "get", None)
     if callable(get) and hasattr(value, "__cuda_array_interface__"):
         return np.asarray(get())
+    to_numpy = getattr(value, "to_numpy", None)
+    if callable(to_numpy):
+        return to_numpy()
     return np.asarray(value)
 
 

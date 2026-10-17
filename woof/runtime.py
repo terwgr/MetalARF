@@ -3162,9 +3162,13 @@ def build_real_spawn_runner(exp: ExperimentConfig, data: CaseDataConfig,
             child_dc, parent_node, model._input_catalog,
             valid_date=exp.start_time)
 
+    # A Metal tree's newborn is built on the root's Metal context.
+    metal = (model._activation_context or {}).get("state_backend") == "metal"
     return SpawnRunner.from_experiment(
         exp, on_child_built=preparer, statics_provider=statics_provider,
-        receipts_path=Path(outdir) / f"spawn_receipts{RECEIPTS_SUFFIX}")
+        receipts_path=Path(outdir) / f"spawn_receipts{RECEIPTS_SUFFIX}",
+        **({"array_module": model.root.state._array_module}
+           if metal else {}))
 
 
 def _tree_forcing_cadence_seconds(catalog) -> float:
@@ -3220,6 +3224,22 @@ def publish_lifecycle_runners(model, *, spawn_runner=None,
         model._spawn_leg_seconds = float(leg_seconds)
 
 
+def _ticks_on(clock, tick_den: int) -> int:
+    """``clock``'s instant counted in ticks of ``1/tick_den`` s.
+
+    tick_den is the LCM of the ACTIVE domains' dt denominators, so a
+    newborn whose dt brings a new denominator changes the tick unit; a
+    raw tick count carried across would name a different instant.
+    """
+    ticks, rest = divmod(int(clock.ticks) * int(tick_den),
+                         int(clock.tick_den))
+    if rest:
+        raise ValueError(
+            f"leg boundary at {clock.ticks}/{clock.tick_den} s is not on "
+            f"the new tick lattice (1/{tick_den} s)")
+    return ticks
+
+
 def _retarget_tree_schedule(model, active_exp: ExperimentConfig,
                             end_seconds: float, lbc_interval_s) -> None:
     """Re-aim the live tree at ``end_seconds`` over ``active_exp``.
@@ -3244,13 +3264,14 @@ def _retarget_tree_schedule(model, active_exp: ExperimentConfig,
     tick_clock = resolve_clock(leg_exp, lbc_interval_s=lbc_interval_s)
     schedule = build_schedule(leg_exp, tick_clock)
     fresh = tick_clock.clocks()
+    den = tick_clock.tick_den
     boundary_ticks = (0 if model.root.clock is None
-                      else int(model.root.clock.ticks))
+                      else _ticks_on(model.root.clock, den))
     for node in model.walk_parent_first():
         gid = int(node.cfg.grid_id)
         old = node.clock
         new = fresh[gid]
-        ticks = boundary_ticks if old is None else int(old.ticks)  # noqa: E501
+        ticks = boundary_ticks if old is None else _ticks_on(old, den)
         new.ticks = ticks
         new.step_count = max(
             0, (ticks - new.spec.start_ticks) // new.spec.step_ticks)
@@ -3284,8 +3305,9 @@ def _attach_spawned_children(model, active_exp, record, writers,
     if coupler_factory is None:
         from woof.core.nest import NestCoupler as coupler_factory
 
-    boundary_ticks = int(model.root.clock.ticks)
-    fresh = resolve_clock(active_exp, lbc_interval_s=lbc_interval_s).clocks()
+    tick_clock = resolve_clock(active_exp, lbc_interval_s=lbc_interval_s)
+    boundary_ticks = _ticks_on(model.root.clock, tick_clock.tick_den)
+    fresh = tick_clock.clocks()
     nodes = dict(model.nodes_by_grid_id)
     attached: list[int] = []
     for gid, child_result in sorted(record["child_results"].items()):
@@ -5466,35 +5488,11 @@ def _publish_receipt(outdir, name: str, document) -> Path:
 
 
 def metal_case_data_refusals(exp) -> list[str]:
-    """Why ``exp`` cannot run on the Metal ``[case_data]`` route, if at all.
-
-    The shared Metal admission, plus the nest lifecycles this route builds
-    only through its CUDA initializers: a nest that starts after the root,
-    a spawned nest, and a moving (followed) nest.
-    """
+    """Why ``exp`` cannot run on the Metal ``[case_data]`` route, if at all:
+    the shared Metal admission."""
     from woof.core.physics import metal_experiment_refusals
 
-    refusals = metal_experiment_refusals(exp)
-    for dc in exp.domains:
-        gid = int(dc.grid_id)
-        if not int(dc.parent_id or 0):
-            continue
-        if exp.domain_start_time(gid) > exp.start_time:
-            refusals.append(
-                f"d{gid:02d} starts after the root; a delayed nest is "
-                "rebuilt through the CUDA initializer on this route, so "
-                "start it with the forecast or run on CUDA")
-        if getattr(dc, "spawn", None) is not None:
-            refusals.append(f"d{gid:02d} is a spawned nest, which this "
-                            "route builds on CUDA only")
-        if getattr(dc, "follow", None) is not None:
-            refusals.append(f"d{gid:02d} follows a storm; moving nests "
-                            "relocate on CUDA only on this route")
-    relocation = getattr(exp, "relocation", None)
-    if relocation is not None and getattr(relocation, "enabled", False):
-        refusals.append("[relocation] moves a nest, which this route does "
-                        "on CUDA only")
-    return refusals
+    return metal_experiment_refusals(exp)
 
 
 def run_experiment(exp: ExperimentConfig, data: CaseDataConfig, outdir, *,

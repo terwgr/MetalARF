@@ -978,7 +978,42 @@ def _host(value) -> np.ndarray:
     nest_relocation idiom)."""
     if isinstance(value, np.ndarray):
         return value
+    to_numpy = getattr(value, "to_numpy", None)
+    if callable(to_numpy):
+        return to_numpy()
     return value.get()
+
+
+class _HostColumns:
+    """A Metal state's columns read to the host on first touch.
+
+    MetalArray has no arithmetic and slices only its leading axis, while
+    the pressure trackers add, crop trailing axes and reduce; on NumPy
+    they run unchanged.  One copy per field per decision.
+    """
+
+    def __init__(self, state):
+        self._state = state
+        self._fields = {}
+
+    def __getattr__(self, name):
+        fields = self.__dict__["_fields"]
+        if name not in fields:
+            value = getattr(self.__dict__["_state"], name)
+            to_numpy = getattr(value, "to_numpy", None)
+            fields[name] = to_numpy() if callable(to_numpy) else value
+        return fields[name]
+
+    def total_theta(self) -> np.ndarray:
+        thb = self.thb
+        return (thb if thb.ndim == 3 else thb[:, None, None]) + self.thp
+
+
+def _host_columns(state):
+    if isinstance(state, _HostColumns) or not getattr(
+            state, "_metal_setup_state", False):
+        return state
+    return _HostColumns(state)
 
 
 def _xp(array):
@@ -1545,6 +1580,8 @@ def planes_for(state, config, *, uh_slot: str = UH_SLOT,
             return [(None, attribute_plane(state, config, window=window))]
         except ValueError as error:
             raise TrackerRefusal(str(error)) from error
+    if config.field == "pressure":
+        state = _host_columns(state)
     levels = all_levels_of(config)
     if not levels:
         return [(None, _plane_from_state(state, config.field,
@@ -1588,6 +1625,7 @@ def _plane_from_state(state, field: str, *,
     minimum; see :meth:`StormTracker.desired_shift`.
     """
     if field == "pressure":
+        state = _host_columns(state)
         if level_hpa is not None:
             # Already a DEVICE reduction whose only host crossing is the
             # finished (ny, nx) plane -- 2 ms on a 378x378x49 grid --

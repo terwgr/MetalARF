@@ -219,7 +219,11 @@ def _assert_spawn_streaming_ownership(tree):
                    if isinstance(statement, ast.Assign)
                    and any(isinstance(target, ast.Name) and target.id == "model"
                            for target in statement.targets)], "tree model owner")
-    assert _same_expression(model.value, "build_experiment(exp, data)")
+    # The backend selector is the only keyword the owner may add.
+    assert _same_expression(model.value.func, "build_experiment")
+    assert [_same_expression(arg, name) for arg, name in
+            zip(model.value.args, ("exp", "data"))] == [True, True]
+    assert len(model.value.args) == 2
     assert any(isinstance(statement, ast.ImportFrom)
                and statement.module == "woof.core.model"
                and any(alias.name == "build_experiment" and alias.asname is None

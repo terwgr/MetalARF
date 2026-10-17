@@ -1311,6 +1311,10 @@ def build_experiment(exp, case_data, *,
         "case_data": case_data,
         "forcing_times": forcing_times,
         "radiation_workspace": radiation_workspace,
+        # A nest built later (delayed start, spawn, relocation) is built
+        # on the backend and Metal context the tree was built on.
+        "state_backend": state_backend,
+        "metal_context": metal_context,
     }
     built._runtime_status = ModelRuntimeStatus()
     built._feedback_provenance = runtime.feedback_provenance(exp)
@@ -1951,20 +1955,30 @@ def execute_experiment(
                                streamed_owner=rebound)
         if delayed_child_initializer is None:
             data = context["case_data"]
-            # After the release above, so the card's free figure includes
-            # the startup build this rebuild replaces.
-            _admit_nest_activation(node, model._input_catalog, exp,
-                                   streamed_owner=rebound)
+            backend = context.get("state_backend", "cuda")
+            metal = backend == "metal"
+            if not metal:
+                # After the release above, so the card's free figure
+                # includes the startup build this rebuild replaces.  A
+                # Metal tree was priced whole, this nest included, by the
+                # Metal memory plan before it was built, and the release
+                # above hands the startup build back first.
+                _admit_nest_activation(node, model._input_catalog, exp,
+                                       streamed_owner=rebound)
             initialized = initialize_child(
                 node.cfg, node.parent, model._input_catalog, exp.vertical,
                 source_orography=data.source_orography,
                 scratch_arena=arena,
                 dycore_state_workspace=dycore_state_workspace,
-                sfcp_to_sfcp=data.sfcp_to_sfcp)
+                sfcp_to_sfcp=data.sfcp_to_sfcp,
+                **({"state_backend": "metal", "preprocess_backend": "cpu",
+                    "metal_context": context["metal_context"]}
+                   if metal else {}))
             prepared = prepare_child_case(
                 initialized, node.cfg, exp=exp, data=data,
                 forcing_times=context["forcing_times"],
                 radiation_workspace=context["radiation_workspace"],
+                state_backend=backend,
                 radiation_parent=(
                     node.parent.state.physics.radiation_callable))
         else:
