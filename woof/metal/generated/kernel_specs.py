@@ -4903,7 +4903,7 @@ WSM6_COLUMN_SHAPES = (('den', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx')
 WSM6_COLUMN_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('hail_opt', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 WSM6_COLUMN_THREADS_PER_GROUP = 32
 WSM6_COLUMN_LAYOUT_HASH = '081a60e13f12430bfee93f9bcfa5e27b6d6adeec301fc8eb3d29db6ac9498afb'
-WSM6_COLUMN_SHADER_HASH = '480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550'
+WSM6_COLUMN_SHADER_HASH = '478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee'
 
 WSM6_FINISH_RESOURCES = (('theta', 'float', 'read'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -4911,7 +4911,7 @@ WSM6_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('theta', (('nz', '
 WSM6_FINISH_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('no_mp_heating', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float')]
 WSM6_FINISH_THREADS_PER_GROUP = 128
 WSM6_FINISH_LAYOUT_HASH = '9756e7a0c13f5614b5e6f84d9c852d3778a87c5ba4a5aa5a137fcc39826f914e'
-WSM6_FINISH_SHADER_HASH = '480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550'
+WSM6_FINISH_SHADER_HASH = '478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee'
 
 WSM6_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('p', 'float', 'read'), ('alt', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('theta', 'float', 'read_write'), ('den', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('z8w', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4919,7 +4919,7 @@ WSM6_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('den', (('nz', 'ny', 'nx
 WSM6_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nzi', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 WSM6_PREPARE_THREADS_PER_GROUP = 128
 WSM6_PREPARE_LAYOUT_HASH = '81f6fca3462936ba1f3a8ef197f0db323053cff947f4843f0d23a7c254f02245'
-WSM6_PREPARE_SHADER_HASH = '480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550'
+WSM6_PREPARE_SHADER_HASH = '478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee'
 
 YSU_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('p', 'float', 'read'), ('p_interface', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('rthraten', 'float', 'read'), ('psfc', 'float', 'read'), ('znt', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('wspd', 'float', 'read'), ('br', 'float', 'read'), ('psim', 'float', 'read'), ('psih', 'float', 'read'), ('xland', 'float', 'read'), ('u10', 'float', 'read'), ('v10', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dtheta', 'float', 'read_write'), ('dqv', 'float', 'read_write'), ('dqc', 'float', 'read_write'), ('dqi', 'float', 'read_write'), ('exch_h', 'float', 'read_write'), ('exch_m', 'float', 'read_write'), ('hpbl', 'float', 'read_write'), ('kpbl', 'int32', 'read_write'), ('wstar', 'float', 'read_write'), ('delta', 'float', 'read_write'), ('topdown_radsum', 'float', 'read_write'), ('wstar3_2', 'float', 'read_write'), ('cloudflg', 'int32', 'read_write'), ('ws', 'float', 'read_write'), ('ctopo', 'float', 'read'), ('ctopo2', 'float', 'read'), ('u10o', 'float', 'read_write'), ('v10o', 'float', 'read_write'), ('a_u_bep', 'float', 'read'), ('a_v_bep', 'float', 'read'), ('a_t_bep', 'float', 'read'), ('a_q_bep', 'float', 'read'), ('b_u_bep', 'float', 'read'), ('b_v_bep', 'float', 'read'), ('b_t_bep', 'float', 'read'), ('b_q_bep', 'float', 'read'), ('sf_bep', 'float', 'read'), ('vl_bep', 'float', 'read'))
 YSU_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -7728,3 +7728,11 @@ MYJURB_COLUMN_PARAM_FIELDS = [('dtturbl', 'ctypes.c_float'), ('flag_bep', 'ctype
 MYJURB_COLUMN_THREADS_PER_GROUP = 128
 MYJURB_COLUMN_LAYOUT_HASH = 'e417876b4fd2c2f0bd10abee90e9680cd21a66e34e7308b37d06cd3184d77372'
 MYJURB_COLUMN_SHADER_HASH = 'c2a337772ffa8ec42ef441bac47fa3e38ab7b95e43df7502e3f01b7288ed9bd7'
+
+WSM6_COLUMN_DEEP_RESOURCES = (('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('den', 'float', 'read'), ('pressure', 'float', 'read'), ('pii', 'float', 'read'), ('dz', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'), ('graupelnc', 'float', 'read_write'), ('graupelncv', 'float', 'read_write'), ('sr', 'float', 'read_write'), ('effc', 'float', 'read_write'), ('effi', 'float', 'read_write'), ('effs', 'float', 'read_write'))
+WSM6_COLUMN_DEEP_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+WSM6_COLUMN_DEEP_SHAPES = (('theta', (('nz', 'ny', 'nx'),)), ('qv', (('nz', 'ny', 'nx'),)), ('qc', (('nz', 'ny', 'nx'),)), ('qi', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny', 'nx'),)), ('qs', (('nz', 'ny', 'nx'),)), ('qg', (('nz', 'ny', 'nx'),)), ('den', (('nz', 'ny', 'nx'),)), ('pressure', (('nz', 'ny', 'nx'),)), ('pii', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx'),)), ('rainnc', (('ny', 'nx'),)), ('rainncv', (('ny', 'nx'),)), ('snownc', (('ny', 'nx'),)), ('snowncv', (('ny', 'nx'),)), ('graupelnc', (('ny', 'nx'),)), ('graupelncv', (('ny', 'nx'),)), ('sr', (('ny', 'nx'),)), ('effc', (('nz', 'ny', 'nx'),)), ('effi', (('nz', 'ny', 'nx'),)), ('effs', (('nz', 'ny', 'nx'),)))
+WSM6_COLUMN_DEEP_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('hail_opt', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+WSM6_COLUMN_DEEP_THREADS_PER_GROUP = 32
+WSM6_COLUMN_DEEP_LAYOUT_HASH = '7d9becaf9ab2ddc49b6268ab50c29a024c74321f57086e84de697fe2a71a86cf'
+WSM6_COLUMN_DEEP_SHADER_HASH = '478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee'

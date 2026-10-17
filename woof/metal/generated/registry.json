@@ -9980,7 +9980,7 @@
       "name": "wsm6_column",
       "parameter_size": 20,
       "resource_count": 21,
-      "shader_hash": "480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550",
+      "shader_hash": "478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee",
       "threads_per_group": 32
     },
     {
@@ -9996,7 +9996,7 @@
       "name": "wsm6_finish",
       "parameter_size": 24,
       "resource_count": 3,
-      "shader_hash": "480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550",
+      "shader_hash": "478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee",
       "threads_per_group": 128
     },
     {
@@ -10012,7 +10012,7 @@
       "name": "wsm6_prepare",
       "parameter_size": 36,
       "resource_count": 12,
-      "shader_hash": "480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550",
+      "shader_hash": "478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee",
       "threads_per_group": 128
     },
     {
@@ -15676,6 +15676,22 @@
       "resource_count": 53,
       "shader_hash": "c2a337772ffa8ec42ef441bac47fa3e38ab7b95e43df7502e3f01b7288ed9bd7",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/wsm6.cu",
+      "cuda_symbol": "wsm6_column",
+      "layout_hash": "7d9becaf9ab2ddc49b6268ab50c29a024c74321f57086e84de697fe2a71a86cf",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/wsm6_family.metal",
+      "module": "wsm6_family",
+      "name": "wsm6_column_deep",
+      "parameter_size": 20,
+      "resource_count": 21,
+      "shader_hash": "478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee",
+      "threads_per_group": 32
     }
   ],
   "schema": "woof-metal-registry-v1"

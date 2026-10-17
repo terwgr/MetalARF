@@ -17,7 +17,9 @@ _SURFACE_RESOURCES = (
     "sr",
 )
 _RESOURCES = _VOLUME_RESOURCES[:11] + _SURFACE_RESOURCES + _VOLUME_RESOURCES[11:]
-_KMAX = 64
+# CUDA's level tiers (woof.core.wsm6_constants.WSM6_KERNEL_LEVEL_TIERS):
+# the shallowest entry point that holds the column runs it.
+_TIERS = ((64, "wsm6_column"), (80, "wsm6_column_deep"))
 
 
 def submit_wsm6_column(*, theta, qv, qc, qi, qr, qs, qg, den, pressure, pii,
@@ -48,8 +50,9 @@ def submit_wsm6_column(*, theta, qv, qc, qi, qr, qs, qg, den, pressure, pii,
         raise ValueError("Metal WSM6 dimensions must be positive")
     if nz < 2:
         raise ValueError("Metal WSM6 requires nz >= 2")
-    if nz > _KMAX:
-        raise ValueError(f"Metal WSM6 supports nz <= {_KMAX}, got {nz}")
+    entrypoint = next((name for kmax, name in _TIERS if nz <= kmax), None)
+    if entrypoint is None:
+        raise ValueError(f"Metal WSM6 supports nz <= {_TIERS[-1][0]}, got {nz}")
     if max(nz, ny, nx, ny * nx) > 0x7FFFFFFF:
         raise ValueError("Metal WSM6 dimensions must fit CUDA int indexing")
     volume_shape = (nz, ny, nx)
@@ -75,7 +78,7 @@ def submit_wsm6_column(*, theta, qv, qc, qi, qr, qs, qg, den, pressure, pii,
     params = {"dt": float(dt32), "hail_opt": int(hail_opt),
               "nz": nz, "ny": ny, "nx": nx}
     return context.submit_kernel(
-        "wsm6_column", arrays, params, exact_policy=False,
+        entrypoint, arrays, params, exact_policy=False,
         grid_size=ny * nx, threads_per_group=32)
 
 

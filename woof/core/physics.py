@@ -2569,9 +2569,9 @@ class PhysicsDriver:
                 "Metal physics capability admission refused: "
                 + "; ".join(refusals))
         if (_metal_wsm6_supported(cfg)
-                and not 2 <= int(self.state.p.shape[0]) <= 64):
+                and not 2 <= int(self.state.p.shape[0]) <= 80):
             raise NotImplementedError(
-                "no-CuPy Metal WSM6 requires 2 <= nz <= 64")
+                "no-CuPy Metal WSM6 requires 2 <= nz <= 80")
         if (_metal_wdm6_supported(cfg)
                 and not 2 <= int(self.state.p.shape[0]) <= 80):
             raise NotImplementedError(

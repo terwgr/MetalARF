@@ -1,6 +1,7 @@
 #include <metal_stdlib>
 #include "pressure_power.metalh"
 #include "wsm6_column_bindings.metalh"
+#include "wsm6_column_deep_bindings.metalh"
 
 using namespace metal;
 
@@ -9,7 +10,11 @@ using namespace metal;
 #pragma clang fp contract(off)
 
 static inline float wsm6_rn_div(float a, float b) { return a / b; }
+// Column capacities: CUDA's WSM6_KERNEL_LEVEL_TIERS.  The shallow tier
+// serves nz <= 64 and the deep tier 65..80; loops are bounded by nz, so a
+// column gives the same result in either.
 constant int WSM6_KMAX = 64;
+constant int WSM6_DEEP_KMAX = 80;
 
 static inline float fmax0(float value) { return max(value, 0.0f); }
 static inline float clamp01(float value) { return min(max(value, 0.0f), 1.0f); }
@@ -141,12 +146,13 @@ static inline float qsat(float t, float p, bool ice) {
 // WRF v4.6.1 nislfv_rain_plm/plm6.  Arrays with nz+1 entries represent
 // interfaces.  q/partner enter as mixing ratios and are remapped as density
 // concentrations, exactly as the Fortran caller does.
+template <int KMAX>
 static inline void plm_arrival(
     thread const float *qq, thread const float *qq2, thread const float *ww, thread const float *dz,
     thread const float *den, int nz, float dt, thread float *zi, thread float *za, thread float *dza,
     thread float *qa, thread float *qa2)
 {
-    float wi[WSM6_KMAX + 1];
+    float wi[KMAX + 1];
     zi[0] = 0.0f;
     for (int k = 0; k < nz; ++k) zi[k + 1] = zi[k] + dz[k];
 
@@ -182,11 +188,12 @@ static inline void plm_arrival(
     if (qq2) qa2[nz] = 0.0f;
 }
 
+template <int KMAX>
 static inline float plm_regular_remap(
     thread const float *qa, thread const float *zi, thread const float *za, thread const float *dza,
     int nz, thread float *qn)
 {
-    float qmi[WSM6_KMAX + 1], qpi[WSM6_KMAX + 1];
+    float qmi[KMAX + 1], qpi[KMAX + 1];
     for (int k = 1; k < nz; ++k) {
         float dip = (qa[k + 1] - qa[k]) / (dza[k + 1] + dza[k]);
         float dim = (qa[k] - qa[k - 1]) / (dza[k - 1] + dza[k]);
@@ -237,15 +244,16 @@ static inline float plm_regular_remap(
     return precip;
 }
 
+template <int KMAX>
 static inline float sediment_column(thread float *q, thread const float *den,
                                  thread const float *dz, thread const float *temp,
                                  int nz, float dt, int species,
                                  thread const Rimed &g, thread float *partner,
                                  thread float *partner_precip_out) {
-    float qq[WSM6_KMAX], qq2[WSM6_KMAX], wd[WSM6_KMAX], ww[WSM6_KMAX];
-    float wa[WSM6_KMAX], qn[WSM6_KMAX], qn2[WSM6_KMAX];
-    float zi[WSM6_KMAX + 1], za[WSM6_KMAX + 1];
-    float dza[WSM6_KMAX + 1], qa[WSM6_KMAX + 1], qa2[WSM6_KMAX + 1];
+    float qq[KMAX], qq2[KMAX], wd[KMAX], ww[KMAX];
+    float wa[KMAX], qn[KMAX], qn2[KMAX];
+    float zi[KMAX + 1], za[KMAX + 1];
+    float dza[KMAX + 1], qa[KMAX + 1], qa2[KMAX + 1];
     float allold = 0.0f;
     for (int k = 0; k < nz; ++k) {
         float q1 = fmax0(q[k]);
@@ -274,7 +282,7 @@ static inline float sediment_column(thread float *q, thread const float *den,
     if (partner_precip_out) *partner_precip_out = 0.0f;
     if (allold <= 0.0f) return 0.0f;
 
-    plm_arrival(qq, partner ? qq2 : nullptr, ww, dz, den, nz, dt,
+    plm_arrival<KMAX>(qq, partner ? qq2 : nullptr, ww, dz, den, nz, dt,
                 zi, za, dza, qa, qa2);
 
     // Rain and the paired snow/graupel categories use WRF iter=1.  Cloud ice
@@ -295,13 +303,13 @@ static inline float sediment_column(thread float *q, thread const float *den,
             }
             ww[k] = 0.5f * (wd[k] + wa[k]);
         }
-        plm_arrival(qq, partner ? qq2 : nullptr, ww, dz, den, nz, dt,
+        plm_arrival<KMAX>(qq, partner ? qq2 : nullptr, ww, dz, den, nz, dt,
                     zi, za, dza, qa, qa2);
     }
 
-    float precip = plm_regular_remap(qa, zi, za, dza, nz, qn);
+    float precip = plm_regular_remap<KMAX>(qa, zi, za, dza, nz, qn);
     float precip2 = partner
-                  ? plm_regular_remap(qa2, zi, za, dza, nz, qn2) : 0.0f;
+                  ? plm_regular_remap<KMAX>(qa2, zi, za, dza, nz, qn2) : 0.0f;
     for (int k = 0; k < nz; ++k) {
         q[k] = fmax0(qn[k] / den[k]);
         if (partner) partner[k] = fmax0(qn2[k] / den[k]);
@@ -310,6 +318,7 @@ static inline float sediment_column(thread float *q, thread const float *den,
     return precip;
 }
 
+template <int KMAX>
 static inline void wsm6_column_impl(
     device float *theta, device float *qv, device float *qc, device float *qi, device float *qr,
     device float *qs, device float *qg, device const float *den, device const float *p,
@@ -319,11 +328,11 @@ static inline void wsm6_column_impl(
     float delt, int hail_opt, int nz, int stride, int col)
 {
     const Rimed gc = rimed_constants(hail_opt);
-    float temp[WSM6_KMAX], rho[WSM6_KMAX], delz[WSM6_KMAX];
-    float qvv[WSM6_KMAX], qcc[WSM6_KMAX], qii[WSM6_KMAX];
-    float qrr[WSM6_KMAX], qss[WSM6_KMAX], qgg[WSM6_KMAX];
-    float cpm[WSM6_KMAX], xl[WSM6_KMAX];
-    float qsw[WSM6_KMAX], qsi[WSM6_KMAX], rhw[WSM6_KMAX], rhi[WSM6_KMAX];
+    float temp[KMAX], rho[KMAX], delz[KMAX];
+    float qvv[KMAX], qcc[KMAX], qii[KMAX];
+    float qrr[KMAX], qss[KMAX], qgg[KMAX];
+    float cpm[KMAX], xl[KMAX];
+    float qsw[KMAX], qsi[KMAX], rhw[KMAX], rhi[KMAX];
 
     for (int k = 0; k < nz; ++k) {
         int id = col + k * stride;
@@ -351,13 +360,13 @@ static inline void wsm6_column_impl(
             rhi[k] = max(qvv[k] / qsi[k], 1.0e-15f);
         }
 
-        float pr = sediment_column(qrr, rho, delz, temp, nz, dtcld, 0,
+        float pr = sediment_column<KMAX>(qrr, rho, delz, temp, nz, dtcld, 0,
                                     gc, nullptr, nullptr);
         float pg = 0.0f;
-        float ps = sediment_column(qss, rho, delz, temp, nz, dtcld, 1,
+        float ps = sediment_column<KMAX>(qss, rho, delz, temp, nz, dtcld, 1,
                                     gc, qgg, &pg);
         // Ice crystals use their own WRF fall-speed law.
-        float piice = sediment_column(qii, rho, delz, temp, nz, dtcld, 2,
+        float piice = sediment_column<KMAX>(qii, rho, delz, temp, nz, dtcld, 2,
                                       gc, nullptr, nullptr);
 
         float total_precip = pr + ps + pg + piice;
@@ -652,7 +661,21 @@ kernel void wsm6_column(
     if (flat >= ncol || p.nz > WSM6_KMAX) return;
     const int col = int(flat);
     const int stride = p.ny * p.nx;
-    wsm6_column_impl(r.theta, r.qv, r.qc, r.qi, r.qr, r.qs, r.qg,
+    wsm6_column_impl<WSM6_KMAX>(r.theta, r.qv, r.qc, r.qi, r.qr, r.qs, r.qg,
+        r.den, r.pressure, r.pii, r.dz, r.rainnc, r.rainncv,
+        r.snownc, r.snowncv, r.graupelnc, r.graupelncv, r.sr,
+        r.effc, r.effi, r.effs, p.dt, p.hail_opt, p.nz, stride, col);
+}
+
+kernel void wsm6_column_deep(
+    constant Wsm6ColumnDeepResources &r [[buffer(0)]],
+    constant Wsm6ColumnDeepParams &p [[buffer(1)]],
+    uint flat [[thread_position_in_grid]]) {
+    const uint ncol = uint(p.ny * p.nx);
+    if (flat >= ncol || p.nz > WSM6_DEEP_KMAX) return;
+    const int col = int(flat);
+    const int stride = p.ny * p.nx;
+    wsm6_column_impl<WSM6_DEEP_KMAX>(r.theta, r.qv, r.qc, r.qi, r.qr, r.qs, r.qg,
         r.den, r.pressure, r.pii, r.dz, r.rainnc, r.rainncv,
         r.snownc, r.snowncv, r.graupelnc, r.graupelncv, r.sr,
         r.effc, r.effi, r.effs, p.dt, p.hail_opt, p.nz, stride, col);
