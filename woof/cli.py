@@ -532,6 +532,9 @@ def build_parser(*, render_only: bool = False) -> argparse.ArgumentParser:
                      help="WPS metgrid directory with met_em.d0*.nc and producing namelist.input; native WOOF initialization")
     run.add_argument("--soil-source", type=Path, default=None, metavar="DIR",
                      help="WRF inputs: original met_em and Vtable directory for automatic soil-water recovery; defaults to the input directory")
+    run.add_argument("--backend", choices=("cuda", "metal"), default=None,
+                     help="state and forecast backend for --wrfinput / --met-em "
+                          "runs (default cuda)")
     run.add_argument("--rrtmg-variant", choices=("rrtmg_legacy", "rte-rrtmgp"), default=None,
                      help="WRF inputs: preserve legacy RRTMG by default; choose rte-rrtmgp to change radiation")
     run.add_argument("--vertical-grid", default=None,
@@ -864,8 +867,11 @@ def _dispatch_argv(argv: list[str] | None = None) -> int:
                 pass
         metal_verify = (args.command == "verify"
                         and getattr(args, "backend", "cuda") == "metal")
+        metal_input_run = (args.command == "run"
+                           and getattr(args, "backend", None) == "metal")
         if (not _spends_nothing and not metal_prepared_sim
-                and not metal_prepared_ensemble and not metal_verify):
+                and not metal_prepared_ensemble and not metal_verify
+                and not metal_input_run):
             capabilities.require_for_command(args.command)
         # --no-memory-gate reaches every process this command starts: the
         # forecast stage `go` runs, the worker `run` supervises, the runner
@@ -1382,6 +1388,10 @@ def _dispatch(args) -> int:
             recipe_door.refuse_unsupervised(args)
             return recipe_door.run_recipe_ensemble(args, request)
 
+    if (args.command == "run" and getattr(args, "backend", None) == "metal"
+            and args.wrfinput is None and args.met_em is None):
+        raise ValueError("woof run --backend metal runs --wrfinput or --met-em "
+                         "inputs; for a CONFIG, use woof go CONFIG --backend metal")
     if args.command == "run" and (args.wrfinput is not None or args.met_em is not None):
         from woof.wrfinput_forecast import run_wrf_forecast
         from woof.metem_forecast import run_metem_forecast
@@ -1398,6 +1408,7 @@ def _dispatch(args) -> int:
         ensemble_request = request_for_inputs(members=getattr(args, "members", None),
             keep_member_files=getattr(args, "keep_member_files", None))
         return launch(directory, args.outdir,
+                               state_backend=args.backend or "cuda",
                                run_seconds=args.run_seconds, restart=args.restart,
                                health_debug=args.health_debug, gpu_uuid=args.gpu_uuid,
                                exclusive_gpu=not args.no_supervise,

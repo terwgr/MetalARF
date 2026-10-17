@@ -92,8 +92,10 @@ def wrf_initial_result(restored, state):
 
 
 class WrfInitialization:
-    def __init__(self, inputs: WrfTreeInputs):
+    def __init__(self, inputs: WrfTreeInputs, *, array_module=None):
         self.inputs = inputs
+        #: The Metal array module of a Metal run; ``None`` is CuPy.
+        self.array_module = array_module
         self.lateral_boundaries = inputs.boundaries
         from woof.case_data import trace_gas_overrides_from_config
         self.trace_gas_overrides = trace_gas_overrides_from_config(
@@ -107,16 +109,17 @@ class WrfInitialization:
 
         state = restore_domain_state(bundle.restored, domain.run,
                                      scratch_arena=scratch_arena,
-                                     dycore_state_workspace=dycore_state_workspace)
+                                     dycore_state_workspace=dycore_state_workspace,
+                                     array_module=self.array_module)
         if domain.parent_id == 0:
             attach_lateral_boundaries(state, self.inputs.boundaries)
         from woof.runtime import declared_constant_glw
         def initialize():
             from woof.core.cam_ozone import cam_ozone_setup, ozone_parent_for
             cam = cam_ozone_setup(exp=self.inputs.experiment, dc=domain, grid=grid)
-            from woof.core.radiation_composition import make_radiation
-            radiation = make_radiation(
-                domain.run, start_time, bundle.restored.raw["XLAT"],
+            from woof.ingest.hrrr_physics import prepared_radiation
+            radiation = prepared_radiation(
+                domain.run, state, start_time, bundle.restored.raw["XLAT"],
                 bundle.restored.raw["XLONG"], p_top=self.inputs.experiment.vertical.p_top,
                 column_chunk=self.inputs.experiment.column_chunk,
                 trace_gas_overrides=self.trace_gas_overrides,
@@ -129,6 +132,7 @@ class WrfInitialization:
                 landuse=bundle.landuse,
                 constant_glw_wm2=declared_constant_glw(self.inputs.experiment),
                 fractional_seaice=bundle.fractional_seaice,
+                array_module=self.array_module,
                 **({"cam_ozone": cam} if cam is not None else {}))
         return DomainInitialization(wrf_initial_result(bundle.restored, state), initialize)
 
@@ -539,7 +543,8 @@ def run_wrf_forecast(directory, outdir, *, run_seconds=None, restart=None,
                      exclusive_gpu=True, rrtmg_variant=None,
                      render_products=None, render_dir=None,
                      progress_options=None, relaunched=False, allow_shared_gpu=False,
-                     output_owner=None, soil_source=None, ensemble_request=None):
+                     output_owner=None, soil_source=None, ensemble_request=None,
+                     state_backend="cuda"):
     import os
     import subprocess
     import sys
@@ -575,7 +580,12 @@ def run_wrf_forecast(directory, outdir, *, run_seconds=None, restart=None,
         # has already said this at plan review in the terminal both
         # processes print to.
         missing = announce_render_readiness(DOOR, announce=not relaunched)
-        if exclusive_gpu:
+        metal = state_backend == "metal"
+        if metal and gpu_uuid is not None:
+            raise ValueError("--gpu-uuid selects a CUDA card; remove it with --backend metal")
+        # A Metal run has no card lease or supervised CUDA worker; it runs
+        # in this process on the Metal device.
+        if exclusive_gpu and not metal:
             from woof.supervisor import priced_reservation_bytes
             from woof.ensemble.supervised_devices import input_device_lease
             command = [sys.executable, '-m', 'woof.wrfinput_forecast',
@@ -631,13 +641,28 @@ def run_wrf_forecast(directory, outdir, *, run_seconds=None, restart=None,
         with production_run_scope(request, output_directory=worker_output):
             first_products = arm_door_first_products(plan, outdir=worker_output, started=started)
             try:
-                run_prepared_tree(inputs, output_directory=worker_output, io_mode=io_mode,
-                                  restart=None if restart is None else io_path(restart),
-                                  health_debug=health_debug,
-                                  progress_options=progress_options,
-                                  initialization=WrfInitialization(inputs),
-                                  **({} if first_products is None
-                                     else {'first_products': first_products}))
+                if metal:
+                    from woof.metal.array import MetalArrayModule
+                    from woof.metal.runtime import MetalContext
+                    with MetalContext() as context:
+                        xp = MetalArrayModule(context)
+                        run_prepared_tree(
+                            inputs, output_directory=worker_output, io_mode=io_mode,
+                            restart=None if restart is None else io_path(restart),
+                            health_debug=health_debug,
+                            progress_options=progress_options,
+                            initialization=WrfInitialization(inputs, array_module=xp),
+                            state_backend="metal", array_module=xp,
+                            **({} if first_products is None
+                               else {'first_products': first_products}))
+                else:
+                    run_prepared_tree(inputs, output_directory=worker_output, io_mode=io_mode,
+                                      restart=None if restart is None else io_path(restart),
+                                      health_debug=health_debug,
+                                      progress_options=progress_options,
+                                      initialization=WrfInitialization(inputs),
+                                      **({} if first_products is None
+                                         else {'first_products': first_products}))
             except BaseException as error:
                 stop_door_renders(first_products, error)
                 raise

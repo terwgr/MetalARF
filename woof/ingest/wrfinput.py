@@ -1164,7 +1164,7 @@ def _restore_active_moisture(state, raw: Mapping[str, np.ndarray], cfg,
         if target is not None and wrf_name in raw:
             _expect_shape(wrf_name, raw[wrf_name], target.shape)
             target[...] = array_module.asarray(
-                raw[wrf_name], dtype=array_module.float32)
+                raw[wrf_name], dtype=np.float32)
     state_names = []
     for wrf_name, state_name in active_moisture_map(cfg).items():
         target = getattr(state, state_name, None)
@@ -1176,7 +1176,7 @@ def _restore_active_moisture(state, raw: Mapping[str, np.ndarray], cfg,
         if wrf_name in raw:
             _expect_shape(wrf_name, raw[wrf_name], target.shape)
             target[...] = array_module.asarray(
-                raw[wrf_name], dtype=array_module.float32)
+                raw[wrf_name], dtype=np.float32)
         elif wrf_name not in optional_moisture:
             raise ValueError(
                 f"WRF input lacks active mp_physics={cfg.mp_physics} "
@@ -1188,7 +1188,7 @@ def _restore_active_moisture(state, raw: Mapping[str, np.ndarray], cfg,
         # carries a nonzero QNCCN. Preserve that initialization after the
         # file restore, before saving the RK-beginning copies. Checkpoint
         # restoration has its separate transport and does not enter here.
-        state.nn[...] = array_module.float32(cfg.wdm6_ccn_conc)
+        state.nn[...] = np.float32(cfg.wdm6_ccn_conc)
 
     # DomainState owns RK-beginning copies only for prognostic fields.  Sync
     # every active one that exists, including all ten NSSL-only fields.
@@ -1221,10 +1221,16 @@ def wrf_coordinate_and_base(restored):
 def restore_domain_state(restored: RestoredDomain, cfg, *, scratch_arena=None,
                          dycore_state_workspace=None, radiation=None,
                          radiation_start_time=None, radiation_latitude=None,
-                         radiation_longitude=None):
-    """Upload one CPU-restored domain into a production ``DomainState``."""
-    import cupy as cp
+                         radiation_longitude=None, array_module=None):
+    """Upload one CPU-restored domain into a production ``DomainState``.
+
+    ``array_module`` is a Metal array module for a Metal state; the default
+    is CuPy.
+    """
     from woof.core.state import DomainState
+    if array_module is None:
+        import cupy as array_module
+    xp = array_module
 
     raw = restored.raw
     nz, ny, nx = cfg.nz, cfg.ny, cfg.nx
@@ -1253,39 +1259,41 @@ def restore_domain_state(restored: RestoredDomain, cfg, *, scratch_arena=None,
     admit_construction(
         "restoring this wrfinput onto the card", cfg,
         shared_symbols=getattr(dycore_state_workspace, "_symbol_shapes", ()))
+    if getattr(xp, "__woof_metal_array_module__", False):
+        state_kwargs["array_module"] = xp
     state = DomainState(cfg, **state_kwargs)
     coord, base = wrf_coordinate_and_base(restored)
     state.load_base(coord, base)
 
     for wrf_name, state_name in (("U", "u"), ("V", "v"), ("W", "w"),
                                  ("PH", "php"), ("MU", "mup")):
-        getattr(state, state_name)[...] = cp.asarray(raw[wrf_name], dtype=cp.float32)
+        getattr(state, state_name)[...] = xp.asarray(raw[wrf_name], dtype=np.float32)
     from woof.wrf_exact import ENABLED as wrf_exact
     if wrf_exact:
         # Keep the native perturbation word throughout integration. A round
         # trip through full theta cannot recover its low bits.
-        state.thb[...] = cp.float32(300.0)
-        state.thp[...] = cp.asarray(raw["T"], dtype=cp.float32)
+        state.thb[...] = np.float32(300.0)
+        state.thp[...] = xp.asarray(raw["T"], dtype=np.float32)
     else:
-        state.thp[...] = cp.asarray(
+        state.thp[...] = xp.asarray(
             (raw["T"].astype(np.float32) + np.float32(300.0))
-            - base.thb, dtype=cp.float32)
-    state.p[...] = cp.asarray(raw["P"] + raw["PB"], dtype=cp.float32)
+            - base.thb, dtype=np.float32)
+    state.p[...] = xp.asarray(raw["P"] + raw["PB"], dtype=np.float32)
     from woof.wrf_exact import DIAGNOSTICS_ENABLED
     if DIAGNOSTICS_ENABLED:
-        state.p_perturbation = cp.asarray(raw["P"], dtype=cp.float32)
-    state.al[...] = cp.asarray(raw["AL"], dtype=cp.float32)
-    state.alt[...] = cp.asarray(raw["AL"] + raw["ALB"], dtype=cp.float32)
+        state.p_perturbation = xp.asarray(raw["P"], dtype=np.float32)
+    state.al[...] = xp.asarray(raw["AL"], dtype=np.float32)
+    state.alt[...] = xp.asarray(raw["AL"] + raw["ALB"], dtype=np.float32)
     for name in ("CF1", "CF2", "CF3"):
         source = np.asarray(raw[name]).reshape(-1)
         _expect_shape(name, source, (1,))
-        setattr(state, name.lower(), cp.float32(source[0]))
+        setattr(state, name.lower(), np.float32(source[0]))
     state.set_map_coriolis(
         raw["MAPFAC_M"], raw["MAPFAC_U"], raw["MAPFAC_V"], raw["F"],
         raw["E"], sina=raw["SINALPHA"], cosa=raw["COSALPHA"])
-    _restore_active_moisture(state, raw, cfg, cp)
+    _restore_active_moisture(state, raw, cfg, xp)
     if "H_DIABATIC" in raw:
-        state.h_diabatic[...] = cp.asarray(raw["H_DIABATIC"], dtype=cp.float32)
+        state.h_diabatic[...] = xp.asarray(raw["H_DIABATIC"], dtype=np.float32)
 
     # WRF start_domain_em diagnoses a cold-start W column after reading
     # real.exe's zero W, before its first history frame. The native door
@@ -1312,14 +1320,16 @@ def initialize_wrfinput_physics(state, restored, cfg, *, radiation=None,
                                radiation_start_time=None, radiation_latitude=None,
                                radiation_longitude=None, landuse=None,
                                constant_glw_wm2=None, cam_ozone=None,
-                               fractional_seaice=False):
+                               fractional_seaice=False, array_module=None):
     """Initialize physics from the file's actual surface and land categories.
 
     ``fractional_seaice`` is the run namelist's (&physics, WRF default 0,
     not a wrfinput header); only the Noah mosaic tile door reads it.
     """
     _validate_supplied_physics_fields(restored.raw, cfg, restored.global_attributes)
-    import cupy as cp
+    if array_module is None:
+        import cupy as array_module
+    xp = array_module
     from woof.core.physics import initialize_physics
     from woof.ingest.ruc_mosaic import wrfinput_ruc_mosaic_inputs
     from woof.ingest.lake_physics import wrfinput_lake_physics_inputs
@@ -1393,16 +1403,16 @@ def initialize_wrfinput_physics(state, restored, cfg, *, radiation=None,
                 raise ValueError(
                     f"WRF physics field {aliases[0]} shape {value.shape} != "
                     f"woof {field} shape {driver.fields[field].shape}")
-            driver.fields[field][...] = cp.asarray(
+            driver.fields[field][...] = xp.asarray(
                 value, dtype=driver.fields[field].dtype)
     if not retain_landuse_albbck:
-        driver.fields["albbck"][...] = cp.asarray(albbck, dtype=cp.float32)
+        driver.fields["albbck"][...] = xp.asarray(albbck, dtype=np.float32)
     if int(cfg.sf_surface_physics) != 4:
-        driver.fields["lai"][...] = cp.asarray(lai, dtype=cp.float32)
+        driver.fields["lai"][...] = xp.asarray(lai, dtype=np.float32)
     if "RAINNC" in raw:
-        driver.microphysics.rainnc[...] = cp.asarray(raw["RAINNC"], dtype=cp.float32)
+        driver.microphysics.rainnc[...] = xp.asarray(raw["RAINNC"], dtype=np.float32)
     if driver.rainc is not None and "RAINC" in raw:
-        driver.rainc[...] = cp.asarray(raw["RAINC"], dtype=cp.float32)
+        driver.rainc[...] = xp.asarray(raw["RAINC"], dtype=np.float32)
     if int(cfg.sf_surface_physics) == 2:
         # LSMINIT follows native cold-start field restoration. A later
         # checkpoint load replaces this initial state, including SH2O.

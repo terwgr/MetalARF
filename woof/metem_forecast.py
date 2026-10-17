@@ -55,8 +55,10 @@ class MetemDomainBundle:
 
 class MetemInitialization:
     """Only the restoration/physics seam varies; all stepping stays shared."""
-    def __init__(self, inputs):
+    def __init__(self, inputs, *, array_module=None):
         self.inputs = inputs
+        #: The Metal array module of a Metal run; ``None`` is CuPy.
+        self.array_module = array_module
         self.lateral_boundaries = inputs.boundaries
         from woof.case_data import trace_gas_overrides_from_config
         self.trace_gas_overrides = trace_gas_overrides_from_config(
@@ -69,7 +71,8 @@ class MetemInitialization:
         from woof.ingest.hrrr_physics import initialize_prepared_physics
         from woof.runtime import declared_constant_glw
         restored = restore_prepared_cache(bundle.cache, expected_identity=bundle.cache_identity,
-            cfg=domain.run, static=bundle.static_fields, allow_nested_without_lbc=domain.parent_id != 0)
+            cfg=domain.run, static=bundle.static_fields, allow_nested_without_lbc=domain.parent_id != 0,
+            **({} if self.array_module is None else {"array_module": self.array_module}))
         def physics():
             from woof.core.cam_ozone import cam_ozone_setup, ozone_parent_for
             cam = cam_ozone_setup(exp=self.inputs.experiment, dc=domain, grid=grid)
@@ -699,7 +702,7 @@ def run_metem_forecast(directory, outdir, *, run_seconds=None, restart=None,
                        exclusive_gpu=True, rrtmg_variant=None, vertical_grid=None,
                        render_products=None, render_dir=None, progress_options=None,
                        relaunched=False, vertical_levels=None, allow_shared_gpu=False,
-                       output_owner=None, ensemble_request=None):
+                       output_owner=None, ensemble_request=None, state_backend='cuda'):
     import os
     import subprocess
     import sys
@@ -745,7 +748,11 @@ def run_metem_forecast(directory, outdir, *, run_seconds=None, restart=None,
         # The supervised child re-enters this door after the parent below
         # has already printed the pair at plan review.
         missing = announce_render_readiness(DOOR, announce=not relaunched)
-        if exclusive_gpu:
+        metal = state_backend == 'metal'
+        if metal and gpu_uuid is not None:
+            raise ValueError('--gpu-uuid selects a CUDA card; remove it with --backend metal')
+        # A Metal run has no card lease or supervised CUDA worker.
+        if exclusive_gpu and not metal:
             from woof.supervisor import priced_reservation_bytes
             from woof.ensemble.supervised_devices import input_device_lease
             command = [sys.executable,'-m','woof.metem_forecast','--met-em',str(Path(directory).resolve()),
@@ -792,11 +799,23 @@ def run_metem_forecast(directory, outdir, *, run_seconds=None, restart=None,
         with production_run_scope(request, output_directory=worker_output):
             first_products = arm_door_first_products(plan, outdir=worker_output, started=started)
             try:
-                run_prepared_tree(inputs,output_directory=worker_output,io_mode=io_mode,
-                    restart=None if restart is None else io_path(restart),
-                    health_debug=health_debug,progress_options=progress_options,
-                    initialization=MetemInitialization(inputs),
-                    **({} if first_products is None else {'first_products': first_products}))
+                if metal:
+                    from woof.metal.array import MetalArrayModule
+                    from woof.metal.runtime import MetalContext
+                    with MetalContext() as context:
+                        xp = MetalArrayModule(context)
+                        run_prepared_tree(inputs,output_directory=worker_output,io_mode=io_mode,
+                            restart=None if restart is None else io_path(restart),
+                            health_debug=health_debug,progress_options=progress_options,
+                            initialization=MetemInitialization(inputs, array_module=xp),
+                            state_backend='metal', array_module=xp,
+                            **({} if first_products is None else {'first_products': first_products}))
+                else:
+                    run_prepared_tree(inputs,output_directory=worker_output,io_mode=io_mode,
+                        restart=None if restart is None else io_path(restart),
+                        health_debug=health_debug,progress_options=progress_options,
+                        initialization=MetemInitialization(inputs),
+                        **({} if first_products is None else {'first_products': first_products}))
             except BaseException as error:
                 stop_door_renders(first_products, error)
                 raise
