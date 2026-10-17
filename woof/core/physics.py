@@ -845,6 +845,9 @@ METAL_KNOWN_CONFLICTS = (
      bool(getattr(cfg, "nested", False))
      and int(getattr(cfg, "o3input", 2)) == 2
      and _metal_legacy_rrtmg_selected(cfg)),
+    ("Metal NSSL microphysics (mp_physics=18) sediments at most 128 levels",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(cfg.mp_physics) == 18 and int(cfg.nz) > 128),
     ("diff_opt=1 (coordinate-surface mixing) has no Metal kernels; use diff_opt=2",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "diff_opt", 2)) == 1),

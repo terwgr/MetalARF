@@ -4173,14 +4173,14 @@
       ],
       "cuda_source": "woof/core/kernels/nssl2_driver_support.cu",
       "cuda_symbol": "nssl2_rain_sediment_256",
-      "layout_hash": "88069d0cee6ec29ab72a77cf371e0cfdbfb15d66b00e4e27efea3013f0a5f09a",
+      "layout_hash": "a26e1f08258b658241dbc5eaa8fd698f26cb5768285d99ac98a0079bd357e0b2",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/nssl2_sedimentation.metal",
       "module": "nssl2_sedimentation",
-      "name": "nssl2_sediment_all_256",
+      "name": "nssl2_sediment_all_128",
       "parameter_size": 16,
       "resource_count": 6,
-      "shader_hash": "3978ff4606512e2da623a33bd0fa026b976b1110c2a97705d3238737c6934be8",
+      "shader_hash": "97184a4e5c533d53615c7f1a4a04a6abf8d41734b28d293d07ed324d773c68ba",
       "threads_per_group": 32
     },
     {
@@ -4196,7 +4196,7 @@
       "name": "nssl2_sediment_all_64",
       "parameter_size": 16,
       "resource_count": 6,
-      "shader_hash": "3978ff4606512e2da623a33bd0fa026b976b1110c2a97705d3238737c6934be8",
+      "shader_hash": "97184a4e5c533d53615c7f1a4a04a6abf8d41734b28d293d07ed324d773c68ba",
       "threads_per_group": 32
     },
     {

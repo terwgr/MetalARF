@@ -2057,13 +2057,13 @@ NSSL2_RUNTIME_PREPARE_THREADS_PER_GROUP = 256
 NSSL2_RUNTIME_PREPARE_LAYOUT_HASH = '58feb3c6888ecc2260a1017a578d8b1f0aad494f4c95f2c7fc13f88f1877a8ea'
 NSSL2_RUNTIME_PREPARE_SHADER_HASH = 'ddf78404fddd5161b471111f5c0c85e68d4c8684f6c30563e36a7153938ca421'
 
-NSSL2_SEDIMENT_ALL_256_RESOURCES = (('air_density', 'float', 'read'), ('temperature_k', 'float', 'read'), ('state', 'float', 'read_write'), ('dz', 'float', 'read'), ('ignored_accumulator', 'float', 'read_write'), ('category_export', 'float', 'read_write'))
-NSSL2_SEDIMENT_ALL_256_ACCESS = ('read', 'read', 'read_write', 'read', 'read_write', 'read_write')
-NSSL2_SEDIMENT_ALL_256_SHAPES = (('air_density', (('nz', 'ny', 'nx'),)), ('category_export', ((5, 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx'),)), ('ignored_accumulator', (('ny', 'nx'),)), ('state', ((16, 'nz', 'ny', 'nx'),)), ('temperature_k', (('nz', 'ny', 'nx'),)))
-NSSL2_SEDIMENT_ALL_256_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
-NSSL2_SEDIMENT_ALL_256_THREADS_PER_GROUP = 32
-NSSL2_SEDIMENT_ALL_256_LAYOUT_HASH = '88069d0cee6ec29ab72a77cf371e0cfdbfb15d66b00e4e27efea3013f0a5f09a'
-NSSL2_SEDIMENT_ALL_256_SHADER_HASH = '3978ff4606512e2da623a33bd0fa026b976b1110c2a97705d3238737c6934be8'
+NSSL2_SEDIMENT_ALL_128_RESOURCES = (('air_density', 'float', 'read'), ('temperature_k', 'float', 'read'), ('state', 'float', 'read_write'), ('dz', 'float', 'read'), ('ignored_accumulator', 'float', 'read_write'), ('category_export', 'float', 'read_write'))
+NSSL2_SEDIMENT_ALL_128_ACCESS = ('read', 'read', 'read_write', 'read', 'read_write', 'read_write')
+NSSL2_SEDIMENT_ALL_128_SHAPES = (('air_density', (('nz', 'ny', 'nx'),)), ('category_export', ((5, 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx'),)), ('ignored_accumulator', (('ny', 'nx'),)), ('state', ((16, 'nz', 'ny', 'nx'),)), ('temperature_k', (('nz', 'ny', 'nx'),)))
+NSSL2_SEDIMENT_ALL_128_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+NSSL2_SEDIMENT_ALL_128_THREADS_PER_GROUP = 32
+NSSL2_SEDIMENT_ALL_128_LAYOUT_HASH = 'a26e1f08258b658241dbc5eaa8fd698f26cb5768285d99ac98a0079bd357e0b2'
+NSSL2_SEDIMENT_ALL_128_SHADER_HASH = '97184a4e5c533d53615c7f1a4a04a6abf8d41734b28d293d07ed324d773c68ba'
 
 NSSL2_SEDIMENT_ALL_64_RESOURCES = (('air_density', 'float', 'read'), ('temperature_k', 'float', 'read'), ('state', 'float', 'read_write'), ('dz', 'float', 'read'), ('ignored_accumulator', 'float', 'read_write'), ('category_export', 'float', 'read_write'))
 NSSL2_SEDIMENT_ALL_64_ACCESS = ('read', 'read', 'read_write', 'read', 'read_write', 'read_write')
@@ -2071,7 +2071,7 @@ NSSL2_SEDIMENT_ALL_64_SHAPES = (('air_density', (('nz', 'ny', 'nx'),)), ('catego
 NSSL2_SEDIMENT_ALL_64_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NSSL2_SEDIMENT_ALL_64_THREADS_PER_GROUP = 32
 NSSL2_SEDIMENT_ALL_64_LAYOUT_HASH = 'ac3513ccc78e99358a6389676e25642e723efc7df78eef9b7700fb143e83b0fb'
-NSSL2_SEDIMENT_ALL_64_SHADER_HASH = '3978ff4606512e2da623a33bd0fa026b976b1110c2a97705d3238737c6934be8'
+NSSL2_SEDIMENT_ALL_64_SHADER_HASH = '97184a4e5c533d53615c7f1a4a04a6abf8d41734b28d293d07ed324d773c68ba'
 
 NTIEDTKE_ADJUST_RESOURCES = (('ldcum', 'int32', 'read'), ('loddraf', 'int32', 'read'), ('idtop', 'int32', 'read'), ('kctop', 'int32', 'read'), ('kcbot', 'int32', 'read'), ('paph', 'float', 'read'), ('pqen', 'float', 'read'), ('pmfu', 'float', 'read'), ('pmfuq', 'float', 'read'), ('pmful', 'float', 'read'), ('pmfd', 'float', 'read_write'), ('pmfds', 'float', 'read_write'), ('pmfdq', 'float', 'read_write'), ('plude', 'float', 'read_write'), ('pdmfup', 'float', 'read_write'), ('pdmfdp', 'float', 'read_write'), ('pmfdde_rate', 'float', 'read_write'), ('pmfude_rate', 'float', 'read_write'), ('pmflxr', 'float', 'read_write'), ('pmflxs', 'float', 'read_write'), ('prsfc', 'float', 'read_write'), ('pssfc', 'float', 'read_write'))
 NTIEDTKE_ADJUST_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')

@@ -6,7 +6,7 @@
       "size": 188592
     },
     "woof_default.metallib": {
-      "sha256": "f7c57bcc85d48c1ae883f86f2619e103d8093bf9b1c801399d9f4499516ce893",
+      "sha256": "2007a3f39c39a60374e4f3348d47a20cadbbac56980eae718ae9bed7eabba3af",
       "size": 12808900
     },
     "woof_exact.metallib": {
@@ -15,8 +15,8 @@
     }
   },
   "implementation_file_count": 1155,
-  "implementation_sha256": "bc43ef9683448052a48b2e2426a66acf012956e8d4c184b36f2af2a1fb735740",
-  "metal_inputs_sha256": "22537121163cdc3a19204df8627697e32aa6250f9de1d09e8010df99a46ee586",
+  "implementation_sha256": "f42dfa83ccb5569819a53125c569301fba08b3e45883c02a42774516316f9707",
+  "metal_inputs_sha256": "cd412ebb53886fc9e125504e8f6819b221a4b7d543b079712f7b783a20ff393b",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -36,7 +36,7 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "792ed2600324826e3a5379c63447a59c882dc68ba5191621e9e3ed21a906fb7b",
+        "sha256": "54d9d8cbf13db638f74850e057ac373102323cb20c13d454a49a230f27b71826",
         "size": 2578792
       },
       "woof/metal/native/woof_metal.h": {
@@ -1464,7 +1464,7 @@
         "size": 1915
       },
       "woof/metal/shaders/nssl2_sedimentation.metal": {
-        "sha256": "3978ff4606512e2da623a33bd0fa026b976b1110c2a97705d3238737c6934be8",
+        "sha256": "97184a4e5c533d53615c7f1a4a04a6abf8d41734b28d293d07ed324d773c68ba",
         "size": 34194
       },
       "woof/metal/shaders/nssl2_soft64.metalh": {
@@ -3420,7 +3420,7 @@
         "size": 3338
       },
       "woof/metal/signature_fragments/nssl2_sedimentation.json": {
-        "sha256": "ab61f22b857c068bfebd6cc53b382477c198b325c1782ebd68b4f66e5b41d1a0",
+        "sha256": "b1cd443ec880fd5d29103e36c55f53a65b8b08c64e7458b6f8224b6a5dc99954",
         "size": 3774
       },
       "woof/metal/signature_fragments/ntiedtke_family.json": {
@@ -4028,6 +4028,6 @@
         "size": 296
       }
     },
-    "sha256": "22537121163cdc3a19204df8627697e32aa6250f9de1d09e8010df99a46ee586"
+    "sha256": "cd412ebb53886fc9e125504e8f6819b221a4b7d543b079712f7b783a20ff393b"
   }
 }

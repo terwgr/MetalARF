@@ -39053,7 +39053,7 @@
       "cuda_symbol": "nssl2_rain_sediment_256",
       "layout_version": 1,
       "module": "nssl2_sedimentation",
-      "name": "nssl2_sediment_all_256",
+      "name": "nssl2_sediment_all_128",
       "parameters": [
         [
           "dt",

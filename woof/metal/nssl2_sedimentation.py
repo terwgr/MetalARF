@@ -26,8 +26,8 @@ def submit_nssl2_sediment_all(
            for value in dims):
         raise ValueError("NSSL sedimentation dimensions must be positive integers")
     nz, ny, nx = map(int, dims)
-    if nz < 2 or nz > 256:
-        raise ValueError("NSSL sedimentation requires 2 <= nz <= 256")
+    if nz < 2 or nz > 128:
+        raise ValueError("NSSL sedimentation requires 2 <= nz <= 128")
     if not math.isfinite(float(dt_s)) or float(dt_s) <= 0.0:
         raise ValueError("NSSL dt_s must be positive and finite")
     dt = np.float32(dt_s)
@@ -55,7 +55,7 @@ def submit_nssl2_sediment_all(
         if value.dtype != np.dtype(np.float32) or value.buffer.context is not context:
             raise ValueError(f"{name} must be FP32 storage in the submitting context")
     ignored_accumulator.fill(0.0)
-    kernel = "nssl2_sediment_all_64" if nz <= 64 else "nssl2_sediment_all_256"
+    kernel = "nssl2_sediment_all_64" if nz <= 64 else "nssl2_sediment_all_128"
     return context.submit_kernel(
         kernel,
         {"air_density": air_density, "temperature_k": temperature_k,
