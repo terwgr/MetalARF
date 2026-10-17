@@ -955,6 +955,8 @@ class VerticalModeSemiImplicit:
             from woof.metal.generated import kernel_specs
 
             nlevel, ndegree, mcount = map(int, divergence.shape)
+            if not 1 <= nlevel <= 128:
+                raise ValueError("Global Metal semi-implicit solve supports 1..128 levels")
             if (tuple(state.theta.shape) != (nlevel, ndegree, mcount)
                     or tuple(state.log_surface_pressure.shape) != (ndegree, mcount)):
                 raise ValueError("resident semi-implicit state shapes do not agree")
@@ -1132,11 +1134,13 @@ class VerticalModeSemiImplicit:
             x = xp.concatenate([state.theta, state.log_surface_pressure[None]], axis=0)
         if (metal_context is not None and xp is np
                 and np.dtype(backend.float_dtype) == np.dtype(np.float64)
-                and state.divergence.ndim == 3 and state.divergence.shape[1] <= 128):
+                and state.divergence.ndim == 3):
             from woof.metal.array import MetalArrayModule
             from woof.metal.generated import kernel_specs
 
             nlevel, ndegree, mcount = map(int, divergence.shape)
+            if not 1 <= nlevel <= 128:
+                raise ValueError("Global Metal semi-implicit solve supports 1..128 levels")
             nmodes = ndegree * mcount
             metal = MetalArrayModule(metal_context)
 
