@@ -43,6 +43,22 @@ def add_array(src, dst):
     return True
 
 
+def add_positive_array(src, dst):
+    """``dst += max(src, 0)`` on Metal; return False for an unsupported layout."""
+    if (not _supported((src, dst)) or src.shape != dst.shape
+            or dst.size > 2_147_483_647 or _overlap(src, dst)):
+        return False
+    if WRF_EXACT:
+        raise NotImplementedError(
+            "Metal bandwidth glue addition supports ordinary FP32 only")
+    n = dst.size
+    if n:
+        src.buffer.context.submit_kernel(
+            "glue_add_positive", {"src": src.view((n,)), "dst": dst.view((n,))},
+            {"n": n}, exact_policy=False, grid_size=n)
+    return True
+
+
 def prepare_add_arrays(state, pairs):
     """Return an ordered Metal batch launcher, or None for wrapper fallback."""
     if not pairs or len(pairs) > 64:

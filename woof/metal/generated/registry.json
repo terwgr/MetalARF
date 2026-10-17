@@ -1844,7 +1844,7 @@
       "name": "glue_add",
       "parameter_size": 4,
       "resource_count": 2,
-      "shader_hash": "6aa7a59ea9f67bcac2a69b5b70158a5fd0b1c571856e283c6ef68ca6e65b5915",
+      "shader_hash": "fab2cccdca6e1fdf22e49dfacb1ea68c1a7d54078eb8165401d6718bda7e5374",
       "threads_per_group": 128
     },
     {
@@ -1860,7 +1860,7 @@
       "name": "glue_capture_theta_forcing",
       "parameter_size": 24,
       "resource_count": 7,
-      "shader_hash": "6aa7a59ea9f67bcac2a69b5b70158a5fd0b1c571856e283c6ef68ca6e65b5915",
+      "shader_hash": "fab2cccdca6e1fdf22e49dfacb1ea68c1a7d54078eb8165401d6718bda7e5374",
       "threads_per_group": 128
     },
     {
@@ -13403,6 +13403,22 @@
       "resource_count": 8,
       "shader_hash": "fe3a8967da6e0c9b00fa491349676a0f6568d613788a099020005aca9e744fd4",
       "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": null,
+      "cuda_symbol": null,
+      "layout_hash": "988c096930d35c9929738d572ecfe671e92c0c32c07f331fb2ca48731d2f7318",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/bandwidth_family.metal",
+      "module": "bandwidth_glue",
+      "name": "glue_add_positive",
+      "parameter_size": 4,
+      "resource_count": 2,
+      "shader_hash": "fab2cccdca6e1fdf22e49dfacb1ea68c1a7d54078eb8165401d6718bda7e5374",
+      "threads_per_group": 128
     }
   ],
   "schema": "woof-metal-registry-v1"

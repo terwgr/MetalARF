@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 #include "glue_add_bindings.metalh"
+#include "glue_add_positive_bindings.metalh"
 #include "glue_capture_theta_forcing_bindings.metalh"
 
 using namespace metal;
@@ -16,6 +17,15 @@ kernel void glue_add(constant GlueAddResources &r [[buffer(0)]],
                      uint tid [[thread_position_in_grid]]) {
     if (ulong(tid) >= q.n) return;
     r.dst[tid] = glue_add_rn(r.dst[tid], r.src[tid]);
+}
+
+// dst += max(src, 0): the surface precipitation carriers' accumulation.
+kernel void glue_add_positive(constant GlueAddPositiveResources &r [[buffer(0)]],
+                              constant GlueAddPositiveParams &q [[buffer(1)]],
+                              uint tid [[thread_position_in_grid]]) {
+    if (ulong(tid) >= q.n) return;
+    const float value = r.src[tid];
+    r.dst[tid] = glue_add_rn(r.dst[tid], value > 0.0f ? value : 0.0f);
 }
 
 kernel void glue_capture_theta_forcing(

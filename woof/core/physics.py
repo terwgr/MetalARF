@@ -3367,11 +3367,23 @@ class PhysicsDriver:
             # after consuming it; canonical RAINNCV remains scheme-owned.
             # MP-only configurations have no surface consumer or carrier.
             if self._pending_rainbl is not None:
-                from woof.metal.bandwidth_family import add_array
-                if not add_array(result.rainncv, self._pending_rainbl):
-                    raise NotImplementedError(
-                        "Metal Noah rain accumulation has no supported "
-                        "FP32 layout")
+                from woof.metal.bandwidth_family import add_positive_array
+                carriers = [(result.rainncv, self._pending_rainbl)]
+                if (self.ruc_params is not None
+                        or self.noahmp_params is not None):
+                    f = self.fields
+                    carriers += [
+                        (diagnostic, f[carrier]) for diagnostic, carrier in (
+                            (result.rainncv, "surface_rainncv"),
+                            (result.snowncv, "surface_snowncv"),
+                            (result.graupelncv, "surface_graupelncv"),
+                            (result.hailncv, "surface_hailncv"))
+                        if diagnostic is not None]
+                for diagnostic, carrier in carriers:
+                    if not add_positive_array(diagnostic, carrier):
+                        raise NotImplementedError(
+                            "Metal surface precipitation accumulation has "
+                            "no supported FP32 layout")
             self.microphysics_updates += 1
             return
         if (dt is not None
@@ -5269,6 +5281,8 @@ class PhysicsDriver:
                 # while retaining the overhead-sun ALBEDO/ALBBCK carriers.
                 ruc_fields = dict(f, albedo=f["albsol"],
                                   albbck=f["albbcksol"])
+            if use_scheme_sr:
+                f["sr"][...] = self.microphysics.sr
             self.last_ruc_census = metal_ruc_step(
                 ruc_fields, atmosphere, params=self.ruc_params,
                 precipitation=SurfacePrecipitationForcing.from_fields(f),
