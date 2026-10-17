@@ -1,0 +1,84 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_lbc_rho_edge_v841",
+      "module": "hexv841_regional_lbc_rho_edge_v841",
+      "source": "woof/metal/shaders/hexv841_regional_lbc_rho_edge_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_rho_edge_v841",
+      "resources": [
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "lbc_u",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_edge",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ru",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lbc_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_lbc_state_at_v841",
+      "module": "hexv841_regional_lbc_state_at_v841",
+      "source": "woof/metal/shaders/hexv841_regional_lbc_state_at_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_lbc_state_at_v841",
+      "resources": [
+        [
+          "state",
+          "float32",
+          "read"
+        ],
+        [
+          "tend",
+          "float32",
+          "read"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "state": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nvalues",
+          "int32"
+        ],
+        [
+          "dt_remaining",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

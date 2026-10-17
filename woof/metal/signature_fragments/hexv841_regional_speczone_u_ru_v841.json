@@ -1,0 +1,84 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_speczone_u_ru_v841",
+      "module": "hexv841_regional_speczone_u_ru_v841",
+      "source": "woof/metal/shaders/hexv841_regional_speczone_u_ru_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_speczone_u_ru_v841",
+      "resources": [
+        [
+          "spec_edges",
+          "int32",
+          "read"
+        ],
+        [
+          "u_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "normal_velocity",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_u",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "u_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_u": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

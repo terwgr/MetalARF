@@ -1,0 +1,184 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_acoustic_ru_regional_v841",
+      "module": "hexv841_acoustic_ru_regional_v841",
+      "source": "woof/metal/shaders/hexv841_acoustic_ru_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "acoustic_ru_regional_v841",
+      "resources": [
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "spec_zone_mask_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "exner",
+          "float32",
+          "read"
+        ],
+        [
+          "cqu",
+          "float32",
+          "read"
+        ],
+        [
+          "zxu",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_ru",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ru_avg",
+          "float32",
+          "read_write"
+        ],
+        [
+          "invalid",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_zone_mask_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zxu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_avg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "invalid": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "small_step",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

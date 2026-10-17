@@ -846,12 +846,15 @@ def write_dry_state_history(
     *,
     initial_time: datetime | str | np.datetime64 | None = None,
     vertical_grid: object | None = None,
+    normal_velocity: object | None = None,
 ) -> Path:
     """Write one public dry Hex state through the MPAS history writer.
 
     The dycore stores density-weighted momentum.  Convert those prognostics
     to the ``u`` and ``w`` velocity fields expected by the existing output
     stream, while retaining the native dtype and logical level-first layout.
+    A limited-area run passes its own recovered ``normal_velocity``: its
+    outer edges have one real cell, so ``u`` cannot be rebuilt from ``rho_u``.
     """
     def _host_array(name: str) -> NDArray[Any]:
         value = getattr(state, name)
@@ -864,13 +867,20 @@ def write_dry_state_history(
     rho_u = _host_array("rho_u")
     rho_w = _host_array("rho_w")
     scalars = _host_array("scalars")
-    cells_on_edge = np.asarray(_mesh_arrays(mesh)["cellsOnEdge"], dtype=np.int64)
-    if cells_on_edge.ndim != 2 or cells_on_edge.shape[1] != 2:
-        raise ValueError("Hex history requires two-cell cellsOnEdge connectivity")
-    if np.any(cells_on_edge < 0) or np.any(cells_on_edge >= rho.shape[1]):
-        raise ValueError("Hex history cellsOnEdge connectivity is outside rho")
-    rho_edge = (rho[:, cells_on_edge[:, 0]] + rho[:, cells_on_edge[:, 1]]) * 0.5
-    edge_velocity = rho_u / rho_edge
+    if normal_velocity is not None:
+        edge_velocity = np.asarray(
+            normal_velocity.to_numpy() if hasattr(normal_velocity, "to_numpy")
+            else normal_velocity)
+        if edge_velocity.shape != rho_u.shape:
+            raise ValueError("normal_velocity must match rho_u")
+    else:
+        cells_on_edge = np.asarray(_mesh_arrays(mesh)["cellsOnEdge"], dtype=np.int64)
+        if cells_on_edge.ndim != 2 or cells_on_edge.shape[1] != 2:
+            raise ValueError("Hex history requires two-cell cellsOnEdge connectivity")
+        if np.any(cells_on_edge < 0) or np.any(cells_on_edge >= rho.shape[1]):
+            raise ValueError("Hex history cellsOnEdge connectivity is outside rho")
+        rho_edge = (rho[:, cells_on_edge[:, 0]] + rho[:, cells_on_edge[:, 1]]) * 0.5
+        edge_velocity = rho_u / rho_edge
     interface_density = np.empty_like(rho_w)
     interface_density[0] = rho[0]
     interface_density[-1] = rho[-1]

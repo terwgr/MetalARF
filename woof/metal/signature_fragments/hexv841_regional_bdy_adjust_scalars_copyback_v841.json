@@ -1,0 +1,68 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
+      "module": "hexv841_regional_bdy_adjust_scalars_copyback_v841",
+      "source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_copyback_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_bdy_adjust_scalars_copyback_v841",
+      "resources": [
+        [
+          "nudged_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "updates",
+          "float32",
+          "read"
+        ],
+        [
+          "scalars_new",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "nudged_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "updates": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_new": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nnudged",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

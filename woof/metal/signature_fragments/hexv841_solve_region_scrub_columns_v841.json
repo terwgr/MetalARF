@@ -1,0 +1,48 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_solve_region_scrub_columns_v841",
+      "module": "hexv841_solve_region_scrub_columns_v841",
+      "source": "woof/metal/shaders/hexv841_solve_region_scrub_columns_v841.metal",
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_scrub_columns_v841",
+      "resources": [
+        [
+          "field",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "field": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rows",
+          "int32"
+        ],
+        [
+          "stride",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "pool_bits",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

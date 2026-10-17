@@ -1,0 +1,196 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_transport_standard_finish_regional_v841",
+      "module": "hexv841_transport_standard_finish_regional_v841",
+      "source": "woof/metal/shaders/hexv841_transport_standard_finish_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "transport_standard_finish_regional_v841",
+      "resources": [
+        [
+          "bdy_mask_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "acoustic_sign",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "edge_values",
+          "float32",
+          "read"
+        ],
+        [
+          "vertical_flux",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "old",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_old",
+          "float32",
+          "read"
+        ],
+        [
+          "target_density",
+          "float32",
+          "read"
+        ],
+        [
+          "source",
+          "float32",
+          "read"
+        ],
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "output",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "bdy_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "acoustic_sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_values": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertical_flux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target_density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "stage": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

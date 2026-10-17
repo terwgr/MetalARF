@@ -1,0 +1,60 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_moist_cell_coefficients",
+      "module": "hexv841_regional_moist_cell_coefficients",
+      "source": "woof/metal/shaders/hexv841_regional_moist_cell_coefficients.metal",
+      "cuda_source": "woof/hex/cuda_regional_forecast_v841.py",
+      "cuda_symbol": "CudaRegionalRuntimeV841.moist_coefficients",
+      "resources": [
+        [
+          "q",
+          "float32",
+          "read"
+        ],
+        [
+          "qtot",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cqw",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qtot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqw": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

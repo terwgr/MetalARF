@@ -1,0 +1,102 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_relaxzone_rayleigh_edge_v841",
+      "module": "hexv841_regional_relaxzone_rayleigh_edge_v841",
+      "source": "woof/metal/shaders/hexv841_regional_relaxzone_rayleigh_edge_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_rayleigh_edge_v841",
+      "resources": [
+        [
+          "relax_edges",
+          "int32",
+          "read"
+        ],
+        [
+          "bdy_mask_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_scaling_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "ru",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_ru",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "relax_edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bdy_mask_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_scaling_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_ru": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nrelax",
+          "int32"
+        ],
+        [
+          "fifty_dt",
+          "float32"
+        ],
+        [
+          "relax_zone",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_relaxzone_filter_cell_v841",
+      "module": "hexv841_regional_relaxzone_filter_cell_v841",
+      "source": "woof/metal/shaders/hexv841_regional_relaxzone_filter_cell_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_relaxzone_filter_cell_v841",
+      "resources": [
+        [
+          "relax_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "bdy_mask_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_scaling_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_sign_on_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "rt_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tend_rt",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "relax_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bdy_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_scaling_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rt_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "nrelax",
+          "int32"
+        ],
+        [
+          "ten_dt",
+          "float32"
+        ],
+        [
+          "relax_zone",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_clamp_negative_scalars_v841",
+      "module": "hexv841_regional_clamp_negative_scalars_v841",
+      "source": "woof/metal/shaders/hexv841_regional_clamp_negative_scalars_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_clamp_negative_scalars_v841",
+      "resources": [
+        [
+          "scalars",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "scalars": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nvalues",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,344 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_acoustic_column_solve_regional_v841",
+      "module": "hexv841_acoustic_column_solve_regional_v841",
+      "source": "woof/metal/shaders/hexv841_acoustic_column_solve_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "acoustic_column_solve_regional_v841",
+      "resources": [
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "dss",
+          "float32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read"
+        ],
+        [
+          "rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_save",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rw",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rt",
+          "float32",
+          "read"
+        ],
+        [
+          "rs",
+          "float32",
+          "read"
+        ],
+        [
+          "ts",
+          "float32",
+          "read"
+        ],
+        [
+          "spec_zone_mask_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "etp",
+          "float32",
+          "read"
+        ],
+        [
+          "etm",
+          "float32",
+          "read"
+        ],
+        [
+          "ewp",
+          "float32",
+          "read"
+        ],
+        [
+          "ewm",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_save": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_zone_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "etp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "etm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ewp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ewm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

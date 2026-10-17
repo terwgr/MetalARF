@@ -1,0 +1,242 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_acoustic_rs_ts_regional_v841",
+      "module": "hexv841_acoustic_rs_ts_regional_v841",
+      "source": "woof/metal/shaders/hexv841_acoustic_rs_ts_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "acoustic_rs_ts_regional_v841",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_sign_on_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "spec_zone_mask_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read"
+        ],
+        [
+          "ewm",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_p",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rt",
+          "float32",
+          "read"
+        ],
+        [
+          "rs",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ts",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_zone_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ewm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

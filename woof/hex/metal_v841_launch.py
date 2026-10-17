@@ -7,7 +7,13 @@ there is nothing to cover.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Callable, Iterable, Mapping
+
+#: Called as ``POST_LAUNCH(entrypoint, arrays)`` after every launch while a
+#: regional run is attached, as the CUDA kernel cache's ``post_launch``: the
+#: regional garbage discipline restores the pool value in each padded array.
+POST_LAUNCH: Callable[[str, Iterable[Any]], None] | None = None
+_in_hook = False
 
 
 def launch(
@@ -27,6 +33,14 @@ def launch(
         threads_per_group=getattr(
             kernel_specs, f"{entrypoint.upper()}_THREADS_PER_GROUP", 128),
     )
+    global _in_hook
+    hook = POST_LAUNCH
+    if hook is not None and not _in_hook:
+        _in_hook = True
+        try:
+            hook(entrypoint, arrays.values())
+        finally:
+            _in_hook = False
 
 
 __all__ = ["launch"]

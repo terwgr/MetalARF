@@ -1,0 +1,64 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_speczone_tend_edge_v841",
+      "module": "hexv841_regional_speczone_tend_edge_v841",
+      "source": "woof/metal/shaders/hexv841_regional_speczone_tend_edge_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_speczone_tend_edge_v841",
+      "resources": [
+        [
+          "spec_edges",
+          "int32",
+          "read"
+        ],
+        [
+          "ru_driving_tend",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_ru",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_driving_tend": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_ru": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

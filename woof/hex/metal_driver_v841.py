@@ -6,8 +6,9 @@ fields, with one ``hexv841_*`` shader per CUDA kernel.  The state stays on the
 device for the whole step; the only readback is the four-byte validation flag
 at the end, as on CUDA.
 
-This is the dry, global lane.  The regional, physics and halo hooks of the
-CUDA step are refused by name until their Metal mirrors exist.
+This is the dry lane, global or limited-area (``regional_v841`` attached by
+:func:`assemble_regional_metal_dycore_v841`).  The physics and halo hooks of
+the CUDA step are refused by name until their Metal mirrors exist.
 """
 
 from __future__ import annotations
@@ -235,6 +236,10 @@ class MetalDycoreV841:
             saved_diag.pressure_perturbation, dpdz, cqu, vertical.zz, vertical.zxu)
         tend_rho_saved = self.horizontal.density_tendency(
             saved_state.rho_u, saved_state.rho_w, vertical.rdzw)
+        if self.regional_v841 is not None:
+            # Native writes tend_rho only at rk_step 1 and the regional stages
+            # adjust that pool again in RK2 and RK3; keep a private image.
+            tend_rho_saved = tend_rho_saved.copy()
         saved_euler_rw = _euler_w(self, saved_diag.pressure_perturbation, dpdz)
         saved_euler_theta = None
         if self.mixing_config_v841 is not None:
@@ -284,6 +289,14 @@ class MetalDycoreV841:
                 zb_cell=self.atmosphere.terrain.zb_cell,
                 zb3_cell=self.atmosphere.terrain.zb3_cell,
             )
+            if self.regional_v841 is not None:
+                # atm_srk3:2300-2351: specified-zone assignment and the
+                # relaxation-zone Rayleigh/Laplacian stages.
+                self.regional_v841.adjust_dynamics_tendencies(
+                    tend_ru=tend_ru, tend_rho=tend_rho_saved, tend_rt=tend_rt,
+                    tend_omega=tend_omega, rho_u=current_state.rho_u,
+                    theta_m=current_diag.theta_m, rho_zz=current_state.rho,
+                    rk_step=stage.stage)
             acoustic = MetalAcousticState.zeros(
                 self.arrays, self.nlev, self.ncells, self.nedges)
             forcing = MetalAcousticForcing(
@@ -305,14 +318,25 @@ class MetalDycoreV841:
             for small_step in range(1, stage.acoustic_steps + 1):
                 rtheta_pp_old = self.horizontal.capture_rtheta_pp_old(
                     acoustic.rtheta_pp, small_step=small_step)
-                acoustic = advance_acoustic_step_metal_v841(
-                    self.atmosphere.mesh, acoustic, forcing, coefficients,
-                    context=self.v841_context,
-                    dts=stage.acoustic_timestep,
-                    small_step=small_step,
-                    fzm=vertical.fzm, fzp=vertical.fzp, rdzw=vertical.rdzw,
-                    in_place=True,
-                )
+                if self.regional_v841 is None:
+                    acoustic = advance_acoustic_step_metal_v841(
+                        self.atmosphere.mesh, acoustic, forcing, coefficients,
+                        context=self.v841_context,
+                        dts=stage.acoustic_timestep,
+                        small_step=small_step,
+                        fzm=vertical.fzm, fzp=vertical.fzp, rdzw=vertical.rdzw,
+                        in_place=True,
+                    )
+                else:
+                    from .metal_regional_v841 import (
+                        advance_acoustic_step_regional_metal_v841,
+                    )
+
+                    acoustic = advance_acoustic_step_regional_metal_v841(
+                        self.regional_v841, self.atmosphere.mesh, acoustic,
+                        forcing, coefficients, context=self.v841_context,
+                        dts=stage.acoustic_timestep, small_step=small_step,
+                        fzm=vertical.fzm, fzp=vertical.fzp, rdzw=vertical.rdzw)
                 # Native :2395-2406: 3-D divergence damping completes the
                 # horizontal momentum at the end of each acoustic sub-step.
                 acoustic.ru_p = self.horizontal.divergence_damping_3d(
@@ -324,12 +348,18 @@ class MetalDycoreV841:
                     config_smdiv=self.config.config_smdiv,
                     config_len_disp=self.config.config_len_disp,
                     in_place=True,
+                    **({} if self.regional_v841 is None else
+                       {"n_cells_solve": self.regional_v841.n_cells_solve}),
                 )
             current_state, current_diag, flux_u, flux_w = _recover_candidate(
                 self, saved_state, saved_diag, acoustic, stage.stage,
                 stage.acoustic_steps, current_state.scalars)
-            validate_recovered_state_metal_v841(
-                current_state, current_diag, invalid_flag=validation_flag)
+            if self.regional_v841 is None:
+                validate_recovered_state_metal_v841(
+                    current_state, current_diag, invalid_flag=validation_flag)
+            else:
+                self.regional_v841.validate_recovered(
+                    current_state, current_diag, validation_flag)
             if stage.stage == 3:
                 final_flux_u, final_flux_w = flux_u, flux_w
             diagnostics = self.horizontal.solve_diagnostics(
@@ -351,8 +381,21 @@ class MetalDycoreV841:
 
         config = self.config
         validation_flag = self.arrays.zeros((1,), np.int32)
+        regional = self.regional_v841
+        if regional is not None:
+            # mpas_atm_core.F:735-781: read lbc_in and re-form the boundary
+            # tendencies at the start of a step whose clock reached an
+            # interval end, before any dynamics.
+            regional.begin_step(self.atmosphere.state)
         outer_saved = _copy_state(self, self.atmosphere.state)
         time_level_one = _copy_saved(self, self.atmosphere.saved)
+        if regional is not None:
+            regional.bind_state_rho(outer_saved.rho)
+            if config.config_moist_physics:
+                raise ConfigurationRefusal(
+                    "config_moist_physics", True,
+                    "the regional moist coefficients join with the physics lane",
+                    "config_moist_physics=False")
         outer_dt = float(config.config_dt)
         splits = int(config.config_dynamics_split_steps)
         dynamics_schedule = RKSchedule.from_mpas(
@@ -370,6 +413,8 @@ class MetalDycoreV841:
         current, carried = outer_saved, time_level_one
         split_flux_u_sum = split_flux_w_sum = None
         for _subcycle in range(splits):
+            if regional is not None:
+                regional.begin_dynamics_substep(_subcycle + 1)
             current, carried, diagnostics, flux_u, flux_w = (
                 self._advance_dynamics_subcycle(
                     current, time_level_one=carried,
@@ -387,6 +432,24 @@ class MetalDycoreV841:
             vertical = self.atmosphere.vertical
             scalar_stage = outer_saved.scalars.copy()
             for stage in scalar_schedule.stages:
+                if regional is not None:
+                    from .metal_regional_v841 import (
+                        advance_scalars_regional_metal_v841,
+                    )
+
+                    scalar_stage, _target = advance_scalars_regional_metal_v841(
+                        regional, self.atmosphere.mesh, self.v841_context,
+                        outer_saved.scalars, scalar_stage, outer_saved.rho,
+                        current.rho, split_flux_u, split_flux_w,
+                        stage.large_timestep, coefficients=self.coefficients,
+                        fzm=vertical.fzm, fzp=vertical.fzp, rdzw=vertical.rdzw,
+                        rk_step=stage.stage,
+                        config_coef_3rd_order=config.config_coef_3rd_order,
+                        validation_flag=validation_flag)
+                    regional.bdy_adjust_scalars(scalar_stage, stage.stage)
+                    accumulate_finite_array_metal_v841(
+                        scalar_stage, invalid_flag=validation_flag)
+                    continue
                 transported = advance_scalar_transport_metal_v841(
                     self.atmosphere.mesh, self.v841_context,
                     outer_saved.scalars, scalar_stage,
@@ -411,6 +474,16 @@ class MetalDycoreV841:
                 accumulate_finite_array_metal_v841(
                     scalar_stage, invalid_flag=validation_flag)
             current.scalars = scalar_stage
+        if regional is not None:
+            # atm_srk3:2798-2878 in order: the clamp, the specified-zone
+            # resets on the pre-advance clock, then the clock advance.
+            if config.config_moist_physics:
+                regional.clamp_negative_scalars(current.scalars)
+            regional.reset_speczone_values(
+                theta_m=carried.theta_m, rho_theta=current.rho_theta,
+                rho_theta_perturbation=carried.rho_theta_perturbation,
+                scalars=current.scalars)
+            regional.advance_clock(outer_dt)
 
         if int(validation_flag.to_numpy()[0]) != 0:
             raise FloatingPointError(
@@ -425,4 +498,113 @@ class MetalDycoreV841:
         return self.atmosphere.state.to_host(), self.atmosphere.saved.to_host()
 
 
-__all__ = ["MetalDycoreV841"]
+
+def assemble_regional_metal_dycore_v841(
+    context: Any,
+    mesh: Any,
+    state: Any,
+    vertical: Any,
+    reference: Any,
+    saved: Any,
+    terrain: Any,
+    config: Any,
+    *,
+    reference_wind_profiles: Any,
+    lbc_paths: Any,
+    start_time: Any,
+    scalar_names: tuple[str, ...] = ("lbc_qv",),
+) -> MetalDycoreV841:
+    """Build the limited-area resident dycore, as ``assemble_regional_driver_v841``.
+
+    The atmosphere and the v8.4.1 context use native's padded memory model,
+    and the regional runtime's garbage discipline runs after every launch.
+    """
+
+    from . import metal_v841_launch
+    from .cuda_regional_forecast_v841 import (
+        PaddedRegionalHostMesh,
+        _PaddedDeformationWeights,
+        regional_padded_advection_coefficients,
+    )
+    from .metal_regional_v841 import (
+        MetalRegionalRuntimeV841,
+        build_regional_metal_atmosphere,
+        regional_padded_metal_context_v841,
+    )
+    from .regional_v841 import derive_regional_masks
+
+    config.validate()
+    CudaDryDycoreDriver._validate_config(config)
+    if config.config_moist_physics:
+        raise ConfigurationRefusal(
+            "config_moist_physics", True,
+            "the regional moist coefficients join with the physics lane",
+            "config_moist_physics=False")
+    dtype = np.dtype(np.float32)
+    padded = PaddedRegionalHostMesh(mesh, derive_regional_masks(mesh, dtype))
+    nlev = int(np.asarray(state.rho).shape[0])
+    offcentering = build_v841_acoustic_offcentering(
+        np.asarray(vertical.rdzw),
+        minimum=config.config_epssm_minimum,
+        maximum=config.config_epssm_maximum,
+        transition_bottom_z=config.config_epssm_transition_bottom_z,
+        transition_top_z=config.config_epssm_transition_top_z,
+    )
+    # dss is built on the unpadded zgrid and padded, as on CUDA.
+    selected_dss = build_v841_vertical_velocity_damping(
+        np.asarray(vertical.zgrid),
+        xnutr=config.config_xnutr,
+        damping_start_z=config.config_zd,
+    )
+
+    class _VerticalWithDss:
+        def __getattr__(self, name: str) -> Any:
+            if name == "dss":
+                return selected_dss
+            if name in ("cf1", "cf2", "cf3"):
+                return float(np.float32(getattr(vertical, name)))
+            return getattr(vertical, name)
+
+    atmosphere = build_regional_metal_atmosphere(
+        context, padded, state, _VerticalWithDss(), reference, saved, terrain)
+    v841_context = regional_padded_metal_context_v841(
+        context, mesh, offcentering, reference_wind_profiles,
+        n_vert_levels=nlev)
+    host_coefficients = build_advection_coefficients(
+        mesh,
+        config_scalar_adv_order=config.config_scalar_adv_order,
+        n_vert_levels=nlev,
+        source_order_v841=True,
+        allow_regional_sentinels=True,
+    )
+    coefficients = MetalAdvectionCoefficients.from_host(
+        context, regional_padded_advection_coefficients(
+            host_coefficients, padded.garbage_cell))
+    driver = MetalDycoreV841(context, atmosphere, config, coefficients, v841_context)
+    if driver.mixing_config_v841 is not None:
+        from .mixing_v841 import initialize_deformation_weights_v841
+
+        driver.horizontal.attach_deformation_weights_v841(
+            _PaddedDeformationWeights(
+                initialize_deformation_weights_v841(mesh, dtype=dtype)))
+    runtime = MetalRegionalRuntimeV841(
+        mesh, padded,
+        context=context,
+        lbc_paths=lbc_paths,
+        start_time=start_time,
+        config_h_scale_with_mesh=bool(config.config_h_ScaleWithMesh),
+        config_apply_lbcs=bool(config.config_apply_lbcs),
+        outer_dt=float(config.config_dt),
+        dynamics_split=int(config.config_dynamics_split_steps),
+        n_vert_levels=nlev,
+        device_atmosphere=atmosphere,
+        v841_context=v841_context,
+        scalar_names=tuple(scalar_names),
+    )
+    driver.regional_v841 = runtime
+    # CUDA: kernel_cache.post_launch = discipline.scrub.
+    metal_v841_launch.POST_LAUNCH = runtime.discipline.scrub
+    return driver
+
+
+__all__ = ["MetalDycoreV841", "assemble_regional_metal_dycore_v841"]

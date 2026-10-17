@@ -1,0 +1,54 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_zero_speczone_w_v841",
+      "module": "hexv841_regional_zero_speczone_w_v841",
+      "source": "woof/metal/shaders/hexv841_regional_zero_speczone_w_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_zero_speczone_w_v841",
+      "resources": [
+        [
+          "spec_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nrows",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

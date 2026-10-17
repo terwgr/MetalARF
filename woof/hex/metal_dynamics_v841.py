@@ -481,10 +481,7 @@ def _recover_velocities(driver: Any, state: MetalPrognosticState) -> tuple[Any, 
 def _recover_candidate(driver: Any, saved_state: MetalPrognosticState,
                        saved_diag: MetalSavedDiagnostics, acoustic: Any,
                        stage: int, acoustic_steps: int, scalars: Any):
-    if getattr(driver, "regional_v841", None) is not None:
-        raise ConfigurationRefusal(
-            "regional_v841", "set", "the Metal recovery has no regional overwrite",
-            "a global (non-regional) run")
+    regional = getattr(driver, "regional_v841", None)
     arrays = driver.arrays
     atmosphere = driver.atmosphere
     mctx = _context(saved_state.rho)
@@ -524,8 +521,18 @@ def _recover_candidate(driver: Any, saved_state: MetalPrognosticState,
                  acoustic_steps=_i(acoustic_steps)))
     if driver.v841_context is not None:
         enforce_rw_endpoints_metal_v841(rw)
+    regional_u_overwrite = None
+    if regional is not None:
+        # As CUDA: recover in the padded memory model with rho_zz's garbage
+        # cell at 1.0, then the ru half of the specified-zone overwrite.
+        regional.bind_state_rho(rho)
+        regional_u_overwrite = regional.overwrite_speczone_rho_u(ru, stage)
     state = _device_state(driver, rho, rtheta, ru, rw, scalars)
     normal_velocity, vertical_velocity = _recover_velocities(driver, state)
+    if regional is not None:
+        # The u half with the same driving values, then the zero-gradient w.
+        regional.overwrite_speczone_u(normal_velocity, regional_u_overwrite)
+        regional.zero_speczone_w(vertical_velocity)
     diagnostics = _device_saved(driver, theta, exner, rho_p, rtheta_p, pressure_p,
                                 normal_velocity, vertical_velocity)
     return state, diagnostics, flux_u, flux_w

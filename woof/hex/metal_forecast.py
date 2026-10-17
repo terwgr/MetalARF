@@ -48,7 +48,7 @@ def _initial_time(dataset: Any) -> datetime:
 _IMPLEMENTED = frozenset({
     "mesh", "backend", "init", "init_source", "start_time", "hours",
     "history_every_minutes", "out", "receipt", "case_label", "repo",
-    "horiz_mixing", "checkpoint", "restart",
+    "horiz_mixing", "checkpoint", "restart", "lbc_dir",
 })
 
 
@@ -79,6 +79,20 @@ _MIXING = {
         "config_del4u_div_factor": 10.0,
     },
 }
+
+
+def _solve_region(value: Any, n_cells: int, n_edges: int) -> Any:
+    """Drop a limited-area run's padded garbage column; global arrays pass."""
+
+    from dataclasses import fields, replace
+
+    solve = {n_cells + 1: n_cells, n_edges + 1: n_edges}
+    sliced = {}
+    for field in fields(value):
+        array = getattr(value, field.name)
+        if isinstance(array, np.ndarray) and array.shape[-1:] and array.shape[-1] in solve:
+            sliced[field.name] = np.ascontiguousarray(array[..., :solve[array.shape[-1]]])
+    return replace(value, **sliced)
 
 
 def _start_stamp(value: datetime) -> str:
@@ -176,10 +190,24 @@ def run_metal_forecast(arguments: Any) -> int:
         checkpoint = Path(checkpoint).expanduser().absolute()
         if not checkpoint.parent.is_dir():
             raise _refuse(f"--checkpoint parent directory does not exist: {checkpoint.parent}")
-    native = load_mpas_vertical_grid(init, mesh)
+    regional = bool(binding.regional)
+    lbc_dir = getattr(arguments, "lbc_dir", None)
+    if regional and lbc_dir is None:
+        raise _refuse(
+            f"mesh row {mesh_name} is limited-area: --lbc-dir is required, or "
+            "the domain empties from its boundary rings inward")
+    if not regional and lbc_dir is not None:
+        raise _refuse(f"--lbc-dir is for limited-area rows; {mesh_name} is global")
+    lbc_paths: list[str] = []
+    if regional:
+        lbc_paths = sorted(str(path) for path in Path(lbc_dir).glob("lbc.*.nc"))
+        if not lbc_paths:
+            raise _refuse(f"--lbc-dir {lbc_dir} holds no lbc.*.nc")
+    native = load_mpas_vertical_grid(init, mesh, allow_regional_sentinels=regional)
     state, reference, saved = load_mpas_initial_state(
         init, mesh, native.vertical_grid, scalar_names=("qv",),
         terrain_metrics=native.terrain_metrics, return_saved_diagnostics=True,
+        allow_regional_sentinels=regional,
     )
     first_step = 0
     if restart is not None:
@@ -222,6 +250,7 @@ def run_metal_forecast(arguments: Any) -> int:
         # Dry: qv is a passive tracer, as in the CUDA dry step.
         config_moist_physics=False,
         config_coef_3rd_order=0.25,
+        config_apply_lbcs=regional,
         **_MIXING[horiz_mixing],
     )
     with Dataset(init, mode="r") as dataset:
@@ -231,27 +260,50 @@ def run_metal_forecast(arguments: Any) -> int:
 
     wind = V841ReferenceWindProfiles(wind_u, wind_v)
     stride = int(history_minutes) * 60 // int(row.dt_seconds)
+    n_cells = int(mesh.dimensions["nCells"])
+    n_edges = int(mesh.dimensions["nEdges"])
     with MetalContext() as context:
-        driver = MetalDycoreV841.from_host(
-            context, mesh, state, native.vertical_grid, reference, config,
-            saved_diagnostics=saved, terrain_metrics=native.terrain_metrics,
-            reference_wind_profiles=wind,
-        )
+        if regional:
+            from . import metal_v841_launch
+            from .metal_driver_v841 import assemble_regional_metal_dycore_v841
+
+            driver = assemble_regional_metal_dycore_v841(
+                context, mesh, state, native.vertical_grid, reference, saved,
+                native.terrain_metrics, config,
+                reference_wind_profiles=wind, lbc_paths=lbc_paths,
+                # LBC inventories carry naive UTC stamps.
+                start_time=(valid_time + timedelta(seconds=float(state.time_seconds))
+                            ).replace(tzinfo=None),
+            )
+        else:
+            driver = MetalDycoreV841.from_host(
+                context, mesh, state, native.vertical_grid, reference, config,
+                saved_diagnostics=saved, terrain_metrics=native.terrain_metrics,
+                reference_wind_profiles=wind,
+            )
         for step in range(first_step + 1, first_step + steps + 1):
             driver.step_device()
             if step % stride == 0:
-                state = driver.atmosphere.state.to_host()
+                state = _solve_region(driver.atmosphere.state.to_host(),
+                                      n_cells, n_edges)
+                edge_u = None
+                if regional:
+                    edge_u = driver.atmosphere.saved.normal_velocity.to_numpy()[
+                        ..., :n_edges]
                 frame_time = valid_time + timedelta(seconds=step * row.dt_seconds)
                 write_dry_state_history(
                     out / f"history.{step:06d}.nc", mesh, state, frame_time,
                     initial_time=valid_time, vertical_grid=native.vertical_grid,
+                    normal_velocity=edge_u,
                 )
-        state = driver.atmosphere.state.to_host()
+        state = _solve_region(driver.atmosphere.state.to_host(), n_cells, n_edges)
         if checkpoint is not None:
             from .checkpoint import write_checkpoint
 
-            write_checkpoint(checkpoint, state,
-                             saved_diagnostics=driver.atmosphere.saved.to_host())
+            write_checkpoint(checkpoint, state, saved_diagnostics=_solve_region(
+                driver.atmosphere.saved.to_host(), n_cells, n_edges))
+        if regional:
+            metal_v841_launch.POST_LAUNCH = None
         state.validate(
             n_cells=int(mesh.dimensions["nCells"]),
             n_edges=int(mesh.dimensions["nEdges"]),
@@ -264,6 +316,8 @@ def run_metal_forecast(arguments: Any) -> int:
         "case_label": getattr(arguments, "case_label", None),
         "physics": "none",
         "horiz_mixing": horiz_mixing,
+        "limited_area": regional,
+        "lbc_dir": None if lbc_dir is None else str(Path(lbc_dir).resolve()),
         "mesh": mesh_name,
         "init": str(init),
         "init_source": init_source,

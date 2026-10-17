@@ -1,0 +1,192 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_regional_bdy_adjust_scalars_compute_v841",
+      "module": "hexv841_regional_bdy_adjust_scalars_compute_v841",
+      "source": "woof/metal/shaders/hexv841_regional_bdy_adjust_scalars_compute_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "regional_bdy_adjust_scalars_compute_v841",
+      "resources": [
+        [
+          "relax_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "spec_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "bdy_mask_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_scaling_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_sign_on_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "scalars_new",
+          "float32",
+          "read"
+        ],
+        [
+          "scalars_driving",
+          "float32",
+          "read"
+        ],
+        [
+          "updates",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "relax_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "bdy_mask_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_scaling_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_new": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scalars_driving": [
+          [
+            "any_1d"
+          ]
+        ],
+        "updates": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "nrelax",
+          "int32"
+        ],
+        [
+          "nspec",
+          "int32"
+        ],
+        [
+          "ten_dt",
+          "float32"
+        ],
+        [
+          "dt_rk",
+          "float32"
+        ],
+        [
+          "relax_zone",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

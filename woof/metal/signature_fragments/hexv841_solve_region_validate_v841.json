@@ -1,0 +1,62 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_solve_region_validate_v841",
+      "module": "hexv841_solve_region_validate_v841",
+      "source": "woof/metal/shaders/hexv841_solve_region_validate_v841.metal",
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_validate_v841",
+      "resources": [
+        [
+          "field",
+          "float32",
+          "read"
+        ],
+        [
+          "flag",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "field": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flag": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rows",
+          "int32"
+        ],
+        [
+          "stride",
+          "int32"
+        ],
+        [
+          "n",
+          "int32"
+        ],
+        [
+          "positive",
+          "int32"
+        ],
+        [
+          "blocks",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_solve_region_envelope_finish_v841",
+      "module": "hexv841_solve_region_envelope_finish_v841",
+      "source": "woof/metal/shaders/hexv841_solve_region_envelope_finish_v841.metal",
+      "cuda_source": "woof/hex/cuda_solve_region_v841.py",
+      "cuda_symbol": "solve_region_envelope_finish_v841",
+      "resources": [
+        [
+          "partials",
+          "int64",
+          "read"
+        ],
+        [
+          "out",
+          "int64",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "partials": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "n_fields",
+          "int32"
+        ],
+        [
+          "blocks_per_field",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 256,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,146 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_transport_edge_values_regional_v841",
+      "module": "hexv841_transport_edge_values_regional_v841",
+      "source": "woof/metal/shaders/hexv841_transport_edge_values_regional_v841.metal",
+      "cuda_source": "woof/hex/cuda_regional_v841.py",
+      "cuda_symbol": "transport_edge_values_regional_v841",
+      "resources": [
+        [
+          "bdy_mask_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "adv",
+          "float32",
+          "read"
+        ],
+        [
+          "adv3",
+          "float32",
+          "read"
+        ],
+        [
+          "n_adv",
+          "int32",
+          "read"
+        ],
+        [
+          "adv_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_values",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "bdy_mask_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "stage": [
+          [
+            "any_1d"
+          ]
+        ],
+        "velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_adv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "adv_cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_values": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "coefficient",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}
