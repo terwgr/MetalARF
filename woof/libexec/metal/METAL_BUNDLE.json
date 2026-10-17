@@ -6,8 +6,8 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "bf641469fb5a3d433f022b40836c9536d3017a717da60344c4da4795c6c7ef71",
-      "size": 11310060
+      "sha256": "849db92f1313cabfbbd5b2dcb4a059da599101f7ee7e04f1d1c4112a974e3e24",
+      "size": 11312092
     },
     "woof_exact.metallib": {
       "sha256": "017b8a398514b6f4d50366b83af61dc25fad1d1d6c805f9d4f73e8ae71949458",
@@ -15,8 +15,8 @@
     }
   },
   "implementation_file_count": 887,
-  "implementation_sha256": "da706cbf2d256a8da37fdf0846ed9e44a40f67a7c6e4f12c13b9288df73058a9",
-  "metal_inputs_sha256": "3fa2829c2a6d21f818a6dc64e53003e6ef3786ef1809af018094f7b1217fb9f3",
+  "implementation_sha256": "b68187b8a83de1020179dfcd29784d06f2af0d4c6d27a5c30029e2d942682c99",
+  "metal_inputs_sha256": "abf79dfda010a21b94f4113c33ed105da907d6ffc9e2ab3dd54cebe18bba5955",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -828,8 +828,8 @@
         "size": 2110
       },
       "woof/metal/shaders/morrison_family.metal": {
-        "sha256": "c2ccf0fbeeb6c3ab1e65a95a86f95179c12b3c691edc3b1fb3778fb54b678534",
-        "size": 58690
+        "sha256": "7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f",
+        "size": 58822
       },
       "woof/metal/shaders/morrison_refl.metal": {
         "sha256": "1d3d79c4ca993ff832872ddb8bc6dca773b97df1c21e7df8c0dbad03dea49b1a",
@@ -2968,6 +2968,6 @@
         "size": 296
       }
     },
-    "sha256": "3fa2829c2a6d21f818a6dc64e53003e6ef3786ef1809af018094f7b1217fb9f3"
+    "sha256": "abf79dfda010a21b94f4113c33ed105da907d6ffc9e2ab3dd54cebe18bba5955"
   }
 }

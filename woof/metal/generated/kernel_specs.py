@@ -1463,7 +1463,7 @@ MORRISON_FINALIZE_LEVELS_SHAPES = (('effc', (('nz', 'ny', 'nx'),)), ('effi', (('
 MORRISON_FINALIZE_LEVELS_PARAM_FIELDS = [('morr_rhog', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ncell', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_FINALIZE_LEVELS_THREADS_PER_GROUP = 128
 MORRISON_FINALIZE_LEVELS_LAYOUT_HASH = 'b3180d259e493023a63502843e8377e1651cea38126bffb4bdd1060cf6dd5521'
-MORRISON_FINALIZE_LEVELS_SHADER_HASH = 'c2ccf0fbeeb6c3ab1e65a95a86f95179c12b3c691edc3b1fb3778fb54b678534'
+MORRISON_FINALIZE_LEVELS_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
 
 MORRISON_FINISH_RESOURCES = (('theta', 'float', 'read'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 MORRISON_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -1471,7 +1471,7 @@ MORRISON_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('theta', (('nz
 MORRISON_FINISH_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float'), ('no_mp_heating', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ncell', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_FINISH_THREADS_PER_GROUP = 128
 MORRISON_FINISH_LAYOUT_HASH = '509153cba9fcf3eb9159e5248460858491909e610ddda2736b5eac8483d86646'
-MORRISON_FINISH_SHADER_HASH = 'c2ccf0fbeeb6c3ab1e65a95a86f95179c12b3c691edc3b1fb3778fb54b678534'
+MORRISON_FINISH_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
 
 MORRISON_PREPARE_FIELDS_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('pressure', 'float', 'read'), ('theta', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 MORRISON_PREPARE_FIELDS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1479,7 +1479,7 @@ MORRISON_PREPARE_FIELDS_SHAPES = (('dz', (('nz', 'ny', 'nx'),)), ('h_diabatic', 
 MORRISON_PREPARE_FIELDS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nzi', 'ctypes.c_int32'), ('thb_full', 'ctypes.c_int32'), ('phb_full', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float'), ('ncell', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_PREPARE_FIELDS_THREADS_PER_GROUP = 128
 MORRISON_PREPARE_FIELDS_LAYOUT_HASH = '2667ff0f204f6df79760997d7d44caee888fa29b51ee62c554bd61a313c40781'
-MORRISON_PREPARE_FIELDS_SHADER_HASH = 'c2ccf0fbeeb6c3ab1e65a95a86f95179c12b3c691edc3b1fb3778fb54b678534'
+MORRISON_PREPARE_FIELDS_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
 
 MORRISON_PROCESS_LEVELS_RESOURCES = (('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('ns', 'float', 'read_write'), ('ng', 'float', 'read_write'), ('qrcuten', 'float', 'read'), ('qscuten', 'float', 'read'), ('qicuten', 'float', 'read'), ('rho_in', 'float', 'read_write'), ('pii', 'float', 'read'), ('pressure', 'float', 'read'), ('ice_to_snow_scratch', 'float', 'read_write'), ('effc', 'float', 'read_write'), ('effi', 'float', 'read_write'), ('effs', 'float', 'read_write'))
 MORRISON_PROCESS_LEVELS_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read_write', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1487,7 +1487,7 @@ MORRISON_PROCESS_LEVELS_SHAPES = (('effc', (('nz', 'ny', 'nx'),)), ('effi', (('n
 MORRISON_PROCESS_LEVELS_PARAM_FIELDS = [('morr_ag', 'ctypes.c_float'), ('morr_bg', 'ctypes.c_float'), ('morr_rhog', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('has_cu_tendencies', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ncell', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_PROCESS_LEVELS_THREADS_PER_GROUP = 64
 MORRISON_PROCESS_LEVELS_LAYOUT_HASH = '6fe3a8a6332e3c5ce1924d37c6ca62eb2842769d2078e81899e4902a6090adcc'
-MORRISON_PROCESS_LEVELS_SHADER_HASH = 'c2ccf0fbeeb6c3ab1e65a95a86f95179c12b3c691edc3b1fb3778fb54b678534'
+MORRISON_PROCESS_LEVELS_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
 
 MORRISON_SEDIMENT_256_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('ns', 'float', 'read_write'), ('ng', 'float', 'read_write'), ('cloud_nc', 'float', 'read'), ('theta', 'float', 'read'), ('pii', 'float', 'read'), ('pressure', 'float', 'read'), ('rho_in', 'float', 'read'), ('dz', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'), ('graupelnc', 'float', 'read_write'), ('graupelncv', 'float', 'read_write'), ('sr', 'float', 'read_write'))
 MORRISON_SEDIMENT_256_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1495,7 +1495,7 @@ MORRISON_SEDIMENT_256_SHAPES = (('cloud_nc', (('nz', 'ny', 'nx'),)), ('dz', (('n
 MORRISON_SEDIMENT_256_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('morr_ag', 'ctypes.c_float'), ('morr_bg', 'ctypes.c_float'), ('morr_rhog', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_SEDIMENT_256_THREADS_PER_GROUP = 128
 MORRISON_SEDIMENT_256_LAYOUT_HASH = '7fe004481970b403ba705ec0aead782720661573f561b4076accf5be65b08813'
-MORRISON_SEDIMENT_256_SHADER_HASH = 'c2ccf0fbeeb6c3ab1e65a95a86f95179c12b3c691edc3b1fb3778fb54b678534'
+MORRISON_SEDIMENT_256_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
 
 MORRISON_SEDIMENT_64_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('ns', 'float', 'read_write'), ('ng', 'float', 'read_write'), ('cloud_nc', 'float', 'read'), ('theta', 'float', 'read'), ('pii', 'float', 'read'), ('pressure', 'float', 'read'), ('rho_in', 'float', 'read'), ('dz', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'), ('graupelnc', 'float', 'read_write'), ('graupelncv', 'float', 'read_write'), ('sr', 'float', 'read_write'))
 MORRISON_SEDIMENT_64_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1503,7 +1503,7 @@ MORRISON_SEDIMENT_64_SHAPES = (('cloud_nc', (('nz', 'ny', 'nx'),)), ('dz', (('nz
 MORRISON_SEDIMENT_64_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('morr_ag', 'ctypes.c_float'), ('morr_bg', 'ctypes.c_float'), ('morr_rhog', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_SEDIMENT_64_THREADS_PER_GROUP = 128
 MORRISON_SEDIMENT_64_LAYOUT_HASH = '11400a4a9eabbe859faeccd9abc443263136b2ab576b016e0744f8a8e1b408c1'
-MORRISON_SEDIMENT_64_SHADER_HASH = 'c2ccf0fbeeb6c3ab1e65a95a86f95179c12b3c691edc3b1fb3778fb54b678534'
+MORRISON_SEDIMENT_64_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
 
 MORRISON_VALIDATE_DIAGNOSTICS_RESOURCES = (('rainnc', 'float', 'read'), ('rainncv', 'float', 'read'), ('snownc', 'float', 'read'), ('snowncv', 'float', 'read'), ('graupelnc', 'float', 'read'), ('graupelncv', 'float', 'read'), ('sr', 'float', 'read'), ('status', 'uint32', 'read_write'))
 MORRISON_VALIDATE_DIAGNOSTICS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -1511,7 +1511,7 @@ MORRISON_VALIDATE_DIAGNOSTICS_SHAPES = (('graupelnc', (('ny', 'nx'),)), ('graupe
 MORRISON_VALIDATE_DIAGNOSTICS_PARAM_FIELDS = [('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ncell', 'ctypes.c_int32'), ('sr_upper', 'ctypes.c_float')]
 MORRISON_VALIDATE_DIAGNOSTICS_THREADS_PER_GROUP = 128
 MORRISON_VALIDATE_DIAGNOSTICS_LAYOUT_HASH = 'fea1eb6eefcb2a5cf919018df029174dd1a579a11d17814982392aea4710a092'
-MORRISON_VALIDATE_DIAGNOSTICS_SHADER_HASH = 'c2ccf0fbeeb6c3ab1e65a95a86f95179c12b3c691edc3b1fb3778fb54b678534'
+MORRISON_VALIDATE_DIAGNOSTICS_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
 
 MYJ_DRIVER_WSPD_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('wspd', 'float', 'read_write'))
 MYJ_DRIVER_WSPD_ACCESS = ('read', 'read', 'read_write')

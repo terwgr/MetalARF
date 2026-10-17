@@ -10,7 +10,9 @@
 #include "morrison_sediment_256_bindings.metalh"
 #include "morrison_finalize_levels_bindings.metalh"
 using namespace metal;
-#pragma clang fp contract(off)
+// CUDA builds morrison.cu with NVRTC defaults, so its plain a*b+c
+// expressions fuse to FMA; contract the same expressions here.
+#pragma clang fp contract(fast)
 
 
 constant float MORR_MPI=3.14159265358979323846f;
