@@ -819,6 +819,27 @@ METAL_FAMILY_CAPS = {
 
 
 METAL_KNOWN_CONFLICTS = (
+    ("Metal MYNN has no bl_mynn_mixscalars=1 caller",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(cfg.bl_pbl_physics) == 5
+     and int(getattr(cfg, "bl_mynn_mixscalars", 0) or 0) != 0),
+    ("Metal IEVA vertical advection runs zadvect_implicit_variant="
+     "'wrf_legacy' with nz <= 64 only",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(getattr(cfg, "zadvect_implicit", 0) or 0) != 0
+     and (getattr(cfg, "zadvect_implicit_variant", "wrf_471") != "wrf_legacy"
+          or int(cfg.nz) > 64)),
+    ("km_opt=0 runs on Metal only under the SASE PBL (bl_pbl_physics=900)",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(cfg.km_opt) == 0 and int(cfg.bl_pbl_physics) != 900),
+    ("SASE has no Metal specified or nested boundary floor",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(cfg.bl_pbl_physics) == 900
+     and (bool(cfg.specified) or bool(getattr(cfg, "nested", False)))),
+    ("Metal RRTMGP holds at most 128 layers including its model-top layer",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     radiation_enabled(cfg) and 4 in radiation_scheme_ids(cfg)
+     and not _metal_legacy_rrtmg_selected(cfg) and int(cfg.nz) > 127),
     ("spp_pbl has no Metal MYNN caller",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "spp_pbl", 0)) != 0),
