@@ -2023,8 +2023,11 @@ def parent_only_init(child_dc: DomainConfig,
             if transition_backing is None or count > transition_backing.size:
                 raise RuntimeError(
                     "parent transition field exceeds F16 arena capacity")
-            backing = transition_backing.reshape(-1)[:count].reshape(
-                parent_shape)
+            if getattr(child, "_metal_setup_state", False):
+                backing = transition_backing.view(parent_shape)
+            else:
+                backing = transition_backing.reshape(-1)[:count].reshape(
+                    parent_shape)
             launch_microphysics_edge_parent_field(
                 transition, transition_parent, name, out=backing, coupled=False)
             sint(backing, transition_reg, out=target)

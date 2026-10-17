@@ -683,6 +683,13 @@ _FORBIDDEN_STAGED_FILES = {
 }
 
 _OPTIONAL_STAGED_IMPORTS = {
+    ("woof/core/microphysics_transition.py", "woof.metal.array"):
+        "optional Metal type detection catches ImportError; standalone "
+        "preparation and CUDA edge launches require no Metal runtime",
+    ("woof/core/microphysics_transition.py", "woof.metal.nest_microphysics_family"):
+        "resident Metal edge launches and donor copies, reached only after "
+        "positive MetalArray detection; standalone preparation uses its "
+        "existing CPU or CUDA path",
     ("woof/core/adaptive_clock.py", "woof.core.physics"):
         "the physics cadence helpers inside _refresh_physics_cadence, "
         "called by the executing adaptive driver. The function returns "

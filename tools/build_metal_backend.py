@@ -822,7 +822,8 @@ def build(output: Path) -> dict:
                 ("p3_sed_rain", P3_SED_RAIN_SHADER),
                 ("p3_sed_ice", P3_SED_ICE_SHADER),
                 ("uwpbl_family", UWPBL_FAMILY_SHADER),
-                ("cumulus_clock_family", CUMULUS_CLOCK_FAMILY_SHADER)):
+                ("cumulus_clock_family", CUMULUS_CLOCK_FAMILY_SHADER),
+                ("nest_microphysics_family", ROOT / "woof/metal/shaders/nest_microphysics_family.metal")):
             air_path = temp / f"{name}.air"
             _run([str(metal), f"-fmodules-cache-path={module_cache}",
                   "-std=macos-metal2.4", "-target", "air64-apple-macos14.0",

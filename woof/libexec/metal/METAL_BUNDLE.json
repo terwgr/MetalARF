@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "6929ed9fc12d12353e38d6d9c76ff941e816ccdef5d1ffba4846d1c6a491547a",
-      "size": 12560548
+      "sha256": "ae9c83a409baf4b23a1eadc3d0859c94af638fb4ea9b01f6e29cec1aa7df464d",
+      "size": 12636769
     },
     "woof_exact.metallib": {
       "sha256": "157c3ba92cdfe9dcdccdaf4ea91f0b330d7a495ba70a91970d8b2ba41204c449",
       "size": 8139364
     }
   },
-  "implementation_file_count": 1144,
-  "implementation_sha256": "38bf4ba858583a1bfac275bf1e9f301f37960f9538d3e08ef7aeeb4cb6972c21",
-  "metal_inputs_sha256": "aa3dea33c4a8ae24c6e37251345e0821529f48b1a46d904995c402252d393014",
+  "implementation_file_count": 1147,
+  "implementation_sha256": "bd6afd8ef37f2b5f91f905c8eb248075b6dec7ca50b7968858da2f3a4c52784a",
+  "metal_inputs_sha256": "a6f239f1060455b94743755e8725527f482ad7434a71af1d50a6b7de2a58afa0",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -24,8 +24,8 @@
     "binding": "sha256-build-inputs",
     "files": {
       "tools/build_metal_backend.py": {
-        "sha256": "2d4ba8f6a5029559414d184b7eebe25fe2e23af6e79ba838972edb134bed0284",
-        "size": 92505
+        "sha256": "cebc64be3245c92780585cf8028d13e2c941e28fb95eb51dff099d3a4f6a3241",
+        "size": 92611
       },
       "tools/generate_metal_kernel_signatures.py": {
         "sha256": "828b6378afd4c24d9925d0b3ed62e5947a4633725264a07bc981132df6e286c4",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "72c3c2f6f00c9088efb98cbbb383d65b6dfbc9004153fd46ecf7560cb972af55",
-        "size": 2543315
+        "sha256": "9013f03f38a411576478fe9fb2ff20049cb9787607df9244b808569fcfdd2da9",
+        "size": 2550467
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
@@ -1370,6 +1370,10 @@
       "woof/metal/shaders/nest_interp_fragment.metal": {
         "sha256": "bab41ec9ce222b297fb2bebbc55ae32bfbee4c248c7960cc894bcf19ac43bc18",
         "size": 4933
+      },
+      "woof/metal/shaders/nest_microphysics_family.metal": {
+        "sha256": "32f3d765290f1e720c62da2e2482c0f185fcd040112d89ce76c513bbc7d10e41",
+        "size": 31010
       },
       "woof/metal/shaders/nest_stream_transfer_fragment.metal": {
         "sha256": "9c1119a23dbc0ff2cb03716e8b0e05bdf7e42d83e2da9ec2af1ef48694826c71",
@@ -3307,6 +3311,10 @@
         "sha256": "56800302c3c74121a2aee60a4e01c071b27c809aa621b36dddb739674f14afc2",
         "size": 2374
       },
+      "woof/metal/signature_fragments/nest_microphysics_family.json": {
+        "sha256": "94dea169ff1a3158d9d1ee1fea7c02b1317091f777560b64c80363a3a691f6b0",
+        "size": 7174
+      },
       "woof/metal/signature_fragments/nest_stream_transfer_fragment.json": {
         "sha256": "ef39d3af3f4aeff159aa3a384102445592ccc0970678c704709436b1e593ab10",
         "size": 1562
@@ -3996,6 +4004,6 @@
         "size": 296
       }
     },
-    "sha256": "aa3dea33c4a8ae24c6e37251345e0821529f48b1a46d904995c402252d393014"
+    "sha256": "a6f239f1060455b94743755e8725527f482ad7434a71af1d50a6b7de2a58afa0"
   }
 }

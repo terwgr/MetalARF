@@ -15580,6 +15580,38 @@
       "resource_count": 4,
       "shader_hash": "7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nest_microphysics.cu",
+      "cuda_symbol": "mp8_to_mp18_mass_diagnosed_field",
+      "layout_hash": "66e550b0194029d8c741ea5daf019933ef73b503fc959987481dda332549f14f",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/nest_microphysics_family.metal",
+      "module": "nest_microphysics_family",
+      "name": "nest_mp8_to_mp18_mass_diagnosed_field",
+      "parameter_size": 20,
+      "resource_count": 12,
+      "shader_hash": "32f3d765290f1e720c62da2e2482c0f185fcd040112d89ce76c513bbc7d10e41",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/nest_microphysics.cu",
+      "cuda_symbol": "microphysics_edge_field",
+      "layout_hash": "1d59e3c492ba806f4af9f544ee01aa6a3bfe9154833ee0510cb52dd6f1ecbac6",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/nest_microphysics_family.metal",
+      "module": "nest_microphysics_family",
+      "name": "nest_microphysics_edge_field",
+      "parameter_size": 76,
+      "resource_count": 19,
+      "shader_hash": "32f3d765290f1e720c62da2e2482c0f185fcd040112d89ce76c513bbc7d10e41",
+      "threads_per_group": 128
     }
   ],
   "schema": "woof-metal-registry-v1"

@@ -1167,7 +1167,6 @@ def transition_source_window(state, window):
     columnar ``thb``: a base profile has no horizontal extent to cut.
     """
     from types import SimpleNamespace
-    import cupy as cp
     ny, nx = state.qv.shape[-2:]
     if not isinstance(window, tuple) or len(window) != 2:
         raise ValueError("transition window must be two bounded slices")
@@ -1176,6 +1175,10 @@ def transition_source_window(state, window):
                 or sl.start is None or sl.stop is None
                 or not 0 <= sl.start < sl.stop <= extent):
             raise ValueError("transition window is outside the parent")
+    if _is_metal_array(state.qv):
+        from woof.metal.nest_microphysics_family import source_window
+        return source_window(state, window, _WINDOWED_EDGE_PLANES)
+    import cupy as cp
     fields = {}
     for name in _WINDOWED_EDGE_PLANES:
         value = getattr(state, name, None)
@@ -1190,8 +1193,6 @@ def transition_source_window(state, window):
 
 
 def _validate_transition_arrays(contract, state, out, shape) -> None:
-    import cupy as cp
-
     source_names = _MASS_FIELDS[contract.source_mp_physics]
     if contract.source_mp_physics == 50:
         # The exit split reads the rime pair beside the mass fields, so it
@@ -1203,13 +1204,13 @@ def _validate_transition_arrays(contract, state, out, shape) -> None:
             raise ValueError(
                 f"microphysics transition source {name} must have "
                 f"shape {shape}")
-        if value.dtype != cp.float32:
+        if value.dtype != np.float32:
             raise TypeError(
                 f"microphysics transition source {name} must be float32")
         if not value.flags.c_contiguous:
             raise ValueError(
                 f"microphysics transition source {name} must be contiguous")
-    if tuple(out.shape) != shape or out.dtype != cp.float32:
+    if tuple(out.shape) != shape or out.dtype != np.float32:
         raise ValueError(
             f"microphysics transition output must be float32 with shape "
             f"{shape}")
@@ -1252,7 +1253,7 @@ def _validate_transition_arrays(contract, state, out, shape) -> None:
                     "kernel's input set")
             checks.append((name, value, shape))
     for name, value, expected in checks:
-        if tuple(value.shape) != expected or value.dtype != cp.float32:
+        if tuple(value.shape) != expected or value.dtype != np.float32:
             raise ValueError(
                 f"microphysics transition {name} must be float32 with "
                 f"shape {expected}")
@@ -1261,6 +1262,25 @@ def _validate_transition_arrays(contract, state, out, shape) -> None:
             # slicing, so contiguity is the property that route can lose.
             raise ValueError(
                 f"microphysics transition {name} must be contiguous")
+
+
+def _is_metal_array(value):
+    try:
+        from woof.metal.array import MetalArray
+    except ImportError:  # Standalone CUDA and preprocessing installations.
+        return False
+    return isinstance(value, MetalArray)
+
+
+def _launch_transition_kernel(symbol, out, arguments):
+    if _is_metal_array(out):
+        from woof.metal.nest_microphysics_family import submit_edge
+        return submit_edge(symbol, arguments)
+    from woof.core.kernels import get_kernel
+    count = int(out.size)
+    get_kernel("nest_microphysics", symbol)(
+        ((count + _THREADS - 1) // _THREADS,), (_THREADS,), arguments)
+    return out
 
 
 def launch_microphysics_edge_field(
@@ -1275,8 +1295,6 @@ def launch_microphysics_edge_field(
     restricted up.  The FORCE path passes the parent and ``coupled=True``;
     the FEEDBACK path passes the child and ``coupled=False``.
     """
-
-    from woof.core.kernels import get_kernel
 
     if not transition_handles_field(contract, field_name):
         raise ValueError(
@@ -1319,7 +1337,12 @@ def launch_microphysics_edge_field(
         from woof.core.milbrandt2_constants import ck_vector_device
         from woof.core import constants as _c
 
-        my2_arrays = (state.thb, state.thp, state.p, ck_vector_device())
+        if _is_metal_array(out):
+            from woof.metal.nest_microphysics_family import my2_constants
+            constants = my2_constants(out.buffer.context)
+        else:
+            constants = ck_vector_device()
+        my2_arrays = (state.thb, state.thp, state.p, constants)
         my2_scalars = (np.float32(_c.P0), np.float32(_c.RCP),
                        np.int32(1 if state.thb.ndim == 1 else 0))
     else:
@@ -1338,10 +1361,8 @@ def launch_microphysics_edge_field(
         for slot, name in ((4, "qs"), (5, "qg"), (6, "qh")):
             if name in _MASS_FIELDS[contract.source_mp_physics]:
                 mass_sources[slot] = _SOURCE_MASS_CODES[name]
-    count = int(out.size)
     ny, nx = shape[1:]
-    get_kernel("nest_microphysics", "microphysics_edge_field")(
-        ((count + _THREADS - 1) // _THREADS,), (_THREADS,), (
+    return _launch_transition_kernel("microphysics_edge_field", out, (
             state.alt, *source_arrays, *rime_arrays, *my2_arrays,
             state.mub2d, state.mup,
             state.c1h, state.c2h, out,
@@ -1355,15 +1376,11 @@ def launch_microphysics_edge_field(
             np.int32(coupled), np.int32(shape[0]), np.int32(ny),
             np.int32(nx),
         ))
-    return out
 
 
 def launch_mp8_to_mp18_parent_field(
         state, field_name: str, *, out, coupled: bool) -> object:
     """Original bit-specified MP8 -> MP18 translation entry point."""
-
-    import cupy as cp
-    from woof.core.kernels import get_kernel
 
     if field_name not in _FIELD_CODES:
         raise ValueError(f"unsupported MP8->MP18 transition field {field_name!r}")
@@ -1378,11 +1395,11 @@ def launch_mp8_to_mp18_parent_field(
         if value is None or tuple(value.shape) != shape:
             raise ValueError(
                 f"MP8 transition source {name} must have shape {shape}")
-        if value.dtype != cp.float32:
+        if value.dtype != np.float32:
             raise TypeError(f"MP8 transition source {name} must be float32")
         if not value.flags.c_contiguous:
             raise ValueError(f"MP8 transition source {name} must be contiguous")
-    if tuple(out.shape) != shape or out.dtype != cp.float32:
+    if tuple(out.shape) != shape or out.dtype != np.float32:
         raise ValueError(
             f"MP8 transition output must be float32 with shape {shape}")
     if not out.flags.c_contiguous:
@@ -1393,19 +1410,16 @@ def launch_mp8_to_mp18_parent_field(
             ("mup", state.mup, (ny, nx)),
             ("c1h", state.c1h, (shape[0],)),
             ("c2h", state.c2h, (shape[0],))):
-        if tuple(value.shape) != expected or value.dtype != cp.float32:
+        if tuple(value.shape) != expected or value.dtype != np.float32:
             raise ValueError(
                 f"MP8 transition {name} must be float32 with shape {expected}")
 
-    count = int(out.size)
-    get_kernel("nest_microphysics", "mp8_to_mp18_mass_diagnosed_field")(
-        ((count + _THREADS - 1) // _THREADS,), (_THREADS,), (
+    return _launch_transition_kernel("mp8_to_mp18_mass_diagnosed_field", out, (
             state.alt, state.qv, state.qc, state.qr, state.qi, state.qs,
             state.qg, state.mub2d, state.mup, state.c1h, state.c2h, out,
             np.int32(_FIELD_CODES[field_name]), np.int32(coupled),
             np.int32(shape[0]), np.int32(ny), np.int32(nx),
         ))
-    return out
 
 
 # ---------------------------------------------------------------------------

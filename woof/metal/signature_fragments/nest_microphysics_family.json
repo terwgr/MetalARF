@@ -1,0 +1,446 @@
+{
+  "kernels": [
+    {
+      "name": "nest_mp8_to_mp18_mass_diagnosed_field",
+      "module": "nest_microphysics_family",
+      "source": "woof/metal/shaders/nest_microphysics_family.metal",
+      "cuda_source": "woof/core/kernels/nest_microphysics.cu",
+      "cuda_symbol": "mp8_to_mp18_mass_diagnosed_field",
+      "resources": [
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qr",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "qg",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "alt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mub2d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c1h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c2h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "field",
+          "int32"
+        ],
+        [
+          "coupled",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "nest_microphysics_edge_field",
+      "module": "nest_microphysics_family",
+      "source": "woof/metal/shaders/nest_microphysics_family.metal",
+      "cuda_source": "woof/core/kernels/nest_microphysics.cu",
+      "cuda_symbol": "microphysics_edge_field",
+      "resources": [
+        [
+          "alt",
+          "float",
+          "read"
+        ],
+        [
+          "source_qv",
+          "float",
+          "read"
+        ],
+        [
+          "source_qc",
+          "float",
+          "read"
+        ],
+        [
+          "source_qr",
+          "float",
+          "read"
+        ],
+        [
+          "source_qi",
+          "float",
+          "read"
+        ],
+        [
+          "source_qs",
+          "float",
+          "read"
+        ],
+        [
+          "source_qg",
+          "float",
+          "read"
+        ],
+        [
+          "source_qh",
+          "float",
+          "read"
+        ],
+        [
+          "source_qir",
+          "float",
+          "read"
+        ],
+        [
+          "source_qib",
+          "float",
+          "read"
+        ],
+        [
+          "target_thb",
+          "float",
+          "read"
+        ],
+        [
+          "target_thp",
+          "float",
+          "read"
+        ],
+        [
+          "target_pres",
+          "float",
+          "read"
+        ],
+        [
+          "my2_ck",
+          "float",
+          "read"
+        ],
+        [
+          "mub2d",
+          "float",
+          "read"
+        ],
+        [
+          "mup",
+          "float",
+          "read"
+        ],
+        [
+          "c1h",
+          "float",
+          "read"
+        ],
+        [
+          "c2h",
+          "float",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "alt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_qv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_qc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_qr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_qi": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_qs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_qg": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_qh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_qir": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source_qib": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target_thb": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target_thp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target_pres": [
+          [
+            "any_1d"
+          ]
+        ],
+        "my2_ck": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mub2d": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mup": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c1h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c2h": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "qv_source",
+          "int32"
+        ],
+        [
+          "qc_source",
+          "int32"
+        ],
+        [
+          "qr_source",
+          "int32"
+        ],
+        [
+          "qi_source",
+          "int32"
+        ],
+        [
+          "qs_source",
+          "int32"
+        ],
+        [
+          "qg_source",
+          "int32"
+        ],
+        [
+          "qh_source",
+          "int32"
+        ],
+        [
+          "field",
+          "int32"
+        ],
+        [
+          "source_mp",
+          "int32"
+        ],
+        [
+          "target_mp",
+          "int32"
+        ],
+        [
+          "morr_rhog",
+          "float32"
+        ],
+        [
+          "my2_p0",
+          "float32"
+        ],
+        [
+          "my2_rcp",
+          "float32"
+        ],
+        [
+          "thb_columnar",
+          "int32"
+        ],
+        [
+          "wdm6_ccn",
+          "float32"
+        ],
+        [
+          "coupled",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}
