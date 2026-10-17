@@ -733,7 +733,7 @@ kernel void noahmp_water_batch(
   r.fout[ob]=c.snowh;r.fout[ob+1]=c.sneqv;
   for(uint k=0;k<3;k++){r.fout[ob+2+k]=c.snice[k];r.fout[ob+5+k]=c.snliq[k];}
   for(uint k=0;k<7;k++){r.fout[ob+8+k]=c.stc[k];r.fout[ob+15+k]=c.zsnso[k];r.fout[ob+22+k]=c.dzsnso[k];}
-  for(uint k=0;k<4;k++){r.fout[ob+29+k]=sh2o[k];r.fout[ob+33+k]=sice[k];r.fout[ob+18+k]=zsoil[k];r.fout[ob+25+k]=dz[k];}
+  for(uint k=0;k<4;k++){r.fout[ob+29+k]=sh2o[k];r.fout[ob+33+k]=sice[k];}
   r.fout[ob+41]=canliq;r.fout[ob+42]=canice;r.fout[ob+43]=tv;r.fout[ob+44]=wslake;r.fout[ob+45]=acc_qinsur;r.fout[ob+46]=acc_qseva;
   r.fout[ob+51]=cmc;r.fout[ob+52]=ecan;r.fout[ob+53]=etran;r.fout[ob+54]=fwet;r.fout[ob+55]=runsrf;r.fout[ob+56]=runsub;
   r.fout[ob+57]=0.0f;r.fout[ob+58]=ponding1;r.fout[ob+59]=ponding2;r.fout[ob+60]=qsnbot;r.fout[ob+61]=qsnsub;r.fout[ob+62]=qsnfro;

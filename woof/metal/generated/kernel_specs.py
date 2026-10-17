@@ -1959,7 +1959,7 @@ NOAHMP_WATER_BATCH_SHAPES = (('fin', (('n', 76),)), ('fout', (('n', 73),)), ('ii
 NOAHMP_WATER_BATCH_PARAM_FIELDS = [('n', 'ctypes.c_int32')]
 NOAHMP_WATER_BATCH_THREADS_PER_GROUP = 64
 NOAHMP_WATER_BATCH_LAYOUT_HASH = 'a79b378d952980f7e34e82b78343f3c06a7b5bb60c3699f09398bbc46aedffe9'
-NOAHMP_WATER_BATCH_SHADER_HASH = '24126a15077d2eacdba17b7d9f9863b4e227cbaa455e61ea067898060f1e9546'
+NOAHMP_WATER_BATCH_SHADER_HASH = 'ea5ab45e2128940d1e5987bf8792cff74cfd55d5c979b901d32dc69395db4fe3'
 
 NSSL2_DRIVER_GATHER_INITIALIZE_RESOURCES = (('air_density', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qr', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('qh', 'float', 'read'), ('qndrop', 'float', 'read'), ('qnr', 'float', 'read'), ('qni', 'float', 'read'), ('qns', 'float', 'read'), ('qng', 'float', 'read'), ('qnh', 'float', 'read'), ('qnn', 'float', 'read'), ('qvolg', 'float', 'read'), ('qvolh', 'float', 'read'), ('qrcuten', 'float', 'read'), ('qscuten', 'float', 'read'), ('qicuten', 'float', 'read'), ('qccuten', 'float', 'read'), ('state', 'float', 'read_write'))
 NSSL2_DRIVER_GATHER_INITIALIZE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')

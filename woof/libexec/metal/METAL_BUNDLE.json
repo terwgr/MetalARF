@@ -6,8 +6,8 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "6ef27c712f603f2005d4203d5ffdb95503ca76186f2a135784fa4712835e4584",
-      "size": 11312140
+      "sha256": "75bd9a1b36eabeeae3d5ea243758302d4b8ceb524d79ebc6a5eb7868855bd82b",
+      "size": 11312060
     },
     "woof_exact.metallib": {
       "sha256": "017b8a398514b6f4d50366b83af61dc25fad1d1d6c805f9d4f73e8ae71949458",
@@ -15,8 +15,8 @@
     }
   },
   "implementation_file_count": 887,
-  "implementation_sha256": "d4275670accb8eb14d8746ace7c09771b5a6a0e30a0477b5cdebc6e271204014",
-  "metal_inputs_sha256": "563711ab19800374186cecafaf2fef79a2134449349971a48f4fb1f9d38909b8",
+  "implementation_sha256": "8681f162234715f129e3e520e47944fe1f37b22b962a6dc023995630d922f2d0",
+  "metal_inputs_sha256": "6e8c0a27e7bf89e502de0cd6531154ff85e912ae968705af62a3f6efea7760f8",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -924,8 +924,8 @@
         "size": 6070
       },
       "woof/metal/shaders/noahmp_water_family.metal": {
-        "sha256": "24126a15077d2eacdba17b7d9f9863b4e227cbaa455e61ea067898060f1e9546",
-        "size": 41917
+        "sha256": "ea5ab45e2128940d1e5987bf8792cff74cfd55d5c979b901d32dc69395db4fe3",
+        "size": 41870
       },
       "woof/metal/shaders/nssl2_diagnostics.metal": {
         "sha256": "9adc13ecd2d150db95526d5f52710ae024a0d473dafae2c715ea1c520f5eb65c",
@@ -2968,6 +2968,6 @@
         "size": 296
       }
     },
-    "sha256": "563711ab19800374186cecafaf2fef79a2134449349971a48f4fb1f9d38909b8"
+    "sha256": "6e8c0a27e7bf89e502de0cd6531154ff85e912ae968705af62a3f6efea7760f8"
   }
 }

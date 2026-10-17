@@ -3965,7 +3965,7 @@
       "name": "noahmp_water_batch",
       "parameter_size": 4,
       "resource_count": 5,
-      "shader_hash": "24126a15077d2eacdba17b7d9f9863b4e227cbaa455e61ea067898060f1e9546",
+      "shader_hash": "ea5ab45e2128940d1e5987bf8792cff74cfd55d5c979b901d32dc69395db4fe3",
       "threads_per_group": 64
     },
     {
