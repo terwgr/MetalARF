@@ -819,6 +819,24 @@ METAL_FAMILY_CAPS = {
 
 
 METAL_KNOWN_CONFLICTS = (
+    ("spp_pbl has no Metal MYNN caller",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(getattr(cfg, "spp_pbl", 0)) != 0),
+    ("a nested legacy-RRTMG child interpolates CAM ozone (o3input=2) from "
+     "its parent, which has no Metal caller",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     bool(getattr(cfg, "nested", False))
+     and int(getattr(cfg, "o3input", 2)) == 2
+     and _metal_legacy_rrtmg_selected(cfg)),
+    ("prescribed smoke (rrtmg_smoke_manifest) has no Metal binding",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     bool(getattr(cfg, "rrtmg_smoke_manifest", ""))),
+    ("inflow_perturbation has no Metal nest-boundary caller",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     bool(getattr(cfg, "inflow_perturbation", False))),
+    ("diff_opt=1 (coordinate-surface mixing) has no Metal kernels; use diff_opt=2",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(getattr(cfg, "diff_opt", 2)) == 1),
     ("tke_budget=1 has no Metal implementation",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "tke_budget", 0)) != 0),
@@ -885,6 +903,13 @@ METAL_KNOWN_CONFLICTS = (
          or (int(cfg.cu_physics) == 16
              and type(cumulus).__name__ == "NewTiedtke"))),
 )
+
+
+def _metal_legacy_rrtmg_selected(cfg):
+    from woof.physics_compat import RRTMG_VARIANT_LEGACY, rrtmg_variant
+
+    return (4 in radiation_scheme_ids(cfg)
+            and rrtmg_variant(cfg) == RRTMG_VARIANT_LEGACY)
 
 
 def _metal_wrf_exact_enabled():
@@ -959,6 +984,23 @@ def _metal_admission_refusals(cfg, *, radiation, cumulus, cam_ozone):
         reason for reason, conflicts in METAL_KNOWN_CONFLICTS
         if conflicts(cfg, radiation, cumulus, cam_ozone)
     )
+    return refusals
+
+
+def metal_experiment_refusals(experiment) -> list[str]:
+    """Every domain's Metal admission refusals, decidable from the config.
+
+    The doors that select Metal ask this before fetching or preparing
+    anything; the runners repeat the full admission with their adapters.
+    """
+    domains = list(experiment.domains)
+    refusals = []
+    for domain in domains:
+        prefix = f"d{int(domain.grid_id):02d}: " if len(domains) > 1 else ""
+        refusals.extend(
+            prefix + message for message in _metal_admission_refusals(
+                domain.run, radiation=None, cumulus=None, cam_ozone=None)
+            if not message.startswith(("radiation adapter", "cumulus adapter")))
     return refusals
 
 

@@ -11053,8 +11053,6 @@ def main(argv=None, *, observer=None) -> int:
                 metal_refusal = "Metal prepared forecast requires exactly one domain"
             elif metal_cfg.nested:
                 metal_refusal = "Metal prepared forecast does not support nested lateral boundaries"
-            elif metal_cfg.specified and metal_cfg.relax_w:
-                metal_refusal = "Metal prepared forecast does not support specified boundaries with relax_w"
             elif metal_tiles.enabled and (
                     metal_tiles.mode != "on" or metal_tiles.tile_nx is None
                     or metal_tiles.tile_ny is None):

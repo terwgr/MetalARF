@@ -609,6 +609,13 @@ def admit(plans, *, config, geog_root, case_root, request, options=None,
     try:
         if not metal_backend:
             go_cli._require_forecast_device()
+        if metal_backend:
+            from woof.core.physics import metal_experiment_refusals
+            for plan in plans:
+                refusals = metal_experiment_refusals(plan.experiment)
+                if refusals:
+                    raise RecipeRefusal("This recipe cannot run on Metal: "
+                                        + "; ".join(refusals))
         if metal_backend and not options.get("no_memory_gate"):
             from woof.metal import memory_gate as metal_memory
             from woof.metal.runtime import MetalContext

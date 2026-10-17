@@ -45,8 +45,10 @@ def dycore_config_refusals(cfg):
             "has no Metal kernel pair")
     if int(getattr(cfg, "tke_budget", 0)) != 0:
         refusals.append("tke_budget=1 has no Metal implementation")
-    if cfg.zadvect_implicit != 0:
-        refusals.append("IEVA vertical advection")
+    if int(cfg.diff_opt) == 1:
+        refusals.append("diff_opt=1 has no Metal kernels")
+    if cfg.zadvect_implicit != 0 and int(cfg.nz) > 256:
+        refusals.append("IEVA vertical advection above 256 levels")
     if cfg.damp_opt not in (0, 3):
         refusals.append(f"damp_opt={cfg.damp_opt} has no Metal path")
     if (cfg.nwp_diagnostics != 0

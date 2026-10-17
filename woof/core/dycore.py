@@ -4293,8 +4293,6 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
                 unsupported.append(
                     "combined radiative-open and specified boundaries")
         if cfg.specified:
-            if cfg.relax_w:
-                unsupported.append("specified boundaries with relax_w")
             boundaries = getattr(state, "lateral_boundaries", None)
             if boundaries is None:
                 unsupported.append("specified boundaries without attached forcing")
@@ -4323,6 +4321,8 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
                 "Smagorinsky/sixth-order diffusion pair "
                 f"(km_opt={cfg.km_opt}, diff_6th_opt="
                 f"{cfg.diff_6th_opt}) has no Metal kernel pair")
+        if int(cfg.diff_opt) == 1:
+            unsupported.append("diff_opt=1 has no Metal kernels")
         if int(getattr(cfg, "tke_budget", 0)) != 0:
             unsupported.append("tke_budget=1 has no Metal implementation")
         if ((cfg.khdif > 0.0 or cfg.kvdif > 0.0)

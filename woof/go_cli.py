@@ -146,6 +146,16 @@ class GoRefusal(ValueError):
     """A config this command will not half-orchestrate."""
 
 
+def _refuse_metal_configuration(experiment) -> None:
+    """Refuse a Metal run whose config has no Metal path, before any fetch."""
+    from woof.core.physics import metal_experiment_refusals
+
+    refusals = metal_experiment_refusals(experiment)
+    if refusals:
+        raise GoRefusal("This config cannot run on Metal: " + "; ".join(refusals)
+                        + ". Next: change those settings, or run on CUDA.")
+
+
 def checked_config_fetch_cycle(fetch_table: dict, *, start_time=None):
     """Keep a saved experiment and its download on the same fixed clock."""
     from datetime import datetime, timedelta
@@ -4411,6 +4421,8 @@ def _registered_launch(args, *, config: Path, payload: dict) -> int:
             print(f"warning: {gate['preparation_warning']}.", file=sys.stderr)
         if gate.get("decode_warning"):
             print(f"warning: {gate['decode_warning']}.", file=sys.stderr)
+    if metal_backend:
+        _refuse_metal_configuration(exp)
     if metal_backend and not getattr(args, "no_memory_gate", False):
         # Unified memory: an oversized domain does not fail cleanly, it
         # starves the machine. Refuse before any preparation.
@@ -5503,6 +5515,8 @@ def _go_prepared_main(args, *, observer=None) -> int:
         # fit has to be told so on this side of it.
         state_backend = os.environ.get("WOOF_STATE_BACKEND", "cuda")
         if state_backend == "metal":
+            from woof.experiment import load_experiment
+            _refuse_metal_configuration(load_experiment(args.config))
             if not getattr(args, "no_memory_gate", False):
                 # The legacy prepared-GFS chain used the CUDA capability and
                 # VRAM gates even when its public caller selected Metal.  Run
