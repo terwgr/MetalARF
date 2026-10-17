@@ -228,9 +228,15 @@ def add_coupled_theta(fields, face: str, delta_theta, state, *,
     of the theta VALUE table; tendencies and all other tables are
     untouched.  All arithmetic is float32 elementwise on device.
     """
+    theta_value = fields["theta"][face][0]
+    if hasattr(theta_value, "to_numpy"):
+        # A Metal table: the same float32 operations on its host copy.
+        _add_coupled_theta_host(theta_value, fields["mu"][face][0][0], face,
+                                delta_theta, state, spec_zone=spec_zone,
+                                relax_zone=relax_zone)
+        return
     import cupy as cp
 
-    theta_value = fields["theta"][face][0]
     mu_value = fields["mu"][face][0][0]      # (ny, W) x-sides / (W, nx)
     c1h = state.c1h
     c2h = state.c2h
@@ -250,6 +256,38 @@ def add_coupled_theta(fields, face: str, delta_theta, state, *,
         mass = columns + mu_value                       # (W, nx)
         ch = c1h[:, None, None] * mass[None] + c2h[:, None, None]
         theta_value[:, rows, :] += ch[:, rows, :] * delta[:, None, :]
+
+
+def _host(value) -> np.ndarray:
+    """A device array's host copy (Metal or CuPy), or the array itself."""
+    if hasattr(value, "to_numpy"):
+        return value.to_numpy()
+    if hasattr(value, "get"):
+        return value.get()
+    return np.asarray(value)
+
+
+def _add_coupled_theta_host(theta_table, mu_table, face: str, delta_theta,
+                            state, *, spec_zone: int, relax_zone: int) -> None:
+    """:func:`add_coupled_theta` for a Metal table, operation for operation."""
+    theta_value = theta_table.to_numpy()
+    mu_value = mu_table.to_numpy()
+    c1h, c2h, mub2d = _host(state.c1h), _host(state.c2h), _host(state.mub2d)
+    rows = slice(int(spec_zone), int(relax_zone))
+    delta = np.ascontiguousarray(delta_theta, dtype=np.float32)
+    if face in ("west", "east"):
+        width = int(theta_value.shape[-1])
+        columns = mub2d[:, :width] if face == "west" else mub2d[:, ::-1][:, :width]
+        mass = columns + mu_value
+        ch = c1h[:, None, None] * mass[None] + c2h[:, None, None]
+        theta_value[:, :, rows] += ch[:, :, rows] * delta[:, :, None]
+    else:
+        width = int(theta_value.shape[1])
+        columns = mub2d[:width, :] if face == "south" else mub2d[::-1, :][:width, :]
+        mass = columns + mu_value
+        ch = c1h[:, None, None] * mass[None] + c2h[:, None, None]
+        theta_value[:, rows, :] += ch[:, rows, :] * delta[:, None, :]
+    theta_table[...] = theta_value
 
 
 class InflowPerturbation:
@@ -289,20 +327,21 @@ class InflowPerturbation:
     def _base_half_heights(self, state) -> np.ndarray:
         """Domain-mean base-state half-level height AGL, cached (static)."""
         if self._z_half_agl is None:
-            import cupy as cp
-
             phb = state.phb
-            if getattr(phb, "ndim", 1) == 3:
+            if hasattr(phb, "to_numpy"):
+                phb = phb.to_numpy().astype(np.float64)
+                full = phb.mean(axis=(1, 2)) if phb.ndim == 3 else phb
+            elif getattr(phb, "ndim", 1) == 3:
+                import cupy as cp
                 full = cp.asnumpy(phb.mean(axis=(1, 2), dtype=cp.float64))
             else:
+                import cupy as cp
                 full = cp.asnumpy(cp.asarray(phb, dtype=cp.float64))
             full = full / c.G
             self._z_half_agl = (0.5 * (full[:-1] + full[1:]) - full[0])
         return self._z_half_agl
 
     def _parent_footprint_pblh(self, parent_node) -> float:
-        import cupy as cp
-
         driver = parent_node.state.physics
         fields = getattr(driver, "fields", None) if driver is not None \
             else None
@@ -313,19 +352,23 @@ class InflowPerturbation:
                 "coupler-construction guard should have refused this "
                 "configuration")
         j0, i0, nj, ni = self._footprint
-        window = fields["pblh"][j0:j0 + nj, i0:i0 + ni]
-        return float(window.mean(dtype=cp.float64))
+        pblh = fields["pblh"]
+        if hasattr(pblh, "to_numpy"):
+            pblh = pblh.to_numpy()
+        window = pblh[j0:j0 + nj, i0:i0 + ni]
+        return float(window.mean(dtype=np.float64))
 
     def _inward_means(self, state, n_levels: int) -> dict[str, float]:
-        import cupy as cp
-
         levels = slice(0, int(n_levels))
-        u, v = state.u, state.v
+        # Metal views only slice the leading axis; read the levels whole.
+        u, v = state.u[levels], state.v[levels]
+        if hasattr(u, "to_numpy"):
+            u, v = u.to_numpy(), v.to_numpy()
         return {
-            "west": float(u[levels, :, 0].mean(dtype=cp.float64)),
-            "east": -float(u[levels, :, -1].mean(dtype=cp.float64)),
-            "south": float(v[levels, 0, :].mean(dtype=cp.float64)),
-            "north": -float(v[levels, -1, :].mean(dtype=cp.float64)),
+            "west": float(u[:, :, 0].mean(dtype=np.float64)),
+            "east": -float(u[:, :, -1].mean(dtype=np.float64)),
+            "south": float(v[:, 0, :].mean(dtype=np.float64)),
+            "north": -float(v[:, -1, :].mean(dtype=np.float64)),
         }
 
     def _refresh_for(self, parent) -> int:

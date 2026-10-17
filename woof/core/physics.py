@@ -852,9 +852,6 @@ METAL_KNOWN_CONFLICTS = (
     ("prescribed smoke (rrtmg_smoke_manifest) has no Metal binding",
      lambda cfg, radiation, cumulus, cam_ozone:
      bool(getattr(cfg, "rrtmg_smoke_manifest", ""))),
-    ("inflow_perturbation has no Metal nest-boundary caller",
-     lambda cfg, radiation, cumulus, cam_ozone:
-     bool(getattr(cfg, "inflow_perturbation", False))),
     ("diff_opt=1 (coordinate-surface mixing) has no Metal kernels; use diff_opt=2",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "diff_opt", 2)) == 1),
