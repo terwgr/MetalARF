@@ -257,7 +257,7 @@ def test_the_door_clears_the_stage_however_the_cycle_ends(monkeypatch,
                                              default=True)
     staged = _fake_set(stage.directory(2, "control"), 180)
 
-    def stops_early(stages):
+    def stops_early(stages, contexts):
         stages.append(stage)
         raise SystemExit("TREATMENT_NOT_APPLIED: nothing was assimilated")
 
@@ -456,6 +456,8 @@ def test_a_nest_with_no_free_legs_is_not_an_argument_refusal(monkeypatch,
     monkeypatch.setattr(sys, "argv", ["da_cycle_prepared"] + _REQUIRED_ARGS
                         + ["--nest-half-width-km", "60",
                            "--obs", "leg0.npz", "--grid-wrfout", "leg0.nc"])
+    # Past the CuPy check too: its refusal also exits 2 on a host without it.
+    monkeypatch.setattr("woof.capabilities.require", lambda *a, **k: None)
     with pytest.raises(BaseException) as info:
         main()
     refusal = capsys.readouterr().err

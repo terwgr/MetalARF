@@ -86,6 +86,9 @@ python -m tools.da_cycle_prepared \
     --obs <volume>.json --grid-wrfout <wrfout> --out <run dir>
 ```
 
+On a Mac add `--state-backend metal`; `--physics-profile` may be omitted
+to run the bundle's own suite as written.
+
 `--source` is a statement of which case this is, not a switch that
 changes how it is read. A prepared root already IS one source's case,
 and naming a different one is refused at the front door by the proof

@@ -83,6 +83,14 @@ Other commands select Metal the same way:
   continuous windows (`--continuous`) refuse it for now. Each member writes
   `radar-tten.json` beside its outputs. The Metal kernels follow the CUDA
   source's arithmetic operation for operation.
+- `tools/da_cycle_prepared.py --state-backend metal` runs the research
+  radar-DA cycle on a Mac: perturbed members, restart sets between legs,
+  the LETKF solve (`--solve-device metal` by default there, or `host`),
+  hot start, `--radar-tten`, `--hydrometeors`, reflectivity and clear-air
+  analysis, `--precip-analysis clear` and `--save-ensemble` /
+  `--resume-ensemble`. The perturbation, the increments and the hot start
+  are computed on host copies of the state and written back. The nest
+  options stay CUDA only and are refused.
 
 Regional Metal
 coverage follows the capability table and admitted scheme combinations, and

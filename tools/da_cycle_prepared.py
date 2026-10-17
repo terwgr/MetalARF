@@ -123,9 +123,27 @@ PHYSICS_VOCABULARY_FIELDS = ("maturity", "registry_sha256",
 
 
 def to_host(value) -> np.ndarray:
-    if hasattr(value, "get"):
+    if hasattr(value, "to_numpy"):
+        value = value.to_numpy()
+    elif hasattr(value, "get"):
         value = value.get()
     return np.ascontiguousarray(np.asarray(value))
+
+
+def host_mirror(state, names):
+    """NumPy copies of ``state``'s arrays ``names``, for the DA helpers that
+    have no Metal path (perturbation, increments, hot start)."""
+    return SimpleNamespace(**{name: to_host(getattr(state, name)).copy()
+                              for name in names
+                              if getattr(state, name, None) is not None})
+
+
+def write_back(state, mirror, names) -> None:
+    """Copy the mirror's ``names`` back into the Metal state, whole-array."""
+    for name in names:
+        value = getattr(mirror, name, None)
+        if value is not None:
+            getattr(state, name)[...] = value
 
 
 #: Schema of the restart-identity components every trajectory's model
@@ -1038,15 +1056,18 @@ def main() -> int:
     its report; the clearing here is the same call again and removes
     nothing more.
     """
+    import contextlib
+
     stages: list = []
     try:
-        return cycle(stages)
+        with contextlib.ExitStack() as contexts:
+            return cycle(stages, contexts)
     finally:
         for stage in stages:
             stage.clear()
 
 
-def cycle(stages: list) -> int:
+def cycle(stages: list, contexts) -> int:
     # Deferred like every other woof import in this driver: the module
     # has to be importable by a bare `python tools/da_cycle_prepared.py
     # --help` from a checkout, and the package lands on sys.path only
@@ -1102,7 +1123,11 @@ def cycle(stages: list) -> int:
     parser.add_argument("--proof-sha256", required=True)
     parser.add_argument("--source-manifest-sha256", required=True)
     parser.add_argument("--prepared-content-sha256", required=True)
-    parser.add_argument("--physics-profile", required=True)
+    parser.add_argument(
+        "--physics-profile", default=None,
+        help="a shipped runner profile; required with --state-backend "
+             "cuda.  Omitted on metal, the hash-bound experiment's own "
+             "suite runs as written")
     parser.add_argument("--run-seconds", type=float, required=True,
                         help="the hash-bound experiment's own run_seconds")
     parser.add_argument("--history-interval-seconds", type=float,
@@ -1255,15 +1280,28 @@ def cycle(stages: list) -> int:
                              "drives; see woof.da.letkf.RELAXATION_MODES")
     parser.add_argument("--thin-cells", type=int, default=2)
     parser.add_argument("--err-inflation", type=float, default=1.0)
-    parser.add_argument("--memory-budget-mib", type=float, default=6144.0)
     parser.add_argument(
-        "--solve-device", default="auto", choices=("auto", "host", "cuda"),
+        "--memory-budget-mib", type=float, default=6144.0,
+        help="the CUDA cycle's device budget; a Metal cycle is priced "
+             "against the Metal memory plan instead")
+    parser.add_argument(
+        "--solve-device", default="auto",
+        choices=("auto", "host", "cuda", "metal"),
         help=("where the LETKF analysis solves.  'auto' (default) takes "
               "the card when this process can reach one and numpy when it "
               "cannot, and the receipt records which and why.  'host' and "
               "'cuda' are honoured verbatim: pin host to reproduce a "
               "receipt banked on numpy, pin cuda to make a missing card "
-              "an error instead of a silent 20x slower run"))
+              "an error instead of a silent 20x slower run.  'metal' "
+              "solves on the Apple GPU, and is what 'auto' becomes under "
+              "--state-backend metal"))
+    parser.add_argument(
+        "--state-backend", default="cuda", choices=("cuda", "metal"),
+        help=("where the forecast legs integrate: the CUDA card, or the "
+              "Apple GPU through Metal.  On Metal the member perturbation, "
+              "the increments and the hot start are computed on host "
+              "copies of the state and written back, and the nest is "
+              "refused"))
     parser.add_argument(
         "--dump-analysis-bundle", type=Path, default=None,
         help=("copy each leg's ANALYSIS INPUTS -- the staged member "
@@ -1465,6 +1503,28 @@ def cycle(stages: list) -> int:
              "The control and the free legs are never forced. OFF unless "
              "given")
     args = parser.parse_args()
+    from woof import capabilities
+    if args.state_backend == "metal":
+        if not capabilities.apple_silicon():
+            parser.error("--state-backend metal needs an Apple GPU")
+        if (args.nest_half_width_km is not None or args.nest_nx is not None
+                or args.nest_ny is not None):
+            parser.error(
+                "the nest runs on CUDA only: its child is initialized "
+                "through the CuPy nested-forecast path; drop the --nest "
+                "options or run with --state-backend cuda")
+        if args.solve_device == "cuda":
+            parser.error("--solve-device cuda needs the CUDA backend; use "
+                         "metal or host with --state-backend metal")
+        if args.solve_device == "auto":
+            args.solve_device = "metal"
+    if args.physics_profile is None and args.state_backend != "metal":
+        parser.error("--physics-profile is required with --state-backend "
+                     "cuda")
+    if args.tolerate_physics_vocabulary_drift and args.physics_profile is None:
+        parser.error(
+            "--tolerate-physics-vocabulary-drift compares the receipt "
+            "with a runner profile; name one with --physics-profile")
     if args.radar_tten and not args.obs:
         parser.error(
             "--radar-tten builds its heating from the observation files, "
@@ -1592,6 +1652,16 @@ def cycle(stages: list) -> int:
             parser.error(
                 "--leg-durations-seconds needs one finite positive duration "
                 "per observed or free leg; clocks cannot be dropped or reordered")
+    if args.state_backend != "metal":
+        # The CUDA cycle integrates and analyses through CuPy; checked
+        # after the arguments so an argument mistake is named first.
+        try:
+            capabilities.require(
+                "tools/da_cycle_prepared.py", capabilities.GPU_RUNTIME,
+                before="Refusing here, before any leg is staged or prepared.")
+        except capabilities.CapabilityMissing as error:
+            from woof.explain import render
+            parser.exit(2, render(str(error), explain=False) + "\n")
     authority = (args.authority_dir if args.authority_dir is not None
                  else args.prepared_root.parent / "authority")
 
@@ -1611,13 +1681,20 @@ def cycle(stages: list) -> int:
           flush=True)
     t_total = time.time()
 
-    # ---- imports (CuPy present; model env untouched) -----------------------
-    import cupy as cp
+    # ---- imports (CuPy, or Metal; model env untouched) ----------------------
+    metal = args.state_backend == "metal"
+    if metal:
+        from woof.metal.array import MetalArrayModule
+        from woof.metal.runtime import MetalContext
+        cp = None
+        metal_context = contexts.enter_context(MetalContext())
+        metal_arrays = MetalArrayModule(metal_context)
+    else:
+        import cupy as cp
+        metal_context = metal_arrays = None
 
     from woof.core.clock import build_schedule, resolve_clock
     from woof.core.health import StateHealthValidator
-    from woof.core.preflight import (device_free_and_total_bytes,
-                                      local_memory_profile_from_device)
     from woof.core.model import (DomainNode, ExperimentState,
                                   ModelRuntimeStatus, execute_experiment)
     from woof.da import (cycle_admission, moments, nested_forecast, obsop,
@@ -1733,6 +1810,12 @@ def cycle(stages: list) -> int:
     }
     exp = inputs.experiment
     cfg = exp.root.run
+    if metal:
+        from woof.core.physics import metal_experiment_refusals
+        refusals = metal_experiment_refusals(exp)
+        if refusals:
+            raise SystemExit("this case does not run on Metal: "
+                             + "; ".join(refusals))
     dt = float(cfg.dt)
     leg_seconds = float(args.leg_seconds)
     final_leg_seconds = (float(args.final_leg_seconds)
@@ -1894,7 +1977,8 @@ def cycle(stages: list) -> int:
     identity = ens_state.EnsembleIdentity(
         members=int(args.members), nx=int(cfg.nx), ny=int(cfg.ny),
         nz=int(cfg.nz), dt_s=dt, mp_physics=int(cfg.mp_physics),
-        physics_profile=str(args.physics_profile),
+        physics_profile=("" if args.physics_profile is None
+                         else str(args.physics_profile)),
         prepared_content_sha256=str(args.prepared_content_sha256))
     resumed_from: dict | None = None
     #: The trajectories whose resumed checkpoint set carries a child,
@@ -2119,7 +2203,8 @@ def cycle(stages: list) -> int:
             live_born = (int(child_dc.grid_id),)
         restored = restore_prepared_cache(
             inputs.prepared_cache_path, expected_identity=inputs.cache_identity,
-            cfg=cfg, static=inputs.static)
+            cfg=cfg, static=inputs.static,
+            **({"array_module": metal_arrays} if metal else {}))
         driver = initialize_prepared_physics(
             restored.initial_result, cfg, restored.met, restored.surface,
             inputs.static, inputs.landuse_identity, inputs.grid,
@@ -2188,6 +2273,9 @@ def cycle(stages: list) -> int:
         ``run_trajectory``, which has returned.
         """
         gc.collect()
+        if metal:
+            metal_context._wait_submissions()
+            return
         cp.get_default_memory_pool().free_all_blocks()
         cp.get_default_pinned_memory_pool().free_all_blocks()
 
@@ -2269,37 +2357,59 @@ def cycle(stages: list) -> int:
             "the heating, and every forced member would refuse at its first "
             "leg after the ensemble was already built")
     mass_shape = (int(cfg.nz), int(cfg.ny), int(cfg.nx))
-    admission = cycle_admission.price_cycle(
-        (nested_forecast.nested_experiment(exp, nest_child_dc)
-         if nest_trajectories else exp),
-        forcing_intervals=max(1, len(inputs.forcing_hours) - 1),
-        observation_points=(int(cfg.nz) * int(cfg.ny) * int(cfg.nx)
-                            if args.obs and not args.no_hotstart else 0),
-        perturbation_bytes=(
-            perturb.device_working_bytes(
-                cfg_perturb, mass_shape,
-                plan_work_bytes=perturb.fft_plan_work_bytes(
-                    cfg_perturb, mass_shape, cp))
-            if resumed_from is None and int(args.members) > 0 else 0),
-        profile=local_memory_profile_from_device(cp),
-        analysis=analysis_price,
-        radar_tten_points=(int(cfg.nz) * int(cfg.ny) * int(cfg.nx)
-                           if args.radar_tten else 0))
-    free_bytes, _total_bytes = device_free_and_total_bytes()
-    try:
-        admission = cycle_admission.admit_cycle(admission,
-                                                free_bytes=free_bytes)
-    except cycle_admission.CycleMemoryRefused as error:
-        report["memory_admission"] = error.admission.receipt()
-        (out / "cycle-report.json").write_text(
-            json.dumps(report, indent=2, default=str), encoding="utf-8")
-        raise SystemExit(str(error)) from None
-    report["memory_admission"] = admission.receipt()
-    print(f"memory admission: {admission.required_bytes:,} bytes for the "
-          f"largest trajectory and the analysis "
-          f"({admission.analysis_route or 'none on the card'}) within "
-          f"{admission.budget_bytes:,} of {admission.free_bytes:,} free",
-          flush=True)
+    if metal:
+        # Serial trajectories, each released before the next is wired: the
+        # largest one is what the device holds.  The analysis solves on
+        # host arrays or through the Jacobi solve, priced by its own budget.
+        from woof.metal import memory_gate as metal_memory
+        metal_estimate = metal_memory.estimate_runs([cfg], metal_context)
+        refusal = metal_memory.refusal_text(
+            metal_estimate, [(int(cfg.nx), int(cfg.ny), int(cfg.nz))])
+        report["memory_admission"] = {
+            "backend": "metal",
+            "estimate_bytes": int(metal_estimate.peak_bytes),
+            "limit_bytes": int(metal_estimate.limit_bytes),
+            "fits": refusal is None}
+        if refusal is not None:
+            (out / "cycle-report.json").write_text(
+                json.dumps(report, indent=2, default=str), encoding="utf-8")
+            raise SystemExit(refusal)
+        print(f"memory admission (Metal): {metal_estimate.peak_bytes:,} "
+              f"bytes for the largest trajectory within "
+              f"{metal_estimate.limit_bytes:,}", flush=True)
+    else:
+        from woof.core import preflight
+        admission = cycle_admission.price_cycle(
+            (nested_forecast.nested_experiment(exp, nest_child_dc)
+             if nest_trajectories else exp),
+            forcing_intervals=max(1, len(inputs.forcing_hours) - 1),
+            observation_points=(int(cfg.nz) * int(cfg.ny) * int(cfg.nx)
+                                if args.obs and not args.no_hotstart else 0),
+            perturbation_bytes=(
+                perturb.device_working_bytes(
+                    cfg_perturb, mass_shape,
+                    plan_work_bytes=perturb.fft_plan_work_bytes(
+                        cfg_perturb, mass_shape, cp))
+                if resumed_from is None and int(args.members) > 0 else 0),
+            profile=preflight.local_memory_profile_from_device(cp),
+            analysis=analysis_price,
+            radar_tten_points=(int(cfg.nz) * int(cfg.ny) * int(cfg.nx)
+                               if args.radar_tten else 0))
+        free_bytes, _total_bytes = preflight.device_free_and_total_bytes()
+        try:
+            admission = cycle_admission.admit_cycle(admission,
+                                                    free_bytes=free_bytes)
+        except cycle_admission.CycleMemoryRefused as error:
+            report["memory_admission"] = error.admission.receipt()
+            (out / "cycle-report.json").write_text(
+                json.dumps(report, indent=2, default=str), encoding="utf-8")
+            raise SystemExit(str(error)) from None
+        report["memory_admission"] = admission.receipt()
+        print(f"memory admission: {admission.required_bytes:,} bytes for the "
+              f"largest trajectory and the analysis "
+              f"({admission.analysis_route or 'none on the card'}) within "
+              f"{admission.budget_bytes:,} of {admission.free_bytes:,} free",
+              flush=True)
     if args.radar_tten:
         report["radar_tten"] = {
             "arrangement": "ensemble members forced on observed legs whose "
@@ -2382,7 +2492,9 @@ def cycle(stages: list) -> int:
         tten_reflectivity = tten_source = None
         if args.radar_tten and document is not None and analysis_due:
             tten_reflectivity, tten_source = \
-                radar_tten.reflectivity_from_document(document)
+                radar_tten.reflectivity_from_document(
+                    document, like=(metal_arrays.zeros((1,), np.float32)
+                                    if metal else None))
             leg_record["radar_tten_observations"] = tten_source
         elif args.radar_tten:
             leg_record["radar_tten_observations"] = (
@@ -2391,9 +2503,10 @@ def cycle(stages: list) -> int:
                 "not used to force it")
         z_obs_cp = z_mask_cp = None
         if document is not None and not args.no_hotstart:
-            z_obs_cp = cp.asarray(np.asarray(
+            # On Metal the hot start runs on host copies of the state.
+            z_obs_cp = (np if metal else cp).asarray(np.asarray(
                 document["variables"]["z_obs"], np.float32))
-            z_mask_cp = cp.asarray(np.asarray(
+            z_mask_cp = (np if metal else cp).asarray(np.asarray(
                 document["variables"]["z_mask"]).astype(bool))
 
         def run_trajectory(name) -> None:
@@ -2511,8 +2624,18 @@ def cycle(stages: list) -> int:
             restored_background: dict = {}
             if source is None:
                 if name != CONTROL:
-                    perturb.apply_perturbations(
-                        state, args.seed + int(name), cfg_perturb)
+                    if metal:
+                        # woof.da.perturb has no Metal path: perturb a host
+                        # copy and write the prognostics back.
+                        mirror = host_mirror(
+                            state, (*STATE_SERIALIZED_ATTRS, "thb"))
+                        perturb.apply_perturbations(
+                            mirror, args.seed + int(name), cfg_perturb)
+                        write_back(state, mirror, STATE_SERIALIZED_ATTRS)
+                        del mirror
+                    else:
+                        perturb.apply_perturbations(
+                            state, args.seed + int(name), cfg_perturb)
                     refresh_diagnostics(
                         state, hypsometric_opt=cfg.hypsometric_opt)
             else:
@@ -2541,8 +2664,17 @@ def cycle(stages: list) -> int:
                             restored_background[field] = to_host(live)
                     to_apply, pair_report = keep_moment_pairs(
                         state, pending[name], mp_physics=cfg.mp_physics)
-                    receipt = apply_increments(
-                        state, to_apply, mp_physics=cfg.mp_physics)
+                    if metal:
+                        mirror = host_mirror(state, STATE_SERIALIZED_ATTRS)
+                        receipt = apply_increments(
+                            mirror, to_apply, mp_physics=cfg.mp_physics)
+                        # Every field: the applier also caps qv at
+                        # saturation and repairs moment partners.
+                        write_back(state, mirror, STATE_SERIALIZED_ATTRS)
+                        del mirror
+                    else:
+                        receipt = apply_increments(
+                            state, to_apply, mp_physics=cfg.mp_physics)
                     leg_record["trajectories"].setdefault(str(name), {})[
                         "apply_fields"] = receipt["field_count"]
                     if pair_report["conditioned"]:
@@ -2696,7 +2828,10 @@ def cycle(stages: list) -> int:
             finally:
                 if tten_forcing is not None:
                     radar_tten.detach(state)
-            cp.cuda.Stream.null.synchronize()
+            if metal:
+                metal_context._wait_submissions()
+            else:
+                cp.cuda.Stream.null.synchronize()
             if tten_forcing is not None:
                 tten_record = tten_forcing.receipt()
                 leg_record["trajectories"].setdefault(str(name), {})[
@@ -2860,8 +2995,10 @@ def cycle(stages: list) -> int:
             if (analysis_due and name != CONTROL
                     and not args.no_hotstart):
                 increments_hot, hot_prov = hotstart_increments(
-                    state, z_obs_cp, z_mask_cp, hot_cfg,
-                    simulated_dbz=refl)
+                    host_mirror(state, ("p", "phb", "php", "qv", "thb",
+                                        "thp")) if metal else state,
+                    z_obs_cp, z_mask_cp, hot_cfg,
+                    simulated_dbz=refl_host if metal else refl)
                 hot_pending[name] = {
                     field: to_host(values).astype(np.float32)
                     for field, values in increments_hot.items()}
@@ -3058,7 +3195,9 @@ def cycle(stages: list) -> int:
                 extra_obs=surface_batches,
                 extra_obs_provenance=surface_prov,
                 cwp_observations=goes_path,
-                cwp_provider=cwp_provider)
+                cwp_provider=cwp_provider,
+                jacobi_context=(metal_context
+                                if args.solve_device == "metal" else None))
             leg_record["analysis"] = {
                 "applied": bool(analysis_due),
                 "solve_seconds": round(time.time() - t_solve, 1),
