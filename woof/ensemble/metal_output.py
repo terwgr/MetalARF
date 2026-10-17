@@ -1,4 +1,4 @@
-"""Host-side mean/spread products for Metal ensemble member forecasts."""
+"""Host-side ensemble products for Metal ensemble member forecasts."""
 from __future__ import annotations
 
 import json
@@ -13,6 +13,10 @@ def _host(value):
     return np.ascontiguousarray(np.asarray(value, dtype=np.float32))
 
 
+
+#: The fields a Metal ensemble publishes statistics of.
+METAL_PRODUCT_FIELDS = ("wind10", "temperature2", "rain_total")
+
 class MetalEnsembleCollector:
     """Capture ordinary history callbacks and publish complete-roster products.
 
@@ -21,10 +25,18 @@ class MetalEnsembleCollector:
     copied their small surface planes from MetalArray storage.
     """
 
-    def __init__(self, root, members):
+    def __init__(self, root, members, thresholds=None):
+        from woof.ensemble.batch_products import DEFAULT_THRESHOLDS
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.members = int(members)
+        overrides = dict(thresholds or {})
+        # The CUDA products' table: each field's default thresholds in its
+        # stored units, replaced field by field by the request.
+        self.thresholds = {
+            field: (units, tuple(float(np.float32(x))
+                                 for x in overrides.get(field, values)))
+            for field, (units, values) in DEFAULT_THRESHOLDS.items()}
         self.frames = {}
         self.member_history_count = 0
         self.products = None
@@ -80,10 +92,10 @@ class MetalEnsembleCollector:
             if rain_key not in initial:
                 initial[rain_key] = cumulative.copy()
             surface["rain_total"] = np.maximum(cumulative - initial[rain_key], 0.0)
-        if not any(name in surface for name in ("wind10", "temperature2", "rain_total")):
+        if not any(name in surface for name in METAL_PRODUCT_FIELDS):
             raise ValueError("Metal ensemble history has none of wind10, temperature2 or rain_total")
         frame["members"][member] = {name: value for name, value in surface.items()
-                                     if name in ("wind10", "temperature2", "rain_total")}
+                                     if name in METAL_PRODUCT_FIELDS}
         self.member_history_count += 1
 
     def finish_run(self):
@@ -118,14 +130,31 @@ class MetalEnsembleCollector:
                         raise ValueError(f"Metal ensemble {name} mean/spread is non-finite")
                     writer.createVariable(f"{name}_mean", "float32", ("south_north", "west_east"))[:] = mean
                     writer.createVariable(f"{name}_spread", "float32", ("south_north", "west_east"))[:] = spread
+                    writer.createVariable(f"{name}_min", "float32", ("south_north", "west_east"))[:] = stack.min(axis=0)
+                    writer.createVariable(f"{name}_max", "float32", ("south_north", "west_east"))[:] = stack.max(axis=0)
+                    units, thresholds = self.thresholds[name]
+                    if thresholds:
+                        # P(member >= threshold) over the complete roster,
+                        # divided in binary64 and rounded once, as on CUDA.
+                        axis = f"{name}_threshold"
+                        writer.createDimension(axis, len(thresholds))
+                        levels = writer.createVariable(axis, "float32", (axis,))
+                        levels[:] = np.asarray(thresholds, np.float32)
+                        levels.units = units
+                        count = (stack[None] >= np.asarray(thresholds, np.float32)[:, None, None, None]).sum(axis=1)
+                        writer.createVariable(f"{name}_probability", "float32",
+                                              (axis, "south_north", "west_east"))[:] = (
+                            count.astype(np.float64) / np.float64(self.members)).astype(np.float32)
                 writer.createVariable("XLAT", "float32", ("south_north", "west_east"))[:] = frame["latitude"]
                 writer.createVariable("XLONG", "float32", ("south_north", "west_east"))[:] = frame["longitude"]
             pending.replace(path)
             manifests.append({"valid_time": str(valid), "grid_id": grid, "episode": episode,
                               "path": str(path.relative_to(self.root)), "fields": fields,
+                              "thresholds": {name: list(self.thresholds[name][1]) for name in fields},
                               "member_count": self.members, "finite": True})
         self.products = {"backend": "metal", "member_history_count": self.member_history_count,
-                         "frames": manifests, "statistics": ["mean", "spread"]}
+                         "frames": manifests,
+                         "statistics": ["mean", "spread", "min", "max", "probability"]}
         (self.root / "ensemble-products.json").write_text(
             json.dumps(self.products, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         return self.products

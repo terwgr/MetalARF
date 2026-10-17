@@ -155,6 +155,34 @@ def _prepared_component_route_plan(member_inputs, *, card, collector, array_modu
     return (decision, None) if decision.eligible else (None, decision.ordinary_reason)
 
 
+
+#: What a Metal ensemble publishes: the member mean and spread of these.
+METAL_ENSEMBLE_PRODUCTS = "10 m wind, 2 m temperature and rain"
+#: What it publishes of them.
+METAL_ENSEMBLE_STATISTICS = "mean, spread, min, max and threshold probabilities"
+
+
+def metal_request_refusal(request) -> str | None:
+    """What a Metal ensemble cannot produce from ``request``, or ``None``.
+
+    Asked before any member is prepared, so a requested product is
+    refused rather than dropped.
+    """
+    from woof.ensemble.metal_output import METAL_PRODUCT_FIELDS
+
+    unpublished = sorted(set(request.thresholds or {})
+                         - set(METAL_PRODUCT_FIELDS))
+    asked = [name for name, wanted in (
+        ("retain_member_diagnostics", request.retain_member_diagnostics),
+        ("stochastic perturbations", request.stochastic is not None),
+        (f"thresholds for {', '.join(unpublished)}", bool(unpublished)),
+    ) if wanted]
+    if not asked:
+        return None
+    return (f"A Metal ensemble publishes the {METAL_ENSEMBLE_STATISTICS} of "
+            f"{METAL_ENSEMBLE_PRODUCTS} only, so it cannot honour "
+            + ", ".join(asked) + ". Next: remove that setting, or run the ensemble on CUDA.")
+
 class PreparedEnsembleSession:
     """The worker and source-provider interface, independent of a CLI route.
 
@@ -1197,7 +1225,10 @@ class PreparedEnsembleSession:
         if array_module is None or not getattr(array_module, "__woof_metal_array_module__", False):
             raise ValueError("Metal ensemble needs the active prepared forecast MetalArrayModule")
         self._require_member_inputs(getattr(inputs, "experiment", None))
-        if self.stochastic_provider is not None or self.request.stochastic is not None:
+        refusal = metal_request_refusal(self.request)
+        if refusal is not None:
+            raise ValueError(refusal)
+        if self.stochastic_provider is not None:
             raise ValueError("Metal ensemble stochastic spectral perturbations are not integrated")
         out = Path(output_directory or self.output_directory)
         out.mkdir(parents=True, exist_ok=True)
@@ -1216,7 +1247,8 @@ class PreparedEnsembleSession:
                 self._require_member_inputs(inputs.experiment)
         self.collector = self.collector or __import__(
             "woof.ensemble.metal_output", fromlist=["MetalEnsembleCollector"]
-        ).MetalEnsembleCollector(out, self.request.members)
+        ).MetalEnsembleCollector(out, self.request.members,
+                                 thresholds=self.request.thresholds)
         started = time.perf_counter()
         completed = []
         from woof.ensemble.radar_output import member_history_required

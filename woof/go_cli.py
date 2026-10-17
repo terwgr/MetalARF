@@ -4853,6 +4853,15 @@ def go_main(args, *, observer=None) -> int:
         raise GoRefusal(str(refusal)) from None
     if getattr(args, "command", None) == "ensemble" and request is None and Path(args.config).is_file():
         raise GoRefusal("ensemble requires --members N or [ensemble].members in CONFIG")
+    if request is not None and getattr(args, "backend", None) == "metal":
+        from woof.ensemble.production import (
+            METAL_ENSEMBLE_PRODUCTS, METAL_ENSEMBLE_STATISTICS,
+            metal_request_refusal)
+        refusal = metal_request_refusal(request)
+        if refusal is not None:
+            raise GoRefusal(refusal)
+        print(f"go: Metal ensemble -- {METAL_ENSEMBLE_STATISTICS} of "
+              f"{METAL_ENSEMBLE_PRODUCTS}; no ensemble pictures")
     if getattr(args, "restart_roster", None) is not None:
         if request is None:
             raise GoRefusal("--restart-roster requires the original ensemble configuration")
