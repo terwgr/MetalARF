@@ -127,15 +127,15 @@ static inline void bep_view_factor(int nz_u, int id, const thread float *z,
     const float hut = z[hut_i];
     for (int jz = 1; jz <= nz_u; ++jz) {
         for (int iz = 1; iz <= nz_u; ++iz) {
-            const float f123 = bep_fprls(dxy, bep_abs(bep_sub(z[jz], z[iz])), ws);
-            const float f23 = bep_fprls(dxy, bep_abs(bep_sub(z[jz], z[iz + 1])), ws);
-            const float f12 = bep_fprls(dxy, bep_abs(bep_sub(z[jz - 1], z[iz])), ws);
-            const float f2 = bep_fprls(dxy, bep_abs(bep_sub(z[jz - 1], z[iz + 1])), ws);
-            const float a123 = bep_mul(dxy, bep_abs(bep_sub(z[jz], z[iz])));
-            const float a12 = bep_mul(dxy, bep_abs(bep_sub(z[jz - 1], z[iz])));
-            const float a23 = bep_mul(dxy, bep_abs(bep_sub(z[jz], z[iz + 1])));
-            const float a1 = bep_mul(dxy, bep_abs(bep_sub(z[iz], z[iz + 1])));
-            const float a2 = bep_mul(dxy, bep_abs(bep_sub(z[jz - 1], z[iz + 1])));
+            const float f123 = bep_fprls(dxy, bep_abs(bep_sub(z[jz], z[iz - 1])), ws);
+            const float f23 = bep_fprls(dxy, bep_abs(bep_sub(z[jz], z[iz])), ws);
+            const float f12 = bep_fprls(dxy, bep_abs(bep_sub(z[jz - 1], z[iz - 1])), ws);
+            const float f2 = bep_fprls(dxy, bep_abs(bep_sub(z[jz - 1], z[iz])), ws);
+            const float a123 = bep_mul(dxy, bep_abs(bep_sub(z[jz], z[iz - 1])));
+            const float a12 = bep_mul(dxy, bep_abs(bep_sub(z[jz - 1], z[iz - 1])));
+            const float a23 = bep_mul(dxy, bep_abs(bep_sub(z[jz], z[iz])));
+            const float a1 = bep_mul(dxy, bep_abs(bep_sub(z[iz - 1], z[iz])));
+            const float a2 = bep_mul(dxy, bep_abs(bep_sub(z[jz - 1], z[iz])));
             const float a3 = bep_mul(dxy, bep_abs(bep_sub(z[jz], z[jz - 1])));
             const float q = bep_add(bep_sub(bep_sub(bep_mul(a123, f123),
                 bep_mul(a23, f23)), bep_mul(a12, f12)), bep_mul(a2, f2));
@@ -452,7 +452,7 @@ kernel void urban_bep_column_profile(
         const float normalized = bep_div(r.urban_profile[hi_at], total);
         r.urban_profile[hi_at] = normalized;
         if (normalized > 0.0f && normalized <= 1.0f)
-            hbmax = r.urban_profile[ulong(k)];
+            hbmax = r.urban_profile[base + ulong(k)];
     }
 
     int iz_u = 1;
@@ -471,7 +471,7 @@ kernel void urban_bep_column_profile(
         const float zlo = r.class_x[1067ul + ulong(iz - 1)];
         const float zhi = r.class_x[1067ul + ulong(iz)];
         for (int k = 0; k < BEP_NZ_UM; ++k) {
-            const float hb = r.urban_profile[ulong(k)];
+            const float hb = r.urban_profile[base + ulong(k)];
             if (zlo <= hb && zhi > hb)
                 ss = bep_add(ss, r.urban_profile[base + 18ul + ulong(k)]);
         }
@@ -598,6 +598,7 @@ kernel void urban_bep_column_views(
     if (col >= uint(p.ncol)) return;
     const ulong ox = ulong(col) * 794ul;
     const ulong oi = ulong(col) * 3ul;
+    const ulong pin = ulong(col) * 140ul;
     for (int k = 0; k < 794; ++k) r.column_view_x[ox + ulong(k)] = 0.0f;
     if (r.active_cols[col] == 0) {
         r.column_view_ix[col] = 0;
@@ -615,8 +616,8 @@ kernel void urban_bep_column_views(
     for (int k = 0; k < BEP_NZ_UM; ++k)
         z[k] = r.class_x[1067ul + ulong(k)];
     for (int id = 0; id < ndu; ++id) {
-        const float strd = r.column_param[ox + 100ul + ulong(id)];
-        const float ws = r.column_param[ox + 98ul + ulong(id)];
+        const float strd = r.column_param[pin + 100ul + ulong(id)];
+        const float ws = r.column_param[pin + 98ul + ulong(id)];
         bep_view_factor(nzurban, id, z, strd, ws, r.column_view_x + ox);
     }
     r.column_view_ix[col] = 0;
@@ -661,8 +662,9 @@ kernel void urban_bep_column_state_gather(
                 r.column_state[tr_base] = r.trb_urb[zwd];
             }
         }
-        r.column_state[out + 720ul + ulong(id)] =
-            r.tgb_urb[ulong(id) * ulong(p.ncol) + ulong(col)];
+        for (int ig = 0; ig < 10; ++ig)
+            r.column_state[out + 720ul + ulong(id + 2 * ig)] =
+                r.tgb_urb[ulong(id + 2 * ig) * ulong(p.ncol) + ulong(col)];
         r.column_state[out + 1172ul + ulong(id)] =
             r.sfg_urb[ulong(id) * ulong(p.ncol) + ulong(col)];
     }
@@ -696,8 +698,9 @@ kernel void urban_bep_column_state_scatter(
                 r.trb_urb[zwd] = r.column_state[tr_base];
             }
         }
-        r.tgb_urb[ulong(id) * ulong(p.ncol) + ulong(col)] =
-            r.column_state[in + 720ul + ulong(id)];
+        for (int ig = 0; ig < 10; ++ig)
+            r.tgb_urb[ulong(id + 2 * ig) * ulong(p.ncol) + ulong(col)] =
+                r.column_state[in + 720ul + ulong(id + 2 * ig)];
         r.sfg_urb[ulong(id) * ulong(p.ncol) + ulong(col)] =
             r.column_state[in + 1172ul + ulong(id)];
     }
@@ -739,7 +742,7 @@ kernel void urban_bep_column_interp(
                 const float overlap_hi = bep_fmin(zhi, zu_hi);
                 const float overlap_lo = bep_fmax(zlo, zu_lo);
                 const float dz = bep_fmax(bep_sub(overlap_hi, overlap_lo), 0.0f);
-                const float c = r.column_x[src + ulong(iz - 1)];
+                const float c = r.column_x[src + ulong(iz)];
                 ctot = bep_add(ctot, bep_mul(c, dz));
             }
             const float layer = bep_sub(zu_hi, zu_lo);
@@ -1102,7 +1105,7 @@ kernel void urban_bep_column_buildings_fragment(
     const ulong surface=ulong(col)*330ul;
     for (int direction=0; direction<nd; ++direction) {
         const ulong out_flat=ulong(col)*648ul;
-        const ulong flat_out=out_flat+504ul+ulong(direction)*18ul;
+        const ulong flat_out=out_flat+504ul+ulong(direction);
         float uh=0.0f,vh=0.0f,th=0.0f,eh=0.0f;
         urban_bep_flux_flat(5.0f,r.column_param[pin+60ul+ulong(direction)],
             r.column_interp_x[interp],r.column_interp_x[interp+18ul],
@@ -1114,25 +1117,25 @@ kernel void urban_bep_column_buildings_fragment(
         r.column_building_x[flat_out+108ul]=eh;
         for (int k=1;k<nz;++k) {
             uh=vh=th=eh=0.0f;
-            if (r.column_param[pin+104ul+ulong(k+1)]>0.0f) {
+            if (r.column_param[pin+104ul+ulong(k)]>0.0f) {
                 urban_bep_flux_flat(5.0f,
-                    r.column_param[pin+60ul+ulong(direction)+2ul*ulong(k+1)],
+                    r.column_param[pin+60ul+ulong(direction)+2ul*ulong(k)],
                     r.column_interp_x[interp+ulong(k)],
                     r.column_interp_x[interp+18ul+ulong(k)],
                     r.column_interp_x[interp+36ul+ulong(k)],
                     r.column_interp_x[interp+54ul+ulong(k)],
-                    r.surface_x[surface+2ul+ulong(direction)*18ul+ulong(k+1)],
+                    r.surface_x[surface+2ul+ulong(direction)*18ul+ulong(k)],
                     uh,vh,th,eh);
             }
-            r.column_building_x[flat_out+ulong(k)]=uh;
-            r.column_building_x[flat_out+36ul+ulong(k)]=vh;
-            r.column_building_x[flat_out+72ul+ulong(k)]=th;
-            r.column_building_x[flat_out+108ul+ulong(k)]=eh;
+            r.column_building_x[flat_out+2ul*ulong(k)]=uh;
+            r.column_building_x[flat_out+36ul+2ul*ulong(k)]=vh;
+            r.column_building_x[flat_out+72ul+2ul*ulong(k)]=th;
+            r.column_building_x[flat_out+108ul+2ul*ulong(k)]=eh;
         }
         for (int side=0;side<2;++side) {
             const int wall_index=2*direction+side;
             for (int k=0;k<nz;++k) {
-            const ulong wall0=out_flat+ulong(wall_index)*18ul+ulong(k);
+            const ulong wall0=out_flat+ulong(wall_index)+4ul*ulong(k);
             float uva=0.0f,vva=0.0f,uvb=0.0f,vvb=0.0f;
             float tva=0.0f,tvb=0.0f,evb=0.0f;
                 urban_bep_flux_wall(r.column_interp_x[interp+ulong(k)],
@@ -1140,7 +1143,7 @@ kernel void urban_bep_column_buildings_fragment(
                     r.column_interp_x[interp+36ul+ulong(k)],
                     r.column_interp_x[interp+90ul+ulong(k)],
                     r.surface_x[surface+38ul+ulong(wall_index)*18ul+ulong(k)],
-                    r.column_param[pin+100ul+2ul*ulong(direction)],p.dt,
+                    r.column_param[pin+102ul+ulong(direction)],p.dt,
                 uva,vva,uvb,vvb,tva,tvb,evb);
             r.column_building_x[wall0]=uva;
             r.column_building_x[wall0+72ul]=vva;
@@ -1150,6 +1153,178 @@ kernel void urban_bep_column_buildings_fragment(
             r.column_building_x[wall0+360ul]=tvb;
             r.column_building_x[wall0+432ul]=evb;
             }
+        }
+    }
+}
+
+// Read-only, first-index-fastest views of the canonical BEP column records.
+struct BepRead1 {
+    device const float *p;
+    float operator()(int i) const { return p[i - 1]; }
+};
+struct BepRead2 {
+    device const float *p; int s0, s1;
+    float operator()(int i, int j) const { return p[(i - 1)*s0 + (j - 1)*s1]; }
+};
+struct BepRead3 {
+    device const float *p; int s0, s1, s2;
+    float operator()(int i, int j, int k) const {
+        return p[(i - 1)*s0 + (j - 1)*s1 + (k - 1)*s2];
+    }
+};
+
+// Upward radiation uses the incoming wall/roof state, before the surface
+// temperature solve, as module_sf_bep.F:bep_upward_rad does.
+kernel void urban_bep_column_upward(
+    constant UrbanBepColumnUpwardResources &r [[buffer(0)]],
+    constant UrbanBepColumnUpwardParams &p [[buffer(1)]],
+    uint col [[thread_position_in_grid]]) {
+    if (col >= uint(p.ncol)) return;
+    r.error[col] = 0;
+    if (!r.active_cols[col]) return;
+    const ulong pin = ulong(col)*140ul, state = ulong(col)*1210ul;
+    const int nzu = r.column_param_ix[ulong(col)*3ul];
+    const int ndu = r.column_param_ix[ulong(col)*3ul+1ul];
+    const int type = r.utype_urb[col] - 1;
+    if (type < 0 || type >= 11 || nzu < 1 || nzu >= 18 || ndu < 1 || ndu > 2) {
+        r.error[col] = 3273; return;
+    }
+    const BepRead1 ws{r.column_param+pin+98ul}, bs{r.column_param+pin+96ul};
+    const BepRead1 ss{r.column_param+pin+104ul}, pb{r.column_param+pin+122ul};
+    const BepRead1 sfg{r.column_state+state+1172ul};
+    const BepRead1 rlg{r.rlg+ulong(col)*2ul}, rsg{r.rsg+ulong(col)*2ul};
+    const BepRead2 tg{r.column_state+state+720ul,1,2};
+    const BepRead2 sfr{r.column_state+state+1174ul,1,2};
+    const BepRead2 sfw{r.column_state+state+1100ul,1,4};
+    const BepRead2 rlw{r.rlw+ulong(col)*72ul,18,1};
+    const BepRead2 rsw{r.rsw+ulong(col)*72ul,18,1};
+    const BepRead3 tr{r.column_state+state+740ul,1,2,36};
+    const BepRead3 tw{r.column_state+state,1,4,72};
+    const float emg_u=r.class_x[132ul+ulong(type)], emw_u=r.class_x[143ul+ulong(type)];
+    const float emr_u=r.class_x[154ul+ulong(type)], albg_u=r.class_x[99ul+ulong(type)];
+    const float albw_u=r.class_x[110ul+ulong(type)], albr_u=r.class_x[121ul+ulong(type)];
+    const float rld=r.glw[col], rs=r.swdown[col], sigma=5.67e-8f, dz_u=5.0f;
+    const int nwr_u=10, ng_u=10;
+    float rl_up, rs_abs, emiss, grdflx_urb;
+
+    int id;
+    int iz;
+    int iw;
+    float rl_inc;
+    float rl_emit;
+    float gfl;
+    int ix;
+    int iy;
+    int iwrong;
+    iwrong = 1;
+    for (iz = 1; iz <= (nzu + 1); iz += 1) {
+    for (id = 1; id <= ndu; id += 1) {
+    for (iw = 1; iw <= nwr_u; iw += 1) {
+    if ((tr(id, iz, iw) < 100.f)) {
+    ;
+    iwrong = 0;
+    }
+    if ((tw(((2 * id) - 1), iz, iw) < 100.f)) {
+    ;
+    iwrong = 0;
+    }
+    if ((tw((2 * id), iz, iw) < 100.f)) {
+    ;
+    iwrong = 0;
+    }
+    }
+    }
+    }
+    for (id = 1; id <= ndu; id += 1) {
+    for (iw = 1; iw <= ng_u; iw += 1) {
+    if ((tg(id, iw) < 100.f)) {
+    ;
+    iwrong = 0;
+    }
+    }
+    }
+    if ((iwrong == 0)) { { r.error[col] = 3273; return; } }
+    rl_up = 0.f;
+    rs_abs = 0.f;
+    rl_inc = 0.f;
+    emiss = 0.f;
+    rl_emit = 0.f;
+    grdflx_urb = 0.f;
+    for (id = 1; id <= ndu; id += 1) {
+    rl_emit = bep_sub(rl_emit, bep_div(bep_div(bep_mul((bep_add(bep_mul(bep_mul(emg_u, sigma), (bep_pow(tg(id, ng_u), 4.f))), bep_mul((bep_sub(float(1), emg_u)), rlg(id)))), ws(id)), (bep_add(ws(id), bs(id)))), float(ndu)));
+    rl_inc = bep_add(rl_inc, bep_div(bep_div(bep_mul(rlg(id), ws(id)), (bep_add(ws(id), bs(id)))), float(ndu)));
+    rs_abs = bep_add(rs_abs, bep_div(bep_div(bep_mul(bep_mul((bep_sub(1.f, albg_u)), rsg(id)), ws(id)), (bep_add(ws(id), bs(id)))), float(ndu)));
+    gfl = bep_add(bep_sub(bep_add(bep_mul((bep_sub(1.f, albg_u)), rsg(id)), bep_mul(emg_u, rlg(id))), bep_mul(bep_mul(emg_u, sigma), (bep_pow(tg(id, ng_u), 4.f)))), sfg(id));
+    grdflx_urb = bep_sub(grdflx_urb, bep_div(bep_div(bep_mul(gfl, ws(id)), (bep_add(ws(id), bs(id)))), float(ndu)));
+    for (iz = 2; iz <= nzu; iz += 1) {
+    rl_emit = bep_sub(rl_emit, bep_div(bep_div(bep_mul(bep_mul((bep_add(bep_mul(bep_mul(emr_u, sigma), (bep_pow(tr(id, iz, nwr_u), 4.f))), bep_mul((bep_sub(float(1), emr_u)), rld))), ss(iz)), bs(id)), (bep_add(ws(id), bs(id)))), float(ndu)));
+    rl_inc = bep_add(rl_inc, bep_div(bep_div(bep_mul(bep_mul(rld, ss(iz)), bs(id)), (bep_add(ws(id), bs(id)))), float(ndu)));
+    rs_abs = bep_add(rs_abs, bep_div(bep_div(bep_mul(bep_mul(bep_mul((bep_sub(1.f, albr_u)), rs), ss(iz)), bs(id)), (bep_add(ws(id), bs(id)))), float(ndu)));
+    gfl = bep_add(bep_sub(bep_add(bep_mul((bep_sub(1.f, albr_u)), rs), bep_mul(emr_u, rld)), bep_mul(bep_mul(emr_u, sigma), (bep_pow(tr(id, iz, nwr_u), 4.f)))), sfr(id, iz));
+    grdflx_urb = bep_sub(grdflx_urb, bep_div(bep_div(bep_mul(bep_mul(gfl, ss(iz)), bs(id)), (bep_add(ws(id), bs(id)))), float(ndu)));
+    }
+    for (iz = 1; iz <= nzu; iz += 1) {
+    rl_emit = bep_sub(rl_emit, bep_div(bep_div(bep_mul(bep_mul((bep_add(bep_mul(bep_mul(emw_u, sigma), (bep_add(bep_pow(tw(((2 * id) - 1), iz, nwr_u), 4.f), bep_pow(tw((2 * id), iz, nwr_u), 4.f)))), bep_mul((bep_sub(float(1), emw_u)), (bep_add(rlw(((2 * id) - 1), iz), rlw((2 * id), iz)))))), dz_u), pb((iz + 1))), (bep_add(ws(id), bs(id)))), float(ndu)));
+    rl_inc = bep_add(rl_inc, bep_div(bep_div(bep_mul(bep_mul(((bep_add(rlw(((2 * id) - 1), iz), rlw((2 * id), iz)))), dz_u), pb((iz + 1))), (bep_add(ws(id), bs(id)))), float(ndu)));
+    rs_abs = bep_add(rs_abs, bep_div(bep_div(bep_mul(bep_mul((bep_mul((bep_sub(1.f, albw_u)), (bep_add(rsw(((2 * id) - 1), iz), rsw((2 * id), iz))))), dz_u), pb((iz + 1))), (bep_add(ws(id), bs(id)))), float(ndu)));
+    gfl = bep_add(bep_sub(bep_add(bep_mul((bep_sub(1.f, albw_u)), (bep_add(rsw(((2 * id) - 1), iz), rsw((2 * id), iz)))), bep_mul(emw_u, (bep_add(rlw(((2 * id) - 1), iz), rlw((2 * id), iz))))), bep_mul(bep_mul(emw_u, sigma), (bep_add(bep_pow(tw(((2 * id) - 1), iz, nwr_u), 4.f), bep_pow(tw((2 * id), iz, nwr_u), 4.f))))), (bep_add(sfw(((2 * id) - 1), iz), sfw((2 * id), iz))));
+    grdflx_urb = bep_sub(grdflx_urb, bep_div(bep_div(bep_mul(bep_mul(gfl, dz_u), pb((iz + 1))), (bep_add(ws(id), bs(id)))), float(ndu)));
+    }
+    }
+    emiss = bep_div((bep_add(bep_add(emg_u, emw_u), emr_u)), 3.f);
+    rl_up = bep_sub((bep_add(rl_inc, rl_emit)), rld);
+    r.rl_up[col]=rl_up; r.rs_abs[col]=rs_abs;
+    r.emiss[col]=emiss; r.grdflx_urb[col]=grdflx_urb;
+}
+
+// Commit profiles and persistent surface exchange only after every stage
+// succeeds. Inactive columns retain caller-owned output values.
+kernel void urban_bep_column_finish(
+    constant UrbanBepColumnFinishResources &r [[buffer(0)]],
+    constant UrbanBepColumnFinishParams &p [[buffer(1)]],
+    uint col [[thread_position_in_grid]]) {
+    if (col >= uint(p.ncol)) return;
+    if (!r.active_cols[col]) return;
+    int error=r.column_param_ix[ulong(col)*3ul+2ul];
+    const int errors[10]={r.view_error[col],r.column_state_ix[col],r.interp_error[col],
+        r.radiation_error[col],r.radiosity_error[ulong(col)*2ul],
+        r.radiosity_error[ulong(col)*2ul+1ul],r.upward_error[col],r.surface_error[col],
+        r.meso_error[col],r.length_error[col]};
+    for (int i=0;i<10;++i) if (!error) error=errors[i];
+    r.error_flags[col]=error;
+    if (error) { r.column_state_ix[col]=error; return; }
+    const ulong stride=ulong(p.nz)+1ul, meso=ulong(col)*10ul*stride;
+    const ulong lengths=ulong(col)*2ul*ulong(p.nz);
+    for (int k=0;k<p.nz;++k) {
+        const ulong out=ulong(k)*ulong(p.ncol)+col;
+        r.a_u[out]=r.column_meso[meso+ulong(k)];
+        r.a_v[out]=r.column_meso[meso+stride+ulong(k)];
+        r.a_t[out]=r.column_meso[meso+2ul*stride+ulong(k)];
+        r.a_e[out]=r.column_meso[meso+3ul*stride+ulong(k)];
+        r.b_u[out]=r.column_meso[meso+4ul*stride+ulong(k)];
+        r.b_v[out]=r.column_meso[meso+5ul*stride+ulong(k)];
+        r.b_t[out]=r.column_meso[meso+6ul*stride+ulong(k)];
+        r.b_e[out]=r.column_meso[meso+7ul*stride+ulong(k)];
+        r.b_q[out]=0.0f;
+        r.sf[out]=r.column_meso[meso+8ul*stride+ulong(k)];
+        r.vl[out]=r.column_meso[meso+9ul*stride+ulong(k)];
+        r.dl_u[out]=r.column_lengths[lengths+ulong(k)];
+        r.dlg[out]=r.column_lengths[lengths+ulong(p.nz+k)];
+    }
+    r.sf[ulong(p.nz)*ulong(p.ncol)+col]=r.column_meso[meso+8ul*stride+ulong(p.nz)];
+    const ulong state=ulong(col)*1210ul, building=ulong(col)*648ul, interp=ulong(col)*108ul;
+    const int nd=r.column_param_ix[ulong(col)*3ul+1ul], nz=r.column_param_ix[ulong(col)*3ul];
+    for (int id=0;id<nd;++id) {
+        r.column_state[state+1172ul+ulong(id)]=bep_mul(bep_mul(-r.column_interp[interp+90ul],1004.0f),
+            r.column_building[building+576ul+ulong(id)]);
+        for (int k=1;k<nz;++k)
+            r.column_state[state+1174ul+ulong(id+2*k)]=bep_mul(bep_mul(
+                -r.column_interp[interp+90ul+ulong(k)],1004.0f),r.column_building[building+576ul+ulong(id+2*k)]);
+        for (int k=0;k<nz;++k) for (int side=0;side<2;++side) {
+            const ulong at=ulong(2*id+side+4*k);
+            const float heat=bep_add(r.column_building[building+360ul+at],bep_mul(
+                r.column_building[building+288ul+at],r.column_interp[interp+36ul+ulong(k)]));
+            r.column_state[state+1100ul+at]=bep_mul(bep_mul(-r.column_interp[interp+90ul+ulong(k)],1004.0f),heat);
         }
     }
 }

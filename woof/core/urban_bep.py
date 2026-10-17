@@ -378,6 +378,8 @@ def _launch_bep_columns_metal(*, params, frc_urb2d, utype_urb2d, dz8w,
         submit_urban_bep_column_interp,
         submit_urban_bep_column_lengths,
         submit_urban_bep_column_meso,
+        submit_urban_bep_column_upward,
+        submit_urban_bep_column_finish,
         submit_urban_bep_column_buildings,
         submit_urban_bep_radiation,
         submit_urban_bep_radiosity,
@@ -547,7 +549,7 @@ def _launch_bep_columns_metal(*, params, frc_urb2d, utype_urb2d, dz8w,
     radiation_error = module.zeros((ncol,), dtype=np.int32)
     submit_urban_bep_radiation(
         context,
-        {"column_x": column_x, "column_param": column_param,
+        {"column_x": column_x, "class_x": class_x, "column_param": column_param,
          "column_param_ix": column_param_ix, "active_cols": active,
          "swdown": resources["swdown"].view((ncol,)),
          "cosz": resources["cosz_urb2d"].view((ncol,)),
@@ -571,6 +573,18 @@ def _launch_bep_columns_metal(*, params, frc_urb2d, utype_urb2d, dz8w,
          "rlw": column_rlw, "rlg": column_rlg,
          "rsw": column_rsw_reflected, "rsg": column_rsg_reflected,
          "error": radiosity_error})
+
+    upward_error = module.zeros((ncol,), dtype=np.int32)
+    submit_urban_bep_column_upward(context, {
+        "column_param": column_param, "column_param_ix": column_param_ix,
+        "class_x": class_x, "column_state": column_state,
+        "utype_urb": resources["utype_urb2d"].view((ncol,)),
+        "active_cols": active, "rlg": column_rlg, "rsg": column_rsg_reflected,
+        "rlw": column_rlw, "rsw": column_rsw_reflected,
+        "glw": resources["glw"].view((ncol,)),
+        "swdown": resources["swdown"].view((ncol,)), "error": upward_error,
+        **{name: result[name].view((ncol,))
+           for name in ("rl_up", "rs_abs", "emiss", "grdflx_urb")}})
 
     surface_x = module.zeros((ncol, 330), dtype=np.float32)
     surface_error = module.zeros((ncol,), dtype=np.int32)
@@ -602,6 +616,19 @@ def _launch_bep_columns_metal(*, params, frc_urb2d, utype_urb2d, dz8w,
         context, column_x, class_x, column_param, column_param_ix,
         column_building, active, column_state_ix, column_meso,
         column_meso_ix, nz=nz)
+    submit_urban_bep_column_finish(context, {
+        "column_param_ix": column_param_ix, "column_state_ix": column_state_ix,
+        "column_state": column_state, "column_building": column_building,
+        "column_interp": column_interp.view((ncol, 108)),
+        "column_meso": column_meso, "column_lengths": column_lengths,
+        "active_cols": active, "view_error": column_view_ix,
+        "interp_error": column_interp_ix, "radiation_error": radiation_error,
+        "radiosity_error": radiosity_error, "upward_error": upward_error,
+        "surface_error": surface_error, "meso_error": column_meso_ix,
+        "length_error": column_lengths_ix,
+        "error_flags": result["error_flags"].view((ncol,)),
+        "sf": result["sf"].view((nz + 1, ncol)),
+        **{name: result[name].view((nz, ncol)) for name in _THREE_D}}, nz=nz)
     submit_urban_bep_column_state_scatter(
         context, active, column_state_ix, column_state,
         state_view("trb_urb4d", (18, 10, 2, ncol)),

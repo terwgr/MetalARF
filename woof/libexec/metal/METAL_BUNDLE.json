@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "13e16718a431011770cfdfa1d6710e7d61038b4a972b9f0311fe0b272e194c4d",
-      "size": 12643825
+      "sha256": "df21e890ac16d297b122afa71eb7dee783501898aa03b8d926c7131257dd6e8b",
+      "size": 12683691
     },
     "woof_exact.metallib": {
-      "sha256": "3da339e6710f3722938d6c22f02331255c7b351e8ed0d757ab1c44de58dd4c6e",
-      "size": 8139412
+      "sha256": "ddaca50f02641dd50e77c0edfbfa2e52f82f02f4d5ebbc79cfc8c455393e5a2a",
+      "size": 8179326
     }
   },
-  "implementation_file_count": 1151,
-  "implementation_sha256": "320564c078afb0f8eb42ecc3c8175a065811e09d8435b9f3167e8e465c4aed4d",
-  "metal_inputs_sha256": "51fb3e495f745dbaf209a9c8f55506790138a3100ce35a08069890218f65bcfc",
+  "implementation_file_count": 1152,
+  "implementation_sha256": "3d2591dbf33209d07a9a9f8a963ef0a7185359916186e6493a79753604ba2672",
+  "metal_inputs_sha256": "f26b9cf13cd9af4cb2fe57fe3a6a645c6b260db05c4df66e785a9d284f8fdd72",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "08eeed4e0076033b87b87de62eab62dcdf79cec074fb8560f76282245fecbff5",
-        "size": 2552723
+        "sha256": "5d9c9eec126c52cd2a275e3a828b34a681c686227d769980a878862bb323f70f",
+        "size": 2561912
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
@@ -1872,8 +1872,8 @@
         "size": 3018
       },
       "woof/metal/shaders/urban_bem_icbep_xy_fragment.metal": {
-        "sha256": "88f7a92e61bfef1d3a9eb0e062be47431632d3273f04ef5cf104c9cf369a10dc",
-        "size": 9337
+        "sha256": "3361778375a71ef0f8d30612f1f22c273899f252bdad68224069a49661194e9c",
+        "size": 9370
       },
       "woof/metal/shaders/urban_bem_indoor_fluxes_fragment.metal": {
         "sha256": "9d65e06cbfb6f99a4f2ed4ec3cdd8852f1204dc4b121b7ec43b24de8d23c396c",
@@ -2044,20 +2044,20 @@
         "size": 4285
       },
       "woof/metal/shaders/urban_bep_family.metal": {
-        "sha256": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
-        "size": 53808
+        "sha256": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
+        "size": 63354
       },
       "woof/metal/shaders/urban_bep_flux_helpers_fragment.metal": {
         "sha256": "b677a52bb472ce693e201a5362298774ddd7da8af4afed29174ac503dab0390e",
         "size": 3649
       },
       "woof/metal/shaders/urban_bep_radiation_fragment.metal": {
-        "sha256": "9a122ac14914752bc07b2a59c69ac9053d07ebdbec53b69e3152d30272485a79",
-        "size": 5810
+        "sha256": "66d921090f1107b571c376e8a88018f5d1a169f730c1a7b8cbbb5d9798dbeaa5",
+        "size": 5730
       },
       "woof/metal/shaders/urban_bep_radiosity_fragment.metal": {
-        "sha256": "8cc60cbd0ddd7618f30a7693a4ae75b788a95f8b98def162100a00d18b57d507",
-        "size": 10680
+        "sha256": "4fdd7fa3f5dc9ce0d6ea59d410fead64ad241f926de7d9d080d0c5d4d743972a",
+        "size": 10819
       },
       "woof/metal/shaders/urban_bep_surface_temperature_fragment.metal": {
         "sha256": "4a7b39c759baf1b73573f6705468650baccd12eebbdf8bec95b06db7b0f1ce68",
@@ -3951,6 +3951,10 @@
         "sha256": "212628a3168160e8f5bd7826aa14666ff039e90e7ddf2badc2afde5be742535c",
         "size": 2757
       },
+      "woof/metal/signature_fragments/urban_bep_column_finish.json": {
+        "sha256": "9ffabd5292554d388dc10d04a0f9de8f5a90a2c282cd22fd0dd7f013f5e91c0e",
+        "size": 9045
+      },
       "woof/metal/signature_fragments/urban_bep_couple_family.json": {
         "sha256": "22cf389802ffa95b47756cb75bcb8f9212f3b134140fdd3cd89ae548ae9bf281",
         "size": 8688
@@ -3960,8 +3964,8 @@
         "size": 22827
       },
       "woof/metal/signature_fragments/urban_bep_radiation_fragment.json": {
-        "sha256": "8f5fca0779c3aaf7c6b6c26cb58f2b3710c705499b562aeb4b95a1770abf9ed1",
-        "size": 2345
+        "sha256": "4805e5a2d0a5bca3245b628aa0b4659bb0c45a3e86ed5d818d796d14758fe6cf",
+        "size": 2511
       },
       "woof/metal/signature_fragments/urban_bep_radiosity_fragment.json": {
         "sha256": "c583ed79a1272927a746a8afa41e3b8d4a1830b9969916313b9e3100a5e910b4",
@@ -4016,6 +4020,6 @@
         "size": 296
       }
     },
-    "sha256": "51fb3e495f745dbaf209a9c8f55506790138a3100ce35a08069890218f65bcfc"
+    "sha256": "f26b9cf13cd9af4cb2fe57fe3a6a645c6b260db05c4df66e785a9d284f8fdd72"
   }
 }

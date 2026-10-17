@@ -25,6 +25,7 @@ def submit_urban_bep_radiation(context, resources, *, nz, declin):
     """Submit direct-solar shadowing from canonical column buffers."""
     expected = {
         "column_x": (np.float32, None), "column_param": (np.float32, (140,)),
+        "class_x": (np.float32, (1085,)),
         "column_param_ix": (np.int32, (3,)),
         "active_cols": (np.int32, ()), "swdown": (np.float32, ()),
         "cosz": (np.float32, ()), "hour_angle": (np.float32, ()),
@@ -38,6 +39,10 @@ def submit_urban_bep_radiation(context, resources, *, nz, declin):
         array = resources[name]
         if not isinstance(array, MetalArray) or array.dtype != np.dtype(dtype):
             raise TypeError(f"urban BEP radiation {name} has wrong Metal dtype")
+        if name == "class_x":
+            if array.shape != (1, 1085) or array.buffer.context is not context:
+                raise ValueError("urban BEP radiation class_x must be one class row")
+            continue
         if array.ndim != (3 if tail is None else len(tail) + 1):
             raise ValueError(f"urban BEP radiation {name} has wrong rank")
         if tail is not None and tuple(array.shape[1:]) != tuple(tail):
@@ -55,6 +60,33 @@ def submit_urban_bep_radiation(context, resources, *, nz, declin):
         {"ncol": ncol, "nz": int(nz), "declin": float(declin)},
         exact_policy=False, grid_size=ncol,
         threads_per_group=_THREADS)
+
+
+def _submit_column_stage(context, name, resources, *, nz=None):
+    ncol = resources["active_cols"].size
+    if not 0 < ncol <= np.iinfo(np.int32).max:
+        raise ValueError("urban BEP column count must fit positive int32")
+    for value in resources.values():
+        if (not isinstance(value, MetalArray)
+                or value.buffer.context is not context):
+            raise ValueError("urban BEP column resources must share their context")
+    parameters = {"ncol": ncol}
+    if nz is not None:
+        if not 0 < nz <= np.iinfo(np.int32).max:
+            raise ValueError("urban BEP level count must fit positive int32")
+        parameters["nz"] = int(nz)
+    return context.submit_kernel(name, resources, parameters,
+        exact_policy=False, grid_size=ncol, threads_per_group=_THREADS)
+
+
+def submit_urban_bep_column_upward(context, resources):
+    """Diagnose radiation from the incoming ground, roof and wall state."""
+    return _submit_column_stage(context, "urban_bep_column_upward", resources)
+
+
+def submit_urban_bep_column_finish(context, resources, *, nz):
+    """Commit successful column tendencies and persistent surface exchange."""
+    return _submit_column_stage(context, "urban_bep_column_finish", resources, nz=nz)
 
 
 def submit_urban_bep_surface_temperature(context, resources, *, nz, dt):

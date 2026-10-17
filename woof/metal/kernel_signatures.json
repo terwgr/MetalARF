@@ -92459,28 +92459,11 @@
       "threads_per_group": 128
     },
     {
-      "arithmetic_policies": [
-        "default"
-      ],
+      "name": "urban_bep_radiation_fragment",
+      "module": "urban_bep_radiation_fragment",
+      "source": "woof/metal/shaders/urban_bep_radiation_fragment.metal",
       "cuda_source": "woof/core/kernels/urban_bep.cu",
       "cuda_symbol": "bep_shadow_mas",
-      "layout_version": 1,
-      "module": "urban_bep_radiation_fragment",
-      "name": "urban_bep_radiation_fragment",
-      "parameters": [
-        [
-          "ncol",
-          "int32"
-        ],
-        [
-          "nz",
-          "int32"
-        ],
-        [
-          "declin",
-          "float32"
-        ]
-      ],
       "resources": [
         [
           "column_x",
@@ -92531,12 +92514,19 @@
           "error",
           "int32",
           "read_write"
+        ],
+        [
+          "class_x",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
-        "active_cols": [
+        "column_x": [
           [
-            "ncol"
+            "ncol",
+            15,
+            "nz+1"
           ]
         ],
         "column_param": [
@@ -92545,25 +92535,17 @@
             140
           ]
         ],
-        "column_param_ix": [
-          [
-            "ncol",
-            3
-          ]
-        ],
-        "column_x": [
-          [
-            "ncol",
-            15,
-            "nz+1"
-          ]
-        ],
-        "cosz": [
+        "active_cols": [
           [
             "ncol"
           ]
         ],
-        "error": [
+        "swdown": [
+          [
+            "ncol"
+          ]
+        ],
+        "cosz": [
           [
             "ncol"
           ]
@@ -92586,14 +92568,43 @@
             18
           ]
         ],
-        "swdown": [
+        "error": [
           [
             "ncol"
           ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "class_x": [
+          [
+            1,
+            1085
+          ]
         ]
       },
-      "source": "woof/metal/shaders/urban_bep_radiation_fragment.metal",
-      "threads_per_group": 64
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "declin",
+          "float32"
+        ]
+      ],
+      "threads_per_group": 64,
+      "layout_version": 2,
+      "arithmetic_policies": [
+        "default"
+      ]
     },
     {
       "arithmetic_policies": [
@@ -152879,6 +152890,557 @@
         ]
       },
       "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_upward",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "column_param",
+          "float",
+          "read"
+        ],
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "class_x",
+          "float",
+          "read"
+        ],
+        [
+          "column_state",
+          "float",
+          "read"
+        ],
+        [
+          "utype_urb",
+          "int32",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "rlg",
+          "float",
+          "read"
+        ],
+        [
+          "rsg",
+          "float",
+          "read"
+        ],
+        [
+          "rlw",
+          "float",
+          "read"
+        ],
+        [
+          "rsw",
+          "float",
+          "read"
+        ],
+        [
+          "glw",
+          "float",
+          "read"
+        ],
+        [
+          "swdown",
+          "float",
+          "read"
+        ],
+        [
+          "error",
+          "int32",
+          "read_write"
+        ],
+        [
+          "rl_up",
+          "float",
+          "read_write"
+        ],
+        [
+          "rs_abs",
+          "float",
+          "read_write"
+        ],
+        [
+          "emiss",
+          "float",
+          "read_write"
+        ],
+        [
+          "grdflx_urb",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "column_param": [
+          [
+            "ncol",
+            140
+          ]
+        ],
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "class_x": [
+          [
+            1,
+            1085
+          ]
+        ],
+        "column_state": [
+          [
+            "ncol",
+            1210
+          ]
+        ],
+        "utype_urb": [
+          [
+            "ncol"
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "rlg": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "rsg": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "rlw": [
+          [
+            "ncol",
+            2,
+            2,
+            18
+          ]
+        ],
+        "rsw": [
+          [
+            "ncol",
+            4,
+            18
+          ]
+        ],
+        "glw": [
+          [
+            "ncol"
+          ]
+        ],
+        "swdown": [
+          [
+            "ncol"
+          ]
+        ],
+        "error": [
+          [
+            "ncol"
+          ]
+        ],
+        "rl_up": [
+          [
+            "ncol"
+          ]
+        ],
+        "rs_abs": [
+          [
+            "ncol"
+          ]
+        ],
+        "emiss": [
+          [
+            "ncol"
+          ]
+        ],
+        "grdflx_urb": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "urban_bep_column_finish",
+      "module": "urban_bep_family",
+      "source": "woof/metal/shaders/urban_bep_family.metal",
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "resources": [
+        [
+          "column_param_ix",
+          "int32",
+          "read"
+        ],
+        [
+          "column_state_ix",
+          "int32",
+          "read_write"
+        ],
+        [
+          "column_state",
+          "float",
+          "read_write"
+        ],
+        [
+          "column_building",
+          "float",
+          "read"
+        ],
+        [
+          "column_interp",
+          "float",
+          "read"
+        ],
+        [
+          "column_meso",
+          "float",
+          "read"
+        ],
+        [
+          "column_lengths",
+          "float",
+          "read"
+        ],
+        [
+          "active_cols",
+          "int32",
+          "read"
+        ],
+        [
+          "view_error",
+          "int32",
+          "read"
+        ],
+        [
+          "interp_error",
+          "int32",
+          "read"
+        ],
+        [
+          "radiation_error",
+          "int32",
+          "read"
+        ],
+        [
+          "upward_error",
+          "int32",
+          "read"
+        ],
+        [
+          "surface_error",
+          "int32",
+          "read"
+        ],
+        [
+          "meso_error",
+          "int32",
+          "read"
+        ],
+        [
+          "length_error",
+          "int32",
+          "read"
+        ],
+        [
+          "error_flags",
+          "int32",
+          "read_write"
+        ],
+        [
+          "radiosity_error",
+          "int32",
+          "read"
+        ],
+        [
+          "a_u",
+          "float",
+          "read_write"
+        ],
+        [
+          "a_v",
+          "float",
+          "read_write"
+        ],
+        [
+          "a_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "a_e",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_u",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_v",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_t",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_e",
+          "float",
+          "read_write"
+        ],
+        [
+          "b_q",
+          "float",
+          "read_write"
+        ],
+        [
+          "vl",
+          "float",
+          "read_write"
+        ],
+        [
+          "dl_u",
+          "float",
+          "read_write"
+        ],
+        [
+          "dlg",
+          "float",
+          "read_write"
+        ],
+        [
+          "sf",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "column_param_ix": [
+          [
+            "ncol",
+            3
+          ]
+        ],
+        "column_state_ix": [
+          [
+            "ncol"
+          ]
+        ],
+        "column_state": [
+          [
+            "ncol",
+            1210
+          ]
+        ],
+        "column_building": [
+          [
+            "ncol",
+            648
+          ]
+        ],
+        "column_interp": [
+          [
+            "ncol",
+            108
+          ]
+        ],
+        "column_meso": [
+          [
+            "ncol",
+            10,
+            "nz+1"
+          ]
+        ],
+        "column_lengths": [
+          [
+            "ncol",
+            2,
+            "nz"
+          ]
+        ],
+        "active_cols": [
+          [
+            "ncol"
+          ]
+        ],
+        "view_error": [
+          [
+            "ncol"
+          ]
+        ],
+        "interp_error": [
+          [
+            "ncol"
+          ]
+        ],
+        "radiation_error": [
+          [
+            "ncol"
+          ]
+        ],
+        "upward_error": [
+          [
+            "ncol"
+          ]
+        ],
+        "surface_error": [
+          [
+            "ncol"
+          ]
+        ],
+        "meso_error": [
+          [
+            "ncol"
+          ]
+        ],
+        "length_error": [
+          [
+            "ncol"
+          ]
+        ],
+        "error_flags": [
+          [
+            "ncol"
+          ]
+        ],
+        "radiosity_error": [
+          [
+            "ncol",
+            2
+          ]
+        ],
+        "a_u": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "a_v": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "a_t": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "a_e": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "b_u": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "b_v": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "b_t": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "b_e": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "b_q": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vl": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dl_u": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dlg": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "sf": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "nz",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 32,
       "layout_version": 1,
       "arithmetic_policies": [
         "default"

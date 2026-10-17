@@ -8725,7 +8725,7 @@
       "name": "urban_bem_icbep_xy_fragment",
       "parameter_size": 8,
       "resource_count": 14,
-      "shader_hash": "88f7a92e61bfef1d3a9eb0e062be47431632d3273f04ef5cf104c9cf369a10dc",
+      "shader_hash": "3361778375a71ef0f8d30612f1f22c273899f252bdad68224069a49661194e9c",
       "threads_per_group": 64
     },
     {
@@ -9244,7 +9244,7 @@
       "name": "urban_bep_class_init",
       "parameter_size": 4,
       "resource_count": 4,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9260,7 +9260,7 @@
       "name": "urban_bep_column_buildings_fragment",
       "parameter_size": 8,
       "resource_count": 5,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9276,7 +9276,7 @@
       "name": "urban_bep_column_gather",
       "parameter_size": 8,
       "resource_count": 9,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9292,7 +9292,7 @@
       "name": "urban_bep_column_interp",
       "parameter_size": 8,
       "resource_count": 6,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9308,7 +9308,7 @@
       "name": "urban_bep_column_lengths",
       "parameter_size": 8,
       "resource_count": 8,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9324,7 +9324,7 @@
       "name": "urban_bep_column_meso",
       "parameter_size": 8,
       "resource_count": 9,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9340,7 +9340,7 @@
       "name": "urban_bep_column_params",
       "parameter_size": 4,
       "resource_count": 12,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9356,7 +9356,7 @@
       "name": "urban_bep_column_profile",
       "parameter_size": 8,
       "resource_count": 6,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9372,7 +9372,7 @@
       "name": "urban_bep_column_state_gather",
       "parameter_size": 4,
       "resource_count": 12,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9388,7 +9388,7 @@
       "name": "urban_bep_column_state_scatter",
       "parameter_size": 4,
       "resource_count": 11,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9404,7 +9404,7 @@
       "name": "urban_bep_column_views",
       "parameter_size": 4,
       "resource_count": 6,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -9429,14 +9429,14 @@
       ],
       "cuda_source": "woof/core/kernels/urban_bep.cu",
       "cuda_symbol": "bep_shadow_mas",
-      "layout_hash": "51e513226b8a9aaae57a435927fe9734e4ab0169e41acf0b59d188f71c868d0a",
-      "layout_version": 1,
+      "layout_hash": "24a0a85c9b589f639eb8a169f61033491a58b819a8246881414e3fd4012be8e5",
+      "layout_version": 2,
       "metal_source": "woof/metal/shaders/urban_bep_radiation_fragment.metal",
       "module": "urban_bep_radiation_fragment",
       "name": "urban_bep_radiation_fragment",
       "parameter_size": 12,
-      "resource_count": 10,
-      "shader_hash": "9a122ac14914752bc07b2a59c69ac9053d07ebdbec53b69e3152d30272485a79",
+      "resource_count": 11,
+      "shader_hash": "66d921090f1107b571c376e8a88018f5d1a169f730c1a7b8cbbb5d9798dbeaa5",
       "threads_per_group": 64
     },
     {
@@ -9452,7 +9452,7 @@
       "name": "urban_bep_radiosity_fragment",
       "parameter_size": 4,
       "resource_count": 15,
-      "shader_hash": "8cc60cbd0ddd7618f30a7693a4ae75b788a95f8b98def162100a00d18b57d507",
+      "shader_hash": "4fdd7fa3f5dc9ce0d6ea59d410fead64ad241f926de7d9d080d0c5d4d743972a",
       "threads_per_group": 64
     },
     {
@@ -9500,7 +9500,7 @@
       "name": "urban_bep_view_init",
       "parameter_size": 4,
       "resource_count": 4,
-      "shader_hash": "abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378",
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
       "threads_per_group": 64
     },
     {
@@ -15628,6 +15628,38 @@
       "resource_count": 5,
       "shader_hash": "f45e408dbbfbf4e378ed80ef10b09eb68e7bf50d0d23e352bd26b202204858a0",
       "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "layout_hash": "92749cb27fff97d8365236b5a44e093b00c4ec45309c4ef680afdf48e46dd083",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/urban_bep_family.metal",
+      "module": "urban_bep_family",
+      "name": "urban_bep_column_upward",
+      "parameter_size": 4,
+      "resource_count": 17,
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
+      "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/urban_bep.cu",
+      "cuda_symbol": "urban_bep_column",
+      "layout_hash": "e1e4ef3b7cc48a058201533dea9fbe191fbbff1bbc0e0f62ded733c2a038e569",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/urban_bep_family.metal",
+      "module": "urban_bep_family",
+      "name": "urban_bep_column_finish",
+      "parameter_size": 8,
+      "resource_count": 30,
+      "shader_hash": "97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97",
+      "threads_per_group": 32
     }
   ],
   "schema": "woof-metal-registry-v1"

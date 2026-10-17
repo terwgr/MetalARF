@@ -52,8 +52,6 @@ kernel void urban_bep_radiation_fragment(
         r.error[col] = 0;
         return;
     }
-    const ulong slots = ulong(nz + 1);
-    const ulong xin = ulong(col) * 15ul * slots;
     const ulong cold = ulong(col) * 2ul;
     const ulong colw = ulong(col) * 72ul;
     const float rs = r.swdown[col];
@@ -87,16 +85,16 @@ kernel void urban_bep_radiation_fragment(
     for (int id = 0; id < nd; ++id) {
         const ulong direction = cold + uint(id);
         const float width = r.column_param[param + 98ul + uint(id)];
-        const float street_direction = r.column_param[param + 100ul + uint(id)];
+        const float street_direction = r.column_param[param + 102ul + uint(id)];
         const float angle_a = ubr_sub(bbb, street_direction);
         const float angle_b = ubr_add(angle_a, 3.141592653589793f);
         for (int iz = 0; iz < nz; ++iz) {
             const float denom = r.column_param[param + 122ul + uint(iz + 1)];
             if (denom <= 0.0f) continue;
-            const float zlo = r.column_x[xin + uint(iz)];
-            const float zhi = r.column_x[xin + uint(iz + 1)];
+            const float zlo = r.class_x[1067ul + uint(iz)];
+            const float zhi = r.class_x[1067ul + uint(iz + 1)];
             for (int jz = 0; jz < nz; ++jz) {
-                const float roof = r.column_x[xin + uint(jz + 1)];
+                const float roof = r.class_x[1067ul + uint(jz + 1)];
                 const float ss = r.column_param[param + 104ul + uint(jz + 1)];
                 if (fabs(precise::sin(angle_a)) > 1.0e-10f) {
                     const float rd = ubr_shade_wall(zlo, zhi, roof, zr,
@@ -119,7 +117,7 @@ kernel void urban_bep_radiation_fragment(
             const float wsd = fabs(ubr_div(width, sine_a));
             float ground = 0.0f;
             for (int jz = 0; jz < nz; ++jz) {
-                const float roof = r.column_x[xin + uint(jz + 1)];
+                const float roof = r.class_x[1067ul + uint(jz + 1)];
                 const float rd = max(0.0f, ubr_sub(wsd, ubr_mul(roof, tangent)));
                 ground = ubr_add(ground,
                     ubr_div(ubr_mul(ubr_mul(rs, rd),

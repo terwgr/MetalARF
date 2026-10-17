@@ -56,6 +56,11 @@
           "error",
           "int32",
           "read_write"
+        ],
+        [
+          "class_x",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
@@ -115,6 +120,12 @@
             "ncol",
             3
           ]
+        ],
+        "class_x": [
+          [
+            1,
+            1085
+          ]
         ]
       },
       "parameters": [
@@ -132,7 +143,7 @@
         ]
       ],
       "threads_per_group": 64,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": [
         "default"
       ]

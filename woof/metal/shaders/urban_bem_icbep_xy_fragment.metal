@@ -171,7 +171,7 @@ kernel void urban_bem_icbep_xy_fragment(
         const float f1s = ubix_fnrm(ubix_sub(hut, z[uint(jz)]), dxy, width);
         const float a1s = ubix_mul(width, dxy);
         const float a12s = ubix_mul(width, dxy);
-        const float a4s = ubix_mul(width, dxy);
+        const float a4s = ubix_mul(ubix_sub(z[uint(jz)], z[uint(jz - 1)]), dxy);
         const float fts = ubix_div(ubix_sub(ubix_mul(a12s, f12s),
                                             ubix_mul(a12s, f1s)), a1s);
         fsw[vector_base + uint(jz - 1)] = ubix_div(ubix_mul(fts, a1s), a4s);

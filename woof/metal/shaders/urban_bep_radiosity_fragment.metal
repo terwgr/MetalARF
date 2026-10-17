@@ -9,6 +9,11 @@ static inline float ubrad_sub(float a, float b) { return as_type<float>(soft32_s
 static inline float ubrad_mul(float a, float b) { return as_type<float>(soft32_mul(as_type<uint>(a), as_type<uint>(b))); }
 static inline float ubrad_div(float a, float b) { return as_type<float>(soft32_div(as_type<uint>(a), as_type<uint>(b))); }
 
+static inline float ubrad_fourth(float t) {
+    const float square = ubrad_mul(t, t);
+    return ubrad_mul(square, square);
+}
+
 // Source-only port of module_sf_bep.F bep_long_rad/bep_short_rad and
 // bep_gaussj (2006-2205). Needs integration: dispatch once per urban column
 // and street direction after urban_bep_radiation_fragment. Fixed shapes use
@@ -121,17 +126,17 @@ kernel void urban_bep_radiosity_fragment(
         a[i * 37 + i] = 1.0f;
         for (int j = 0; j < nz_u; ++j) {
             const float vf = r.column_view_x[fwwbase + ulong(i) * 18ul + uint(j)];
-            a[i * 37 + nz_u + j] = ubrad_mul(ubrad_mul(-(1.0f - emw), vf), r.column_param[param + 122ul + uint(j)]);
+            a[i * 37 + nz_u + j] = ubrad_mul(ubrad_mul(-(1.0f - emw), vf), r.column_param[param + 123ul + uint(j)]);
         }
         const float groundvf = r.column_view_x[fgwbase + uint(i)];
         a[i * 37 + 2 * nz_u] = ubrad_mul(-(1.0f - emg), groundvf);
         float rhs = ubrad_add(ubrad_mul(r.column_view_x[fswbase + uint(i)], rl),
-            ubrad_mul(ubrad_mul(ubrad_mul(emg, groundvf), sigma), powr(r.column_state[state_ground], 4.0f)));
+            ubrad_mul(ubrad_mul(ubrad_mul(emg, groundvf), sigma), ubrad_fourth(r.column_state[state_ground])));
         for (int j = 0; j < nz_u; ++j) {
             const float vf = r.column_view_x[fwwbase + ulong(i) * 18ul + uint(j)];
             const float t = r.column_state[state_walls + ulong(4 * j + 2 * dir + 1)];
-            const float emitted = ubrad_mul(ubrad_mul(ubrad_mul(ubrad_mul(r.column_param[param + 122ul + uint(j)], emw), sigma), vf), powr(t, 4.0f));
-            const float transmitted = ubrad_mul(ubrad_mul(vf, rl), 1.0f - r.column_param[param + 122ul + uint(j)]);
+            const float emitted = ubrad_mul(ubrad_mul(ubrad_mul(ubrad_mul(r.column_param[param + 123ul + uint(j)], emw), sigma), vf), ubrad_fourth(t));
+            const float transmitted = ubrad_mul(ubrad_mul(vf, rl), 1.0f - r.column_param[param + 123ul + uint(j)]);
             rhs = ubrad_add(ubrad_add(rhs, emitted), transmitted);
         }
         b[i] = rhs;
@@ -139,19 +144,19 @@ kernel void urban_bep_radiosity_fragment(
     for (int i = 0; i < nz_u; ++i) {
         const int row = nz_u + i;
         for (int j = 0; j < nz_u; ++j)
-            a[row * 37 + j] = ubrad_mul(ubrad_mul(-(1.0f - emw), r.column_view_x[fwwbase + ulong(i) * 18ul + uint(j)]), r.column_param[param + 122ul + uint(j)]);
+            a[row * 37 + j] = ubrad_mul(ubrad_mul(-(1.0f - emw), r.column_view_x[fwwbase + ulong(i) * 18ul + uint(j)]), r.column_param[param + 123ul + uint(j)]);
         a[row * 37 + row] = 1.0f;
         const float gv = r.column_view_x[fgwbase + uint(i)];
         a[row * 37 + 2 * nz_u] = ubrad_mul(-(1.0f - emg), gv);
         const float t = r.column_state[state_walls + ulong(4 * i + 2 * dir)];
         float rhs = ubrad_add(ubrad_mul(r.column_view_x[fswbase + uint(i)], rl),
-            ubrad_mul(ubrad_mul(ubrad_mul(emg, gv), sigma), powr(r.column_state[state_ground], 4.0f)));
+            ubrad_mul(ubrad_mul(ubrad_mul(emg, gv), sigma), ubrad_fourth(r.column_state[state_ground])));
         for (int j = 0; j < nz_u; ++j) {
             const float vf = r.column_view_x[fwwbase + ulong(i) * 18ul + uint(j)];
             const float wt = r.column_state[state_walls + ulong(4 * j + 2 * dir)];
             rhs = ubrad_add(ubrad_add(rhs,
-                ubrad_mul(ubrad_mul(ubrad_mul(ubrad_mul(r.column_param[param + 122ul + uint(j)], emw), sigma), vf), powr(wt, 4.0f))),
-                ubrad_mul(ubrad_mul(vf, rl), 1.0f - r.column_param[param + 122ul + uint(j)]));
+                ubrad_mul(ubrad_mul(ubrad_mul(ubrad_mul(r.column_param[param + 123ul + uint(j)], emw), sigma), vf), ubrad_fourth(wt))),
+                ubrad_mul(ubrad_mul(vf, rl), 1.0f - r.column_param[param + 123ul + uint(j)]));
         }
         b[row] = rhs;
         (void)t;
@@ -159,8 +164,8 @@ kernel void urban_bep_radiosity_fragment(
     const int groundrow = 2 * nz_u;
     for (int j = 0; j < nz_u; ++j) {
         const float vf = r.column_view_x[fwgbase + uint(j)];
-        a[groundrow * 37 + j] = ubrad_mul(ubrad_mul(-(1.0f - emw), vf), r.column_param[param + 122ul + uint(j)]);
-        a[groundrow * 37 + nz_u + j] = ubrad_mul(ubrad_mul(-(1.0f - emw), vf), r.column_param[param + 122ul + uint(j)]);
+        a[groundrow * 37 + j] = ubrad_mul(ubrad_mul(-(1.0f - emw), vf), r.column_param[param + 123ul + uint(j)]);
+        a[groundrow * 37 + nz_u + j] = ubrad_mul(ubrad_mul(-(1.0f - emw), vf), r.column_param[param + 123ul + uint(j)]);
     }
     a[groundrow * 37 + groundrow] = 1.0f;
     float ground_rhs = ubrad_mul(r.column_view_x[fsg_at], rl);
@@ -169,9 +174,9 @@ kernel void urban_bep_radiosity_fragment(
         const float t1 = r.column_state[state_walls + ulong(4 * j + 2 * dir)];
         const float t2 = r.column_state[state_walls + ulong(4 * j + 2 * dir + 1)];
         const float emit = ubrad_mul(ubrad_mul(ubrad_mul(emw, sigma), vf),
-            ubrad_mul(r.column_param[param + 122ul + uint(j)], ubrad_add(powr(t1, 4.0f), powr(t2, 4.0f))));
+            ubrad_mul(r.column_param[param + 123ul + uint(j)], ubrad_add(ubrad_fourth(t1), ubrad_fourth(t2))));
         const float refl = ubrad_mul(ubrad_mul(2.0f, vf),
-            ubrad_mul(rl, 1.0f - r.column_param[param + 122ul + uint(j)]));
+            ubrad_mul(rl, 1.0f - r.column_param[param + 123ul + uint(j)]));
         ground_rhs = ubrad_add(ubrad_add(ground_rhs, emit), refl);
     }
     b[groundrow] = ground_rhs;
@@ -187,22 +192,22 @@ kernel void urban_bep_radiosity_fragment(
     for (int i = 0; i < nz_u; ++i) {
         a[i * 37 + i] = 1.0f;
         for (int j = 0; j < nz_u; ++j)
-            a[i * 37 + nz_u + j] = ubrad_mul(ubrad_mul(-albw, r.column_view_x[fwwbase + ulong(i) * 18ul + uint(j)]), r.column_param[param + 122ul + uint(j)]);
+            a[i * 37 + nz_u + j] = ubrad_mul(ubrad_mul(-albw, r.column_view_x[fwwbase + ulong(i) * 18ul + uint(j)]), r.column_param[param + 123ul + uint(j)]);
         a[i * 37 + groundrow] = ubrad_mul(-albg, r.column_view_x[fgwbase + uint(i)]);
         b[i] = r.direct_rsw[direct_wall + uint(i)];
     }
     for (int i = 0; i < nz_u; ++i) {
         const int row = nz_u + i;
         for (int j = 0; j < nz_u; ++j)
-            a[row * 37 + j] = ubrad_mul(ubrad_mul(-albw, r.column_view_x[fwwbase + ulong(i) * 18ul + uint(j)]), r.column_param[param + 122ul + uint(j)]);
+            a[row * 37 + j] = ubrad_mul(ubrad_mul(-albw, r.column_view_x[fwwbase + ulong(i) * 18ul + uint(j)]), r.column_param[param + 123ul + uint(j)]);
         a[row * 37 + row] = 1.0f;
         a[row * 37 + groundrow] = ubrad_mul(-albg, r.column_view_x[fgwbase + uint(i)]);
         b[row] = r.direct_rsw[direct_wall + 18ul + uint(i)];
     }
     for (int j = 0; j < nz_u; ++j) {
         const float vf = r.column_view_x[fwgbase + uint(j)];
-        a[groundrow * 37 + j] = ubrad_mul(ubrad_mul(-albw, vf), r.column_param[param + 122ul + uint(j)]);
-        a[groundrow * 37 + nz_u + j] = ubrad_mul(ubrad_mul(-albw, vf), r.column_param[param + 122ul + uint(j)]);
+        a[groundrow * 37 + j] = ubrad_mul(ubrad_mul(-albw, vf), r.column_param[param + 123ul + uint(j)]);
+        a[groundrow * 37 + nz_u + j] = ubrad_mul(ubrad_mul(-albw, vf), r.column_param[param + 123ul + uint(j)]);
     }
     a[groundrow * 37 + groundrow] = 1.0f;
     b[groundrow] = r.direct_rsg[item];

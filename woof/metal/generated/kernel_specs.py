@@ -4279,7 +4279,7 @@ URBAN_BEM_ICBEP_XY_FRAGMENT_SHAPES = (('active_cols', (('ncol',),)), ('class_int
 URBAN_BEM_ICBEP_XY_FRAGMENT_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nurbm', 'ctypes.c_int32')]
 URBAN_BEM_ICBEP_XY_FRAGMENT_THREADS_PER_GROUP = 64
 URBAN_BEM_ICBEP_XY_FRAGMENT_LAYOUT_HASH = 'e7b7d08c259b680795ee9895372028df39a2d243531ae087dda0c69d848d1629'
-URBAN_BEM_ICBEP_XY_FRAGMENT_SHADER_HASH = '88f7a92e61bfef1d3a9eb0e062be47431632d3273f04ef5cf104c9cf369a10dc'
+URBAN_BEM_ICBEP_XY_FRAGMENT_SHADER_HASH = '3361778375a71ef0f8d30612f1f22c273899f252bdad68224069a49661194e9c'
 
 URBAN_BEM_INDOOR_FLUXES_FRAGMENT_RESOURCES = (('active_cols', 'int32', 'read'), ('utype', 'int32', 'read'), ('building_nlev', 'int32', 'read'), ('class_float', 'float', 'read'), ('bs', 'float', 'read'), ('rsw', 'float', 'read'), ('rlw', 'float', 'read'), ('rsint', 'float', 'read'), ('rlint', 'float', 'read'), ('tw', 'float', 'read'), ('twlev', 'float', 'read'), ('tflev', 'float', 'read'), ('tglev', 'float', 'read'), ('tr', 'float', 'read'), ('tlev', 'float', 'read'), ('tr_av', 'float', 'read'), ('swdown', 'float', 'read'), ('glw', 'float', 'read'), ('hrwalout', 'float', 'read_write'), ('hrwinout', 'float', 'read_write'), ('hrrof', 'float', 'read_write'), ('hrwalins', 'float', 'read_write'), ('hrwinins', 'float', 'read_write'), ('hswalins', 'float', 'read_write'), ('hswinins', 'float', 'read_write'), ('surwal', 'float', 'read_write'), ('hscond', 'float', 'read_write'), ('error', 'int32', 'read_write'))
 URBAN_BEM_INDOOR_FLUXES_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4535,7 +4535,7 @@ URBAN_BEP_CLASS_INIT_SHAPES = (('class_ix', (('ncase', 23),)), ('class_x', (('nc
 URBAN_BEP_CLASS_INIT_PARAM_FIELDS = [('ncase', 'ctypes.c_int32')]
 URBAN_BEP_CLASS_INIT_THREADS_PER_GROUP = 64
 URBAN_BEP_CLASS_INIT_LAYOUT_HASH = 'f05f90e8a15cc0e63d4b1853806bd7e3331fdbcfde254c83b7a65971c3a68dc9'
-URBAN_BEP_CLASS_INIT_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_CLASS_INIT_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_BUILDINGS_FRAGMENT_RESOURCES = (('column_param', 'float', 'read'), ('column_param_ix', 'int32', 'read'), ('column_interp_x', 'float', 'read'), ('surface_x', 'float', 'read'), ('column_building_x', 'float', 'read_write'))
 URBAN_BEP_COLUMN_BUILDINGS_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read_write')
@@ -4543,7 +4543,7 @@ URBAN_BEP_COLUMN_BUILDINGS_FRAGMENT_SHAPES = (('column_building_x', (('ncol', 64
 URBAN_BEP_COLUMN_BUILDINGS_FRAGMENT_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('dt', 'ctypes.c_float')]
 URBAN_BEP_COLUMN_BUILDINGS_FRAGMENT_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_BUILDINGS_FRAGMENT_LAYOUT_HASH = '93de30f43f913941d112643124dc065542d6b2b5d2b19ce1d3dd9624179a355e'
-URBAN_BEP_COLUMN_BUILDINGS_FRAGMENT_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_BUILDINGS_FRAGMENT_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_GATHER_RESOURCES = (('frc_urb', 'float', 'read'), ('dz8w', 'float', 'read'), ('u_phy', 'float', 'read'), ('v_phy', 'float', 'read'), ('th_phy', 'float', 'read'), ('rho', 'float', 'read'), ('p_phy', 'float', 'read'), ('column_x', 'float', 'read_write'), ('active_cols', 'int32', 'read_write'))
 URBAN_BEP_COLUMN_GATHER_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -4551,7 +4551,7 @@ URBAN_BEP_COLUMN_GATHER_SHAPES = (('active_cols', (('ncol',),)), ('column_x', ((
 URBAN_BEP_COLUMN_GATHER_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 URBAN_BEP_COLUMN_GATHER_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_GATHER_LAYOUT_HASH = '9068d4c58472b2f9bcc00845d783c9a39f1dbf6b07b555820cbddddeef233bbc'
-URBAN_BEP_COLUMN_GATHER_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_GATHER_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_INTERP_RESOURCES = (('column_x', 'float', 'read'), ('class_x', 'float', 'read'), ('column_param_ix', 'int32', 'read'), ('active_cols', 'int32', 'read'), ('column_interp_x', 'float', 'read_write'), ('column_interp_ix', 'int32', 'read_write'))
 URBAN_BEP_COLUMN_INTERP_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -4559,7 +4559,7 @@ URBAN_BEP_COLUMN_INTERP_SHAPES = (('active_cols', (('ncol',),)), ('class_x', ((1
 URBAN_BEP_COLUMN_INTERP_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 URBAN_BEP_COLUMN_INTERP_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_INTERP_LAYOUT_HASH = '34629774677d418a50ae2af9de4ff14486794c03f34fe9604b0bc75c46628819'
-URBAN_BEP_COLUMN_INTERP_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_INTERP_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_LENGTHS_RESOURCES = (('column_x', 'float', 'read'), ('class_x', 'float', 'read'), ('column_param', 'float', 'read'), ('column_param_ix', 'int32', 'read'), ('active_cols', 'int32', 'read'), ('column_state_ix', 'int32', 'read'), ('column_lengths', 'float', 'read_write'), ('column_lengths_ix', 'int32', 'read_write'))
 URBAN_BEP_COLUMN_LENGTHS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -4567,7 +4567,7 @@ URBAN_BEP_COLUMN_LENGTHS_SHAPES = (('active_cols', (('ncol',),)), ('class_x', ((
 URBAN_BEP_COLUMN_LENGTHS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 URBAN_BEP_COLUMN_LENGTHS_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_LENGTHS_LAYOUT_HASH = 'eb90457326a843121c7be48db9cd29a77593531179559869ac2a0270797f33f6'
-URBAN_BEP_COLUMN_LENGTHS_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_LENGTHS_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_MESO_RESOURCES = (('column_x', 'float', 'read'), ('class_x', 'float', 'read'), ('column_param', 'float', 'read'), ('column_param_ix', 'int32', 'read'), ('column_building_x', 'float', 'read'), ('active_cols', 'int32', 'read'), ('column_state_ix', 'int32', 'read'), ('column_meso_x', 'float', 'read_write'), ('column_meso_ix', 'int32', 'read_write'))
 URBAN_BEP_COLUMN_MESO_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -4575,7 +4575,7 @@ URBAN_BEP_COLUMN_MESO_SHAPES = (('active_cols', (('ncol',),)), ('class_x', ((1, 
 URBAN_BEP_COLUMN_MESO_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 URBAN_BEP_COLUMN_MESO_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_MESO_LAYOUT_HASH = '469f6a23a697e1e07f36a2b00ed54df29e3301a6aa02925f9b138692bc4e71e5'
-URBAN_BEP_COLUMN_MESO_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_MESO_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_PARAMS_RESOURCES = (('class_x', 'float', 'read'), ('class_ix', 'int32', 'read'), ('urban_profile', 'float', 'read'), ('urban_profile_ix', 'int32', 'read'), ('active_cols', 'int32', 'read'), ('utype_urb', 'int32', 'read'), ('frc_urb', 'float', 'read'), ('lp_urb', 'float', 'read'), ('lb_urb', 'float', 'read'), ('hgt_urb', 'float', 'read'), ('column_param', 'float', 'read_write'), ('column_param_ix', 'int32', 'read_write'))
 URBAN_BEP_COLUMN_PARAMS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -4583,7 +4583,7 @@ URBAN_BEP_COLUMN_PARAMS_SHAPES = (('active_cols', (('ncol',),)), ('class_ix', ((
 URBAN_BEP_COLUMN_PARAMS_PARAM_FIELDS = [('ncol', 'ctypes.c_int32')]
 URBAN_BEP_COLUMN_PARAMS_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_PARAMS_LAYOUT_HASH = '780a432bce068b82d7dc9308ea9ffd542d918325c1c3d7dbe818d8753092e3db'
-URBAN_BEP_COLUMN_PARAMS_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_PARAMS_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_PROFILE_RESOURCES = (('class_x', 'float', 'read'), ('class_ix', 'int32', 'read'), ('hi_urb', 'float', 'read'), ('active_cols', 'int32', 'read'), ('urban_profile', 'float', 'read_write'), ('urban_profile_ix', 'int32', 'read_write'))
 URBAN_BEP_COLUMN_PROFILE_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -4591,7 +4591,7 @@ URBAN_BEP_COLUMN_PROFILE_SHAPES = (('active_cols', (('ncol',),)), ('class_ix', (
 URBAN_BEP_COLUMN_PROFILE_PARAM_FIELDS = [('num_urban_hi', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 URBAN_BEP_COLUMN_PROFILE_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_PROFILE_LAYOUT_HASH = 'd0a0cb324684f8cb33fd0b8acb70fa8b4e61e4d02291c5243b5eb32e4f22ab77'
-URBAN_BEP_COLUMN_PROFILE_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_PROFILE_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_STATE_GATHER_RESOURCES = (('active_cols', 'int32', 'read'), ('column_param_ix', 'int32', 'read'), ('trb_urb', 'float', 'read'), ('tw1_urb', 'float', 'read'), ('tw2_urb', 'float', 'read'), ('tgb_urb', 'float', 'read'), ('sfw1_urb', 'float', 'read'), ('sfw2_urb', 'float', 'read'), ('sfr_urb', 'float', 'read'), ('sfg_urb', 'float', 'read'), ('column_state', 'float', 'read_write'), ('column_state_ix', 'int32', 'read_write'))
 URBAN_BEP_COLUMN_STATE_GATHER_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -4599,7 +4599,7 @@ URBAN_BEP_COLUMN_STATE_GATHER_SHAPES = (('active_cols', (('ncol',),)), ('column_
 URBAN_BEP_COLUMN_STATE_GATHER_PARAM_FIELDS = [('ncol', 'ctypes.c_int32')]
 URBAN_BEP_COLUMN_STATE_GATHER_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_STATE_GATHER_LAYOUT_HASH = 'bce58ae3dff978a62e4e00d004221969dae0f9f608e8ae9d15ea2d67c8df58b6'
-URBAN_BEP_COLUMN_STATE_GATHER_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_STATE_GATHER_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_STATE_SCATTER_RESOURCES = (('active_cols', 'int32', 'read'), ('column_state_ix', 'int32', 'read'), ('column_state', 'float', 'read'), ('trb_urb', 'float', 'read_write'), ('tw1_urb', 'float', 'read_write'), ('tw2_urb', 'float', 'read_write'), ('tgb_urb', 'float', 'read_write'), ('sfw1_urb', 'float', 'read_write'), ('sfw2_urb', 'float', 'read_write'), ('sfr_urb', 'float', 'read_write'), ('sfg_urb', 'float', 'read_write'))
 URBAN_BEP_COLUMN_STATE_SCATTER_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4607,7 +4607,7 @@ URBAN_BEP_COLUMN_STATE_SCATTER_SHAPES = (('active_cols', (('ncol',),)), ('column
 URBAN_BEP_COLUMN_STATE_SCATTER_PARAM_FIELDS = [('ncol', 'ctypes.c_int32')]
 URBAN_BEP_COLUMN_STATE_SCATTER_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_STATE_SCATTER_LAYOUT_HASH = '461db11ca21093b665f564311f4a0e3dc704067741fb5cc2e5f82f19e127e178'
-URBAN_BEP_COLUMN_STATE_SCATTER_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_STATE_SCATTER_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COLUMN_VIEWS_RESOURCES = (('class_x', 'float', 'read'), ('column_param', 'float', 'read'), ('column_param_ix', 'int32', 'read'), ('active_cols', 'int32', 'read'), ('column_view_x', 'float', 'read_write'), ('column_view_ix', 'int32', 'read_write'))
 URBAN_BEP_COLUMN_VIEWS_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -4615,7 +4615,7 @@ URBAN_BEP_COLUMN_VIEWS_SHAPES = (('active_cols', (('ncol',),)), ('class_x', ((1,
 URBAN_BEP_COLUMN_VIEWS_PARAM_FIELDS = [('ncol', 'ctypes.c_int32')]
 URBAN_BEP_COLUMN_VIEWS_THREADS_PER_GROUP = 64
 URBAN_BEP_COLUMN_VIEWS_LAYOUT_HASH = '3e4ff8c3afd6525b878e2f821e6138bf38a4f9c10faf12c8b1491361f412c776'
-URBAN_BEP_COLUMN_VIEWS_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_COLUMN_VIEWS_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 URBAN_BEP_COUPLE_RESOURCES = (('frc_urb2d', 'float', 'read'), ('glw', 'float', 'read'), ('swdown', 'float', 'read'), ('rl_up_urb', 'float', 'read'), ('rs_abs_urb', 'float', 'read'), ('emiss_urb', 'float', 'read'), ('grdflx_urb', 'float', 'read'), ('ust', 'float', 'read_write'), ('tsk', 'float', 'read_write'), ('hfx', 'float', 'read_write'), ('qfx', 'float', 'read_write'), ('lh', 'float', 'read_write'), ('grdflx', 'float', 'read_write'), ('albedo', 'float', 'read_write'), ('emiss', 'float', 'read_write'), ('ts_urb2d', 'float', 'read_write'), ('sh_urb2d', 'float', 'read_write'), ('lh_urb2d', 'float', 'read_write'), ('g_urb2d', 'float', 'read_write'), ('rn_urb2d', 'float', 'read_write'), ('dz8w', 'float', 'read'), ('rho', 'float', 'read'), ('u_phy', 'float', 'read'), ('v_phy', 'float', 'read'), ('a_u_bep', 'float', 'read_write'), ('a_v_bep', 'float', 'read_write'), ('a_t_bep', 'float', 'read_write'), ('a_q_bep', 'float', 'read_write'), ('a_e_bep', 'float', 'read_write'), ('b_u_bep', 'float', 'read_write'), ('b_v_bep', 'float', 'read_write'), ('b_t_bep', 'float', 'read_write'), ('b_q_bep', 'float', 'read_write'), ('b_e_bep', 'float', 'read_write'), ('sf_bep', 'float', 'read_write'), ('vl_bep', 'float', 'read_write'))
 URBAN_BEP_COUPLE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4625,13 +4625,13 @@ URBAN_BEP_COUPLE_THREADS_PER_GROUP = 128
 URBAN_BEP_COUPLE_LAYOUT_HASH = 'dd6016176ac02e5f7c7d0817bb7ad28ef64ead477261aba429c79f88fae8787a'
 URBAN_BEP_COUPLE_SHADER_HASH = 'fbc58ba6f57f4245625396336759f286ebc13a02b0b8f99fa325e6866a5def18'
 
-URBAN_BEP_RADIATION_FRAGMENT_RESOURCES = (('column_x', 'float', 'read'), ('column_param', 'float', 'read'), ('column_param_ix', 'int32', 'read'), ('active_cols', 'int32', 'read'), ('swdown', 'float', 'read'), ('cosz', 'float', 'read'), ('hour_angle', 'float', 'read'), ('rsg', 'float', 'read_write'), ('rsw', 'float', 'read_write'), ('error', 'int32', 'read_write'))
-URBAN_BEP_RADIATION_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
-URBAN_BEP_RADIATION_FRAGMENT_SHAPES = (('active_cols', (('ncol',),)), ('column_param', (('ncol', 140),)), ('column_param_ix', (('ncol', 3),)), ('column_x', (('ncol', 15, 'nz+1'),)), ('cosz', (('ncol',),)), ('error', (('ncol',),)), ('hour_angle', (('ncol',),)), ('rsg', (('ncol', 2),)), ('rsw', (('ncol', 4, 18),)), ('swdown', (('ncol',),)))
+URBAN_BEP_RADIATION_FRAGMENT_RESOURCES = (('column_x', 'float', 'read'), ('column_param', 'float', 'read'), ('column_param_ix', 'int32', 'read'), ('active_cols', 'int32', 'read'), ('swdown', 'float', 'read'), ('cosz', 'float', 'read'), ('hour_angle', 'float', 'read'), ('rsg', 'float', 'read_write'), ('rsw', 'float', 'read_write'), ('error', 'int32', 'read_write'), ('class_x', 'float', 'read'))
+URBAN_BEP_RADIATION_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read')
+URBAN_BEP_RADIATION_FRAGMENT_SHAPES = (('column_x', (('ncol', 15, 'nz+1'),)), ('column_param', (('ncol', 140),)), ('active_cols', (('ncol',),)), ('swdown', (('ncol',),)), ('cosz', (('ncol',),)), ('hour_angle', (('ncol',),)), ('rsg', (('ncol', 2),)), ('rsw', (('ncol', 4, 18),)), ('error', (('ncol',),)), ('column_param_ix', (('ncol', 3),)), ('class_x', ((1, 1085),)))
 URBAN_BEP_RADIATION_FRAGMENT_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('declin', 'ctypes.c_float')]
 URBAN_BEP_RADIATION_FRAGMENT_THREADS_PER_GROUP = 64
-URBAN_BEP_RADIATION_FRAGMENT_LAYOUT_HASH = '51e513226b8a9aaae57a435927fe9734e4ab0169e41acf0b59d188f71c868d0a'
-URBAN_BEP_RADIATION_FRAGMENT_SHADER_HASH = '9a122ac14914752bc07b2a59c69ac9053d07ebdbec53b69e3152d30272485a79'
+URBAN_BEP_RADIATION_FRAGMENT_LAYOUT_HASH = '24a0a85c9b589f639eb8a169f61033491a58b819a8246881414e3fd4012be8e5'
+URBAN_BEP_RADIATION_FRAGMENT_SHADER_HASH = '66d921090f1107b571c376e8a88018f5d1a169f730c1a7b8cbbb5d9798dbeaa5'
 
 URBAN_BEP_RADIOSITY_FRAGMENT_RESOURCES = (('column_param', 'float', 'read'), ('column_param_ix', 'int32', 'read'), ('column_view_x', 'float', 'read'), ('column_state', 'float', 'read'), ('class_x', 'float', 'read'), ('utype_urb', 'int32', 'read'), ('active_cols', 'int32', 'read'), ('glw', 'float', 'read'), ('direct_rsg', 'float', 'read'), ('direct_rsw', 'float', 'read'), ('rlw', 'float', 'read_write'), ('rlg', 'float', 'read_write'), ('rsw', 'float', 'read_write'), ('rsg', 'float', 'read_write'), ('error', 'int32', 'read_write'))
 URBAN_BEP_RADIOSITY_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4639,7 +4639,7 @@ URBAN_BEP_RADIOSITY_FRAGMENT_SHAPES = (('active_cols', (('ncol',),)), ('class_x'
 URBAN_BEP_RADIOSITY_FRAGMENT_PARAM_FIELDS = [('ncol', 'ctypes.c_int32')]
 URBAN_BEP_RADIOSITY_FRAGMENT_THREADS_PER_GROUP = 64
 URBAN_BEP_RADIOSITY_FRAGMENT_LAYOUT_HASH = '32f0e3064aedc868fbe746bd56052f031c28b11b023b3f93ae97b78a6fb11358'
-URBAN_BEP_RADIOSITY_FRAGMENT_SHADER_HASH = '8cc60cbd0ddd7618f30a7693a4ae75b788a95f8b98def162100a00d18b57d507'
+URBAN_BEP_RADIOSITY_FRAGMENT_SHADER_HASH = '4fdd7fa3f5dc9ce0d6ea59d410fead64ad241f926de7d9d080d0c5d4d743972a'
 
 URBAN_BEP_SFCDIAG_RESOURCES = (('utype_urb2d', 'int32', 'read'), ('th_phy', 'float', 'read'), ('qv', 'float', 'read'), ('u_phy', 'float', 'read'), ('v_phy', 'float', 'read'), ('psfc', 'float', 'read'), ('t2', 'float', 'read_write'), ('th2', 'float', 'read_write'), ('q2', 'float', 'read_write'), ('u10', 'float', 'read_write'), ('v10', 'float', 'read_write'))
 URBAN_BEP_SFCDIAG_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4663,7 +4663,7 @@ URBAN_BEP_VIEW_INIT_SHAPES = (('class_ix', (('ncase', 23),)), ('class_x', (('nca
 URBAN_BEP_VIEW_INIT_PARAM_FIELDS = [('ncase', 'ctypes.c_int32')]
 URBAN_BEP_VIEW_INIT_THREADS_PER_GROUP = 64
 URBAN_BEP_VIEW_INIT_LAYOUT_HASH = 'bd199c058abbfb07307920f5ae7eac2aacb20ce300554ac56b558a2c751ad151'
-URBAN_BEP_VIEW_INIT_SHADER_HASH = 'abde4ad9d0efa1e3960fc5dd59c10dce3d7144de34ed97f5760502e8bcbce378'
+URBAN_BEP_VIEW_INIT_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
 
 UWPBL_COLUMNS_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('th', 'float', 'read'), ('rho', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('qnc', 'float', 'read'), ('qni', 'float', 'read'), ('p', 'float', 'read'), ('z', 'float', 'read'), ('t', 'float', 'read'), ('cldfra', 'float', 'read'), ('exner', 'float', 'read'), ('rthratenlw', 'float', 'read'), ('wsedl3d', 'float', 'read'), ('p8w', 'float', 'read'), ('z_at_w', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('ust', 'float', 'read'), ('ht', 'float', 'read'), ('kvm3d', 'float', 'read_write'), ('kvh3d', 'float', 'read_write'), ('tauresx2d', 'float', 'read_write'), ('tauresy2d', 'float', 'read_write'), ('rublten', 'float', 'read_write'), ('rvblten', 'float', 'read_write'), ('rthblten', 'float', 'read_write'), ('rqvblten', 'float', 'read_write'), ('rqcblten', 'float', 'read_write'), ('rqiblten', 'float', 'read_write'), ('rqniblten', 'float', 'read_write'), ('tke_pbl', 'float', 'read_write'), ('turbtype3d', 'float', 'read_write'), ('smaw3d', 'float', 'read_write'), ('tpert2d', 'float', 'read_write'), ('qpert2d', 'float', 'read_write'), ('wpert2d', 'float', 'read_write'), ('pblh2d', 'float', 'read_write'), ('kpbl2d', 'int32', 'read_write'), ('r8pool', 'float64_bits', 'read_write'), ('i4pool', 'int32', 'read_write'), ('err', 'int32', 'read_write'))
 UWPBL_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -7704,3 +7704,19 @@ SCALE_PHYSICS_PARAM_VALUES_PARAM_FIELDS = [('count', 'ctypes.c_int32')]
 SCALE_PHYSICS_PARAM_VALUES_THREADS_PER_GROUP = 128
 SCALE_PHYSICS_PARAM_VALUES_LAYOUT_HASH = '8f83663822d46d5eddebd65aa6e4c45ea5520b7ce43d65e8bc2125be61ec73ad'
 SCALE_PHYSICS_PARAM_VALUES_SHADER_HASH = 'f45e408dbbfbf4e378ed80ef10b09eb68e7bf50d0d23e352bd26b202204858a0'
+
+URBAN_BEP_COLUMN_UPWARD_RESOURCES = (('column_param', 'float', 'read'), ('column_param_ix', 'int32', 'read'), ('class_x', 'float', 'read'), ('column_state', 'float', 'read'), ('utype_urb', 'int32', 'read'), ('active_cols', 'int32', 'read'), ('rlg', 'float', 'read'), ('rsg', 'float', 'read'), ('rlw', 'float', 'read'), ('rsw', 'float', 'read'), ('glw', 'float', 'read'), ('swdown', 'float', 'read'), ('error', 'int32', 'read_write'), ('rl_up', 'float', 'read_write'), ('rs_abs', 'float', 'read_write'), ('emiss', 'float', 'read_write'), ('grdflx_urb', 'float', 'read_write'))
+URBAN_BEP_COLUMN_UPWARD_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+URBAN_BEP_COLUMN_UPWARD_SHAPES = (('column_param', (('ncol', 140),)), ('column_param_ix', (('ncol', 3),)), ('class_x', ((1, 1085),)), ('column_state', (('ncol', 1210),)), ('utype_urb', (('ncol',),)), ('active_cols', (('ncol',),)), ('rlg', (('ncol', 2),)), ('rsg', (('ncol', 2),)), ('rlw', (('ncol', 2, 2, 18),)), ('rsw', (('ncol', 4, 18),)), ('glw', (('ncol',),)), ('swdown', (('ncol',),)), ('error', (('ncol',),)), ('rl_up', (('ncol',),)), ('rs_abs', (('ncol',),)), ('emiss', (('ncol',),)), ('grdflx_urb', (('ncol',),)))
+URBAN_BEP_COLUMN_UPWARD_PARAM_FIELDS = [('ncol', 'ctypes.c_int32')]
+URBAN_BEP_COLUMN_UPWARD_THREADS_PER_GROUP = 32
+URBAN_BEP_COLUMN_UPWARD_LAYOUT_HASH = '92749cb27fff97d8365236b5a44e093b00c4ec45309c4ef680afdf48e46dd083'
+URBAN_BEP_COLUMN_UPWARD_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
+
+URBAN_BEP_COLUMN_FINISH_RESOURCES = (('column_param_ix', 'int32', 'read'), ('column_state_ix', 'int32', 'read_write'), ('column_state', 'float', 'read_write'), ('column_building', 'float', 'read'), ('column_interp', 'float', 'read'), ('column_meso', 'float', 'read'), ('column_lengths', 'float', 'read'), ('active_cols', 'int32', 'read'), ('view_error', 'int32', 'read'), ('interp_error', 'int32', 'read'), ('radiation_error', 'int32', 'read'), ('upward_error', 'int32', 'read'), ('surface_error', 'int32', 'read'), ('meso_error', 'int32', 'read'), ('length_error', 'int32', 'read'), ('error_flags', 'int32', 'read_write'), ('radiosity_error', 'int32', 'read'), ('a_u', 'float', 'read_write'), ('a_v', 'float', 'read_write'), ('a_t', 'float', 'read_write'), ('a_e', 'float', 'read_write'), ('b_u', 'float', 'read_write'), ('b_v', 'float', 'read_write'), ('b_t', 'float', 'read_write'), ('b_e', 'float', 'read_write'), ('b_q', 'float', 'read_write'), ('vl', 'float', 'read_write'), ('dl_u', 'float', 'read_write'), ('dlg', 'float', 'read_write'), ('sf', 'float', 'read_write'))
+URBAN_BEP_COLUMN_FINISH_ACCESS = ('read', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+URBAN_BEP_COLUMN_FINISH_SHAPES = (('column_param_ix', (('ncol', 3),)), ('column_state_ix', (('ncol',),)), ('column_state', (('ncol', 1210),)), ('column_building', (('ncol', 648),)), ('column_interp', (('ncol', 108),)), ('column_meso', (('ncol', 10, 'nz+1'),)), ('column_lengths', (('ncol', 2, 'nz'),)), ('active_cols', (('ncol',),)), ('view_error', (('ncol',),)), ('interp_error', (('ncol',),)), ('radiation_error', (('ncol',),)), ('upward_error', (('ncol',),)), ('surface_error', (('ncol',),)), ('meso_error', (('ncol',),)), ('length_error', (('ncol',),)), ('error_flags', (('ncol',),)), ('radiosity_error', (('ncol', 2),)), ('a_u', (('nz', 'ncol'),)), ('a_v', (('nz', 'ncol'),)), ('a_t', (('nz', 'ncol'),)), ('a_e', (('nz', 'ncol'),)), ('b_u', (('nz', 'ncol'),)), ('b_v', (('nz', 'ncol'),)), ('b_t', (('nz', 'ncol'),)), ('b_e', (('nz', 'ncol'),)), ('b_q', (('nz', 'ncol'),)), ('vl', (('nz', 'ncol'),)), ('dl_u', (('nz', 'ncol'),)), ('dlg', (('nz', 'ncol'),)), ('sf', (('nz+1', 'ncol'),)))
+URBAN_BEP_COLUMN_FINISH_PARAM_FIELDS = [('ncol', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32')]
+URBAN_BEP_COLUMN_FINISH_THREADS_PER_GROUP = 32
+URBAN_BEP_COLUMN_FINISH_LAYOUT_HASH = 'e1e4ef3b7cc48a058201533dea9fbe191fbbff1bbc0e0f62ded733c2a038e569'
+URBAN_BEP_COLUMN_FINISH_SHADER_HASH = '97b9ad7a21bebbcb537be5233a4ab8d0b12eaa5c8f6ef143335a3a602089fa97'
