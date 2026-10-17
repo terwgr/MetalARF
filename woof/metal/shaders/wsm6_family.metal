@@ -728,8 +728,10 @@ kernel void wsm6_finish(
         return;
     }
     float mpten = r.theta[id] - r.h_diabatic[id];
-    mpten = min(p.limit, mpten);
-    mpten = max(-p.limit, mpten);
+    if (!isnan(mpten)) {
+        mpten = min(p.limit, mpten);
+        mpten = max(-p.limit, mpten);
+    }
     r.thp[id] += mpten;
     r.h_diabatic[id] = mpten / p.dt;
 }

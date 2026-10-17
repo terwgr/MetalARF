@@ -191,8 +191,10 @@ kernel void kessler_finish(constant KesslerFinishResources &r [[buffer(0)]],
         return;
     }
     float mpten = r.t[tid] - r.h_diabatic[tid];
-    mpten = fmin(p.limit, mpten);
-    mpten = fmax(-p.limit, mpten);
+    if (!isnan(mpten)) {
+        mpten = fmin(p.limit, mpten);
+        mpten = fmax(-p.limit, mpten);
+    }
     r.thp[tid] = r.thp[tid] + mpten;
     r.h_diabatic[tid] = mpten / p.dt;
 }

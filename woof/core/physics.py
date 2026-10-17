@@ -3279,7 +3279,7 @@ class PhysicsDriver:
         """
         if not isinstance(result, MicrophysicsDiagnostics):
             raise TypeError("microphysics must return MicrophysicsDiagnostics")
-        if getattr(self.state, "_metal_setup_state", False) and cp is None:
+        if getattr(self.state, "_metal_setup_state", False):
             # The Metal schemes produce the state's canonical
             # surface accumulators directly. Validate that ownership and
             # layout here without routing live Metal arrays through CuPy's
@@ -3319,6 +3319,20 @@ class PhysicsDriver:
                     raise ValueError(
                         f"Metal microphysics {name} is not produced by "
                         f"mp_physics={self.mp_physics}")
+            if not self._metal_gfs_profile:
+                from woof.core.health import FieldRule, HealthField
+                from woof.metal.health_family import submit_validate_full_state
+
+                finite_fields = tuple(
+                    HealthField(f"microphysics.{name}", getattr(self.microphysics, name),
+                                FieldRule("generic"))
+                    for name in slots)
+                _submission, status = submit_validate_full_state(
+                    self.state, finite_fields)
+                if status is not None and int(status.to_numpy()[0]):
+                    raise FloatingPointError(
+                        "Metal microphysics precipitation diagnostics contain "
+                        "a non-finite value")
             if self._metal_gfs_profile:
                 from woof.metal.morrison_family import (
                     MORR_DIAG_GRAUPELNC_NONFINITE,

@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "6cae7926b6a3f9f95f642b89e6b4d36ad1365b32c2d61cdd2b2760c1c8b8f464",
-      "size": 12487179
+      "sha256": "c0ee000dfbf44e9e9ddda0bf442b94e0043e7e6b2598183894e649c168bd79c3",
+      "size": 12487339
     },
     "woof_exact.metallib": {
-      "sha256": "b0a6ab3a60c3a9a0cbbd28153144e5f2078ac8e37e0deac7910aa6faa9b6c80e",
-      "size": 8138468
+      "sha256": "372aa49f86aa728aa6b70f25e42103eaf68113ad1ce7d289a1a8d27ecdd5bc70",
+      "size": 8138532
     }
   },
   "implementation_file_count": 1142,
-  "implementation_sha256": "ba847aa6335714f45e80fba4b01dbabb0eada2ec856ef41abbe710a8bdb95a71",
-  "metal_inputs_sha256": "c5f430793980fb9a6c923c8fdf1c447ffe0f15bd15f2ac3242954ee864927a74",
+  "implementation_sha256": "11005d84bdbb4c9c98a2e95e0d67d202335a8d3497c2fb7ac45a7ca14fa96a4b",
+  "metal_inputs_sha256": "e1c6bea9464549d5ba1ea00ee214ce69996d02454ff9f722df9dbdf9fe58d8d2",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -1272,8 +1272,8 @@
         "size": 5055
       },
       "woof/metal/shaders/kessler_family.metal": {
-        "sha256": "881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94",
-        "size": 7805
+        "sha256": "7845bc95831fefd8adfc6def570378ad3ca26264cadb7af4ca0184654db9db28",
+        "size": 7844
       },
       "woof/metal/shaders/kf_column_family.metal": {
         "sha256": "68bb0ed06af3d9dc3fa1dfc9348080e701d9daa993e4e3d5c96408da5accd948",
@@ -1316,8 +1316,8 @@
         "size": 84724
       },
       "woof/metal/shaders/milbrandt2_fields.metal": {
-        "sha256": "0d734fd42dd72c695c14495033374eb4c5752ae23642c971d8b194d3a36c5b8d",
-        "size": 2472
+        "sha256": "8932b297c0b165ee03b7560fe646ee6e24aa05ee76e5cff44a357100c81b13ee",
+        "size": 2511
       },
       "woof/metal/shaders/milbrandt2_zet.metal": {
         "sha256": "9f578220676bd075e9c392f3b2ddc607a89c805ecc2368fa78a0b86e732c8009",
@@ -1336,8 +1336,8 @@
         "size": 2110
       },
       "woof/metal/shaders/morrison_family.metal": {
-        "sha256": "7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f",
-        "size": 58822
+        "sha256": "459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1",
+        "size": 58857
       },
       "woof/metal/shaders/morrison_refl.metal": {
         "sha256": "1d3d79c4ca993ff832872ddb8bc6dca773b97df1c21e7df8c0dbad03dea49b1a",
@@ -1452,8 +1452,8 @@
         "size": 27520
       },
       "woof/metal/shaders/nssl2_runtime.metal": {
-        "sha256": "d34f5ea2bd3facc18238b46c5e16fb258d8139b00a116f0c10eaaa4927c19b24",
-        "size": 1825
+        "sha256": "43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e",
+        "size": 1867
       },
       "woof/metal/shaders/nssl2_sedimentation.metal": {
         "sha256": "3978ff4606512e2da623a33bd0fa026b976b1110c2a97705d3238737c6934be8",
@@ -2092,8 +2092,8 @@
         "size": 3628
       },
       "woof/metal/shaders/wsm6_family.metal": {
-        "sha256": "b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff",
-        "size": 33531
+        "sha256": "ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557",
+        "size": 33570
       },
       "woof/metal/shaders/wsm6_reflectivity.metal": {
         "sha256": "fe3a8967da6e0c9b00fa491349676a0f6568d613788a099020005aca9e744fd4",
@@ -3988,6 +3988,6 @@
         "size": 296
       }
     },
-    "sha256": "c5f430793980fb9a6c923c8fdf1c447ffe0f15bd15f2ac3242954ee864927a74"
+    "sha256": "e1c6bea9464549d5ba1ea00ee214ce69996d02454ff9f722df9dbdf9fe58d8d2"
   }
 }

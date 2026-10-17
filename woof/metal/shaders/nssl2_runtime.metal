@@ -34,8 +34,10 @@ kernel void nssl2_runtime_finish(
         return;
     }
     float tendency = r.theta[idx] - r.heating[idx];
-    tendency = min(p.limit, tendency);
-    tendency = max(-p.limit, tendency);
+    if (!isnan(tendency)) {
+        tendency = min(p.limit, tendency);
+        tendency = max(-p.limit, tendency);
+    }
     r.theta_perturbation[idx] += tendency;
     r.heating[idx] = tendency / p.dt;
 }

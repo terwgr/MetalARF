@@ -56,8 +56,10 @@ kernel void milbrandt2_finish(
         return;
     }
     float mpten = theta - r.h_diabatic[id];
-    mpten = min(p.limit, mpten);
-    mpten = max(-p.limit, mpten);
+    if (!isnan(mpten)) {
+        mpten = min(p.limit, mpten);
+        mpten = max(-p.limit, mpten);
+    }
     r.thp[id] += mpten;
     r.h_diabatic[id] = mpten / p.dt;
 }

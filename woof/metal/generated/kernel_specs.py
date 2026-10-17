@@ -1303,7 +1303,7 @@ KESSLER_COLUMN_SHAPES = (('dz8w', (('nz', 'ny', 'nx'),)), ('pii', (('nz', 'ny', 
 KESSLER_COLUMN_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('svp1', 'ctypes.c_float'), ('svp2', 'ctypes.c_float'), ('svp3', 'ctypes.c_float'), ('svpt0', 'ctypes.c_float'), ('xlv', 'ctypes.c_float'), ('cp', 'ctypes.c_float'), ('rhowater', 'ctypes.c_float'), ('ep2', 'ctypes.c_float')]
 KESSLER_COLUMN_THREADS_PER_GROUP = 128
 KESSLER_COLUMN_LAYOUT_HASH = 'c66b054978dbbe0e548c6b122916957d07c2faad31d5bb6cbfcc0fbb19130b6e'
-KESSLER_COLUMN_SHADER_HASH = '881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94'
+KESSLER_COLUMN_SHADER_HASH = '7845bc95831fefd8adfc6def570378ad3ca26264cadb7af4ca0184654db9db28'
 
 KESSLER_FINISH_RESOURCES = (('t', 'float', 'read'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 KESSLER_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -1311,7 +1311,7 @@ KESSLER_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('t', (('nz', 'n
 KESSLER_FINISH_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float'), ('no_mp_heating', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 KESSLER_FINISH_THREADS_PER_GROUP = 128
 KESSLER_FINISH_LAYOUT_HASH = '0e55c238cace347946a166e1c3c7d2d57b58099f50977add3113d3b0647ec325'
-KESSLER_FINISH_SHADER_HASH = '881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94'
+KESSLER_FINISH_SHADER_HASH = '7845bc95831fefd8adfc6def570378ad3ca26264cadb7af4ca0184654db9db28'
 
 KESSLER_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('p', 'float', 'read'), ('alt', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('t', 'float', 'read_write'), ('rho', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('z', 'float', 'read_write'), ('dz8w', 'float', 'read_write'), ('z_interface', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 KESSLER_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1319,7 +1319,7 @@ KESSLER_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('dz8w', (('nz', 'ny',
 KESSLER_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 KESSLER_PREPARE_THREADS_PER_GROUP = 128
 KESSLER_PREPARE_LAYOUT_HASH = 'c4994fdb43be8979f7537c0efc0970462eafd08c87692bd3b80407fdd6f1864a'
-KESSLER_PREPARE_SHADER_HASH = '881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94'
+KESSLER_PREPARE_SHADER_HASH = '7845bc95831fefd8adfc6def570378ad3ca26264cadb7af4ca0184654db9db28'
 
 KF_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('temperature', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('pressure', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('w', 'float', 'read'), ('temperature_table', 'float', 'read'), ('qsat_table', 'float', 'read'), ('thetae_base', 'float', 'read'), ('log_ratio', 'float', 'read'), ('rthcuten', 'float', 'read_write'), ('rqvcuten', 'float', 'read_write'), ('rqccuten', 'float', 'read_write'), ('rqicuten', 'float', 'read_write'), ('rqrcuten', 'float', 'read_write'), ('rqscuten', 'float', 'read_write'), ('rainc', 'float', 'read_write'), ('pratec', 'float', 'read_write'), ('triggered', 'int32', 'read_write'), ('cape_before', 'float', 'read_write'), ('cape_after', 'float', 'read_write'), ('closure_time', 'float', 'read_write'), ('nca_seconds', 'float', 'read_write'), ('shallow_out', 'int32', 'read_write'), ('cloud_base', 'int32', 'read_write'), ('cloud_top_out', 'int32', 'read_write'), ('updraft_out', 'float', 'read_write'), ('downdraft_out', 'float', 'read_write'), ('workspace', 'float', 'read_write'))
 KF_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1391,7 +1391,7 @@ MILBRANDT2_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('pii', (('nz
 MILBRANDT2_FINISH_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('no_mp_heating', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float')]
 MILBRANDT2_FINISH_THREADS_PER_GROUP = 128
 MILBRANDT2_FINISH_LAYOUT_HASH = 'd3a062fddc5aefc4eebcc58264ee53063e73ef9d4e908b716d2ea44800b2f770'
-MILBRANDT2_FINISH_SHADER_HASH = '0d734fd42dd72c695c14495033374eb4c5752ae23642c971d8b194d3a36c5b8d'
+MILBRANDT2_FINISH_SHADER_HASH = '8932b297c0b165ee03b7560fe646ee6e24aa05ee76e5cff44a357100c81b13ee'
 
 MILBRANDT2_GEOMETRY_RESOURCES = (('pres', 'float', 'read'), ('psfc', 'float', 'read'), ('DE', 'float', 'read'), ('DZ', 'float', 'read_write'), ('iDZ', 'float', 'read_write'))
 MILBRANDT2_GEOMETRY_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
@@ -1415,7 +1415,7 @@ MILBRANDT2_PREPARE_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('p', (('nz'
 MILBRANDT2_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nzi', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 MILBRANDT2_PREPARE_THREADS_PER_GROUP = 128
 MILBRANDT2_PREPARE_LAYOUT_HASH = 'd843f8f212c7367e64047b8aa6e2c385abba7229453c125f5616ba39bf5f4eff'
-MILBRANDT2_PREPARE_SHADER_HASH = '0d734fd42dd72c695c14495033374eb4c5752ae23642c971d8b194d3a36c5b8d'
+MILBRANDT2_PREPARE_SHADER_HASH = '8932b297c0b165ee03b7560fe646ee6e24aa05ee76e5cff44a357100c81b13ee'
 
 MILBRANDT2_SEDIMENT_256_RESOURCES = (('T', 'float', 'read'), ('Q', 'float', 'read_write'), ('QC', 'float', 'read_write'), ('QR', 'float', 'read_write'), ('QI', 'float', 'read_write'), ('QN', 'float', 'read_write'), ('QG', 'float', 'read_write'), ('QH', 'float', 'read_write'), ('NC', 'float', 'read_write'), ('NR', 'float', 'read_write'), ('NY', 'float', 'read_write'), ('NN', 'float', 'read_write'), ('NG', 'float', 'read_write'), ('NH', 'float', 'read_write'), ('DE', 'float', 'read'), ('iDE', 'float', 'read'), ('DZ', 'float', 'read'), ('iDZ', 'float', 'read'), ('gamfact', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'), ('graupelnc', 'float', 'read_write'), ('graupelncv', 'float', 'read_write'), ('hailnc', 'float', 'read_write'), ('hailncv', 'float', 'read_write'), ('sr', 'float', 'read_write'), ('ck', 'float', 'read'))
 MILBRANDT2_SEDIMENT_256_ACCESS = ('read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read')
@@ -1463,7 +1463,7 @@ MORRISON_FINALIZE_LEVELS_SHAPES = (('effc', (('nz', 'ny', 'nx'),)), ('effi', (('
 MORRISON_FINALIZE_LEVELS_PARAM_FIELDS = [('morr_rhog', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ncell', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_FINALIZE_LEVELS_THREADS_PER_GROUP = 128
 MORRISON_FINALIZE_LEVELS_LAYOUT_HASH = 'b3180d259e493023a63502843e8377e1651cea38126bffb4bdd1060cf6dd5521'
-MORRISON_FINALIZE_LEVELS_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
+MORRISON_FINALIZE_LEVELS_SHADER_HASH = '459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1'
 
 MORRISON_FINISH_RESOURCES = (('theta', 'float', 'read'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 MORRISON_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -1471,7 +1471,7 @@ MORRISON_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('theta', (('nz
 MORRISON_FINISH_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float'), ('no_mp_heating', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ncell', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_FINISH_THREADS_PER_GROUP = 128
 MORRISON_FINISH_LAYOUT_HASH = '509153cba9fcf3eb9159e5248460858491909e610ddda2736b5eac8483d86646'
-MORRISON_FINISH_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
+MORRISON_FINISH_SHADER_HASH = '459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1'
 
 MORRISON_PREPARE_FIELDS_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('pressure', 'float', 'read'), ('theta', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 MORRISON_PREPARE_FIELDS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1479,7 +1479,7 @@ MORRISON_PREPARE_FIELDS_SHAPES = (('dz', (('nz', 'ny', 'nx'),)), ('h_diabatic', 
 MORRISON_PREPARE_FIELDS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nzi', 'ctypes.c_int32'), ('thb_full', 'ctypes.c_int32'), ('phb_full', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float'), ('ncell', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_PREPARE_FIELDS_THREADS_PER_GROUP = 128
 MORRISON_PREPARE_FIELDS_LAYOUT_HASH = '2667ff0f204f6df79760997d7d44caee888fa29b51ee62c554bd61a313c40781'
-MORRISON_PREPARE_FIELDS_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
+MORRISON_PREPARE_FIELDS_SHADER_HASH = '459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1'
 
 MORRISON_PROCESS_LEVELS_RESOURCES = (('theta', 'float', 'read_write'), ('qv', 'float', 'read_write'), ('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('ns', 'float', 'read_write'), ('ng', 'float', 'read_write'), ('qrcuten', 'float', 'read'), ('qscuten', 'float', 'read'), ('qicuten', 'float', 'read'), ('rho_in', 'float', 'read_write'), ('pii', 'float', 'read'), ('pressure', 'float', 'read'), ('ice_to_snow_scratch', 'float', 'read_write'), ('effc', 'float', 'read_write'), ('effi', 'float', 'read_write'), ('effs', 'float', 'read_write'))
 MORRISON_PROCESS_LEVELS_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read_write', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1487,7 +1487,7 @@ MORRISON_PROCESS_LEVELS_SHAPES = (('effc', (('nz', 'ny', 'nx'),)), ('effi', (('n
 MORRISON_PROCESS_LEVELS_PARAM_FIELDS = [('morr_ag', 'ctypes.c_float'), ('morr_bg', 'ctypes.c_float'), ('morr_rhog', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('has_cu_tendencies', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ncell', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_PROCESS_LEVELS_THREADS_PER_GROUP = 64
 MORRISON_PROCESS_LEVELS_LAYOUT_HASH = '6fe3a8a6332e3c5ce1924d37c6ca62eb2842769d2078e81899e4902a6090adcc'
-MORRISON_PROCESS_LEVELS_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
+MORRISON_PROCESS_LEVELS_SHADER_HASH = '459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1'
 
 MORRISON_SEDIMENT_256_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('ns', 'float', 'read_write'), ('ng', 'float', 'read_write'), ('cloud_nc', 'float', 'read'), ('theta', 'float', 'read'), ('pii', 'float', 'read'), ('pressure', 'float', 'read'), ('rho_in', 'float', 'read'), ('dz', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'), ('graupelnc', 'float', 'read_write'), ('graupelncv', 'float', 'read_write'), ('sr', 'float', 'read_write'))
 MORRISON_SEDIMENT_256_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1495,7 +1495,7 @@ MORRISON_SEDIMENT_256_SHAPES = (('cloud_nc', (('nz', 'ny', 'nx'),)), ('dz', (('n
 MORRISON_SEDIMENT_256_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('morr_ag', 'ctypes.c_float'), ('morr_bg', 'ctypes.c_float'), ('morr_rhog', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_SEDIMENT_256_THREADS_PER_GROUP = 128
 MORRISON_SEDIMENT_256_LAYOUT_HASH = '7fe004481970b403ba705ec0aead782720661573f561b4076accf5be65b08813'
-MORRISON_SEDIMENT_256_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
+MORRISON_SEDIMENT_256_SHADER_HASH = '459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1'
 
 MORRISON_SEDIMENT_64_RESOURCES = (('qc', 'float', 'read_write'), ('qr', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('qs', 'float', 'read_write'), ('qg', 'float', 'read_write'), ('nc', 'float', 'read_write'), ('nr', 'float', 'read_write'), ('ni', 'float', 'read_write'), ('ns', 'float', 'read_write'), ('ng', 'float', 'read_write'), ('cloud_nc', 'float', 'read'), ('theta', 'float', 'read'), ('pii', 'float', 'read'), ('pressure', 'float', 'read'), ('rho_in', 'float', 'read'), ('dz', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'), ('graupelnc', 'float', 'read_write'), ('graupelncv', 'float', 'read_write'), ('sr', 'float', 'read_write'))
 MORRISON_SEDIMENT_64_ACCESS = ('read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1503,7 +1503,7 @@ MORRISON_SEDIMENT_64_SHAPES = (('cloud_nc', (('nz', 'ny', 'nx'),)), ('dz', (('nz
 MORRISON_SEDIMENT_64_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('morr_ag', 'ctypes.c_float'), ('morr_bg', 'ctypes.c_float'), ('morr_rhog', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('j_start', 'ctypes.c_int32'), ('j_stop', 'ctypes.c_int32'), ('i_start', 'ctypes.c_int32'), ('i_stop', 'ctypes.c_int32')]
 MORRISON_SEDIMENT_64_THREADS_PER_GROUP = 128
 MORRISON_SEDIMENT_64_LAYOUT_HASH = '11400a4a9eabbe859faeccd9abc443263136b2ab576b016e0744f8a8e1b408c1'
-MORRISON_SEDIMENT_64_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
+MORRISON_SEDIMENT_64_SHADER_HASH = '459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1'
 
 MORRISON_VALIDATE_DIAGNOSTICS_RESOURCES = (('rainnc', 'float', 'read'), ('rainncv', 'float', 'read'), ('snownc', 'float', 'read'), ('snowncv', 'float', 'read'), ('graupelnc', 'float', 'read'), ('graupelncv', 'float', 'read'), ('sr', 'float', 'read'), ('status', 'uint32', 'read_write'))
 MORRISON_VALIDATE_DIAGNOSTICS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -1511,7 +1511,7 @@ MORRISON_VALIDATE_DIAGNOSTICS_SHAPES = (('graupelnc', (('ny', 'nx'),)), ('graupe
 MORRISON_VALIDATE_DIAGNOSTICS_PARAM_FIELDS = [('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('ncell', 'ctypes.c_int32'), ('sr_upper', 'ctypes.c_float')]
 MORRISON_VALIDATE_DIAGNOSTICS_THREADS_PER_GROUP = 128
 MORRISON_VALIDATE_DIAGNOSTICS_LAYOUT_HASH = 'fea1eb6eefcb2a5cf919018df029174dd1a579a11d17814982392aea4710a092'
-MORRISON_VALIDATE_DIAGNOSTICS_SHADER_HASH = '7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f'
+MORRISON_VALIDATE_DIAGNOSTICS_SHADER_HASH = '459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1'
 
 MYJ_DRIVER_WSPD_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('wspd', 'float', 'read_write'))
 MYJ_DRIVER_WSPD_ACCESS = ('read', 'read', 'read_write')
@@ -2039,7 +2039,7 @@ NSSL2_RADIUS_MICRONS_SHAPES = (('cloud', (('nz', 'ny', 'nx'),)), ('ice', (('nz',
 NSSL2_RADIUS_MICRONS_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NSSL2_RADIUS_MICRONS_THREADS_PER_GROUP = 256
 NSSL2_RADIUS_MICRONS_LAYOUT_HASH = 'b696fec9f64a2f72c75473060ec4cfc4a307d6b5ae6b7bcc87368f77dfb6c7f0'
-NSSL2_RADIUS_MICRONS_SHADER_HASH = 'd34f5ea2bd3facc18238b46c5e16fb258d8139b00a116f0c10eaaa4927c19b24'
+NSSL2_RADIUS_MICRONS_SHADER_HASH = '43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e'
 
 NSSL2_RUNTIME_FINISH_RESOURCES = (('theta', 'float', 'read'), ('heating', 'float', 'read_write'), ('theta_perturbation', 'float', 'read_write'))
 NSSL2_RUNTIME_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -2047,7 +2047,7 @@ NSSL2_RUNTIME_FINISH_SHAPES = (('heating', (('nz', 'ny', 'nx'),)), ('theta', (('
 NSSL2_RUNTIME_FINISH_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float'), ('no_mp_heating', 'ctypes.c_int32')]
 NSSL2_RUNTIME_FINISH_THREADS_PER_GROUP = 256
 NSSL2_RUNTIME_FINISH_LAYOUT_HASH = '5999a158a76a582f1a1273903dff52728968e0ac994493a1ae2aee534842aaf1'
-NSSL2_RUNTIME_FINISH_SHADER_HASH = 'd34f5ea2bd3facc18238b46c5e16fb258d8139b00a116f0c10eaaa4927c19b24'
+NSSL2_RUNTIME_FINISH_SHADER_HASH = '43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e'
 
 NSSL2_RUNTIME_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('alt', 'float', 'read'), ('pressure', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('theta', 'float', 'read_write'), ('rho', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 NSSL2_RUNTIME_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2055,7 +2055,7 @@ NSSL2_RUNTIME_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('dz', (('nz', '
 NSSL2_RUNTIME_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 NSSL2_RUNTIME_PREPARE_THREADS_PER_GROUP = 256
 NSSL2_RUNTIME_PREPARE_LAYOUT_HASH = '58feb3c6888ecc2260a1017a578d8b1f0aad494f4c95f2c7fc13f88f1877a8ea'
-NSSL2_RUNTIME_PREPARE_SHADER_HASH = 'd34f5ea2bd3facc18238b46c5e16fb258d8139b00a116f0c10eaaa4927c19b24'
+NSSL2_RUNTIME_PREPARE_SHADER_HASH = '43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e'
 
 NSSL2_SEDIMENT_ALL_256_RESOURCES = (('air_density', 'float', 'read'), ('temperature_k', 'float', 'read'), ('state', 'float', 'read_write'), ('dz', 'float', 'read'), ('ignored_accumulator', 'float', 'read_write'), ('category_export', 'float', 'read_write'))
 NSSL2_SEDIMENT_ALL_256_ACCESS = ('read', 'read', 'read_write', 'read', 'read_write', 'read_write')
@@ -4903,7 +4903,7 @@ WSM6_COLUMN_SHAPES = (('den', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx')
 WSM6_COLUMN_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('hail_opt', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 WSM6_COLUMN_THREADS_PER_GROUP = 32
 WSM6_COLUMN_LAYOUT_HASH = '081a60e13f12430bfee93f9bcfa5e27b6d6adeec301fc8eb3d29db6ac9498afb'
-WSM6_COLUMN_SHADER_HASH = 'b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff'
+WSM6_COLUMN_SHADER_HASH = 'ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557'
 
 WSM6_FINISH_RESOURCES = (('theta', 'float', 'read'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -4911,7 +4911,7 @@ WSM6_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('theta', (('nz', '
 WSM6_FINISH_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('no_mp_heating', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float')]
 WSM6_FINISH_THREADS_PER_GROUP = 128
 WSM6_FINISH_LAYOUT_HASH = '9756e7a0c13f5614b5e6f84d9c852d3778a87c5ba4a5aa5a137fcc39826f914e'
-WSM6_FINISH_SHADER_HASH = 'b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff'
+WSM6_FINISH_SHADER_HASH = 'ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557'
 
 WSM6_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('p', 'float', 'read'), ('alt', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('theta', 'float', 'read_write'), ('den', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('z8w', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4919,7 +4919,7 @@ WSM6_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('den', (('nz', 'ny', 'nx
 WSM6_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nzi', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 WSM6_PREPARE_THREADS_PER_GROUP = 128
 WSM6_PREPARE_LAYOUT_HASH = '81f6fca3462936ba1f3a8ef197f0db323053cff947f4843f0d23a7c254f02245'
-WSM6_PREPARE_SHADER_HASH = 'b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff'
+WSM6_PREPARE_SHADER_HASH = 'ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557'
 
 YSU_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('p', 'float', 'read'), ('p_interface', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('rthraten', 'float', 'read'), ('psfc', 'float', 'read'), ('znt', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('wspd', 'float', 'read'), ('br', 'float', 'read'), ('psim', 'float', 'read'), ('psih', 'float', 'read'), ('xland', 'float', 'read'), ('u10', 'float', 'read'), ('v10', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dtheta', 'float', 'read_write'), ('dqv', 'float', 'read_write'), ('dqc', 'float', 'read_write'), ('dqi', 'float', 'read_write'), ('exch_h', 'float', 'read_write'), ('exch_m', 'float', 'read_write'), ('hpbl', 'float', 'read_write'), ('kpbl', 'int32', 'read_write'), ('wstar', 'float', 'read_write'), ('delta', 'float', 'read_write'), ('topdown_radsum', 'float', 'read_write'), ('wstar3_2', 'float', 'read_write'), ('cloudflg', 'int32', 'read_write'), ('ws', 'float', 'read_write'), ('ctopo', 'float', 'read'), ('ctopo2', 'float', 'read'), ('u10o', 'float', 'read_write'), ('v10o', 'float', 'read_write'))
 YSU_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read_write')

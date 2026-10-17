@@ -967,7 +967,9 @@ kernel void morrison_finish(
     }
     if(p.no_mp_heating){r.h_diabatic[idx]=0.0f;return;}
     float mpten=r.theta[idx]-r.h_diabatic[idx];
-    mpten=fmin(p.limit,mpten);mpten=fmax(-p.limit,mpten);
+    if (!isnan(mpten)) {
+        mpten=fmin(p.limit,mpten);mpten=fmax(-p.limit,mpten);
+    }
     r.thp[idx]+=mpten;
     r.h_diabatic[idx]=mpten/p.dt;
 }

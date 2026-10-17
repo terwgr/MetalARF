@@ -2645,7 +2645,7 @@
       "name": "kessler_column",
       "parameter_size": 48,
       "resource_count": 10,
-      "shader_hash": "881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94",
+      "shader_hash": "7845bc95831fefd8adfc6def570378ad3ca26264cadb7af4ca0184654db9db28",
       "threads_per_group": 128
     },
     {
@@ -2661,7 +2661,7 @@
       "name": "kessler_finish",
       "parameter_size": 24,
       "resource_count": 3,
-      "shader_hash": "881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94",
+      "shader_hash": "7845bc95831fefd8adfc6def570378ad3ca26264cadb7af4ca0184654db9db28",
       "threads_per_group": 128
     },
     {
@@ -2677,7 +2677,7 @@
       "name": "kessler_prepare",
       "parameter_size": 32,
       "resource_count": 13,
-      "shader_hash": "881a40dc44e482f64d4a9cd1e6a98b58f01fa40ff8c545c1f0cf67dbf8f5ce94",
+      "shader_hash": "7845bc95831fefd8adfc6def570378ad3ca26264cadb7af4ca0184654db9db28",
       "threads_per_group": 128
     },
     {
@@ -2821,7 +2821,7 @@
       "name": "milbrandt2_finish",
       "parameter_size": 24,
       "resource_count": 5,
-      "shader_hash": "0d734fd42dd72c695c14495033374eb4c5752ae23642c971d8b194d3a36c5b8d",
+      "shader_hash": "8932b297c0b165ee03b7560fe646ee6e24aa05ee76e5cff44a357100c81b13ee",
       "threads_per_group": 128
     },
     {
@@ -2869,7 +2869,7 @@
       "name": "milbrandt2_prepare",
       "parameter_size": 36,
       "resource_count": 10,
-      "shader_hash": "0d734fd42dd72c695c14495033374eb4c5752ae23642c971d8b194d3a36c5b8d",
+      "shader_hash": "8932b297c0b165ee03b7560fe646ee6e24aa05ee76e5cff44a357100c81b13ee",
       "threads_per_group": 128
     },
     {
@@ -2965,7 +2965,7 @@
       "name": "morrison_finalize_levels",
       "parameter_size": 36,
       "resource_count": 20,
-      "shader_hash": "7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f",
+      "shader_hash": "459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1",
       "threads_per_group": 128
     },
     {
@@ -2981,7 +2981,7 @@
       "name": "morrison_finish",
       "parameter_size": 44,
       "resource_count": 3,
-      "shader_hash": "7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f",
+      "shader_hash": "459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1",
       "threads_per_group": 128
     },
     {
@@ -2997,7 +2997,7 @@
       "name": "morrison_prepare_fields",
       "parameter_size": 56,
       "resource_count": 9,
-      "shader_hash": "7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f",
+      "shader_hash": "459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1",
       "threads_per_group": 128
     },
     {
@@ -3013,7 +3013,7 @@
       "name": "morrison_process_levels",
       "parameter_size": 52,
       "resource_count": 22,
-      "shader_hash": "7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f",
+      "shader_hash": "459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1",
       "threads_per_group": 64
     },
     {
@@ -3029,7 +3029,7 @@
       "name": "morrison_sediment_256",
       "parameter_size": 44,
       "resource_count": 23,
-      "shader_hash": "7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f",
+      "shader_hash": "459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1",
       "threads_per_group": 128
     },
     {
@@ -3045,7 +3045,7 @@
       "name": "morrison_sediment_64",
       "parameter_size": 44,
       "resource_count": 23,
-      "shader_hash": "7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f",
+      "shader_hash": "459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1",
       "threads_per_group": 128
     },
     {
@@ -3061,7 +3061,7 @@
       "name": "morrison_validate_diagnostics",
       "parameter_size": 16,
       "resource_count": 8,
-      "shader_hash": "7141a64989efe66b9a3520b11e691a706920d8c34fae262011bb72892ee9435f",
+      "shader_hash": "459df82e689281a22abaa0bf5b48676a3235b879a689fa091e3a2d3ec3a720f1",
       "threads_per_group": 128
     },
     {
@@ -4126,7 +4126,7 @@
       "name": "nssl2_radius_microns",
       "parameter_size": 16,
       "resource_count": 3,
-      "shader_hash": "d34f5ea2bd3facc18238b46c5e16fb258d8139b00a116f0c10eaaa4927c19b24",
+      "shader_hash": "43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e",
       "threads_per_group": 256
     },
     {
@@ -4145,7 +4145,7 @@
       "name": "nssl2_runtime_finish",
       "parameter_size": 28,
       "resource_count": 3,
-      "shader_hash": "d34f5ea2bd3facc18238b46c5e16fb258d8139b00a116f0c10eaaa4927c19b24",
+      "shader_hash": "43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e",
       "threads_per_group": 256
     },
     {
@@ -4164,7 +4164,7 @@
       "name": "nssl2_runtime_prepare",
       "parameter_size": 36,
       "resource_count": 11,
-      "shader_hash": "d34f5ea2bd3facc18238b46c5e16fb258d8139b00a116f0c10eaaa4927c19b24",
+      "shader_hash": "43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e",
       "threads_per_group": 256
     },
     {
@@ -9980,7 +9980,7 @@
       "name": "wsm6_column",
       "parameter_size": 20,
       "resource_count": 21,
-      "shader_hash": "b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff",
+      "shader_hash": "ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557",
       "threads_per_group": 32
     },
     {
@@ -9996,7 +9996,7 @@
       "name": "wsm6_finish",
       "parameter_size": 24,
       "resource_count": 3,
-      "shader_hash": "b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff",
+      "shader_hash": "ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557",
       "threads_per_group": 128
     },
     {
@@ -10012,7 +10012,7 @@
       "name": "wsm6_prepare",
       "parameter_size": 36,
       "resource_count": 12,
-      "shader_hash": "b45fdfe7e94d3df7d1e87240b051b63113d38be5b5353defeb6a70eac31296ff",
+      "shader_hash": "ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557",
       "threads_per_group": 128
     },
     {
