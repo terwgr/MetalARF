@@ -350,13 +350,15 @@ def _mask(region):
     return out
 
 
-def test_the_stage_refuses_without_a_device_inside_the_seam(world, grid,
-                                                             monkeypatch):
+def test_without_cupy_only_clear_runs_on_the_host(monkeypatch):
+    """A Mac without CuPy clears on the host (the rule is a compare and a
+    zero, reproduced cell for cell); the retrieval modes still refuse."""
     monkeypatch.setitem(sys.modules, "cupy", None)
-    cfg = _config(precip_analysis="clear", mp_physics=8)
-    with pytest.raises(ha.HydrometeorAnalysisError,
-                       match="no host implementation"):
-        assimilate_radar_grid(world.checkpoints, world.obs_path, grid, cfg)
+    assert ha.array_module("clear") is np
+    for mode in ("trim-build", "retrieve-all"):
+        with pytest.raises(ha.HydrometeorAnalysisError,
+                           match="no host implementation"):
+            ha.array_module(mode)
 
 
 def test_off_adds_nothing_to_the_analysis(world, grid):

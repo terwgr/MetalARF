@@ -864,6 +864,7 @@ class PreparedBackend:
             reflectivity_thinning_cells=max(1, int(np.ceil(6000. / self.grid.dx_m))),
             mp_physics=self.mp_physics,
             solve_device='metal' if self.device_backend == 'metal' else 'auto',
+            precip_analysis=settings.get('precip_analysis', 'off') if radar else 'off',
             positivity_policy='clip',
             memory_budget_mib=self.plan['memory']['solve_memory_mib'])
         reflectivity_provider = scheme_reflectivity_provider(self.exp.root.run, base_theta=self.setup['thb']) if reflect else None

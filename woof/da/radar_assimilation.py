@@ -1544,7 +1544,7 @@ def _precip_analysis(cfg: RadarAssimilationConfig, document, increments,
     from woof.da import hydrometeor_analysis as ha  # noqa: PLC0415
     from woof.da.moments import validate_analysis_fields  # noqa: PLC0415
 
-    cp = ha.require_device()
+    cp = ha.array_module(cfg.precip_analysis)
     if document is None:
         raise RadarAssimilationError(
             "the precipitation analysis needs the radar file, and none was "
@@ -1612,7 +1612,7 @@ def _precip_analysis(cfg: RadarAssimilationConfig, document, increments,
             final = cp.where(moved, after.astype(cp.float64)
                              - backgrounds[name].astype(cp.float64),
                              filter_inc)
-            out[name][slot] = cp.asnumpy(final)
+            out[name][slot] = final if cp is np else cp.asnumpy(final)
             row = dict(result.receipt["per_field"][name])
             if air is not None:
                 change = (after.astype(cp.float64)

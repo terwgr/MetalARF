@@ -642,9 +642,10 @@ def require_device():
 
     The breakage this prevents: a cycle configured to clear false rain
     carrying it into the next leg while its receipt reads as if the
-    precipitation analysis ran.  There is no NumPy implementation to fall
-    back to, on purpose: a second copy of NOAA's rule on the host would be a
-    second authority for one analysis.
+    precipitation analysis ran.  The retrieval modes have no NumPy
+    implementation to fall back to, on purpose: a second copy of NOAA's
+    float64 retrieval on the host would be a second authority for one
+    analysis.  ``clear`` is the one exception (:func:`array_module`).
     """
     try:
         import cupy as cp
@@ -668,6 +669,20 @@ def require_device():
     return cp
 
 
+def array_module(mode: str):
+    """CuPy, or NumPy for ``clear`` on a host without CUDA (a Metal Mac).
+
+    ``clear`` only compares reflectivity and zeroes cells, so the host
+    reproduces ``ha_clear_field`` exactly; the retrieval modes keep their
+    device-only float64 arithmetic and glibc ``pow``.
+    """
+    import importlib.util
+
+    if mode == "clear" and importlib.util.find_spec("cupy") is None:
+        return np
+    return require_device()
+
+
 def _device_array(cp, value, dtype, name: str):
     """``value`` as a C-contiguous device array of ``dtype``.
 
@@ -677,7 +692,7 @@ def _device_array(cp, value, dtype, name: str):
     """
     if not isinstance(value, cp.ndarray):
         raise HydrometeorAnalysisError(
-            f"{name} must be a CuPy array on the device, got "
+            f"{name} must be a {cp.__name__} array, got "
             f"{type(value).__name__}; this stage does no host arithmetic "
             "and does not move data for its caller")
     if value.dtype != dtype:
@@ -834,7 +849,7 @@ def radar_grid_reflectivity(document: Mapping, *, z_source: str = "z_obs"):
     """
     from woof.da.obs_radar import CLEAR_AIR_SOURCES, Z_SOURCES
 
-    cp = require_device()
+    cp = array_module("clear")
     if z_source not in Z_SOURCES:
         raise HydrometeorAnalysisError(
             f"z_source must be one of {Z_SOURCES}, got {z_source!r}")
@@ -875,11 +890,18 @@ def radar_grid_reflectivity(document: Mapping, *, z_source: str = "z_obs"):
             "the writer vetoes clear air wherever any radar found echo, so "
             "the file is internally inconsistent and this stage would "
             "have to guess which half to believe")
-    ref = cp.empty(z.shape, dtype=cp.float64)
-    total = int(z.size)
-    _kernel("ha_radar_grid_reflectivity")(
-        (_blocks(total),), (_THREADS,),
-        (z, z_mask, z0_mask, ref, np.int64(total)))
+    if cp is np:
+        # ha_radar_grid_reflectivity, cell for cell.
+        ref = np.full(z.shape, NO_COVERAGE_DBZ, dtype=np.float64)
+        echo = (z_mask != 0) & np.isfinite(z) & (z > np.float32(-100.0))
+        ref[echo] = z[echo]
+        ref[(z_mask == 0) & (z0_mask != 0)] = NO_ECHO_DBZ
+    else:
+        ref = cp.empty(z.shape, dtype=cp.float64)
+        total = int(z.size)
+        _kernel("ha_radar_grid_reflectivity")(
+            (_blocks(total),), (_THREADS,),
+            (z, z_mask, z0_mask, ref, np.int64(total)))
     provenance = {
         "schema": SCHEMA,
         "source_variable": z_source,
@@ -1047,7 +1069,7 @@ def hydrometeor_analysis(fields: Mapping, reflectivity,
     if not isinstance(cfg, HydrometeorAnalysisConfig):
         raise TypeError(
             f"cfg must be a HydrometeorAnalysisConfig, got {type(cfg).__name__}")
-    cp = require_device()
+    cp = array_module(cfg.mode)
     if not fields:
         raise HydrometeorAnalysisError(
             "no field was given; an analysis that reads nothing would "
@@ -1074,7 +1096,16 @@ def hydrometeor_analysis(fields: Mapping, reflectivity,
     after: dict = {}
     action = None
     columns = None
-    if cfg.mode == "clear":
+    if cfg.mode == "clear" and cp is np:
+        # ha_clear_field, cell for cell.
+        no_echo = (reflectivity <= 0.0) & (reflectivity > -100.0)
+        for name in names:
+            out = np.where(no_echo, np.float32(0.0), before[name])
+            out = np.where(out < np.float32(0.0), np.float32(0.0), out)
+            if not scope_noaa:
+                out = np.where(reflectivity > -100.0, out, before[name])
+            after[name] = out.astype(np.float32, copy=False)
+    elif cfg.mode == "clear":
         for name in names:
             out = cp.empty(shape, dtype=cp.float32)
             _kernel("ha_clear_field")(
@@ -1157,7 +1188,7 @@ def hydrometeor_analysis(fields: Mapping, reflectivity,
         "schema": SCHEMA,
         "stability": "experimental",
         "mode": cfg.mode,
-        "device": "cuda",
+        "device": "cuda" if cp is not np else "host",
         "noaa_source": {
             "repository": "NOAA-EMC/HRRR", "tag": "v4.1.21",
             "retrieval": ("sorc/hrrr_gsi.fd/libsrc/GSD/gsdcloud/"

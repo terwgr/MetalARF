@@ -234,6 +234,7 @@ class Request:
     satellite_grids: tuple[str, ...] = ()
     base_seed: int = 0
     continuous_windows: int = 0
+    precip_analysis: str = 'off'
 
     def validate(self):
         if type(self.continuous_windows) is not int or self.continuous_windows < 0:
@@ -247,6 +248,8 @@ class Request:
             raise PlanError("scale must be a positive integer; start with rung 1.")
         if type(self.base_seed) is not int or self.base_seed < 0:
             raise PlanError("base_seed must be a nonnegative integer; use 0 for repeatable defaults.")
+        if self.precip_analysis not in ('off', 'clear'):
+            raise PlanError("precip_analysis must be 'off' or 'clear'; an ensemble member takes NOAA's clear only.")
         for name in ('budget_seconds', 'forecast_seconds', 'cadence_seconds'):
             value = getattr(self, name)
             if value is None and name == 'cadence_seconds':
@@ -620,7 +623,8 @@ def _build_plan(request: Request, *, availability: Callable | None = None,
     from woof.da.velocity_dispersion import (DEFAULT_VELOCITY_DISPERSION_BATCH_RATIO,
                                               DEFAULT_VELOCITY_DISPERSION_RATIO)
     settings['applied'].update(velocity_dispersion_ratio=DEFAULT_VELOCITY_DISPERSION_RATIO,
-                               velocity_dispersion_batch_ratio=DEFAULT_VELOCITY_DISPERSION_BATCH_RATIO)
+                               velocity_dispersion_batch_ratio=DEFAULT_VELOCITY_DISPERSION_BATCH_RATIO,
+                               precip_analysis=request.precip_analysis)
     from woof.da.static_covariance import perturbation_options
     ensemble = {"ensemble": dict(base_config="experiment.toml", n_members=rung['members'],
         base_seed=request.base_seed, perturbation="none" if rung['members'] == 1 else "woof.da.perturb",
@@ -874,7 +878,8 @@ def main(args) -> int:
                         supplements=tuple(args.supplement),
                         obs_tables=tuple(args.obs_table), radar_grids=tuple(args.radar_grid),
                         satellite_grids=tuple(args.satellite_grid), base_seed=args.seed,
-                        continuous_windows=args.continuous or 0)
+                        continuous_windows=args.continuous or 0,
+                        precip_analysis=args.precip_analysis)
                 from functools import lru_cache
                 from woof.fetch import _head_answer
                 # One review samples each URL once; launch keeps its exact
@@ -944,6 +949,8 @@ def register_cli(subparsers):
     p.add_argument('--obs-table', action='append', default=[], help='existing neutral observation table; repeatable')
     p.add_argument('--radar-grid', action='append', default=[], help='existing radar-grid observation file; repeatable')
     p.add_argument('--satellite-grid', action='append', default=[], help='existing cloud-water-path grid; repeatable')
+    p.add_argument('--precip-analysis', choices=('off', 'clear'), default='off',
+                   help="after each radar analysis, clear precipitating mass and its moments where the radar observed no echo (NOAA's HRRRDAS member rule); off by default")
     p.add_argument('--capabilities', action='store_true', help='print the companion command and field contract without pricing')
     p.add_argument('--request-json', type=Path, help=f'{REQUEST_SCHEMA} file, or - for stdin')
     p.add_argument('--out', type=Path, help='new directory to publish experiment.toml, ensemble.toml, experiment.namelist.wps, every other file the published configuration is read with on its own input route, and local-da.json into; refused if it exists')
