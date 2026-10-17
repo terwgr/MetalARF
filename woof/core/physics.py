@@ -6769,6 +6769,7 @@ class PhysicsDriver:
         from woof.metal.array import MetalArrayModule
         from woof.metal.sase_family import (
             submit_sase_destagger_w, submit_sase_moist_n2,
+            submit_sase_diff_flux_diag, submit_sase_vent_flux_diag,
             submit_sase_n2, submit_sase_plume_vent_flux,
             submit_sase_rate, submit_sase_scalar_mix,
             submit_sase_surface_rho1, submit_sase_surface_source,
@@ -6827,6 +6828,11 @@ class PhysicsDriver:
                 cfg, "sase_additive_dissipation"))
         kv, km_h = ledger.pop("kv"), ledger.pop("km_h")
         pr_t = float(sase_prandtl_blend(float(ledger["f"])))
+        if self.hmix_k_diag is not None:
+            self.hmix_k_diag["SASE_KMH"][...] = km_h
+            khh = self.hmix_k_diag["SASE_KHH"]
+            khh.fill(DTYPE(0.0))
+            submit_sase_rate(context, khh, km_h, khh, mode=2, inv_dt=1.0 / pr_t)
 
         # M2 uses the frozen pre-source energy and the moist/dry M1 pair.
         vent = submit_sase_plume_vent_flux(
@@ -6835,6 +6841,12 @@ class PhysicsDriver:
             thickness=dzf)
         vent_scale = submit_sase_vent_deposit_scale(
             context, *vent, rho1, dzf, dt=float(dt))
+        if self.sase_flux_diag is not None:
+            submit_sase_vent_flux_diag(
+                context, vent[1], vent_scale, self.sase_flux_diag["fqv_vent"])
+            submit_sase_vent_flux_diag(
+                context, vent[0], vent_scale, self.sase_flux_diag["fth_vent"],
+                fac=float(SASE_CP_AIR))
 
         du = arrays.empty(state.p.shape, dtype=DTYPE)
         dv = arrays.empty(state.p.shape, dtype=DTYPE)
@@ -6866,6 +6878,11 @@ class PhysicsDriver:
                 sfc_flux=surface_flux,
                 sfc_rho1=rho1 if surface_flux is not None else None,
                 sfc_fac=float(c.CP) if name == "dtheta" else 1.0)
+            if self.sase_flux_diag is not None and name in _SASE_FLUX_DIAG_ROWS:
+                key, fac = _SASE_FLUX_DIAG_ROWS[name]
+                self.sase_flux_diag[key][...] = submit_sase_diff_flux_diag(
+                    context, work, kv, rho1, dzf, dz=dz_mean, t_mode=3,
+                    kfac=1.0 / pr_t, fac=fac)
             rate = arrays.empty(state.p.shape, dtype=DTYPE)
             submit_sase_rate(context, work, field, rate, mode=0,
                              inv_dt=inv_dt)
@@ -6903,6 +6920,17 @@ class PhysicsDriver:
         ``_prepare_atmosphere``'s destagger and layer thicknesses.
         """
         state = self.state
+        if getattr(state, "_metal_setup_state", False):
+            from woof.core.sase import G_ACCEL, RIB_CRIT, RIB_WSPD2_FLOOR
+            from woof.metal.sase_family import submit_sase_zi_column
+
+            atmosphere = _prepare_atmosphere(state)
+            dz = atmosphere["dz"]
+            return submit_sase_zi_column(
+                dz.buffer.context, atmosphere["u"], atmosphere["v"],
+                atmosphere["theta"], dz, dz=0.0, t_mode=3,
+                rib_crit=RIB_CRIT, wspd2_floor=RIB_WSPD2_FLOOR,
+                g_accel=G_ACCEL)
         theta = cp.ascontiguousarray(state.total_theta())
         u = cp.ascontiguousarray(0.5 * (state.u[:, :, :-1]
                                         + state.u[:, :, 1:]))

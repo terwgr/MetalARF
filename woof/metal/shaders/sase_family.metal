@@ -17,6 +17,7 @@
 #include "sase_model_stress_bindings.metalh"
 #include "sase_scalar_hflux_bindings.metalh"
 #include "sase_diff_flux_diag_bindings.metalh"
+#include "sase_vent_flux_diag_bindings.metalh"
 #include "sase_destagger_w_bindings.metalh"
 #include "sase_surface_source_bindings.metalh"
 #include "sase_surface_rho1_bindings.metalh"
@@ -240,6 +241,16 @@ kernel void sase_scalar_hflux(
                       - r.s[sase_idx3(k, jm, uint(i), p.ny, p.nx)]) / p.two_dy;
     r.fx[tid] = kh * dsdx;
     r.fy[tid] = kh * dsdy;
+}
+
+kernel void sase_vent_flux_diag(
+    constant SaseVentFluxDiagResources &r [[buffer(0)]],
+    constant SaseVentFluxDiagParams &p [[buffer(1)]],
+    uint tid [[thread_position_in_grid]]) {
+    const uint ncol = uint(p.ny) * uint(p.nx);
+    if (tid >= uint(p.nzp1) * ncol) return;
+    const ulong scaled = soft64_mul(r.scale[tid % ncol], sase_f64(r.f_row[tid]));
+    r.out[tid] = sase_f32(soft64_mul(r.constants[0], scaled));
 }
 
 kernel void sase_diff_flux_diag(

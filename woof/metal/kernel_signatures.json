@@ -152154,6 +152154,81 @@
       },
       "source": "woof/metal/shaders/rrtmgp_cloud_prep_family.metal",
       "threads_per_group": 128
+    },
+    {
+      "name": "sase_vent_flux_diag",
+      "module": "sase_family",
+      "source": "woof/metal/shaders/sase_family.metal",
+      "cuda_source": "woof/core/kernels/sase.cu",
+      "cuda_symbol": "sase_vent_flux_diag",
+      "resources": [
+        [
+          "f_row",
+          "float",
+          "read"
+        ],
+        [
+          "scale",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "out",
+          "float",
+          "read_write"
+        ],
+        [
+          "constants",
+          "float64_bits",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "f_row": [
+          [
+            "nzp1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "scale": [
+          [
+            "ny",
+            "nx"
+          ]
+        ],
+        "out": [
+          [
+            "nzp1",
+            "ny",
+            "nx"
+          ]
+        ],
+        "constants": [
+          [
+            1
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nzp1",
+          "int32"
+        ],
+        [
+          "ny",
+          "int32"
+        ],
+        [
+          "nx",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops"
+      ]
     }
   ],
   "schema": "woof-metal-kernel-signatures-v1"

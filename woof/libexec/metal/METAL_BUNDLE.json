@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "c0ee000dfbf44e9e9ddda0bf442b94e0043e7e6b2598183894e649c168bd79c3",
-      "size": 12487339
+      "sha256": "9664c55958ad9cdf33baeb03f6b5c79c8c00314ff3d6d06425aeebfa0faafce8",
+      "size": 12494692
     },
     "woof_exact.metallib": {
       "sha256": "372aa49f86aa728aa6b70f25e42103eaf68113ad1ce7d289a1a8d27ecdd5bc70",
       "size": 8138532
     }
   },
-  "implementation_file_count": 1142,
-  "implementation_sha256": "11005d84bdbb4c9c98a2e95e0d67d202335a8d3497c2fb7ac45a7ca14fa96a4b",
-  "metal_inputs_sha256": "e1c6bea9464549d5ba1ea00ee214ce69996d02454ff9f722df9dbdf9fe58d8d2",
+  "implementation_file_count": 1143,
+  "implementation_sha256": "ca7c144192b1582f9a10c815cf792b7668bd8e866e193d7b479549e206ea37c6",
+  "metal_inputs_sha256": "a88a13df49adb5ab91fe6270689884d2134c5cfe1d87aa654dd68bfa41fec743",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "c506bff6af0ed201124f39e553c1dd48b5771bdfc518a82434c158a47050f588",
-        "size": 2540685
+        "sha256": "35f4d78251a381a59a8a676605df0c315d35d11bbc36d62cb966e8a3b52fbd21",
+        "size": 2541997
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
@@ -1616,8 +1616,8 @@
         "size": 166014
       },
       "woof/metal/shaders/sase_family.metal": {
-        "sha256": "132f4e7691095bd741a839687b6044efb2a91f8ef751bdf1e7dbd3fe9dd74812",
-        "size": 82422
+        "sha256": "7bcd835c088f53b00fc1c71545892301cc936a11360e518b89c273b427321db2",
+        "size": 82896
       },
       "woof/metal/shaders/sfclay_family.metal": {
         "sha256": "022ef564dbc143561548b03db94f604942608f2e59796ff7e6ee6c4f6d6f01b3",
@@ -3567,6 +3567,10 @@
         "sha256": "fc0b81c7eb3b21ddcfc88953bbaab7929574df2d4a5ae96282930945c181503b",
         "size": 75741
       },
+      "woof/metal/signature_fragments/sase_vent_flux_diag.json": {
+        "sha256": "ecd8e6c8f254da6a245c5b5d1c5e7ca4f67a6ac1b5d4dd6a2900f736ab4cbf2d",
+        "size": 1011
+      },
       "woof/metal/signature_fragments/sfclay_family.json": {
         "sha256": "99ed4813499c5d3e28029edb0edfe95fe772c0404bb526432595a7d34314505f",
         "size": 8542
@@ -3988,6 +3992,6 @@
         "size": 296
       }
     },
-    "sha256": "e1c6bea9464549d5ba1ea00ee214ce69996d02454ff9f722df9dbdf9fe58d8d2"
+    "sha256": "a88a13df49adb5ab91fe6270689884d2134c5cfe1d87aa654dd68bfa41fec743"
   }
 }

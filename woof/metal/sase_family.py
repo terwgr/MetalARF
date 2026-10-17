@@ -414,6 +414,34 @@ def submit_sase_scalar_hflux(
     return fx, fy
 
 
+def submit_sase_vent_flux_diag(
+        context: MetalContext, f_row: MetalArray, scale: MetalArray,
+        out: MetalArray, *, fac: float = 1.0) -> None:
+    """Record the cap-scaled venting flux without changing its inputs."""
+    if not isinstance(f_row, MetalArray) or f_row.ndim != 3:
+        raise TypeError("SASE vent flux must be a 3-D MetalArray")
+    _field("f_row", f_row, context, f_row.shape)
+    _field("out", out, context, f_row.shape)
+    nzp1, ny, nx = f_row.shape
+    if (not isinstance(scale, MetalArray) or scale.shape != (ny, nx)
+            or scale.dtype != np.dtype(np.float64)
+            or not scale.flags.c_contiguous or scale.buffer.context is not context):
+        raise ValueError("SASE vent scale must be a context-local FP64 surface field")
+    for source in (f_row, scale):
+        if (out.buffer is source.buffer
+                and out.byte_offset < source.byte_offset + source.nbytes
+                and source.byte_offset < out.byte_offset + out.nbytes):
+            raise ValueError("SASE vent flux output must not overlap its inputs")
+    if not np.isfinite(fac):
+        raise ValueError("SASE vent flux unit factor must be finite")
+    context.submit_kernel(
+        "sase_vent_flux_diag",
+        {"f_row": f_row, "scale": scale, "out": out,
+         "constants": MetalArrayModule(context).asarray(np.asarray([fac], np.float64))},
+        {"nzp1": nzp1, "ny": ny, "nx": nx}, exact_policy=False,
+        grid_size=f_row.size, threads_per_group=_TPB)
+
+
 def submit_sase_diff_flux_diag(
         context: MetalContext, phi: MetalArray, kv: MetalArray,
         rho1: MetalArray, thickness: MetalArray, *, dz: float,
