@@ -37,6 +37,14 @@ def _arrays(context, arrays, shapes):
             raise ValueError("Metal IEVA arrays must belong to one context")
 
 
+def _tiered(kernel: str, nz: int) -> str:
+    """The column-capacity entrypoint CUDA's IEVA_KMAX tier selects."""
+    from woof.core.ieva_constants import level_tier
+
+    tier = level_tier(nz)
+    return kernel if tier == 65 else f"{kernel}_k{tier}"
+
+
 def submit_ww_split(context, *, ww, u, v, mut, rdnw, c1f, c2f, ww_e,
                     ww_i, nz, ny, nx, rdx, rdy, dt, alpha_max, ceps,
                     cmnx_ratio, cutoff, r4cmx, msft, has_msf=0, legacy=0,
@@ -116,9 +124,6 @@ def submit_solve_s(context, *, tend, pert, base, base_mode, shift, rom,
     base_mode = _integer("base_mode", base_mode)
     if base_mode not in (0, 1, 2):
         raise ValueError("Metal IEVA base_mode must be 0, 1, or 2")
-    if nz > 64:
-        raise NotImplementedError(
-            "Metal IEVA column solve currently supports nz <= 64")
     st = (nz, ny, nx)
     arrays = {"tend": tend, "pert": pert, "base": base, "rom": rom,
               "c1h": c1h, "c2h": c2h, "mut_old": mut_old,
@@ -138,13 +143,13 @@ def submit_solve_s(context, *, tend, pert, base, base_mode, shift, rom,
                   "zero": float(np.float32(zero)),
                   "nz": nz, "ny": ny, "nx": nx}
     return context.submit_kernel(
-        "ieva_solve_s", arrays, parameters, exact_policy=True,
+        _tiered("ieva_solve_s", nz), arrays, parameters, exact_policy=True,
         grid_size=count, threads_per_group=_THREADS)
 
 
 def _submit_wind_solve(name, context, *, tend, old, rom, c1h, c2h,
                        mut_old, mut_new, rdnw, msf, legacy_face, dt,
-                       has_msf, periodic, f_lo, f_hi, nz, ny, nx):
+                       has_msf, periodic, f_lo, f_hi, nz, ny, nx, legacy=1):
     nz = _integer("nz", nz, minimum=1)
     ny = _integer("ny", ny, minimum=1)
     nx = _integer("nx", nx, minimum=1)
@@ -152,11 +157,9 @@ def _submit_wind_solve(name, context, *, tend, old, rom, c1h, c2h,
     periodic = _integer("periodic", int(periodic))
     f_lo = _integer("f_lo", f_lo)
     f_hi = _integer("f_hi", f_hi)
-    if has_msf not in (0, 1) or periodic not in (0, 1):
-        raise ValueError("Metal IEVA has_msf and periodic must be 0 or 1")
-    if nz > 64:
-        raise NotImplementedError(
-            "Metal IEVA column solve currently supports nz <= 64")
+    legacy = _integer("legacy", legacy)
+    if has_msf not in (0, 1) or periodic not in (0, 1) or legacy not in (0, 1):
+        raise ValueError("Metal IEVA has_msf, periodic and legacy must be 0 or 1")
     nfaces = f_hi - f_lo + 1
     if nfaces <= 0:
         raise ValueError("Metal IEVA wind solve has an empty face interval")
@@ -177,10 +180,10 @@ def _submit_wind_solve(name, context, *, tend, old, rom, c1h, c2h,
     parameters = {"dt": float(np.float32(dt)), "one": 1.0,
                   "zero": 0.0, "half_val": 0.5,
                   "has_msf": has_msf, "periodic": periodic,
-                  "f_lo": f_lo, "f_hi": f_hi, "legacy": 1,
+                  "f_lo": f_lo, "f_hi": f_hi, "legacy": legacy,
                   "nz": nz, "ny": ny, "nx": nx}
     return context.submit_kernel(
-        f"ieva_solve_{name}", arrays, parameters, exact_policy=True,
+        _tiered(f"ieva_solve_{name}", nz), arrays, parameters, exact_policy=True,
         grid_size=grid_size, threads_per_group=_THREADS)
 
 
@@ -204,9 +207,6 @@ def submit_solve_ph(context, *, tend, ph_old, phb, rom, c1f, c2f, mut,
     has_msf = _integer("has_msf", has_msf)
     if has_msf not in (0, 1):
         raise ValueError("Metal IEVA has_msf must be 0 or 1")
-    if nz > 64:
-        raise NotImplementedError(
-            "Metal IEVA geopotential solve currently supports nz <= 64")
     st = (nz + 1, ny, nx)
     arrays = {"tend": tend, "ph_old": ph_old, "phb": phb,
               "rom": rom, "c1f": c1f, "c2f": c2f, "mut": mut,
@@ -228,7 +228,7 @@ def submit_solve_ph(context, *, tend, ph_old, phb, rom, c1f, c2f, mut,
                   "half_val": float(np.float32(half_val)),
                   "has_msf": has_msf, "nz": nz, "ny": ny, "nx": nx}
     return context.submit_kernel(
-        "ieva_solve_ph", arrays, parameters, exact_policy=True,
+        _tiered("ieva_solve_ph", nz), arrays, parameters, exact_policy=True,
         grid_size=count, threads_per_group=_THREADS)
 
 
@@ -245,14 +245,9 @@ def submit_solve_w(context, *, tend, utend, vtend, mux, muy, c1h, c2h,
     bx = _integer("bx", bx)
     by = _integer("by", by)
     legacy = _integer("legacy", legacy)
-    if has_msf not in (0, 1) or bx not in (0, 1) or by not in (0, 1):
+    if (has_msf not in (0, 1) or bx not in (0, 1) or by not in (0, 1)
+            or legacy not in (0, 1)):
         raise ValueError("Metal IEVA flags must be 0 or 1")
-    if legacy != 1:
-        raise NotImplementedError(
-            "Metal IEVA vertical-wind solve currently supports "
-            "zadvect_implicit_variant='wrf_legacy'")
-    if nz > 64:
-        raise NotImplementedError("Metal IEVA w solve currently supports nz <= 64")
     arrays = {"tend": tend, "utend": utend, "vtend": vtend,
               "mux": mux, "muy": muy, "c1h": c1h, "c2h": c2h,
               "msfu": msfu, "msfv": msfv, "ht": ht, "rom": rom,
@@ -285,5 +280,5 @@ def submit_solve_w(context, *, tend, utend, vtend, mux, muy, c1h, c2h,
                   "has_msf": has_msf, "bx": bx, "by": by,
                   "legacy": legacy, "nz": nz, "ny": ny, "nx": nx}
     return context.submit_kernel(
-        "ieva_solve_w", arrays, parameters, exact_policy=True,
+        _tiered("ieva_solve_w", nz), arrays, parameters, exact_policy=True,
         grid_size=count, threads_per_group=_THREADS)

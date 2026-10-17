@@ -1255,7 +1255,7 @@ IEVA_MUT_NEW_SHAPES = (('c1h', (('nz',),)), ('c2h', (('nz',),)), ('msft', (('ny'
 IEVA_MUT_NEW_PARAM_FIELDS = [('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 IEVA_MUT_NEW_THREADS_PER_GROUP = 128
 IEVA_MUT_NEW_LAYOUT_HASH = 'fb85da16e0efd3b44e714b085fb287c13fda62af151dfcec42e1df0f305c593a'
-IEVA_MUT_NEW_SHADER_HASH = 'f0913c91c96f8975e15a75b451867411421d43565811a41eb87772af0460d268'
+IEVA_MUT_NEW_SHADER_HASH = 'b0cac2405ff81d5b27f7c3df0184e071f236e61c64869e9542b7bcb554362233'
 
 IEVA_WW_SPLIT_RESOURCES = (('ww', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('mut', 'float', 'read'), ('rdnw', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('ww_e', 'float', 'read_write'), ('ww_i', 'float', 'read_write'), ('msft', 'float', 'read'))
 IEVA_WW_SPLIT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read')
@@ -1263,7 +1263,7 @@ IEVA_WW_SPLIT_SHAPES = (('ww', (('nz+1', 'ny', 'nx'),)), ('u', (('nz', 'ny', 'nx
 IEVA_WW_SPLIT_PARAM_FIELDS = [('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('alpha_max', 'ctypes.c_float'), ('ceps', 'ctypes.c_float'), ('cmnx_ratio', 'ctypes.c_float'), ('cutoff', 'ctypes.c_float'), ('r4cmx', 'ctypes.c_float'), ('quarter', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 IEVA_WW_SPLIT_THREADS_PER_GROUP = 128
 IEVA_WW_SPLIT_LAYOUT_HASH = '279af1272e73ab1e4fa749ab6dbdef2ea2e833ee6f851f8b84e416b8823b3a72'
-IEVA_WW_SPLIT_SHADER_HASH = 'f0913c91c96f8975e15a75b451867411421d43565811a41eb87772af0460d268'
+IEVA_WW_SPLIT_SHADER_HASH = 'b0cac2405ff81d5b27f7c3df0184e071f236e61c64869e9542b7bcb554362233'
 
 INSTALL_MU_BOUNDARY_RESOURCES = (('mup', 'float', 'read_write'), ('old_mup_frame', 'float', 'read_write'), ('west', 'float', 'read'), ('west_t', 'float', 'read'), ('east', 'float', 'read'), ('east_t', 'float', 'read'), ('south', 'float', 'read'), ('south_t', 'float', 'read'), ('north', 'float', 'read'), ('north_t', 'float', 'read'))
 INSTALL_MU_BOUNDARY_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -6359,7 +6359,7 @@ IEVA_SOLVE_S_SHAPES = (('tend', (('nz', 'ny', 'nx'),)), ('pert', (('nz', 'ny', '
 IEVA_SOLVE_S_PARAM_FIELDS = [('base_mode', 'ctypes.c_int32'), ('shift', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 IEVA_SOLVE_S_THREADS_PER_GROUP = 128
 IEVA_SOLVE_S_LAYOUT_HASH = 'f2bd9835870679c5f1381ffb5f50836829408ea371e2bf98365d5468847d8e9f'
-IEVA_SOLVE_S_SHADER_HASH = '7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777'
+IEVA_SOLVE_S_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
 
 IEVA_SOLVE_U_RESOURCES = (('tend', 'float', 'read_write'), ('u_old', 'float', 'read'), ('rom', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdnw', 'float', 'read'), ('msfu', 'float', 'read'), ('legacy_face', 'float', 'read'))
 IEVA_SOLVE_U_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -6367,7 +6367,7 @@ IEVA_SOLVE_U_SHAPES = (('tend', (('nz', 'ny', 'nx+1'),)), ('u_old', (('nz', 'ny'
 IEVA_SOLVE_U_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('periodic', 'ctypes.c_int32'), ('f_lo', 'ctypes.c_int32'), ('f_hi', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 IEVA_SOLVE_U_THREADS_PER_GROUP = 128
 IEVA_SOLVE_U_LAYOUT_HASH = '716dea8cc3ba585ca5a2ebff611514b287bf8f4c0e814c19a5e0fc214384ab16'
-IEVA_SOLVE_U_SHADER_HASH = '7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777'
+IEVA_SOLVE_U_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
 
 IEVA_SOLVE_V_RESOURCES = (('tend', 'float', 'read_write'), ('v_old', 'float', 'read'), ('rom', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdnw', 'float', 'read'), ('msfv', 'float', 'read'), ('legacy_face', 'float', 'read'))
 IEVA_SOLVE_V_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -6375,7 +6375,7 @@ IEVA_SOLVE_V_SHAPES = (('tend', (('nz', 'ny+1', 'nx'),)), ('v_old', (('nz', 'ny+
 IEVA_SOLVE_V_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('periodic', 'ctypes.c_int32'), ('f_lo', 'ctypes.c_int32'), ('f_hi', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 IEVA_SOLVE_V_THREADS_PER_GROUP = 128
 IEVA_SOLVE_V_LAYOUT_HASH = 'a542d8ad928b6256f58fb7468c45fb64857bc0812463ae00da97115a259c931b'
-IEVA_SOLVE_V_SHADER_HASH = '7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777'
+IEVA_SOLVE_V_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
 
 IEVA_SOLVE_PH_RESOURCES = (('tend', 'float', 'read_write'), ('ph_old', 'float', 'read'), ('phb', 'float', 'read'), ('rom', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('mut', 'float', 'read'), ('rdnw', 'float', 'read'), ('msft', 'float', 'read'))
 IEVA_SOLVE_PH_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -6383,7 +6383,7 @@ IEVA_SOLVE_PH_SHAPES = (('tend', (('nz', 'ny', 'nx'),)), ('ph_old', (('nz+1', 'n
 IEVA_SOLVE_PH_PARAM_FIELDS = [('base3d', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 IEVA_SOLVE_PH_THREADS_PER_GROUP = 128
 IEVA_SOLVE_PH_LAYOUT_HASH = 'f6a5fc7db1c30016bd226da2e2d58b9ac1c9fe3c0f5c477105701ae0d3242ec5'
-IEVA_SOLVE_PH_SHADER_HASH = '7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777'
+IEVA_SOLVE_PH_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
 
 IEVA_SOLVE_W_RESOURCES = (('tend', 'float', 'read_write'), ('utend', 'float', 'read'), ('vtend', 'float', 'read'), ('mux', 'float', 'read'), ('muy', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('ht', 'float', 'read'), ('rom', 'float', 'read'), ('ph_new', 'float', 'read'), ('ph_old', 'float', 'read'), ('ph_tend', 'float', 'read'), ('w_old', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('mut', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdn', 'float', 'read'), ('msft', 'float', 'read'))
 IEVA_SOLVE_W_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -6391,7 +6391,7 @@ IEVA_SOLVE_W_SHAPES = (('tend', (('nz+1', 'ny', 'nx'),)), ('utend', (('nz', 'ny'
 IEVA_SOLVE_W_PARAM_FIELDS = [('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('g', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('bx', 'ctypes.c_int32'), ('by', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 IEVA_SOLVE_W_THREADS_PER_GROUP = 128
 IEVA_SOLVE_W_LAYOUT_HASH = 'e983b4a547cec1674799585836040939101571cf38009d841d322e9c03ada924'
-IEVA_SOLVE_W_SHADER_HASH = '7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777'
+IEVA_SOLVE_W_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
 
 GLOBAL_INSITU_CAPTURE_PARTIAL_FRAGMENT_RESOURCES = (('current', 'float64_bits', 'read'), ('previous', 'float64_bits', 'read'), ('quadrature_weights', 'float64_bits', 'read'), ('partial_stats', 'float64_bits', 'read_write'))
 GLOBAL_INSITU_CAPTURE_PARTIAL_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -6439,7 +6439,7 @@ IEVA_THETA_MINUS_T0_SHAPES = (('thb', (('any_1d',),)), ('thp', (('nz', 'ny', 'nx
 IEVA_THETA_MINUS_T0_PARAM_FIELDS = [('t0', 'ctypes.c_float'), ('base3d', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 IEVA_THETA_MINUS_T0_THREADS_PER_GROUP = 128
 IEVA_THETA_MINUS_T0_LAYOUT_HASH = '36556383e5480038ce55e7d4d1a99316712bfb4c37bb19e92a6bf422ebcfe8ab'
-IEVA_THETA_MINUS_T0_SHADER_HASH = 'f0913c91c96f8975e15a75b451867411421d43565811a41eb87772af0460d268'
+IEVA_THETA_MINUS_T0_SHADER_HASH = 'b0cac2405ff81d5b27f7c3df0184e071f236e61c64869e9542b7bcb554362233'
 
 NOAHMP_GLACIER_COLUMN_RESOURCES = (('in', 'float32', 'read'), ('ii', 'int32', 'read'), ('zsoil_row', 'float32', 'read'), ('out', 'float32', 'read_write'), ('io', 'int32', 'read_write'))
 NOAHMP_GLACIER_COLUMN_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
@@ -7736,3 +7736,83 @@ WSM6_COLUMN_DEEP_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('hail_opt', 'ctypes.
 WSM6_COLUMN_DEEP_THREADS_PER_GROUP = 32
 WSM6_COLUMN_DEEP_LAYOUT_HASH = '7d9becaf9ab2ddc49b6268ab50c29a024c74321f57086e84de697fe2a71a86cf'
 WSM6_COLUMN_DEEP_SHADER_HASH = '478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee'
+
+IEVA_SOLVE_S_K129_RESOURCES = (('tend', 'float', 'read_write'), ('pert', 'float', 'read'), ('base', 'float', 'read'), ('rom', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdnw', 'float', 'read'))
+IEVA_SOLVE_S_K129_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_S_K129_SHAPES = (('base', (('nz',), ('nz', 'ny', 'nx'))), ('c1h', (('nz',),)), ('c2h', (('nz',),)), ('mut_new', (('ny', 'nx'),)), ('mut_old', (('ny', 'nx'),)), ('pert', (('nz', 'ny', 'nx'),)), ('rdnw', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz', 'ny', 'nx'),)))
+IEVA_SOLVE_S_K129_PARAM_FIELDS = [('base_mode', 'ctypes.c_int32'), ('shift', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_S_K129_THREADS_PER_GROUP = 128
+IEVA_SOLVE_S_K129_LAYOUT_HASH = 'd45617637a2567c36857c6a97f0864f9e44303339e6a9471a5c1b277ba92da31'
+IEVA_SOLVE_S_K129_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
+
+IEVA_SOLVE_S_K257_RESOURCES = (('tend', 'float', 'read_write'), ('pert', 'float', 'read'), ('base', 'float', 'read'), ('rom', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdnw', 'float', 'read'))
+IEVA_SOLVE_S_K257_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_S_K257_SHAPES = (('base', (('nz',), ('nz', 'ny', 'nx'))), ('c1h', (('nz',),)), ('c2h', (('nz',),)), ('mut_new', (('ny', 'nx'),)), ('mut_old', (('ny', 'nx'),)), ('pert', (('nz', 'ny', 'nx'),)), ('rdnw', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz', 'ny', 'nx'),)))
+IEVA_SOLVE_S_K257_PARAM_FIELDS = [('base_mode', 'ctypes.c_int32'), ('shift', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_S_K257_THREADS_PER_GROUP = 128
+IEVA_SOLVE_S_K257_LAYOUT_HASH = 'dd8e78c64fa0a1b4a15739fd9fedcea5d30277a9323d496b8b81990213e19ea1'
+IEVA_SOLVE_S_K257_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
+
+IEVA_SOLVE_U_K129_RESOURCES = (('tend', 'float', 'read_write'), ('u_old', 'float', 'read'), ('rom', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdnw', 'float', 'read'), ('msfu', 'float', 'read'), ('legacy_face', 'float', 'read'))
+IEVA_SOLVE_U_K129_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_U_K129_SHAPES = (('c1h', (('nz',),)), ('c2h', (('nz',),)), ('legacy_face', (('ny', 'nx+1'),)), ('msfu', (('ny', 'nx+1'),)), ('mut_new', (('ny', 'nx'),)), ('mut_old', (('ny', 'nx'),)), ('rdnw', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz', 'ny', 'nx+1'),)), ('u_old', (('nz', 'ny', 'nx+1'),)))
+IEVA_SOLVE_U_K129_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('periodic', 'ctypes.c_int32'), ('f_lo', 'ctypes.c_int32'), ('f_hi', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_U_K129_THREADS_PER_GROUP = 128
+IEVA_SOLVE_U_K129_LAYOUT_HASH = 'f9f5a21b99ae6793f2264c2d5aedb2b70aac6bf90f87f04b80a6676109a26689'
+IEVA_SOLVE_U_K129_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
+
+IEVA_SOLVE_U_K257_RESOURCES = (('tend', 'float', 'read_write'), ('u_old', 'float', 'read'), ('rom', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdnw', 'float', 'read'), ('msfu', 'float', 'read'), ('legacy_face', 'float', 'read'))
+IEVA_SOLVE_U_K257_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_U_K257_SHAPES = (('c1h', (('nz',),)), ('c2h', (('nz',),)), ('legacy_face', (('ny', 'nx+1'),)), ('msfu', (('ny', 'nx+1'),)), ('mut_new', (('ny', 'nx'),)), ('mut_old', (('ny', 'nx'),)), ('rdnw', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz', 'ny', 'nx+1'),)), ('u_old', (('nz', 'ny', 'nx+1'),)))
+IEVA_SOLVE_U_K257_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('periodic', 'ctypes.c_int32'), ('f_lo', 'ctypes.c_int32'), ('f_hi', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_U_K257_THREADS_PER_GROUP = 128
+IEVA_SOLVE_U_K257_LAYOUT_HASH = '3e7859ba55b15dd15ee88f289d717df68082de8f8a4348ddbebcebb53985955a'
+IEVA_SOLVE_U_K257_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
+
+IEVA_SOLVE_V_K129_RESOURCES = (('tend', 'float', 'read_write'), ('v_old', 'float', 'read'), ('rom', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdnw', 'float', 'read'), ('msfv', 'float', 'read'), ('legacy_face', 'float', 'read'))
+IEVA_SOLVE_V_K129_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_V_K129_SHAPES = (('c1h', (('nz',),)), ('c2h', (('nz',),)), ('legacy_face', (('ny+1', 'nx'),)), ('msfv', (('ny+1', 'nx'),)), ('mut_new', (('ny', 'nx'),)), ('mut_old', (('ny', 'nx'),)), ('rdnw', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz', 'ny+1', 'nx'),)), ('v_old', (('nz', 'ny+1', 'nx'),)))
+IEVA_SOLVE_V_K129_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('periodic', 'ctypes.c_int32'), ('f_lo', 'ctypes.c_int32'), ('f_hi', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_V_K129_THREADS_PER_GROUP = 128
+IEVA_SOLVE_V_K129_LAYOUT_HASH = 'e359d83d08bb9ed850450f1e6c73aead4564c0bece51c12dbd8f67849f300dd2'
+IEVA_SOLVE_V_K129_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
+
+IEVA_SOLVE_V_K257_RESOURCES = (('tend', 'float', 'read_write'), ('v_old', 'float', 'read'), ('rom', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdnw', 'float', 'read'), ('msfv', 'float', 'read'), ('legacy_face', 'float', 'read'))
+IEVA_SOLVE_V_K257_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_V_K257_SHAPES = (('c1h', (('nz',),)), ('c2h', (('nz',),)), ('legacy_face', (('ny+1', 'nx'),)), ('msfv', (('ny+1', 'nx'),)), ('mut_new', (('ny', 'nx'),)), ('mut_old', (('ny', 'nx'),)), ('rdnw', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz', 'ny+1', 'nx'),)), ('v_old', (('nz', 'ny+1', 'nx'),)))
+IEVA_SOLVE_V_K257_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('periodic', 'ctypes.c_int32'), ('f_lo', 'ctypes.c_int32'), ('f_hi', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_V_K257_THREADS_PER_GROUP = 128
+IEVA_SOLVE_V_K257_LAYOUT_HASH = 'c274a1d8d977221440449b0af3712485442ba1c9d3e06489b636392867b24903'
+IEVA_SOLVE_V_K257_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
+
+IEVA_SOLVE_PH_K129_RESOURCES = (('tend', 'float', 'read_write'), ('ph_old', 'float', 'read'), ('phb', 'float', 'read'), ('rom', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('mut', 'float', 'read'), ('rdnw', 'float', 'read'), ('msft', 'float', 'read'))
+IEVA_SOLVE_PH_K129_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_PH_K129_SHAPES = (('c1f', (('nz',),)), ('c2f', (('nz',),)), ('msft', (('ny', 'nx'),)), ('mut', (('ny', 'nx'),)), ('ph_old', (('nz+1', 'ny', 'nx'),)), ('phb', (('nz+1',), ('nz+1', 'ny', 'nx'))), ('rdnw', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz', 'ny', 'nx'),)))
+IEVA_SOLVE_PH_K129_PARAM_FIELDS = [('base3d', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_PH_K129_THREADS_PER_GROUP = 128
+IEVA_SOLVE_PH_K129_LAYOUT_HASH = '43656063fe3eba4d2c1fce42ad85b8b78549ee7709c73a7ee07675094400feec'
+IEVA_SOLVE_PH_K129_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
+
+IEVA_SOLVE_PH_K257_RESOURCES = (('tend', 'float', 'read_write'), ('ph_old', 'float', 'read'), ('phb', 'float', 'read'), ('rom', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('mut', 'float', 'read'), ('rdnw', 'float', 'read'), ('msft', 'float', 'read'))
+IEVA_SOLVE_PH_K257_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_PH_K257_SHAPES = (('c1f', (('nz',),)), ('c2f', (('nz',),)), ('msft', (('ny', 'nx'),)), ('mut', (('ny', 'nx'),)), ('ph_old', (('nz+1', 'ny', 'nx'),)), ('phb', (('nz+1',), ('nz+1', 'ny', 'nx'))), ('rdnw', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz', 'ny', 'nx'),)))
+IEVA_SOLVE_PH_K257_PARAM_FIELDS = [('base3d', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_PH_K257_THREADS_PER_GROUP = 128
+IEVA_SOLVE_PH_K257_LAYOUT_HASH = '3ed31b4bccff71a7db6d1c31d752b6a741034a573f713e9f8dbfd2043f9322b2'
+IEVA_SOLVE_PH_K257_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
+
+IEVA_SOLVE_W_K129_RESOURCES = (('tend', 'float', 'read_write'), ('utend', 'float', 'read'), ('vtend', 'float', 'read'), ('mux', 'float', 'read'), ('muy', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('ht', 'float', 'read'), ('rom', 'float', 'read'), ('ph_new', 'float', 'read'), ('ph_old', 'float', 'read'), ('ph_tend', 'float', 'read'), ('w_old', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('mut', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdn', 'float', 'read'), ('msft', 'float', 'read'))
+IEVA_SOLVE_W_K129_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_W_K129_SHAPES = (('c1f', (('nz',),)), ('c1h', (('nz',),)), ('c2f', (('nz',),)), ('c2h', (('nz',),)), ('ht', (('ny', 'nx'),)), ('msft', (('ny', 'nx'),)), ('msfu', (('ny', 'nx+1'),)), ('msfv', (('ny+1', 'nx'),)), ('mut', (('ny', 'nx'),)), ('mut_new', (('ny', 'nx'),)), ('mut_old', (('ny', 'nx'),)), ('mux', (('ny', 'nx+1'),)), ('muy', (('ny+1', 'nx'),)), ('ph_new', (('nz+1', 'ny', 'nx'),)), ('ph_old', (('nz+1', 'ny', 'nx'),)), ('ph_tend', (('nz+1', 'ny', 'nx'),)), ('rdn', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz+1', 'ny', 'nx'),)), ('utend', (('nz', 'ny', 'nx+1'),)), ('vtend', (('nz', 'ny+1', 'nx'),)), ('w_old', (('nz+1', 'ny', 'nx'),)))
+IEVA_SOLVE_W_K129_PARAM_FIELDS = [('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('g', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('bx', 'ctypes.c_int32'), ('by', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_W_K129_THREADS_PER_GROUP = 128
+IEVA_SOLVE_W_K129_LAYOUT_HASH = 'b20b11030d76ce84275344b1961428df4dde7a6a230a250fd92f325c46091e9c'
+IEVA_SOLVE_W_K129_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'
+
+IEVA_SOLVE_W_K257_RESOURCES = (('tend', 'float', 'read_write'), ('utend', 'float', 'read'), ('vtend', 'float', 'read'), ('mux', 'float', 'read'), ('muy', 'float', 'read'), ('c1h', 'float', 'read'), ('c2h', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('ht', 'float', 'read'), ('rom', 'float', 'read'), ('ph_new', 'float', 'read'), ('ph_old', 'float', 'read'), ('ph_tend', 'float', 'read'), ('w_old', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('mut', 'float', 'read'), ('mut_old', 'float', 'read'), ('mut_new', 'float', 'read'), ('rdn', 'float', 'read'), ('msft', 'float', 'read'))
+IEVA_SOLVE_W_K257_ACCESS = ('read_write', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read')
+IEVA_SOLVE_W_K257_SHAPES = (('c1f', (('nz',),)), ('c1h', (('nz',),)), ('c2f', (('nz',),)), ('c2h', (('nz',),)), ('ht', (('ny', 'nx'),)), ('msft', (('ny', 'nx'),)), ('msfu', (('ny', 'nx+1'),)), ('msfv', (('ny+1', 'nx'),)), ('mut', (('ny', 'nx'),)), ('mut_new', (('ny', 'nx'),)), ('mut_old', (('ny', 'nx'),)), ('mux', (('ny', 'nx+1'),)), ('muy', (('ny+1', 'nx'),)), ('ph_new', (('nz+1', 'ny', 'nx'),)), ('ph_old', (('nz+1', 'ny', 'nx'),)), ('ph_tend', (('nz+1', 'ny', 'nx'),)), ('rdn', (('nz',),)), ('rom', (('nz+1', 'ny', 'nx'),)), ('tend', (('nz+1', 'ny', 'nx'),)), ('utend', (('nz', 'ny', 'nx+1'),)), ('vtend', (('nz', 'ny+1', 'nx'),)), ('w_old', (('nz+1', 'ny', 'nx'),)))
+IEVA_SOLVE_W_K257_PARAM_FIELDS = [('cf1', 'ctypes.c_float'), ('cf2', 'ctypes.c_float'), ('cf3', 'ctypes.c_float'), ('rdx', 'ctypes.c_float'), ('rdy', 'ctypes.c_float'), ('dt', 'ctypes.c_float'), ('g', 'ctypes.c_float'), ('one', 'ctypes.c_float'), ('zero', 'ctypes.c_float'), ('half_val', 'ctypes.c_float'), ('has_msf', 'ctypes.c_int32'), ('bx', 'ctypes.c_int32'), ('by', 'ctypes.c_int32'), ('legacy', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
+IEVA_SOLVE_W_K257_THREADS_PER_GROUP = 128
+IEVA_SOLVE_W_K257_LAYOUT_HASH = '4bdba7301d7ca35537605838fa7ee6931851f7971e6d4bc322ce6b6340cda834'
+IEVA_SOLVE_W_K257_SHADER_HASH = '24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def'

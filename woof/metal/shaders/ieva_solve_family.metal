@@ -63,15 +63,14 @@ static inline void ieva_backward(int kstart, int kend,
             values[k], soft64_mul(gamma[k + 1], values[k + 1]));
 }
 
-// Current supported Metal tier is IEVA_KMAX=65 (nz <= 64), matching the
-// production HRRR configuration. Larger vertical tiers remain refused.
-kernel void ieva_solve_s(constant IevaSolveSResources& r [[buffer(0)]],
-                          constant IevaSolveSParams& p [[buffer(1)]],
-                          uint c [[thread_position_in_grid]]) {
+// Column capacities follow CUDA's IEVA_KMAX tiers: 65, 129 and 257
+// (nz <= 64, 128, 256), chosen by woof.core.ieva_constants.level_tier.
+template <int KMAX, typename R, typename P>
+static inline void ieva_solve_s_column(constant R& r, constant P& p, uint c) {
     const ulong st = ulong(p.ny) * ulong(p.nx);
     if (ulong(c) >= st) return;
-    ulong gamma[65];
-    ulong values[65];
+    ulong gamma[KMAX];
+    ulong values[KMAX];
     ulong bet = 0ul;
     ulong cprev = 0ul;
     const float mo = r.mut_old[c];
@@ -114,6 +113,25 @@ kernel void ieva_solve_s(constant IevaSolveSResources& r [[buffer(0)]],
         r.tend[ulong(k) * st + c] = ieva_fdiv(ieva_narrow(values[k]), p.dt);
 }
 
+kernel void ieva_solve_s(constant IevaSolveSResources& r [[buffer(0)]],
+                          constant IevaSolveSParams& p [[buffer(1)]],
+                          uint c [[thread_position_in_grid]]) {
+    ieva_solve_s_column<65>(r, p, c);
+}
+
+kernel void ieva_solve_s_k129(constant IevaSolveSK129Resources& r [[buffer(0)]],
+                          constant IevaSolveSK129Params& p [[buffer(1)]],
+                          uint c [[thread_position_in_grid]]) {
+    ieva_solve_s_column<129>(r, p, c);
+}
+
+kernel void ieva_solve_s_k257(constant IevaSolveSK257Resources& r [[buffer(0)]],
+                          constant IevaSolveSK257Params& p [[buffer(1)]],
+                          uint c [[thread_position_in_grid]]) {
+    ieva_solve_s_column<257>(r, p, c);
+}
+
+
 static inline float ieva_face_mass(device const float* mu, ulong row,
                                    int face, int n, int stride,
                                    int periodic, float half_val) {
@@ -132,9 +150,8 @@ static inline float ieva_face_mass(device const float* mu, ulong row,
                    + mu[row + ulong(b * stride)]);
 }
 
-kernel void ieva_solve_u(constant IevaSolveUResources& r [[buffer(0)]],
-                         constant IevaSolveUParams& p [[buffer(1)]],
-                         uint t [[thread_position_in_grid]]) {
+template <int KMAX, typename R, typename P>
+static inline void ieva_solve_u_column(constant R& r, constant P& p, uint t) {
     const int nfaces = p.f_hi - p.f_lo + 1;
     if (nfaces <= 0 || ulong(t) >= ulong(p.ny) * ulong(nfaces)) return;
     const int j = int(t) / nfaces;
@@ -152,8 +169,8 @@ kernel void ieva_solve_u(constant IevaSolveUResources& r [[buffer(0)]],
                               p.periodic, p.half_val);
     if (p.legacy) mo = mn = r.legacy_face[fc];
     const float msf = p.has_msf ? r.msfu[fc] : p.one;
-    ulong gamma[65];
-    ulong values[65];
+    ulong gamma[KMAX];
+    ulong values[KMAX];
     ulong bet = 0ul;
     ulong cprev = 0ul;
     for (int k = 0; k < p.nz; ++k) {
@@ -191,9 +208,27 @@ kernel void ieva_solve_u(constant IevaSolveUResources& r [[buffer(0)]],
     }
 }
 
-kernel void ieva_solve_v(constant IevaSolveVResources& r [[buffer(0)]],
-                         constant IevaSolveVParams& p [[buffer(1)]],
-                         uint t [[thread_position_in_grid]]) {
+kernel void ieva_solve_u(constant IevaSolveUResources& r [[buffer(0)]],
+                          constant IevaSolveUParams& p [[buffer(1)]],
+                          uint t [[thread_position_in_grid]]) {
+    ieva_solve_u_column<65>(r, p, t);
+}
+
+kernel void ieva_solve_u_k129(constant IevaSolveUK129Resources& r [[buffer(0)]],
+                          constant IevaSolveUK129Params& p [[buffer(1)]],
+                          uint t [[thread_position_in_grid]]) {
+    ieva_solve_u_column<129>(r, p, t);
+}
+
+kernel void ieva_solve_u_k257(constant IevaSolveUK257Resources& r [[buffer(0)]],
+                          constant IevaSolveUK257Params& p [[buffer(1)]],
+                          uint t [[thread_position_in_grid]]) {
+    ieva_solve_u_column<257>(r, p, t);
+}
+
+
+template <int KMAX, typename R, typename P>
+static inline void ieva_solve_v_column(constant R& r, constant P& p, uint t) {
     const int nfaces = p.f_hi - p.f_lo + 1;
     if (nfaces <= 0 || ulong(t) >= ulong(p.nx) * ulong(nfaces)) return;
     const int f = p.f_lo + int(t / uint(p.nx));
@@ -209,8 +244,8 @@ kernel void ieva_solve_v(constant IevaSolveVResources& r [[buffer(0)]],
                               p.periodic, p.half_val);
     if (p.legacy) mo = mn = r.legacy_face[fc];
     const float msf = p.has_msf ? r.msfv[fc] : p.one;
-    ulong gamma[65];
-    ulong values[65];
+    ulong gamma[KMAX];
+    ulong values[KMAX];
     ulong bet = 0ul;
     ulong cprev = 0ul;
     for (int k = 0; k < p.nz; ++k) {
@@ -248,15 +283,33 @@ kernel void ieva_solve_v(constant IevaSolveVResources& r [[buffer(0)]],
     }
 }
 
-kernel void ieva_solve_ph(constant IevaSolvePhResources& r [[buffer(0)]],
-                          constant IevaSolvePhParams& p [[buffer(1)]],
-                          uint c [[thread_position_in_grid]]) {
+kernel void ieva_solve_v(constant IevaSolveVResources& r [[buffer(0)]],
+                          constant IevaSolveVParams& p [[buffer(1)]],
+                          uint t [[thread_position_in_grid]]) {
+    ieva_solve_v_column<65>(r, p, t);
+}
+
+kernel void ieva_solve_v_k129(constant IevaSolveVK129Resources& r [[buffer(0)]],
+                          constant IevaSolveVK129Params& p [[buffer(1)]],
+                          uint t [[thread_position_in_grid]]) {
+    ieva_solve_v_column<129>(r, p, t);
+}
+
+kernel void ieva_solve_v_k257(constant IevaSolveVK257Resources& r [[buffer(0)]],
+                          constant IevaSolveVK257Params& p [[buffer(1)]],
+                          uint t [[thread_position_in_grid]]) {
+    ieva_solve_v_column<257>(r, p, t);
+}
+
+
+template <int KMAX, typename R, typename P>
+static inline void ieva_solve_ph_column(constant R& r, constant P& p, uint c) {
     const ulong st = ulong(p.ny) * ulong(p.nx);
     if (ulong(c) >= st || p.nz < 2) return;
     const float mt = r.mut[c];
     const float msf = p.has_msf ? r.msft[c] : p.one;
-    ulong gamma[65];
-    ulong values[65];
+    ulong gamma[KMAX];
+    ulong values[KMAX];
     ulong bet = 0ul;
     ulong cprev = 0ul;
     for (int k = 1; k < p.nz; ++k) {
@@ -298,6 +351,25 @@ kernel void ieva_solve_ph(constant IevaSolvePhResources& r [[buffer(0)]],
     }
 }
 
+kernel void ieva_solve_ph(constant IevaSolvePhResources& r [[buffer(0)]],
+                          constant IevaSolvePhParams& p [[buffer(1)]],
+                          uint c [[thread_position_in_grid]]) {
+    ieva_solve_ph_column<65>(r, p, c);
+}
+
+kernel void ieva_solve_ph_k129(constant IevaSolvePhK129Resources& r [[buffer(0)]],
+                          constant IevaSolvePhK129Params& p [[buffer(1)]],
+                          uint c [[thread_position_in_grid]]) {
+    ieva_solve_ph_column<129>(r, p, c);
+}
+
+kernel void ieva_solve_ph_k257(constant IevaSolvePhK257Resources& r [[buffer(0)]],
+                          constant IevaSolvePhK257Params& p [[buffer(1)]],
+                          uint c [[thread_position_in_grid]]) {
+    ieva_solve_ph_column<257>(r, p, c);
+}
+
+
 static inline float ieva_ht_at(device const float* ht, int j, int i,
                                int ny, int nx, int bx, int by) {
     if (bx) i = clamp(i, 0, nx - 1);
@@ -313,9 +385,8 @@ static inline float ieva_uncoupled(float tend, float msf, int has_msf,
     return ieva_fdiv(scaled, ieva_fadd(ieva_fmul(c1, mu), c2));
 }
 
-kernel void ieva_solve_w(constant IevaSolveWResources& r [[buffer(0)]],
-                         constant IevaSolveWParams& p [[buffer(1)]],
-                         uint c [[thread_position_in_grid]]) {
+template <int KMAX, typename R, typename P>
+static inline void ieva_solve_w_column(constant R& r, constant P& p, uint c) {
     const ulong st = ulong(p.ny) * ulong(p.nx);
     if (ulong(c) >= st || p.nz < 2) return;
     const int j = int(c) / p.nx;
@@ -327,8 +398,8 @@ kernel void ieva_solve_w(constant IevaSolveWResources& r [[buffer(0)]],
     const float mn = r.mut_new[c];
     const float msf = p.has_msf ? r.msft[c] : p.one;
     const int kend = p.nz - 1;
-    ulong gamma[65];
-    ulong values[65];
+    ulong gamma[KMAX];
+    ulong values[KMAX];
     ulong bet = 0ul;
     ulong cprev = 0ul;
     for (int k = 1; k <= kend; ++k) {
@@ -442,3 +513,22 @@ kernel void ieva_solve_w(constant IevaSolveWResources& r [[buffer(0)]],
         r.tend[ulong(k) * st + ulong(c)] = out;
     }
 }
+
+kernel void ieva_solve_w(constant IevaSolveWResources& r [[buffer(0)]],
+                          constant IevaSolveWParams& p [[buffer(1)]],
+                          uint c [[thread_position_in_grid]]) {
+    ieva_solve_w_column<65>(r, p, c);
+}
+
+kernel void ieva_solve_w_k129(constant IevaSolveWK129Resources& r [[buffer(0)]],
+                          constant IevaSolveWK129Params& p [[buffer(1)]],
+                          uint c [[thread_position_in_grid]]) {
+    ieva_solve_w_column<129>(r, p, c);
+}
+
+kernel void ieva_solve_w_k257(constant IevaSolveWK257Resources& r [[buffer(0)]],
+                          constant IevaSolveWK257Params& p [[buffer(1)]],
+                          uint c [[thread_position_in_grid]]) {
+    ieva_solve_w_column<257>(r, p, c);
+}
+

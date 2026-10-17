@@ -4328,17 +4328,6 @@ def step(state: DomainState, cfg: RunConfig, *, acoustic: bool = True,
         if ((cfg.khdif > 0.0 or cfg.kvdif > 0.0)
                 and getattr(state.phb, "ndim", None) != 1):
             unsupported.append("constant-K diffusion on a non-flat base")
-        if cfg.zadvect_implicit != 0:
-            if (getattr(cfg, "zadvect_implicit_variant", "wrf_471")
-                    != "wrf_legacy"):
-                unsupported.append(
-                    "IEVA vertical advection variant "
-                    f"{getattr(cfg, 'zadvect_implicit_variant', 'wrf_471')} "
-                    "(Metal currently implements wrf_legacy)")
-            elif state.p.shape[0] > 64:
-                unsupported.append(
-                    "IEVA vertical advection with nz > 64 "
-                    "(Metal software-binary64 column storage is fixed at 65)")
         if cfg.damp_opt not in (0, 3):
             unsupported.append(
                 f"damp_opt={cfg.damp_opt} (only the implicit w damper "

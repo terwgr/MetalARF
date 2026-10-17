@@ -378,9 +378,6 @@ def solve_u(state, cfg, ctx: DynamicsSplit) -> None:
     if getattr(state, "_metal_setup_state", False):
         from woof.metal.ieva_family import submit_solve_u
 
-        if not legacy(cfg):
-            raise NotImplementedError(
-                "Metal IEVA u solve currently supports zadvect_implicit_variant='wrf_legacy'")
         nz, ny, nx = state.p.shape
         periodic = _periodic_x(cfg)
         f_lo, f_hi = (0, nx) if periodic else (1, nx - 1)
@@ -391,7 +388,7 @@ def solve_u(state, cfg, ctx: DynamicsSplit) -> None:
             mut_old=ctx.mut_old, mut_new=ctx.mut_new, rdnw=state.rdnw,
             msf=state.msfu, legacy_face=legacy_face, dt=ctx.dt,
             has_msf=int(state.has_msf), periodic=periodic,
-            f_lo=f_lo, f_hi=f_hi, nz=nz, ny=ny, nx=nx)
+            f_lo=f_lo, f_hi=f_hi, legacy=int(legacy(cfg)), nz=nz, ny=ny, nx=nx)
     nz, ny, nx = state.p.shape
     periodic = _periodic_x(cfg)
     f_lo, f_hi = (0, nx) if periodic else (1, nx - 1)
@@ -413,9 +410,6 @@ def solve_v(state, cfg, ctx: DynamicsSplit) -> None:
     if getattr(state, "_metal_setup_state", False):
         from woof.metal.ieva_family import submit_solve_v
 
-        if not legacy(cfg):
-            raise NotImplementedError(
-                "Metal IEVA v solve currently supports zadvect_implicit_variant='wrf_legacy'")
         nz, ny, nx = state.p.shape
         periodic = _periodic_y(cfg)
         f_lo, f_hi = (0, ny) if periodic else (1, ny - 1)
@@ -426,7 +420,7 @@ def solve_v(state, cfg, ctx: DynamicsSplit) -> None:
             mut_old=ctx.mut_old, mut_new=ctx.mut_new, rdnw=state.rdnw,
             msf=state.msfv, legacy_face=legacy_face, dt=ctx.dt,
             has_msf=int(state.has_msf), periodic=periodic,
-            f_lo=f_lo, f_hi=f_hi, nz=nz, ny=ny, nx=nx)
+            f_lo=f_lo, f_hi=f_hi, legacy=int(legacy(cfg)), nz=nz, ny=ny, nx=nx)
     nz, ny, nx = state.p.shape
     periodic = _periodic_y(cfg)
     f_lo, f_hi = (0, ny) if periodic else (1, ny - 1)
@@ -448,10 +442,6 @@ def solve_ph(state, cfg, ctx: DynamicsSplit) -> None:
     if getattr(state, "_metal_setup_state", False):
         from woof.metal.ieva_family import submit_solve_ph
 
-        if not legacy(cfg):
-            raise NotImplementedError(
-                "Metal IEVA geopotential solve currently supports "
-                "zadvect_implicit_variant='wrf_legacy'")
         nz, ny, nx = state.p.shape
         return submit_solve_ph(
             # The column recurrence reads levels k < nz only.
@@ -479,10 +469,6 @@ def solve_w(state, cfg, ctx: DynamicsSplit) -> None:
     if getattr(state, "_metal_setup_state", False):
         from woof.metal.ieva_family import submit_solve_w
 
-        if not legacy(cfg):
-            raise NotImplementedError(
-                "Metal IEVA vertical-wind solve currently supports "
-                "zadvect_implicit_variant='wrf_legacy'")
         nz, ny, nx = state.p.shape
         rdx, rdy = _rdx_rdy(cfg)
         mux, muy = stage_face_masses(state, cfg, ctx.mut)
@@ -499,7 +485,7 @@ def solve_w(state, cfg, ctx: DynamicsSplit) -> None:
             cf1=state.cf1, cf2=state.cf2, cf3=state.cf3,
             rdx=rdx, rdy=rdy, dt=ctx.dt, g=c.G,
             has_msf=int(state.has_msf), bx=int(not _periodic_x(cfg)),
-            by=int(not _periodic_y(cfg)), legacy=1,
+            by=int(not _periodic_y(cfg)), legacy=int(legacy(cfg)),
             nz=nz, ny=ny, nx=nx, one=1.0, zero=0.0, half_val=0.5)
     nz, ny, nx = state.p.shape
     rdx, rdy = _rdx_rdy(cfg)

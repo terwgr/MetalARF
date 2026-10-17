@@ -823,12 +823,10 @@ METAL_KNOWN_CONFLICTS = (
      lambda cfg, radiation, cumulus, cam_ozone:
      int(cfg.bl_pbl_physics) == 5
      and int(getattr(cfg, "bl_mynn_mixscalars", 0) or 0) != 0),
-    ("Metal IEVA vertical advection runs zadvect_implicit_variant="
-     "'wrf_legacy' with nz <= 64 only",
+    ("IEVA vertical advection solves at most 256 levels",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "zadvect_implicit", 0) or 0) != 0
-     and (getattr(cfg, "zadvect_implicit_variant", "wrf_471") != "wrf_legacy"
-          or int(cfg.nz) > 64)),
+     and int(cfg.nz) > 256),
     ("km_opt=0 runs on Metal only under the SASE PBL (bl_pbl_physics=900)",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(cfg.km_opt) == 0 and int(cfg.bl_pbl_physics) != 900),

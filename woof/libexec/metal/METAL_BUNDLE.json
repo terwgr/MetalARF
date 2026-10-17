@@ -10,13 +10,13 @@
       "size": 12808900
     },
     "woof_exact.metallib": {
-      "sha256": "1716feaebe89054e31ee8448a6ec7c7571a6c3ee34674fba69935e8cbeae627b",
-      "size": 8229652
+      "sha256": "acd37202f074474fe84c7d1ad2746059f5b15d9c73970c6638e87a497e2c7e49",
+      "size": 8371292
     }
   },
-  "implementation_file_count": 1155,
-  "implementation_sha256": "f42dfa83ccb5569819a53125c569301fba08b3e45883c02a42774516316f9707",
-  "metal_inputs_sha256": "cd412ebb53886fc9e125504e8f6819b221a4b7d543b079712f7b783a20ff393b",
+  "implementation_file_count": 1156,
+  "implementation_sha256": "ec8e88afabb82c7430cdb78ac45087653012d92e3ef4c82560e7ac98cb280a8f",
+  "metal_inputs_sha256": "74281959f8a99197d625c0a5884d277a928b9a8737c8375ee8590ba120736c04",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "54d9d8cbf13db638f74850e057ac373102323cb20c13d454a49a230f27b71826",
-        "size": 2578792
+        "sha256": "d870c40c67c0428343fabbd681b0d014c9fc26be3f87e01edffc81c9ce0a4072",
+        "size": 2610342
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "bdb2361017af7d6fcbe6e728517144dd81a0fdacecb264c75fb6f90835476cda",
@@ -1256,12 +1256,12 @@
         "size": 2275
       },
       "woof/metal/shaders/ieva_family.metal": {
-        "sha256": "f0913c91c96f8975e15a75b451867411421d43565811a41eb87772af0460d268",
-        "size": 5400
+        "sha256": "b0cac2405ff81d5b27f7c3df0184e071f236e61c64869e9542b7bcb554362233",
+        "size": 5538
       },
       "woof/metal/shaders/ieva_solve_family.metal": {
-        "sha256": "7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777",
-        "size": 21497
+        "sha256": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+        "size": 24963
       },
       "woof/metal/shaders/jacobi_eigh_fp64.metal": {
         "sha256": "e51c3288c133df05d1dfdfbc36af90135f5da5a6a8c6d9ee63fab3a7415c9e2a",
@@ -3179,6 +3179,10 @@
         "sha256": "728a11638c6b1e30e9edd2adcbf09e5363dccb90b20a86e3073c6a5fe64f4c34",
         "size": 1223
       },
+      "woof/metal/signature_fragments/ieva_solve_tiers.json": {
+        "sha256": "6ade800fe9cd3df222ad83c7e7e63755738e4402c202ae578bbab172a930a443",
+        "size": 31572
+      },
       "woof/metal/signature_fragments/ieva_solve_uv.json": {
         "sha256": "ce3dda62ad45411626fadd12973753b638811548869193557528cd17ff2f2bf4",
         "size": 2744
@@ -4028,6 +4032,6 @@
         "size": 296
       }
     },
-    "sha256": "cd412ebb53886fc9e125504e8f6819b221a4b7d543b079712f7b783a20ff393b"
+    "sha256": "74281959f8a99197d625c0a5884d277a928b9a8737c8375ee8590ba120736c04"
   }
 }

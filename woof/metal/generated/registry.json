@@ -2548,7 +2548,7 @@
       "name": "ieva_mut_new",
       "parameter_size": 32,
       "resource_count": 12,
-      "shader_hash": "f0913c91c96f8975e15a75b451867411421d43565811a41eb87772af0460d268",
+      "shader_hash": "b0cac2405ff81d5b27f7c3df0184e071f236e61c64869e9542b7bcb554362233",
       "threads_per_group": 128
     },
     {
@@ -2564,7 +2564,7 @@
       "name": "ieva_ww_split",
       "parameter_size": 64,
       "resource_count": 10,
-      "shader_hash": "f0913c91c96f8975e15a75b451867411421d43565811a41eb87772af0460d268",
+      "shader_hash": "b0cac2405ff81d5b27f7c3df0184e071f236e61c64869e9542b7bcb554362233",
       "threads_per_group": 128
     },
     {
@@ -12923,7 +12923,7 @@
       "name": "ieva_solve_s",
       "parameter_size": 32,
       "resource_count": 9,
-      "shader_hash": "7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777",
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
       "threads_per_group": 128
     },
     {
@@ -12940,7 +12940,7 @@
       "name": "ieva_solve_u",
       "parameter_size": 48,
       "resource_count": 10,
-      "shader_hash": "7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777",
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
       "threads_per_group": 128
     },
     {
@@ -12957,7 +12957,7 @@
       "name": "ieva_solve_v",
       "parameter_size": 48,
       "resource_count": 10,
-      "shader_hash": "7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777",
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
       "threads_per_group": 128
     },
     {
@@ -12974,7 +12974,7 @@
       "name": "ieva_solve_ph",
       "parameter_size": 36,
       "resource_count": 9,
-      "shader_hash": "7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777",
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
       "threads_per_group": 128
     },
     {
@@ -12991,7 +12991,7 @@
       "name": "ieva_solve_w",
       "parameter_size": 68,
       "resource_count": 22,
-      "shader_hash": "7a29f61d4427f5e765ec239fa90522bb78e2207f644af5e28d477def876ab777",
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
       "threads_per_group": 128
     },
     {
@@ -13087,7 +13087,7 @@
       "name": "ieva_theta_minus_t0",
       "parameter_size": 20,
       "resource_count": 3,
-      "shader_hash": "f0913c91c96f8975e15a75b451867411421d43565811a41eb87772af0460d268",
+      "shader_hash": "b0cac2405ff81d5b27f7c3df0184e071f236e61c64869e9542b7bcb554362233",
       "threads_per_group": 128
     },
     {
@@ -15692,6 +15692,176 @@
       "resource_count": 21,
       "shader_hash": "478b2d4d0bf4e2c1c84626f8e627cd978f75b1d09d3548d2afcac324ded3b6ee",
       "threads_per_group": 32
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_s",
+      "layout_hash": "d45617637a2567c36857c6a97f0864f9e44303339e6a9471a5c1b277ba92da31",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_s_k129",
+      "parameter_size": 32,
+      "resource_count": 9,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_s",
+      "layout_hash": "dd8e78c64fa0a1b4a15739fd9fedcea5d30277a9323d496b8b81990213e19ea1",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_s_k257",
+      "parameter_size": 32,
+      "resource_count": 9,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_u",
+      "layout_hash": "f9f5a21b99ae6793f2264c2d5aedb2b70aac6bf90f87f04b80a6676109a26689",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_u_k129",
+      "parameter_size": 48,
+      "resource_count": 10,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_u",
+      "layout_hash": "3e7859ba55b15dd15ee88f289d717df68082de8f8a4348ddbebcebb53985955a",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_u_k257",
+      "parameter_size": 48,
+      "resource_count": 10,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_v",
+      "layout_hash": "e359d83d08bb9ed850450f1e6c73aead4564c0bece51c12dbd8f67849f300dd2",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_v_k129",
+      "parameter_size": 48,
+      "resource_count": 10,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_v",
+      "layout_hash": "c274a1d8d977221440449b0af3712485442ba1c9d3e06489b636392867b24903",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_v_k257",
+      "parameter_size": 48,
+      "resource_count": 10,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_ph",
+      "layout_hash": "43656063fe3eba4d2c1fce42ad85b8b78549ee7709c73a7ee07675094400feec",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_ph_k129",
+      "parameter_size": 36,
+      "resource_count": 9,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_ph",
+      "layout_hash": "3ed31b4bccff71a7db6d1c31d752b6a741034a573f713e9f8dbfd2043f9322b2",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_ph_k257",
+      "parameter_size": 36,
+      "resource_count": 9,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_w",
+      "layout_hash": "b20b11030d76ce84275344b1961428df4dde7a6a230a250fd92f325c46091e9c",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_w_k129",
+      "parameter_size": 68,
+      "resource_count": 22,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "soft64-rn-bit-ops",
+        "wrf-exact"
+      ],
+      "cuda_source": "woof/core/kernels/ieva.cu",
+      "cuda_symbol": "ieva_solve_w",
+      "layout_hash": "4bdba7301d7ca35537605838fa7ee6931851f7971e6d4bc322ce6b6340cda834",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/ieva_solve_family.metal",
+      "module": "ieva_solve_family",
+      "name": "ieva_solve_w_k257",
+      "parameter_size": 68,
+      "resource_count": 22,
+      "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
     }
   ],
   "schema": "woof-metal-registry-v1"

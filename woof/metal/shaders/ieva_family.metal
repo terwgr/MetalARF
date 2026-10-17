@@ -2,6 +2,7 @@
 #include "ieva_ww_split_bindings.metalh"
 #include "ieva_mut_new_bindings.metalh"
 #include "ieva_theta_minus_t0_bindings.metalh"
+#include "soft_binary32.metalh"
 
 using namespace metal;
 
@@ -36,7 +37,8 @@ kernel void ieva_ww_split(constant IevaWwSplitResources &r [[buffer(0)]],
     const float sv = ((r.v[va + ulong(p.nx)] + r.v[va]) +
                       r.v[vb + ulong(p.nx)]) + r.v[vb];
     const float cy = (p.quarter * p.rdy) * sv;
-    float hyp = sqrt((cx * cx) + (cy * cy));
+    // __fsqrt_rn: correctly rounded, independent of the math mode.
+    float hyp = as_type<float>(soft32_sqrt(as_type<uint>((cx * cx) + (cy * cy))));
     if (p.legacy != 0) {
         // The earlier WW_SPLIT takes the flow on the upwind mass level,
         // including the mass-point map factor, and uses cx+cy.
