@@ -884,13 +884,16 @@ def submit_mynn_driver_diss_heat(context, el, qke, p, diss_heat, *,
 def submit_mynn_mixlength_default(context, dz, zw, u, v, qke, dtv, theta,
                                   edmf_w, edmf_a, rmo, fltv, zi, psig_bl,
                                   el, qkw, qtke, thetaw, elblavg, dlu, dld,
-                                  *, nz: int, ncol: int, experimental=False):
+                                  *, nz: int, ncol: int, mixlength: int = 1,
+                                  experimental=False):
     """Experimentally compute MYNN mixing length and its column scratch.
 
     Level resources use C-contiguous level-major `(nz, ncol)` storage; `zw`
     uses `(nz+1, ncol)` and controls use `(ncol,)`. The source fdlibm tanhf
     path is transcribed; shared pow/sqrt and RN arithmetic remain unverified.
     """
+    if type(mixlength) is not int or mixlength not in (1, 2):
+        raise ValueError("MYNN mixing length requires mixlength=1 or 2")
     for name, extent in (("nz", nz), ("ncol", ncol)):
         if (isinstance(extent, (bool, np.bool_))
                 or not isinstance(extent, (int, np.integer))
@@ -926,7 +929,7 @@ def submit_mynn_mixlength_default(context, dz, zw, u, v, qke, dtv, theta,
     resources.update(dict(zip(output_names,
                               (a.view(layer_shape) for a in output_values))))
     return _submit(context, "mynn_mixlength_default_columns", resources,
-                   {"nz": nz, "ncol": ncol}, ncol, experimental)
+                   {"nz": nz, "ncol": ncol, "mixlength": mixlength}, ncol, experimental)
 
 
 def submit_mynn_mixlength_gsd41(context, dz, zw, qke, dtv, theta,
@@ -973,6 +976,7 @@ def submit_mynn_initialize_default(context, dz, zw, u, v, thl, qw, theta,
                                    rmo, ust, zi, psig_bl, el, qke, tsq, qsq,
                                    cov, sm, sh, scratch, *, nz: int,
                                    ncol: int, initialize_qke: bool,
+                                   mixlength: int = 1,
                                    _kernel_name: str = "mynn_initialize_default_columns",
                                    experimental=False):
     """Run the gated cold-start proposal with level-major field storage.
@@ -983,6 +987,8 @@ def submit_mynn_initialize_default(context, dz, zw, u, v, thl, qw, theta,
     initialization path. Shared portable-libm pow is only a candidate for the
     CUDA binary64 pow helper; this proposal is not admitted to production.
     """
+    if type(mixlength) is not int or mixlength not in (1, 2):
+        raise ValueError("MYNN initialization requires mixlength=1 or 2")
     for name, extent in (("nz", nz), ("ncol", ncol)):
         if (isinstance(extent, (bool, np.bool_))
                 or not isinstance(extent, (int, np.integer))
@@ -1021,10 +1027,11 @@ def submit_mynn_initialize_default(context, dz, zw, u, v, thl, qw, theta,
     resources.update(dict(zip(output_names,
                               (a.view((nz, ncol)) for a in output_arrays))))
     resources["scratch"] = scratch_values[0].view((15 * nz * ncol,))
-    return _submit(context, _kernel_name, resources,
-                   {"nz": nz, "ncol": ncol,
-                    "initialize_qke": int(initialize_qke)},
-                   ncol, experimental)
+    parameters = {"nz": nz, "ncol": ncol,
+                  "initialize_qke": int(initialize_qke)}
+    if _kernel_name == "mynn_initialize_default_columns":
+        parameters["mixlength"] = mixlength
+    return _submit(context, _kernel_name, resources, parameters, ncol, experimental)
 
 
 def submit_mynn_initialize_gsd41(context, *args, **kwargs):

@@ -30247,7 +30247,7 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_pbl.cu",
       "cuda_symbol": "mynn_initialize_default_columns",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "mynn_pbl_family",
       "name": "mynn_initialize_default_columns",
       "parameters": [
@@ -30261,6 +30261,10 @@
         ],
         [
           "initialize_qke",
+          "int32"
+        ],
+        [
+          "mixlength",
           "int32"
         ]
       ],
@@ -30948,7 +30952,7 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_pbl.cu",
       "cuda_symbol": "mynn_mixlength_default_columns",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "mynn_pbl_family",
       "name": "mynn_mixlength_default_columns",
       "parameters": [
@@ -30958,6 +30962,10 @@
         ],
         [
           "ncol",
+          "int32"
+        ],
+        [
+          "mixlength",
           "int32"
         ]
       ],

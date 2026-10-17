@@ -1876,9 +1876,9 @@ def mynn_bl_driver_metal(
 ) -> dict[str, object]:
     """Run the source-supported MYNN chain on Metal arrays.
 
-    ``bl_mynn_mixlength=1`` is the RAP/HRRR form. Value 2 selects WRF v4.1
-    ``mym_length`` CASE(2), the GSD cloud-aware form. Other optional MYNN
-    branches remain fail-closed. Every intermediate lives in a named
+    ``bl_mynn_mixlength=1`` is the RAP/HRRR form. Value 2 selects the local
+    WRF v4.6.1 law, or the GSD cloud-aware law under ``gsd_41``. Other optional
+    MYNN branches remain fail-closed. Every intermediate lives in a named
     DomainState scratch slot so a public step does not allocate a fresh arena.
     """
     from woof.metal.array import MetalArray
@@ -1984,8 +1984,7 @@ def mynn_bl_driver_metal(
         sm_in = slot("initialize_sm_in", L); sm_in[...] = layers["sm"]
         sh_in = slot("initialize_sh_in", L); sh_in[...] = layers["sh"]
         initialize_submitter = (submit_mynn_initialize_gsd41
-                                if (bl_mynn_version == "gsd_41"
-                                    or bl_mynn_mixlength == 2)
+                                if bl_mynn_version == "gsd_41"
                                 else submit_mynn_initialize_default)
         # module_bl_mynn.F:795 seeds with vapor, not total water.
         initialize_submitter(context, layers["dz"], zw, layers["u"],
@@ -1994,7 +1993,7 @@ def mynn_bl_driver_metal(
             pblh_out, seed_scale, layers["el"], layers["qke"], layers["tsq"],
             layers["qsq"], layers["cov"], layers["sm"], layers["sh"],
             init_scratch, nz=nz, ncol=ncol, initialize_qke=True,
-            experimental=True)
+            mixlength=bl_mynn_mixlength, experimental=True)
 
     submit_mynn_pblh_scale(context, pblh_thetav, layers["qke"], zw, layers["dz"],
         scalars["xland"], scalars["dx"], pblh_out, kpbl, psig_bl,
@@ -2058,7 +2057,7 @@ def mynn_bl_driver_metal(
         nz=nz, ncol=ncol, experimental=True)
     length = {name: slot(f"length_{name}", L) for name in
               ("el", "qkw", "qtke", "thetaw", "elblavg", "dlu", "dld")}
-    if bl_mynn_mixlength == 2:
+    if bl_mynn_version == "gsd_41":
         submit_mynn_mixlength_gsd41(context, layers["dz"], zw,
             layers["qke"], level2["dtv"], layers["th"], plumes.edmf_w,
             plumes.edmf_a, plumes.cldfra_bl, plumes.vt, plumes.vq,
@@ -2071,7 +2070,7 @@ def mynn_bl_driver_metal(
             plumes.edmf_w, plumes.edmf_a, surf["rmol"], surf["fltv"],
             pblh_out, psig_bl, *(length[name] for name in
             ("el", "qkw", "qtke", "thetaw", "elblavg", "dlu", "dld")),
-            nz=nz, ncol=ncol, experimental=True)
+            nz=nz, ncol=ncol, mixlength=bl_mynn_mixlength, experimental=True)
     t = {name: slot(f"turb_{name}", L) for name in (
         "dfm", "dfh", "dfq", "pdk", "pdt", "pdq", "pdc", "tcd", "qcd")}
     t.update(level2)

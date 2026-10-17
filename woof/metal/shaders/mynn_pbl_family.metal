@@ -2270,6 +2270,100 @@ static inline void mynn_mym_length(
     }
 }
 
+// WRF v4.6.1 module_bl_mynn.F:2100-2232 mym_length CASE(2).
+// See licenses/LICENSE-WRF-public-domain.txt.
+static inline void mynn_mym_length_local(
+    device const float *dz, device const float *zw,
+    device const float *qke, device const float *dtv,
+    device const float *edmf_w, device const float *edmf_a,
+    float rmo, float fltv, float zi, float psig_bl,
+    device float *el, device float *qkw, device float *qtke,
+    uint ncol, int nz, uint column)
+{
+    const ulong base = ulong(column), stride = ulong(ncol);
+    const float gtr = mynn_f32_div(9.81f, 300.0f);
+    const float onethird = mynn_f32_div(1.0f, 3.0f);
+    float zi2 = mynn_f32_max2(zi, 300.0f);
+    float h1 = mynn_f32_min2(mynn_f32_max2(mynn_f32_mul(0.3f, zi2), 300.0f), 600.0f);
+    float h2 = mynn_f32_mul(h1, 0.5f);
+    qtke[base] = mynn_f32_max2(mynn_f32_mul(0.5f, qke[base]), mynn_f32_mul(0.5f, 1.0e-3f));
+    qkw[base] = mynn_f32_sqrt(mynn_f32_max2(qke[base], 1.0e-3f));
+    for (int k = 1; k < nz; ++k) {
+        const ulong idx = ulong(k) * stride + base, prev = idx - stride;
+        float afk = mynn_f32_div(dz[idx], mynn_f32_add(dz[idx], dz[prev]));
+        float abk = mynn_f32_sub(1.0f, afk);
+        qkw[idx] = mynn_f32_sqrt(mynn_f32_max2(mynn_f32_add(
+            mynn_f32_mul(qke[idx], abk), mynn_f32_mul(qke[prev], afk)), 1.0e-3f));
+        qtke[idx] = mynn_f32_mul(0.5f, mynn_f32_mul(qkw[idx], qkw[idx]));
+    }
+    float elt = 1.0e-5f, vsc_sum = 1.0e-5f;
+    float pblh_plus_ent = mynn_f32_max2(mynn_f32_add(zi, h1), 100.0f);
+    for (int k = 1; k < nz && zw[ulong(k) * stride + base] <= pblh_plus_ent; ++k) {
+        const ulong idx = ulong(k) * stride + base, prev = idx - stride;
+        float dzk = mynn_f32_mul(0.5f, mynn_f32_add(dz[idx], dz[prev]));
+        float qdz = mynn_f32_mul(mynn_f32_min2(mynn_f32_max2(qkw[idx], 0.03f), 30.0f), dzk);
+        elt = mynn_f32_add(elt, mynn_f32_mul(qdz, zw[idx]));
+        vsc_sum = mynn_f32_add(vsc_sum, qdz);
+    }
+    elt = mynn_f32_min2(mynn_f32_max2(mynn_f32_div(mynn_f32_mul(0.22f, elt), vsc_sum),
+                              10.0f), 400.0f);
+    float vsc = mynn_gfk_powf(mynn_f32_mul(mynn_f32_mul(gtr, elt), mynn_f32_max2(fltv, 0.0f)),
+                         onethird);
+    el[base] = 0.0f;
+    for (int k = 1; k < nz; ++k) {
+        const ulong idx = ulong(k) * stride + base, prev = idx - stride;
+        float zwk = zw[idx];
+        float dzk = mynn_f32_mul(0.5f, mynn_f32_add(dz[idx], dz[prev]));
+        float wstar = mynn_f32_mul(1.25f, mynn_gfk_powf(
+            mynn_f32_mul(mynn_f32_mul(gtr, zi), mynn_f32_max2(fltv, 1.0e-4f)), onethird));
+        float weight = mynn_f32_add(mynn_f32_mul(0.5f, mynn_tanhf(
+            mynn_f32_div(mynn_f32_sub(zwk, mynn_f32_add(zi2, h1)), h2))), 0.5f);
+        float elb_mf, elf;
+        if (dtv[idx] > 0.0f) {
+            float bv = mynn_f32_max2(mynn_f32_sqrt(mynn_f32_mul(gtr, dtv[idx])), 0.001f);
+            float numerator = mynn_f32_max2(mynn_f32_mul(0.30f, qkw[idx]),
+                mynn_f32_mul(mynn_f32_mul(50.0f, edmf_a[prev]), edmf_w[prev]));
+            elb_mf = mynn_f32_mul(mynn_f32_div(numerator, bv), mynn_f32_add(1.0f,
+                mynn_f32_mul(2.0f, mynn_f32_sqrt(mynn_f32_div(vsc, mynn_f32_mul(bv, elt))))));
+            float tau = mynn_f32_min2(mynn_f32_max2(
+                mynn_f32_div(mynn_f32_mul(1000.0f, wstar), 9.81f), 30.0f), 150.0f);
+            tau = mynn_f32_add(mynn_f32_mul(tau, mynn_f32_sub(1.0f, weight)),
+                           mynn_f32_mul(50.0f, weight));
+            elf = mynn_f32_min2(mynn_f32_max2(
+                mynn_f32_mul(tau, mynn_f32_sqrt(mynn_f32_min2(qtke[idx], 40.0f))),
+                mynn_f32_div(mynn_f32_mul(mynn_f32_mul(50.0f, edmf_a[idx]), edmf_w[idx]), bv)),
+                zwk);
+        } else {
+            float tau = mynn_f32_min2(mynn_f32_max2(
+                mynn_f32_div(mynn_f32_mul(1000.0f, wstar), 9.81f), 50.0f), 200.0f);
+            tau = mynn_f32_add(mynn_f32_mul(tau, mynn_f32_sub(1.0f, weight)),
+                mynn_f32_mul(mynn_f32_max2(100.0f, mynn_f32_mul(dzk, 0.25f)), weight));
+            elf = mynn_f32_min2(mynn_f32_mul(tau, mynn_f32_sqrt(mynn_f32_min2(qtke[idx], 40.0f))), zwk);
+            elb_mf = elf;
+        }
+        elf = mynn_f32_div(elf, mynn_f32_add(1.0f, mynn_f32_div(elf, 800.0f)));
+        elb_mf = mynn_f32_max2(elb_mf, 0.01f);
+        float els;
+        if (rmo > 0.0f) {
+            els = mynn_f32_div(mynn_f32_mul(0.4f, zwk), mynn_f32_add(1.0f,
+                mynn_f32_mul(3.5f, mynn_f32_min2(mynn_f32_mul(zwk, rmo), 1.0f))));
+        } else {
+            els = mynn_f32_mul(mynn_f32_mul(0.4f, zwk), mynn_gfk_powf(mynn_f32_sub(1.0f,
+                mynn_f32_mul(mynn_f32_mul(5.0f, zwk), rmo)), 0.2f));
+        }
+        float els2 = mynn_f32_mul(els, els);
+        float value = mynn_f32_sqrt(mynn_f32_div(els2, mynn_f32_add(mynn_f32_add(1.0f,
+            mynn_f32_div(els2, mynn_f32_mul(elt, elt))),
+            mynn_f32_div(els2, mynn_f32_mul(elb_mf, elb_mf)))));
+        value = mynn_f32_add(mynn_f32_mul(value, mynn_f32_sub(1.0f, weight)),
+                         mynn_f32_mul(elf, weight));
+        float el_les = mynn_f32_min2(mynn_f32_div(els,
+            mynn_f32_add(1.0f, mynn_f32_div(els, 12.0f))), elb_mf);
+        el[idx] = mynn_f32_add(mynn_f32_mul(value, psig_bl),
+                         mynn_f32_mul(mynn_f32_sub(1.0f, psig_bl), el_les));
+    }
+}
+
 // WRF v4.1 module_bl_mynn.F:mym_length CASE(2), the GSD experimental
 // cloud-aware mixing length. Keep this separate from the RAP/HRRR CASE(1)
 // helper above: its cloud-regime buoyancy length, cloud turnover length,
@@ -2408,10 +2502,16 @@ kernel void mynn_mixlength_default_columns(
     uint column [[thread_position_in_grid]])
 {
     if (column >= uint(q.ncol) || q.nz < 2) return;
+    if (q.mixlength == 2) {
+        mynn_mym_length_local(r.dz, r.zw, r.qke, r.dtv, r.edmf_w,
+            r.edmf_a, r.rmo[column], r.fltv[column], r.zi[column],
+            r.psig_bl[column], r.el, r.qkw, r.qtke, uint(q.ncol), q.nz, column);
+    } else {
     mynn_mym_length(r.dz, r.zw, r.u, r.v, r.qke, r.dtv, r.theta,
         r.edmf_w, r.edmf_a, r.el, r.qkw, r.qtke, r.thetaw, r.elblavg,
         r.dlu, r.dld, r.rmo[column], r.fltv[column], r.zi[column],
         r.psig_bl[column], uint(q.ncol), q.nz, column);
+    }
 }
 
 kernel void mynn_mixlength_gsd41_columns(
@@ -2436,6 +2536,7 @@ static inline float mynn_initialize_powf_candidate(float x, float y)
 }
 
 template <typename Resources, typename Params>
+// Length laws: 1 is WRF nonlocal, 2 is GSD 4.1, 3 is WRF local.
 static inline void mynn_initialize_column(
     constant Resources &r, constant Params &q, uint column, int mixlength)
 {
@@ -2572,7 +2673,11 @@ static inline void mynn_initialize_column(
     }
     const float qkemin = mixlength == 2 ? 1.0e-12f : 1.0e-3f;
     for (int iteration = 0; iteration < 5; ++iteration) {
-        if (mixlength == 2) {
+        if (mixlength == 3) {
+            mynn_mym_length_local(r.dz, r.zw, r.qke, dtv, r.edmf_w,
+                r.edmf_a, rmo, 0.0f, zi, psig, r.el, qkw, qtke,
+                uint(q.ncol), nz, column);
+        } else if (mixlength == 2) {
             mynn_mym_length_gsd41(r.dz, r.zw, r.qke, dtv, r.theta,
                 nullptr, nullptr, nullptr, nullptr, nullptr,
                 r.el, qkw, qtke, thetaw, rmo, 0.0f, 0.0f, zi, psig,
@@ -2648,7 +2753,7 @@ kernel void mynn_initialize_default_columns(
     constant MynnInitializeDefaultColumnsParams &q [[buffer(1)]],
     uint column [[thread_position_in_grid]])
 {
-    mynn_initialize_column(r, q, column, 1);
+    mynn_initialize_column(r, q, column, q.mixlength == 2 ? 3 : 1);
 }
 
 kernel void mynn_initialize_gsd41_columns(
