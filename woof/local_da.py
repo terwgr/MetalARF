@@ -482,7 +482,17 @@ def price_rung(request: Request, rung: dict, exp, streams, *, forcing_interval_s
     analysis_seconds = (ncells / (71829. / 2) * solve_scale + 15. * max(1, enabled)) / request.card.speed_factor
     per_sim = pace.wall_seconds_high / exp.run_seconds / request.card.speed_factor
     cycle_seconds = rung['members'] * rung['cadence_seconds'] * per_sim + analysis_seconds
-    return dict(forecast_peak_bytes=phases.peak_envelope_bytes,
+    forecast_peak = int(phases.peak_envelope_bytes)
+    if getattr(request, 'radar_tten', False):
+        # The leg's heating (woof.local_da_runtime._LegRadarTten): the
+        # cycle tool's held figure plus the second, no-coverage slot, and
+        # the builder's volumes, counted on top of the forecast as an
+        # upper bound (they are freed before the first step).
+        from woof.da.cycle_admission import (
+            RADAR_TTEN_BUILD_BYTES_PER_POINT, RADAR_TTEN_HELD_BYTES_PER_POINT)
+        forecast_peak += ncells * (RADAR_TTEN_HELD_BYTES_PER_POINT + 4
+                                   + RADAR_TTEN_BUILD_BYTES_PER_POINT)
+    return dict(forecast_peak_bytes=forecast_peak,
                 analysis_peak_bytes=analysis_peak,
                 host_peak_bytes=arrays * 2 + phases.peak_envelope_bytes + 16 * sum(Path(p).stat().st_size for p in request.obs_tables),
                 cycle_seconds=cycle_seconds,

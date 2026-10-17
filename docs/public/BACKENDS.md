@@ -82,8 +82,8 @@ Other commands select Metal the same way:
   and microphysics, and is refused before anything is fetched otherwise;
   continuous windows (`--continuous`) refuse it for now. The forcing stays
   attached for the whole leg, so HRRR's microphysics clamp (`mp_tend_lim`,
-  0.07 K/s) applies past the heated cadence too, and its two slots (a few
-  state-sized arrays) are not in the plan's memory price. Each member
+  0.07 K/s) applies past the heated cadence too; its slots and builder volumes
+  are counted in the plan's memory price. Each member
   writes `radar-tten.json` beside its outputs. The Metal kernels follow the
   CUDA source's arithmetic operation for operation.
 - `tools/da_cycle_prepared.py --state-backend metal` runs the research

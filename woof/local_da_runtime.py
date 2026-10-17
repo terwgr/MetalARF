@@ -523,6 +523,7 @@ class _LegRadarTten:
         forcing = radar_tten.RadarTtenForcing(
             [built.slots[0], quiet], [cadence / 60., cadence / 60. + 1.],
             receipts=built.receipts, provenance=built.provenance)
+        del built, quiet  # the first forcing's own theta copy goes with it
         # A leg resumed inside itself keeps the leg's clock.
         forcing.elapsed_seconds = max(0., model_elapsed - (checkpoint_elapsed_seconds(self.restart) or 0.))
         radar_tten.attach(state, forcing, backend.exp.root.run)
