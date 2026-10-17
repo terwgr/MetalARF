@@ -100,6 +100,8 @@ def _submit(context, name: str, resources, parameters, count: int,
         )
     if count > 0x7FFFFFFF:
         raise ValueError("MYNN element count exceeds the CUDA int32 ABI")
+    from woof.physics_params import metal_mynn_parameters
+    parameters = {**parameters, **metal_mynn_parameters(name)}
     return context.submit_kernel(
         name, resources, parameters, exact_policy=False, grid_size=count)
 

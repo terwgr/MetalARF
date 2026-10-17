@@ -29145,7 +29145,7 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_pbl.cu",
       "cuda_symbol": "mynn_dmp_mf_columns",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "mynn_pbl_family",
       "name": "mynn_dmp_mf_columns",
       "parameters": [
@@ -29156,6 +29156,10 @@
         [
           "ncol",
           "int32"
+        ],
+        [
+          "edmf_entrainment",
+          "float32"
         ]
       ],
       "resources": [
@@ -30247,7 +30251,7 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_pbl.cu",
       "cuda_symbol": "mynn_initialize_default_columns",
-      "layout_version": 2,
+      "layout_version": 3,
       "module": "mynn_pbl_family",
       "name": "mynn_initialize_default_columns",
       "parameters": [
@@ -30266,6 +30270,18 @@
         [
           "mixlength",
           "int32"
+        ],
+        [
+          "prandtl",
+          "float32"
+        ],
+        [
+          "cns",
+          "float32"
+        ],
+        [
+          "alp1",
+          "float32"
         ]
       ],
       "resources": [
@@ -30540,7 +30556,7 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_pbl.cu",
       "cuda_symbol": "mynn_mym_level2_column",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "mynn_pbl_family",
       "name": "mynn_level2_columns",
       "parameters": [
@@ -30551,6 +30567,10 @@
         [
           "ncol",
           "int32"
+        ],
+        [
+          "prandtl",
+          "float32"
         ]
       ],
       "resources": [
@@ -30720,13 +30740,17 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_pbl.cu",
       "cuda_symbol": "mynn_level2_pairs",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "mynn_pbl_family",
       "name": "mynn_level2_pairs",
       "parameters": [
         [
           "n",
           "int32"
+        ],
+        [
+          "prandtl",
+          "float32"
         ]
       ],
       "resources": [
@@ -30952,7 +30976,7 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_pbl.cu",
       "cuda_symbol": "mynn_mixlength_default_columns",
-      "layout_version": 2,
+      "layout_version": 3,
       "module": "mynn_pbl_family",
       "name": "mynn_mixlength_default_columns",
       "parameters": [
@@ -30967,6 +30991,14 @@
         [
           "mixlength",
           "int32"
+        ],
+        [
+          "cns",
+          "float32"
+        ],
+        [
+          "alp1",
+          "float32"
         ]
       ],
       "resources": [
@@ -31859,7 +31891,7 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_surface.cu",
       "cuda_symbol": "mynn_surface_column",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "mynn_surface_family",
       "name": "mynn_surface_column",
       "parameters": [
@@ -31886,6 +31918,10 @@
         [
           "gsl_wrf39",
           "int32"
+        ],
+        [
+          "czil",
+          "float32"
         ]
       ],
       "resources": [
@@ -33271,7 +33307,7 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_pbl.cu",
       "cuda_symbol": "mynn_turbulence_default_interfaces",
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "mynn_pbl_family",
       "name": "mynn_turbulence_default_interfaces",
       "parameters": [
@@ -33282,6 +33318,10 @@
         [
           "count",
           "int32"
+        ],
+        [
+          "prandtl",
+          "float32"
         ]
       ],
       "resources": [
@@ -127333,10 +127373,14 @@
         [
           "ncol",
           "int32"
+        ],
+        [
+          "edmf_entrainment",
+          "float32"
         ]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": [
         "default"
       ]
@@ -128072,10 +128116,22 @@
         [
           "initialize_qke",
           "int32"
+        ],
+        [
+          "prandtl",
+          "float32"
+        ],
+        [
+          "cns",
+          "float32"
+        ],
+        [
+          "alp1",
+          "float32"
         ]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": [
         "default"
       ]
@@ -150526,7 +150582,7 @@
       ],
       "cuda_source": null,
       "cuda_symbol": null,
-      "layout_version": 1,
+      "layout_version": 2,
       "module": "mynn_pbl_family",
       "name": "mynn_turbulence_gsd41_interfaces",
       "parameters": [
@@ -150537,6 +150593,10 @@
         [
           "count",
           "int32"
+        ],
+        [
+          "prandtl",
+          "float32"
         ]
       ],
       "resources": [
@@ -152746,6 +152806,78 @@
           "int32"
         ]
       ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "scale_physics_param_values",
+      "module": "physics_params_family",
+      "source": "woof/metal/shaders/physics_params_family.metal",
+      "cuda_source": "woof/core/kernels/physics_params.cu",
+      "cuda_symbol": "scale_physics_param_values",
+      "resources": [
+        [
+          "values",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "factors",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "crop_flags",
+          "int32",
+          "read"
+        ],
+        [
+          "outputs",
+          "float",
+          "read_write"
+        ],
+        [
+          "status",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "values": [
+          [
+            "count"
+          ]
+        ],
+        "factors": [
+          [
+            "count"
+          ]
+        ],
+        "crop_flags": [
+          [
+            "count"
+          ]
+        ],
+        "outputs": [
+          [
+            "count"
+          ]
+        ],
+        "status": [
+          [
+            "count"
+          ]
+        ]
+      },
       "threads_per_group": 128,
       "layout_version": 1,
       "arithmetic_policies": [

@@ -17,6 +17,8 @@ Two kinds of constant exist, each a registry row:
     default.  If an anchor does not occur exactly ``count`` times the set
     is refused: the kernel was edited and the constant no longer reaches
     the literal it names.
+    Metal passes the registered MYNN values through its precompiled
+    kernels' parameter blocks instead of rewriting shader source.
 ``table-multiplier``
     One column of one parameter table scaled for the listed categories,
     applied to the bundle AFTER its pinned-hash check (the pinned bytes are
@@ -459,6 +461,31 @@ def note_compiled(module: str) -> None:
     compiled = dict(_STATE["compiled"])
     compiled[module] = _active_sha()
     _STATE["compiled"] = compiled
+
+
+def metal_mynn_parameters(kernel: str) -> dict[str, float]:
+    """Bind registered MYNN literals to the precompiled Metal kernel ABI."""
+    parameters = {
+        "mynn_surface_column": ("czil",),
+        "mynn_level2_pairs": ("prandtl",),
+        "mynn_level2_columns": ("prandtl",),
+        "mynn_turbulence_default_interfaces": ("prandtl",),
+        "mynn_turbulence_gsd41_interfaces": ("prandtl",),
+        "mynn_initialize_default_columns": ("prandtl", "cns", "alp1"),
+        "mynn_initialize_gsd41_columns": ("prandtl", "cns", "alp1"),
+        "mynn_mixlength_default_columns": ("cns", "alp1"),
+        "mynn_dmp_mf_columns": ("edmf_entrainment",),
+        "mynn_dmp_mf_gsd41_columns": ("edmf_entrainment",),
+    }.get(kernel, ())
+    if not parameters:
+        return {}
+    # Keep the process binding identical to source-compiled backends: a
+    # declaration arriving after a default forecast has started must refuse.
+    note_compiled("mynn_surface" if kernel == "mynn_surface_column" else "mynn_pbl")
+    pset = active()
+    return {name: float(np.float32(
+        registry()["mynn." + name].default if pset is None
+        else pset.value("mynn." + name))) for name in parameters}
 
 
 def validate_kernel_sites(read_source) -> list[str]:

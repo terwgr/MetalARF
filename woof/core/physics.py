@@ -7935,7 +7935,12 @@ def _initialize_metal_sfclay_without_cupy(
             raise NotImplementedError(
                 "no-CuPy Metal RUC currently requires the nine-level WRF "
                 "soil geometry")
+        from woof.physics_params import ruc_bundle_for_forecast
+        from woof.core.ruc import load_ruc_parameters
+        from woof.metal.physics_params_family import scale_physics_param_values
         ruc_params = RucRuntimeParameters(
+            ruc_bundle_for_forecast(load_ruc_parameters,
+                lambda *args: scale_physics_param_values(state._array_module.context, *args)),
             dataset_identifier=landuse_dataset,
             seaice_albedo_default=cfg.seaice_albedo_default,
             num_soil_layers=n_soil,

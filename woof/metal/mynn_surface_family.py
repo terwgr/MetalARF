@@ -100,9 +100,11 @@ def submit_mynn_surface_layer(context, inputs: Mapping[str, object], mol,
                 "FP32 MetalArrays")
         flattened[name] = array.view((count,))
 
+    from woof.physics_params import metal_mynn_parameters
     return context.submit_kernel(
         "mynn_surface_column", flattened,
         {"dx": float(np.float32(dx)), "itimestep": int(itimestep),
          "isfflx": int(isfflx), "isftcflx": int(isftcflx), "n": count,
-         "gsl_wrf39": int(variant == "gsl_wrf39")},
+         "gsl_wrf39": int(variant == "gsl_wrf39"),
+         **metal_mynn_parameters("mynn_surface_column")},
         exact_policy=False, grid_size=count)

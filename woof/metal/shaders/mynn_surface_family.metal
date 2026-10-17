@@ -266,9 +266,9 @@ static inline float mynn_zolri(
 }
 
 static inline void mynn_zilitinkevich_land(
-    float z0, float restar, thread float &zt, thread float &zq)
+    float z0, float restar, float czil, thread float &zt, thread float &zq)
 {
-    zt = z0 * mynn_sf_exp(-0.4f * 0.085f * mynn_sf_sqrt(restar));
+    zt = z0 * mynn_sf_exp(-0.4f * czil * mynn_sf_sqrt(restar));
     zt = fmin(zt, 0.75f * z0);
     zq = zt;
 }
@@ -539,7 +539,7 @@ kernel void mynn_surface_column(
     } else {
         restar = fmax(ust * z0 / visc, 0.1f);
         if (snowh >= 0.1f) mynn_andreas_snow(visc, ust, zt, zq);
-        else mynn_zilitinkevich_land(z0, restar, zt, zq);
+        else mynn_zilitinkevich_land(z0, restar, p.czil, zt, zq);
     }
 
     float zratio = z0 / zt;

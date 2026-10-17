@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "ae9c83a409baf4b23a1eadc3d0859c94af638fb4ea9b01f6e29cec1aa7df464d",
-      "size": 12636769
+      "sha256": "13e16718a431011770cfdfa1d6710e7d61038b4a972b9f0311fe0b272e194c4d",
+      "size": 12643825
     },
     "woof_exact.metallib": {
-      "sha256": "157c3ba92cdfe9dcdccdaf4ea91f0b330d7a495ba70a91970d8b2ba41204c449",
-      "size": 8139364
+      "sha256": "3da339e6710f3722938d6c22f02331255c7b351e8ed0d757ab1c44de58dd4c6e",
+      "size": 8139412
     }
   },
-  "implementation_file_count": 1147,
-  "implementation_sha256": "bd6afd8ef37f2b5f91f905c8eb248075b6dec7ca50b7968858da2f3a4c52784a",
-  "metal_inputs_sha256": "a6f239f1060455b94743755e8725527f482ad7434a71af1d50a6b7de2a58afa0",
+  "implementation_file_count": 1151,
+  "implementation_sha256": "320564c078afb0f8eb42ecc3c8175a065811e09d8435b9f3167e8e465c4aed4d",
+  "metal_inputs_sha256": "51fb3e495f745dbaf209a9c8f55506790138a3100ce35a08069890218f65bcfc",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -24,8 +24,8 @@
     "binding": "sha256-build-inputs",
     "files": {
       "tools/build_metal_backend.py": {
-        "sha256": "cebc64be3245c92780585cf8028d13e2c941e28fb95eb51dff099d3a4f6a3241",
-        "size": 92611
+        "sha256": "9d799c0112b30c3f8bd3ec5a0ae89545ed53c33cdafaaf9e998b8bb6fcc096b9",
+        "size": 92711
       },
       "tools/generate_metal_kernel_signatures.py": {
         "sha256": "828b6378afd4c24d9925d0b3ed62e5947a4633725264a07bc981132df6e286c4",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "9013f03f38a411576478fe9fb2ff20049cb9787607df9244b808569fcfdd2da9",
-        "size": 2550467
+        "sha256": "08eeed4e0076033b87b87de62eab62dcdf79cec074fb8560f76282245fecbff5",
+        "size": 2552723
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
@@ -1356,12 +1356,12 @@
         "size": 19986
       },
       "woof/metal/shaders/mynn_pbl_family.metal": {
-        "sha256": "b96feaccf8222327734c51cb9dd7d41f7e5fbb7f2a31aee56881f6d5656173c3",
-        "size": 197955
+        "sha256": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+        "size": 198039
       },
       "woof/metal/shaders/mynn_surface_family.metal": {
-        "sha256": "7e6083231994fbb752f374ec316e3de486286f8f4e306d59601a8c2484d69a77",
-        "size": 31146
+        "sha256": "65d6fb2727a6df53e617c04fad2ed0df254d82b6d3784e033c61f215d1a9217a",
+        "size": 31164
       },
       "woof/metal/shaders/nest_family.metal": {
         "sha256": "e332b07ccb888e9f1534ac9c4753978be9e4bfc5aea2029c8e529a31fcf45287",
@@ -1526,6 +1526,10 @@
       "woof/metal/shaders/physics_atmosphere_prepare.metal": {
         "sha256": "d462aa7ce811b8847c4d2acc03db5cf9e17fe37e50c923e11eb5b988890746c7",
         "size": 4082
+      },
+      "woof/metal/shaders/physics_params_family.metal": {
+        "sha256": "f45e408dbbfbf4e378ed80ef10b09eb68e7bf50d0d23e352bd26b202204858a0",
+        "size": 902
       },
       "woof/metal/shaders/pressure_power.metalh": {
         "sha256": "ab81f9f9b778f9fc4e60bf7014d2fc2a9eccdb0db970c44d18842b916a791765",
@@ -3287,6 +3291,10 @@
         "sha256": "7b732f8e97c4611b85221080e149d870290dc5ad715c962738df8e9a7f1d3be5",
         "size": 27219
       },
+      "woof/metal/signature_fragments/mynn_physics_params.json": {
+        "sha256": "540fbd78f6ece6808e623ed698ba7cc299592825475990a6a364e78c9aa702a9",
+        "size": 57025
+      },
       "woof/metal/signature_fragments/mynn_scalar_pblmix_columns.json": {
         "sha256": "5dbdbe5e93e174cb4e0bf656cf6e10084ae52d2a41539b9265414e51f6e07048",
         "size": 942
@@ -3454,6 +3462,10 @@
       "woof/metal/signature_fragments/physics_atmosphere_prepare.json": {
         "sha256": "72e53ee74fa34c4fe481735bba8321d09083110e15d8b94a486743bd61d8bece",
         "size": 2763
+      },
+      "woof/metal/signature_fragments/physics_params_family.json": {
+        "sha256": "06b9c812d9319836671b590a8b790db9fefb0f07691e682acbb78cd0d7cdfcf7",
+        "size": 1354
       },
       "woof/metal/signature_fragments/rayleigh_family.json": {
         "sha256": "408202a219552ae7cfa4df6e9b7a0ea4fbe6c4908d001d01c188c8099283d19b",
@@ -4004,6 +4016,6 @@
         "size": 296
       }
     },
-    "sha256": "a6f239f1060455b94743755e8725527f482ad7434a71af1d50a6b7de2a58afa0"
+    "sha256": "51fb3e495f745dbaf209a9c8f55506790138a3100ce35a08069890218f65bcfc"
   }
 }

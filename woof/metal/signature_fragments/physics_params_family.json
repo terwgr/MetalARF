@@ -1,0 +1,76 @@
+{
+  "kernels": [
+    {
+      "name": "scale_physics_param_values",
+      "module": "physics_params_family",
+      "source": "woof/metal/shaders/physics_params_family.metal",
+      "cuda_source": "woof/core/kernels/physics_params.cu",
+      "cuda_symbol": "scale_physics_param_values",
+      "resources": [
+        [
+          "values",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "factors",
+          "float64_bits",
+          "read"
+        ],
+        [
+          "crop_flags",
+          "int32",
+          "read"
+        ],
+        [
+          "outputs",
+          "float",
+          "read_write"
+        ],
+        [
+          "status",
+          "int32",
+          "read_write"
+        ]
+      ],
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "shapes": {
+        "values": [
+          [
+            "count"
+          ]
+        ],
+        "factors": [
+          [
+            "count"
+          ]
+        ],
+        "crop_flags": [
+          [
+            "count"
+          ]
+        ],
+        "outputs": [
+          [
+            "count"
+          ]
+        ],
+        "status": [
+          [
+            "count"
+          ]
+        ]
+      },
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

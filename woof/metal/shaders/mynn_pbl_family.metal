@@ -748,7 +748,7 @@ kernel void mynn_level2_pairs(
 {
     if (index >= uint(q.n)) return;
 
-    const float pr = 0.74f, g1 = 0.235f, b1 = 24.0f, b2 = 15.0f;
+    const float pr = q.prandtl, g1 = 0.235f, b1 = 24.0f, b2 = 15.0f;
     const float c2 = 0.729f, c3 = 0.340f, c5 = 0.2f;
     const float a1 = mynn_f32_div(
         mynn_f32_mul(b1, mynn_f32_sub(1.0f,
@@ -854,7 +854,7 @@ kernel void mynn_level2_columns(
 {
     if (column >= uint(q.ncol) || q.nz < 2) return;
     const ulong ncol = ulong(q.ncol);
-    const float pr = 0.74f, b1 = 24.0f, b2 = 15.0f, g1 = 0.235f;
+    const float pr = q.prandtl, b1 = 24.0f, b2 = 15.0f, g1 = 0.235f;
     const float c2 = 0.729f, c3 = 0.340f, c5 = 0.2f;
     const float a1 = mynn_f32_div(
         mynn_f32_mul(b1, mynn_f32_sub(1.0f, mynn_f32_mul(3.0f, g1))), 6.0f);
@@ -1134,7 +1134,7 @@ static inline void mynn_turbulence_interface(
     const ulong idx = ulong(index);
     const ulong prev = idx - ulong(ld);
 
-    const float pr = 0.74f, g1 = 0.235f, b1 = 24.0f, b2 = 15.0f;
+    const float pr = q.prandtl, g1 = 0.235f, b1 = 24.0f, b2 = 15.0f;
     const float c2 = 0.729f, c3 = 0.340f, c5 = 0.2f;
     const float a1 = mynn_f32_div(
         mynn_f32_mul(b1, mynn_f32_sub(1.0f,
@@ -2167,7 +2167,8 @@ static inline void mynn_mym_length(
     device const float *edmf_a, device float *el, device float *qkw,
     device float *qtke, device float *thetaw, device float *elblavg,
     device float *dlu, device float *dld, float rmo, float fltv,
-    float zi, float psig_bl, uint ncol, int nz, uint column)
+    float zi, float psig_bl, uint ncol, int nz, uint column,
+    float cns, float alp1)
 {
     const float gtr = mynn_f32_div(9.81f, 300.0f);
     const ulong base = ulong(column);
@@ -2215,7 +2216,7 @@ static inline void mynn_mym_length(
         ++k;
     }
     elt = mynn_f32_min2(mynn_f32_max2(mynn_f32_div(
-        mynn_f32_mul(0.23f, elt), vsc_sum), 8.0f), 400.0f);
+        mynn_f32_mul(alp1, elt), vsc_sum), 8.0f), 400.0f);
     const float vsc = mynn_gfk_powf(mynn_f32_mul(mynn_f32_mul(gtr, elt),
         mynn_f32_max2(fltv, 0.0f)), mynn_f32_div(1.0f, 3.0f));
     mynn_boulac_elblavg(zw, dz, qtke, thetaw, elblavg, dlu, dld,
@@ -2248,7 +2249,7 @@ static inline void mynn_mym_length(
         float els;
         if (rmo > 0.0f) {
             els = mynn_f32_div(mynn_f32_mul(0.4f, zwk), mynn_f32_add(1.0f,
-                mynn_f32_mul(3.5f,
+                mynn_f32_mul(cns,
                     mynn_f32_min2(mynn_f32_mul(zwk, rmo), 1.0f))));
         } else {
             els = mynn_f32_mul(mynn_f32_mul(0.4f, zwk),
@@ -2510,7 +2511,7 @@ kernel void mynn_mixlength_default_columns(
     mynn_mym_length(r.dz, r.zw, r.u, r.v, r.qke, r.dtv, r.theta,
         r.edmf_w, r.edmf_a, r.el, r.qkw, r.qtke, r.thetaw, r.elblavg,
         r.dlu, r.dld, r.rmo[column], r.fltv[column], r.zi[column],
-        r.psig_bl[column], uint(q.ncol), q.nz, column);
+        r.psig_bl[column], uint(q.ncol), q.nz, column, q.cns, q.alp1);
     }
 }
 
@@ -2560,7 +2561,7 @@ static inline void mynn_initialize_column(
     device float *pdq = r.scratch + 13 * nz * ncol;
     device float *pdc = r.scratch + 14 * nz * ncol;
     const float b1 = 24.0f, b2 = 15.0f, g1 = 0.235f;
-    const float pr = 0.74f, c2 = 0.729f, c3 = 0.340f, c5 = 0.2f;
+    const float pr = q.prandtl, c2 = 0.729f, c3 = 0.340f, c5 = 0.2f;
     const float a1 = mynn_f32_div(
         mynn_f32_mul(b1, mynn_f32_sub(1.0f, mynn_f32_mul(3.0f, g1))), 6.0f);
     const float c1 = mynn_f32_sub(g1, mynn_f32_div(1.0f,
@@ -2685,7 +2686,7 @@ static inline void mynn_initialize_column(
         } else {
             mynn_mym_length(r.dz, r.zw, r.u, r.v, r.qke, dtv, r.theta,
                 r.edmf_w, r.edmf_a, r.el, qkw, qtke, thetaw, elblavg, dlu, dld,
-                rmo, 0.0f, zi, psig, uint(q.ncol), nz, column);
+                rmo, 0.0f, zi, psig, uint(q.ncol), nz, column, q.cns, q.alp1);
         }
         for (int k = 1; k < nz; ++k) {
             const ulong idx = ulong(k) * ncol + base;
@@ -3487,7 +3488,7 @@ static inline void mynn_dmp_mf_body(constant Resources &r,
                 float e = gsd41
                     ? mynn_f32_div(0.35f, mynn_f32_mul(mynn_f32_min2(
                         mynn_f32_max2(DMP_PLUME(0, i, k - 1), 0.75f), 1.9f), len))
-                    : mynn_f32_div(0.33f, mynn_f32_mul(
+                    : mynn_f32_div(q.edmf_entrainment, mynn_f32_mul(
                         mynn_f32_min2(mynn_f32_max2(DMP_PLUME(0, i, k - 1),
                             ent_wmin), 0.9f), len));
                 e = mynn_f32_max2(e, 0.0003f);
