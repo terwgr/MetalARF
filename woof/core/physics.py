@@ -2741,7 +2741,6 @@ class PhysicsDriver:
                 or physics_reuses_pbl_composition(cfg))
             else PhysicsTendencies.zeros(
                 self.state, optional_components=composed_components))
-        self.microphysics = None
         micro_slots = dict(microphysics_scratch_slots(cfg.mp_physics))
         if micro_slots:
             surface_shape = self.state.mup.shape
@@ -2754,6 +2753,11 @@ class PhysicsDriver:
                 graupelnc=micro.get("graupelnc"),
                 graupelncv=micro.get("graupelncv"),
                 hailnc=micro.get("hailnc"), hailncv=micro.get("hailncv"))
+        else:
+            self.microphysics = MicrophysicsDiagnostics(
+                rainnc=arrays.zeros(self.state.mup.shape, dtype=DTYPE),
+                rainncv=arrays.zeros(self.state.mup.shape, dtype=DTYPE),
+                sr=arrays.zeros(self.state.mup.shape, dtype=DTYPE))
         self.microphysics_updates = 0
         (self._sr_roundoff_upper, self._sr_roundoff_max_ulps,
          self._wsm6_minor_loops) = _sr_roundoff_envelope(
@@ -2761,12 +2765,8 @@ class PhysicsDriver:
         self.refl_10cm = None
         self.rainc = (self.state.scratch(self.state.mup.shape, "cu_rainc")
                       if cfg.cu_physics else None)
-        self._pending_rainbl = (
-            self.state._array_module.zeros(
-                self.state.mup.shape, dtype=DTYPE)
-            if (int(cfg.sf_surface_physics) != 0
-                or int(cfg.cu_physics) != 0)
-            else None)
+        self._pending_rainbl = arrays.zeros(
+            self.state.mup.shape, dtype=DTYPE)
         self._morrison_validation_status = (
             self.state._array_module.zeros((1,), dtype=np.uint32)
             if self._metal_gfs_profile else None)

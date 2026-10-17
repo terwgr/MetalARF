@@ -701,6 +701,10 @@ RESTART_ONLY_DRIVER_SLOTS = frozenset({
 #: rebuilds are EXACT names only â€” a future accumulator slot under those
 #: prefixes must be classified explicitly instead of silently dropping.
 REBUILT_SCRATCH_SLOTS = frozenset({
+    # Static terrain coefficients are rebuilt when terrain drag is attached.
+    "terrain_drag_lap_hgt", "terrain_drag_ctopo", "terrain_drag_ctopo2",
+    # Metal TKE stage masses are refilled before each scalar advance.
+    "tke_mu0", "tke_mu",
     "diff1_theta_work",
     "mp_th", "mp_rho", "mp_pii", "mp_z", "mp_dz8w", "mp_z8w",
     "mp_thompson_temperature",
