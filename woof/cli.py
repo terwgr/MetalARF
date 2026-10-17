@@ -532,9 +532,6 @@ def build_parser(*, render_only: bool = False) -> argparse.ArgumentParser:
                      help="WPS metgrid directory with met_em.d0*.nc and producing namelist.input; native WOOF initialization")
     run.add_argument("--soil-source", type=Path, default=None, metavar="DIR",
                      help="WRF inputs: original met_em and Vtable directory for automatic soil-water recovery; defaults to the input directory")
-    run.add_argument("--backend", choices=("cuda", "metal"), default=None,
-                     help="state and forecast backend for --wrfinput / --met-em "
-                          "runs (default cuda)")
     run.add_argument("--rrtmg-variant", choices=("rrtmg_legacy", "rte-rrtmgp"), default=None,
                      help="WRF inputs: preserve legacy RRTMG by default; choose rte-rrtmgp to change radiation")
     run.add_argument("--vertical-grid", default=None,
@@ -867,7 +864,7 @@ def _dispatch_argv(argv: list[str] | None = None) -> int:
                 pass
         metal_verify = (args.command == "verify"
                         and getattr(args, "backend", "cuda") == "metal")
-        metal_input_run = (args.command == "run"
+        metal_input_run = (args.command in ("run", "resume", "branch")
                            and getattr(args, "backend", None) == "metal")
         if (not _spends_nothing and not metal_prepared_sim
                 and not metal_prepared_ensemble and not metal_verify
@@ -1388,10 +1385,11 @@ def _dispatch(args) -> int:
             recipe_door.refuse_unsupervised(args)
             return recipe_door.run_recipe_ensemble(args, request)
 
-    if (args.command == "run" and getattr(args, "backend", None) == "metal"
-            and args.wrfinput is None and args.met_em is None):
-        raise ValueError("woof run --backend metal runs --wrfinput or --met-em "
-                         "inputs; for a CONFIG, use woof go CONFIG --backend metal")
+    if getattr(args, "backend", None) == "metal" and (
+            getattr(args, "gpu_uuid", None) is not None
+            or getattr(args, "allow_shared_gpu", False)):
+        raise ValueError("--gpu-uuid and --allow-shared-gpu select a CUDA "
+                         "card; --backend metal runs on this Mac's GPU")
     if args.command == "run" and (args.wrfinput is not None or args.met_em is not None):
         from woof.wrfinput_forecast import run_wrf_forecast
         from woof.metem_forecast import run_metem_forecast
@@ -1471,7 +1469,10 @@ def _dispatch(args) -> int:
             from woof.config import validate_experiment_preparation
 
             validate_experiment_preparation(exp)
-            if not args.no_supervise:
+            metal = getattr(args, "backend", None) == "metal"
+            if not args.no_supervise and not metal:
+                # The supervisor locks and prices a CUDA card; a Metal
+                # run integrates in this process.
                 from woof.supervisor import supervise_from_cli
                 return supervise_from_cli(args)
             if getattr(args, "preprocess_backend", None) is not None:
@@ -1486,7 +1487,8 @@ def _dispatch(args) -> int:
                                          if getattr(args, "restart_roster", None) is not None else {})):
                 summary = runtime.run_experiment(exp, data, args.outdir,
                                                  restart=args.restart,
-                                                 health_debug=args.health_debug)
+                                                 health_debug=args.health_debug,
+                                                 state_backend=args.backend or "cuda")
             print({"experiment": exp.name, "outdir": str(args.outdir),
                    "wrfout_count": len(summary.wrfout_paths),
                    "completed_seconds": summary.completed_seconds,
@@ -1503,6 +1505,11 @@ def _dispatch(args) -> int:
                    "restarted": args.restart is not None})
         return 0
 
+    if getattr(args, "backend", None) == "metal":
+        raise ValueError(
+            f"{args.config} is a legacy [grid]/[dynamics]/[run] config, whose "
+            "frozen case path runs on CUDA only. Next: woof go CONFIG "
+            "--backend metal on the config woof domain wrote.")
     if getattr(args, "preprocess_backend", None) is not None:
         raise ValueError(
             f"--preprocess-backend pins an experiment config's preparation, "

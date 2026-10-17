@@ -132,6 +132,60 @@ def _validate_prepared_near_surface(result, met, cfg) -> Mapping[str, np.ndarray
     return MappingProxyType(validated)
 
 
+def prepared_radiation(cfg, state, origin, lat, lon, *, p_top,
+                       column_chunk=None, trace_gas_overrides=None,
+                       ozone_parent=None):
+    """The radiation adapter for a prepared state.
+
+    Every selector goes through make_radiation, including legacy RRTMG
+    and its CAM ozone routing, except modern RRTMGP on a Metal state,
+    which needs the fused no-CuPy adapter.
+    """
+    from woof.config import radiation_scheme_ids
+    from woof.core.radiation_composition import make_radiation
+    from woof.physics_compat import (
+        RRTMG_VARIANT_RTE_RRTMGP, metal_rrtmg_compatibility_supported,
+        rrtmg_variant)
+
+    radiation_pair = radiation_scheme_ids(cfg)
+    if not (getattr(state, "_metal_setup_state", False)
+            and radiation_pair in ((4, 0), (4, 4))
+            and rrtmg_variant(cfg) == RRTMG_VARIANT_RTE_RRTMGP
+            and metal_rrtmg_compatibility_supported(cfg)
+            and int(getattr(cfg, "icloud", 1)) == 1):
+        return make_radiation(
+            cfg, origin, lat, lon, p_top=p_top, column_chunk=column_chunk,
+            trace_gas_overrides=trace_gas_overrides,
+            ozone_parent=ozone_parent)
+    from woof.core.radiation_composition import trace_gas_override_status
+    from woof.core.rrtmgp import RRTMGPRadiation, coefficient_gas_names
+    from woof.core.trace_gases import trace_gas_subset
+
+    p_top_value = getattr(state, "p_top", None)
+    if state.qv is None:
+        raise ValueError("fused Metal RRTMGP construction requires state.qv")
+    if (p_top_value is None or not np.isfinite(p_top_value)
+            or float(p_top_value) <= 0.0):
+        raise ValueError(
+            "fused Metal RRTMGP construction requires finite positive p_top")
+    # Match make_radiation's selected-spectrum validation and filtering,
+    # while constructing the direct adapter required by the no-CuPy call.
+    trace_gas_override_status(cfg, trace_gas_overrides)
+    selected_gases = trace_gas_overrides
+    if trace_gas_overrides:
+        selected_gases = trace_gas_subset(
+            trace_gas_overrides, coefficient_gas_names("lw")) or None
+    options = {
+        "validation_mode": "fused",
+        "longwave": radiation_pair[0] == 4,
+        "shortwave": radiation_pair[1] == 4,
+        "trace_gas_overrides": selected_gases,
+    }
+    if column_chunk is not None:
+        options["column_chunk"] = column_chunk
+    return RRTMGPRadiation(origin, np.asarray(lat), np.asarray(lon), **options)
+
+
 def initialize_prepared_physics(
         result, cfg, met, surface, static, landuse_attrs, grid, valid_time, *,
         center_lat=None, constant_glw_wm2=None, fractional_seaice=True,
@@ -190,33 +244,7 @@ def initialize_prepared_physics(
             f"{sorted(required_attrs)}")
     state = result.state
     metal_state = bool(getattr(state, "_metal_setup_state", False))
-    metal_direct_radiation = False
     if metal_state:
-        from woof.config import radiation_scheme_ids
-        from woof.physics_compat import (
-            RRTMG_VARIANT_RTE_RRTMGP,
-            metal_rrtmg_compatibility_supported,
-            rrtmg_variant)
-
-        radiation_pair = radiation_scheme_ids(cfg)
-        metal_direct_radiation = (
-            radiation_pair in ((4, 0), (4, 4))
-            and rrtmg_variant(cfg) == RRTMG_VARIANT_RTE_RRTMGP
-            and metal_rrtmg_compatibility_supported(cfg)
-            and int(getattr(cfg, "icloud", 1)) == 1)
-        # These two checks are specific to the fused no-CuPy RRTMGP
-        # constructor below. Other selectors, including legacy RRTMG with
-        # its CAM ozone routing, are constructed by make_radiation and are
-        # admitted centrally by PhysicsDriver.
-        if metal_direct_radiation:
-            p_top_value = getattr(state, "p_top", None)
-            if state.qv is None:
-                raise ValueError(
-                    "fused Metal RRTMGP construction requires state.qv")
-            if (p_top_value is None or not np.isfinite(p_top_value)
-                    or float(p_top_value) <= 0.0):
-                raise ValueError(
-                    "fused Metal RRTMGP construction requires finite positive p_top")
         xp = state._array_module
     else:
         import cupy as cp
@@ -243,37 +271,12 @@ def initialize_prepared_physics(
     from woof.core.landuse import surface_leaf_area
     lai = surface_leaf_area(cfg, static["LAI12M"], valid_time)
     lat, lon = grid.latlon_mass()
-    from woof.core.radiation_composition import make_radiation
     radiation_origin = (valid_time if simulation_start_time is None
                         else simulation_start_time)
-    if metal_state and metal_direct_radiation:
-        from woof.core.radiation_composition import trace_gas_override_status
-        from woof.core.rrtmgp import RRTMGPRadiation, coefficient_gas_names
-        from woof.core.trace_gases import trace_gas_subset
-
-        # Match make_radiation's selected-spectrum validation and filtering,
-        # while constructing the direct adapter required by the no-CuPy call.
-        trace_gas_override_status(cfg, trace_gas_overrides)
-        selected_gases = trace_gas_overrides
-        if trace_gas_overrides:
-            selected_gases = trace_gas_subset(
-                trace_gas_overrides, coefficient_gas_names("lw")) or None
-        options = {
-            "validation_mode": "fused",
-            "longwave": radiation_pair[0] == 4,
-            "shortwave": radiation_pair[1] == 4,
-            "trace_gas_overrides": selected_gases,
-        }
-        if column_chunk is not None:
-            options["column_chunk"] = column_chunk
-        radiation = RRTMGPRadiation(
-            radiation_origin, np.asarray(lat), np.asarray(lon), **options)
-    else:
-        radiation = make_radiation(
-            cfg, radiation_origin, lat, lon, p_top=p_top,
-            column_chunk=column_chunk,
-            trace_gas_overrides=trace_gas_overrides,
-            ozone_parent=ozone_parent)
+    radiation = prepared_radiation(
+        cfg, state, radiation_origin, lat, lon, p_top=p_top,
+        column_chunk=column_chunk, trace_gas_overrides=trace_gas_overrides,
+        ozone_parent=ozone_parent)
     driver = initialize_physics(
         state, cfg, landuse=landuse, radiation=radiation, tsk=fields["TSK"],
         soil_temperature=fields["TSLB"],

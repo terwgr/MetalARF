@@ -3939,7 +3939,8 @@ def _execute_experiment_route(plan: RunPlan, *, exp, data, config_path,
             exp, data, plan.run_dir,
             restart=None if restart is None else Path(restart),
             progress_callback=observer,
-            health_debug=bool(plan.run_options.get("health_debug")))
+            health_debug=bool(plan.run_options.get("health_debug")),
+            state_backend=plan.run_options.get("state_backend") or "cuda")
     if render_plan is not None:
         _finish_render(render_plan, observer=observer)
     return {
@@ -6841,7 +6842,7 @@ ROUTES: dict[str, Route] = {
                 "this process (what `woof run CONFIG` executes)",
         run_options=frozenset(_RUN_OPTION_DEFAULTS)
         - {"data_dir", "physics_profile", "prepared_root", "wps_namelist", "supplement",
-           "state_backend", "transport", "as_posted", "late_after_minutes", "cycle"},
+           "transport", "as_posted", "late_after_minutes", "cycle"},
         execute=_execute_experiment_route),
 }
 

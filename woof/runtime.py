@@ -975,9 +975,9 @@ def _initialize_real_case_physics(
     # Diagnose the time-zero atmosphere before the first RRTMGP call.
     update_diagnostics(state, cfg.hypsometric_opt)
     lat, lon = grid.latlon_mass()
-    from woof.core.radiation_composition import make_radiation
-    radiation = make_radiation(
-        cfg, start_time, lat, lon, p_top=vertical.p_top,
+    from woof.ingest.hrrr_physics import prepared_radiation
+    radiation = prepared_radiation(
+        cfg, state, start_time, lat, lon, p_top=vertical.p_top,
         trace_gas_overrides=trace_gas_overrides,
         column_chunk=radiation_column_chunk)
     landuse = initialize_landuse(
@@ -1018,13 +1018,17 @@ def _initialize_real_case_physics(
     state_xp = getattr(state, "_array_module", None)
     metal_state = bool(getattr(state, "_metal_setup_state", False))
     if metal_state:
-        # The admitted Metal lane is no-LSM SFCLAY. These four prognostic
-        # surface fields belong to the land-surface driver, which this lane
-        # does not construct.
-        if not getattr(driver, "_metal_sfclay_only", False):
-            raise NotImplementedError(
-                "Metal real preparation currently supports only the minimal "
-                "no-LSM SFCLAY driver")
+        from woof.core.landuse import surface_snow_albedo
+        # Each land model carries its own subset of these fields.
+        for name, value in (
+                ("snoalb", lambda: surface_snow_albedo(
+                    cfg, static, driver.noah_params)),
+                ("lai", lambda: lai),
+                ("shdmin", lambda: 100.0 * static["GREENFRAC"].min(axis=0)),
+                ("shdmax", lambda: 100.0 * static["GREENFRAC"].max(axis=0))):
+            if name in driver.fields:
+                driver.fields[name][...] = state_xp.asarray(
+                    value(), dtype=np.float32)
     else:
         import cupy as cp
         from woof.core.landuse import surface_snow_albedo
@@ -1046,10 +1050,11 @@ def _initialize_real_case_physics(
                 state_xp, "__woof_metal_array_module__", False):
             raise RuntimeError("Metal state has no MetalArrayModule")
         met0 = surface_fields_to_device(initial_met, state_xp)
-        driver.fields["psfc"] = state_xp.asarray(
+        # In place, as on CUDA: the surface-layer result aliases these.
+        driver.fields["psfc"][...] = state_xp.asarray(
             initial_result.surface_pressure, dtype=state_xp.float32)
-        driver.fields["t2"] = met0["T2"]
-        driver.fields["q2"] = state_xp.asarray(
+        driver.fields["t2"][...] = met0["T2"]
+        driver.fields["q2"][...] = state_xp.asarray(
             initial_result.surface_qv, dtype=state_xp.float32)
         from woof.metal.surface_diagnostics_seed import (
             submit_surface_diagnostics_seed)
@@ -1074,10 +1079,6 @@ def _initialize_real_case_physics(
         driver.fields["v10"][...] = 0.5 * (met0["V10"][:-1]
                                             + met0["V10"][1:])
 
-    if (metal_state and getattr(cfg, "sf_surface_mosaic", 0) == 1):
-        raise NotImplementedError(
-            "Metal's minimal no-LSM SFCLAY setup does not support Noah "
-            "surface mosaics")
     if getattr(cfg, "sf_surface_mosaic", 0) == 1:
         from woof.core.noah_mosaic_door import attach_noah_mosaic_to_driver
         # initialize_landuse above runs at its own default,
@@ -1542,7 +1543,8 @@ def prepare_root_experiment_case(exp: ExperimentConfig,
     if source is None:
         return _prepare_root_experiment_case(exp, data, input_catalog=input_catalog,
             forcing_by_time=forcing_by_time, scratch_arena=scratch_arena,
-            dycore_state_workspace=dycore_state_workspace, store_request=store_request)
+            dycore_state_workspace=dycore_state_workspace, store_request=store_request,
+            state_backend=state_backend)
     catalog = _runtime_input_catalog(data) if input_catalog is None else input_catalog
     grid = (experiment_grid(exp, data) if len(exp.domains) == 1 else grids_from_projection_config(exp)[0])
     selection = GeogSelection.from_case_data(data, domain_id=exp.root.grid_id)
@@ -1551,7 +1553,8 @@ def prepare_root_experiment_case(exp: ExperimentConfig,
         store_request=store_request,
         build=lambda: _prepare_root_experiment_case(exp, data, input_catalog=catalog,
             forcing_by_time=forcing_by_time, scratch_arena=scratch_arena,
-            dycore_state_workspace=dycore_state_workspace, store_request=store_request))
+            dycore_state_workspace=dycore_state_workspace, store_request=store_request,
+            state_backend=state_backend))
 
 
 def _prepare_root_experiment_case(exp: ExperimentConfig,
@@ -1560,7 +1563,8 @@ def _prepare_root_experiment_case(exp: ExperimentConfig,
                                  forcing_by_time=None,
                                  scratch_arena=None,
                                  dycore_state_workspace=None,
-                                 store_request=None
+                                 store_request=None,
+                                 state_backend: str = "cuda"
                                  ) -> PreparedRealCase:
     """Prepare the root domain of a single- or multi-domain experiment."""
     dc = exp.root
@@ -5450,6 +5454,31 @@ def run_experiment(exp: ExperimentConfig, data: CaseDataConfig, outdir, *,
     from woof.experiment import _bind_physics_params
     exp = _bind_physics_params(exp, "woof.runtime.run_experiment")
     from woof.ensemble.runtime_context import current_session
+    if state_backend == "metal":
+        # Before any input is decoded.  Nests on this route are initialized
+        # from the decoded parent, which only the CUDA path implements.
+        if current_session() is not None:
+            raise ValueError(
+                "a [case_data] ensemble runs on CUDA only; run a Metal "
+                "ensemble through woof go CONFIG --backend metal")
+        if len(exp.domains) > 1:
+            raise ValueError(
+                "the [case_data] route builds nested domains on CUDA only; "
+                "run a nested Metal case from a prepared bundle "
+                "(woof go CONFIG --backend metal without [case_data])")
+        pinned_backend = getattr(data, "preprocess_backend", None)
+        if str(pinned_backend).strip().lower() == "cuda":
+            raise ValueError(
+                f"preprocess_backend={pinned_backend!r} "
+                "([case_data] preprocess_backend or --preprocess-backend) "
+                "selects CUDA preprocessing, which Metal state cannot use "
+                "on the single-domain or host-store route; set it to 'cpu' "
+                "or 'auto'")
+        from woof.core.physics import metal_experiment_refusals
+        refusals = metal_experiment_refusals(exp)
+        if refusals:
+            raise ValueError("this experiment is not admitted on Metal: "
+                             + "; ".join(refusals))
     ensemble = current_session()
     if ensemble is not None:
         return ensemble.run_experiment(run_experiment, exp, data,
@@ -5671,82 +5700,90 @@ def run_experiment(exp: ExperimentConfig, data: CaseDataConfig, outdir, *,
         # frees nothing while a local still names the arrays.  Byte-inert:
         # these caches memoize a pure function of immutable input bytes,
         # so the only thing a later decode of the same key loses is time.
-        if not store_direct:
-            del snapshots, catalog
-            clear_forcing_caches()
-            single_tiles, single_decision = _refine_single_streaming_plan(
-                prepared, single_tiles, single_decision, planning_machine, resident_estimate)
-        _write_initial_perturbation_receipt(
-            outdir, exp,
-            ([prepared.initial_result.initial_perturbation]
-             if exp.perturbation is not None else ()))
-        # [tiles] on the single-domain arm.  integrate_prepared_case has
-        # taken a `stepper` since the mode existed and is streaming-aware
-        # throughout -- the observers are asked of the stepper, the health
-        # arming, the UP_HELI_MAX reset and the restart restore all branch
-        # on it -- and no caller ever supplied one.  This is that caller.
-        # A domain with no tree is exactly what standalone_domain_builder
-        # is for: it is a specified-boundary ROOT, the same non-nested
-        # branch of prepared_domain_builder woof go's d01 takes.
-        # Unconfigured, make_stepper returns woof.core.dycore.step ITSELF
-        # and this run is byte-for-byte the run it always was.
-        adaptive_model = None
-        if adaptive_clock is not None:
-            adaptive_model = _model_from_prepared_single(
-                exp, prepared, adaptive_clock, adaptive_fingerprint)
-        builder = (_streaming.store_domain_builder(
-                       store_bundle, clock=(None if adaptive_model is None
-                                            else adaptive_model.root.clock))
-                   if store_direct else _streaming.standalone_domain_builder(
-                       grid_id=int(dc.grid_id)))
-        single_stepper = _streaming.make_stepper(
-            prepared.initial_result.state, prepared.cfg, single_tiles,
-            decision=single_decision, build=builder)
-        if store_direct:
-            prepared.initial_result.state._streamed_domain = single_stepper
-        if single_tiles.enabled:
-            print(single_decision.explain())
-        if adaptive_model is not None:
-            # Initialization above is the same resident or bounded host-store
-            # route. Only the configured adaptive calendar selects this executor.
-            return _run_built_experiment(
-                exp, data, outdir, adaptive_model, restart=restart,
-                progress_callback=progress_callback, health_debug=health_debug,
-                prepared_steppers={int(dc.grid_id): single_stepper},
-                prepared_decisions={int(dc.grid_id): single_decision})
-        from woof.io.history_selection import resolve
+        try:
+            if not store_direct:
+                del snapshots, catalog
+                clear_forcing_caches()
+                single_tiles, single_decision = _refine_single_streaming_plan(
+                    prepared, single_tiles, single_decision, planning_machine, resident_estimate)
+            _write_initial_perturbation_receipt(
+                outdir, exp,
+                ([prepared.initial_result.initial_perturbation]
+                 if exp.perturbation is not None else ()))
+            # [tiles] on the single-domain arm.  integrate_prepared_case has
+            # taken a `stepper` since the mode existed and is streaming-aware
+            # throughout -- the observers are asked of the stepper, the health
+            # arming, the UP_HELI_MAX reset and the restart restore all branch
+            # on it -- and no caller ever supplied one.  This is that caller.
+            # A domain with no tree is exactly what standalone_domain_builder
+            # is for: it is a specified-boundary ROOT, the same non-nested
+            # branch of prepared_domain_builder woof go's d01 takes.
+            # Unconfigured, make_stepper returns woof.core.dycore.step ITSELF
+            # and this run is byte-for-byte the run it always was.
+            adaptive_model = None
+            if adaptive_clock is not None:
+                adaptive_model = _model_from_prepared_single(
+                    exp, prepared, adaptive_clock, adaptive_fingerprint)
+            builder = (_streaming.store_domain_builder(
+                           store_bundle, clock=(None if adaptive_model is None
+                                                else adaptive_model.root.clock))
+                       if store_direct else _streaming.standalone_domain_builder(
+                           grid_id=int(dc.grid_id)))
+            single_stepper = _streaming.make_stepper(
+                prepared.initial_result.state, prepared.cfg, single_tiles,
+                decision=single_decision, build=builder)
+            if store_direct:
+                prepared.initial_result.state._streamed_domain = single_stepper
+            if single_tiles.enabled:
+                print(single_decision.explain())
+            if adaptive_model is not None:
+                # Initialization above is the same resident or bounded host-store
+                # route. Only the configured adaptive calendar selects this executor.
+                return _run_built_experiment(
+                    exp, data, outdir, adaptive_model, restart=restart,
+                    progress_callback=progress_callback, health_debug=health_debug,
+                    prepared_steppers={int(dc.grid_id): single_stepper},
+                    prepared_decisions={int(dc.grid_id): single_decision})
+            from woof.io.history_selection import resolve
 
-        from woof.simulated_radar import run_with_radar
-        summary = run_with_radar(
-            integrate_prepared_case, outdir, prepared, start_time=exp.start_time,
-            radar_options=exp.simulated_radar, radar_outdir=outdir,
-            output_title=data.output_title, domain_id=data.output_domain,
-            run_seconds=exp.run_seconds,
-            history_interval_s=dc.history_interval_s,
-            history_selection=resolve(exp.output, dc.output),
-            history_begin_s=dc.history_begin_s, history_end_s=dc.history_end_s,
-            restart_interval_s=exp.restart_interval_s,
-            auto_epssm=exp.auto_epssm,
-            restart_path=restart, progress_callback=progress_callback,
-            health_debug=health_debug, feedback=experimental_feedback,
-            stepper=single_stepper)
-        _finalizing_progress(progress_callback, "provenance-receipts")
-        _write_feedback_provenance_receipt(
-            outdir, exp, resumed=restart is not None)
-        # The fixed loop carries hashes captured before frame publication.
-        frame_records = (list(summary.frame_records) if summary.frame_records else
-                         _frame_records(summary.wrfout_paths,
-                                        progress_callback=progress_callback))
-        _finalizing_progress(progress_callback, "run-capsule")
-        _, floor_receipts = _emit_front_door_capsule(
-            outdir, emission_site="runtime.run_experiment:single-domain",
-            exp=exp, data=data, wrfout_paths=summary.wrfout_paths,
-            trajectory_digest=summary.trajectory_digest, io_mode="history",
-            frame_records=frame_records,
-            prepared_cases={int(dc.grid_id): prepared})
-        return dataclass_replace(
-            summary, frame_records=tuple(frame_records),
-            moisture_floor_receipts=floor_receipts or None)
+            from woof.simulated_radar import run_with_radar
+            summary = run_with_radar(
+                integrate_prepared_case, outdir, prepared, start_time=exp.start_time,
+                radar_options=exp.simulated_radar, radar_outdir=outdir,
+                output_title=data.output_title, domain_id=data.output_domain,
+                run_seconds=exp.run_seconds,
+                history_interval_s=dc.history_interval_s,
+                history_selection=resolve(exp.output, dc.output),
+                history_begin_s=dc.history_begin_s, history_end_s=dc.history_end_s,
+                restart_interval_s=exp.restart_interval_s,
+                auto_epssm=exp.auto_epssm,
+                restart_path=restart, progress_callback=progress_callback,
+                health_debug=health_debug, feedback=experimental_feedback,
+                stepper=single_stepper)
+            _finalizing_progress(progress_callback, "provenance-receipts")
+            _write_feedback_provenance_receipt(
+                outdir, exp, resumed=restart is not None)
+            # The fixed loop carries hashes captured before frame publication.
+            frame_records = (list(summary.frame_records) if summary.frame_records else
+                             _frame_records(summary.wrfout_paths,
+                                            progress_callback=progress_callback))
+            _finalizing_progress(progress_callback, "run-capsule")
+            _, floor_receipts = _emit_front_door_capsule(
+                outdir, emission_site="runtime.run_experiment:single-domain",
+                exp=exp, data=data, wrfout_paths=summary.wrfout_paths,
+                trajectory_digest=summary.trajectory_digest, io_mode="history",
+                frame_records=frame_records,
+                prepared_cases={int(dc.grid_id): prepared})
+            return dataclass_replace(
+                summary, frame_records=tuple(frame_records),
+                moisture_floor_receipts=floor_receipts or None)
+        finally:
+            # The prepared state owns the one Metal context this run
+            # created; close it once the run has finished or failed.
+            metal_arrays = getattr(prepared.initial_result.state,
+                                   "_array_module", None)
+            if getattr(metal_arrays, "__woof_metal_array_module__", False):
+                metal_arrays.context.close()
 
     _preparation_progress(progress_callback, "build-domain-tree")
     from woof.core.model import build_experiment

@@ -2864,6 +2864,10 @@ def register_cli(subparsers: argparse._SubParsersAction,
         # time-lagged or multi-model ensemble.
         add_recipe_arguments(run)
     run.add_argument(
+        "--backend", choices=("cuda", "metal"), default=None,
+        help="state and forecast backend (default cuda); a Metal run "
+             "integrates in this process, without the CUDA supervisor")
+    run.add_argument(
         "--no-supervise", action="store_true",
         help="run the experiment in this process (escape hatch; disables "
              "fresh-process recovery and exclusive-GPU supervision)")

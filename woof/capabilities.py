@@ -141,6 +141,7 @@ NO_METAL_ROUTE = "  CUDA does not run on this Mac; this command has no Metal rou
 #: reader at it.
 METAL_DOORS = frozenset(
     ("woof go", "woof ensemble", "woof sim", "woof verify",
+     "woof run", "woof resume", "woof branch",
      "woof warm-kernels"))
 
 

@@ -4226,14 +4226,14 @@ def _registered_launch(args, *, config: Path, payload: dict) -> int:
 
     prepared_root = getattr(args, "prepared_root", None)
     declared_inputs = "case_data" in payload and prepared_root is None
-    if declared_inputs and getattr(args, "backend", None) == "metal":
-        # The experiment route integrates through CUDA only; without this
-        # the plan refused state_backend as an unknown key.
+    if (declared_inputs and getattr(args, "backend", None) == "metal"
+            and (len(payload.get("domain") or ()) > 1 or "ensemble" in payload)):
         raise GoRefusal(
-            "This config names its input files in [case_data], and that route "
-            "runs on CUDA only. Next: remove [case_data] so woof go fetches and "
-            "prepares the case itself, or pass --prepared-root with a bundle "
-            "from woof prep --state-backend metal.")
+            "This config names its input files in [case_data] and nests "
+            "domains or declares an ensemble; that route builds nests and "
+            "members on CUDA only. Next: remove [case_data] so woof go "
+            "fetches and prepares the case itself, or pass --prepared-root "
+            "with a bundle from woof prep --state-backend metal.")
     if declared_inputs and args.data_dir is not None:
         raise GoRefusal(
             "This config names its input files directly, so --data-dir is unused. "
