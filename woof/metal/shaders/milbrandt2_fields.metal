@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#include "pressure_power.metalh"
 #include "milbrandt2_prepare_bindings.metalh"
 #include "milbrandt2_finish_bindings.metalh"
 
@@ -20,7 +21,7 @@ kernel void milbrandt2_prepare(
         const int id = k * plane + int(col);
         const int thb_id = p.thb_3d != 0 ? id : k;
         const float full_theta = r.thb[thb_id] + r.thp[id];
-        const float exner = pow(r.p[id] / p.p0, p.rcp);
+        const float exner = fp32_pressure_power(r.p[id], p.p0, p.rcp);
         r.theta[id] = full_theta;
         r.pii[id] = exner;
         r.temperature[id] = full_theta * exner;

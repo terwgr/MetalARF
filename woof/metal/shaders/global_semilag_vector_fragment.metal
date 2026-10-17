@@ -1,6 +1,7 @@
 // FP64 Cartesian wind and full-level rate for the default Global SL route.
 #include <metal_stdlib>
 #include "soft_binary64.metalh"
+#include "soft_libm64.metalh"
 #include "global_semilag_cartesian_wind_fragment_bindings.metalh"
 #include "global_semilag_level_rate_fragment_bindings.metalh"
 #include "global_semilag_level_rate_extrapolate_fragment_bindings.metalh"
@@ -113,10 +114,8 @@ kernel void global_semilag_thermodynamics_fragment(
     constant GlobalSemilagThermodynamicsFragmentParams &p [[buffer(1)]],
     uint tid [[thread_position_in_grid]]) {
     if (tid >= uint(p.count)) return;
-    const float pressure = as_type<float>(
-        soft64_to_f32_bits(r.pressure_full[tid]));
-    const float exner_float = pow(pressure / 100000.0f, 0.2857142857142857f);
-    const ulong exner = soft64_from_f32_bits(as_type<uint>(exner_float));
+    const ulong normalized = soft64_div(r.pressure_full[tid], 0x40f86a0000000000ul);
+    const ulong exner = soft64_plm_pow(normalized, 0x3fd24b795eda4351ul);
     const ulong temperature = soft64_mul(r.theta[tid], exner);
     ulong condensate = soft64_add(r.qc[tid], r.qr[tid]);
     condensate = soft64_add(condensate, r.qi[tid]);

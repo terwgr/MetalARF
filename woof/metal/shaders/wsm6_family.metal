@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#include "pressure_power.metalh"
 #include "wsm6_column_bindings.metalh"
 
 using namespace metal;
@@ -698,7 +699,7 @@ kernel void wsm6_prepare(
         r.theta[id] = full_theta;
         r.h_diabatic[id] = full_theta;
         r.den[id] = 1.0f / r.alt[id];
-        r.pii[id] = pow(r.p[id] / p.p0, p.rcp);
+        r.pii[id] = fp32_pressure_power(r.p[id], p.p0, p.rcp);
         const int next = id + plane;
         const int next_phb = p.phb_3d ? next : k + 1;
         const float upper = (r.phb[next_phb] + r.php[next]) / p.gravity;

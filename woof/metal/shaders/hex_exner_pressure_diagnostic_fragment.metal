@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#include "pressure_power.metalh"
 #include "hex_exner_pressure_diagnostic_bindings.metalh"
 
 using namespace metal;
@@ -16,7 +17,7 @@ kernel void hex_exner_pressure_diagnostic(
     const float argument =
         r.zz[level] * q.rgas_over_reference_pressure * r.rho_theta[gid];
     if (argument <= 0.0f) return;
-    const float exner = pow(argument, q.exner_exponent);
+    const float exner = fp32_pressure_power(argument, 1.0f, q.exner_exponent);
     r.exner[gid] = exner;
     r.pressure[gid] = r.zz[level] * q.rgas * r.rho_theta[gid] * exner;
 }

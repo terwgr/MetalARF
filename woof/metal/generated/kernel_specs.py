@@ -679,7 +679,7 @@ GLOBAL_SEMILAG_CARTESIAN_WIND_FRAGMENT_SHAPES = (('coslat', (('any_1d',),)), ('c
 GLOBAL_SEMILAG_CARTESIAN_WIND_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlat', 'ctypes.c_int32'), ('nlon', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_CARTESIAN_WIND_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_CARTESIAN_WIND_FRAGMENT_LAYOUT_HASH = '7b31838e419b455cea1f685a57c7bb2a278054d1ba47996aeee2fc73e333efcf'
-GLOBAL_SEMILAG_CARTESIAN_WIND_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_CARTESIAN_WIND_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_DEPARTURE_FRAGMENT_RESOURCES = (('wind_vx', 'float64_bits', 'read'), ('wind_vy', 'float64_bits', 'read'), ('wind_vz', 'float64_bits', 'read'), ('wind_level', 'float64_bits', 'read'), ('extrapolated_vx', 'float64_bits', 'read'), ('extrapolated_vy', 'float64_bits', 'read'), ('extrapolated_vz', 'float64_bits', 'read'), ('extrapolated_level', 'float64_bits', 'read'), ('axis_x', 'float64_bits', 'read'), ('axis_y', 'float64_bits', 'read'), ('axis_z', 'float64_bits', 'read'), ('lat_ext', 'float64_bits', 'read'), ('mlut', 'int32', 'read'), ('rowoff', 'int32', 'read'), ('rowshift', 'int32', 'read'), ('dt', 'float64_bits', 'read'), ('radius', 'float64_bits', 'read'), ('inv_dlam', 'float64_bits', 'read'), ('lut_scale', 'float64_bits', 'read'), ('xi', 'float64_bits', 'read_write'), ('phi', 'float64_bits', 'read_write'), ('departure_level', 'float64_bits', 'read_write'), ('move_m', 'float64_bits', 'read_write'), ('move_k', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_DEPARTURE_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -711,7 +711,7 @@ GLOBAL_SEMILAG_LEVEL_RATE_EXTRAPOLATE_FRAGMENT_SHAPES = (('current', (('any_1d',
 GLOBAL_SEMILAG_LEVEL_RATE_EXTRAPOLATE_FRAGMENT_PARAM_FIELDS = [('count', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_LEVEL_RATE_EXTRAPOLATE_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_LEVEL_RATE_EXTRAPOLATE_FRAGMENT_LAYOUT_HASH = '5683db4cc95d938e58babb007a150ca0cf0c324dbfa761d4dc29c26b81e94e30'
-GLOBAL_SEMILAG_LEVEL_RATE_EXTRAPOLATE_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_LEVEL_RATE_EXTRAPOLATE_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_LEVEL_RATE_FRAGMENT_RESOURCES = (('omega_half', 'float64_bits', 'read'), ('dp', 'float64_bits', 'read'), ('level_rate', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_LEVEL_RATE_FRAGMENT_ACCESS = ('read', 'read', 'read_write')
@@ -719,7 +719,7 @@ GLOBAL_SEMILAG_LEVEL_RATE_FRAGMENT_SHAPES = (('dp', (('any_1d',),)), ('level_rat
 GLOBAL_SEMILAG_LEVEL_RATE_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlat', 'ctypes.c_int32'), ('nlon', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_LEVEL_RATE_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_LEVEL_RATE_FRAGMENT_LAYOUT_HASH = '3fc6e5da8d69898585ba93e0b6a0e88cac6b8f0d64422c85e2abe7266e08f596'
-GLOBAL_SEMILAG_LEVEL_RATE_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_LEVEL_RATE_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_LIPSCHITZ_FRAGMENT_RESOURCES = (('vx', 'float64_bits', 'read'), ('vy', 'float64_bits', 'read'), ('vz', 'float64_bits', 'read'), ('rate', 'float64_bits', 'read'), ('lat_ext', 'float64_bits', 'read'), ('inv_x', 'float64_bits', 'read'), ('inv_y', 'float64_bits', 'read'), ('dlam', 'float64_bits', 'read'), ('vx_dx', 'float64_bits', 'read_write'), ('vx_dy', 'float64_bits', 'read_write'), ('vx_dk', 'float64_bits', 'read_write'), ('vy_dx', 'float64_bits', 'read_write'), ('vy_dy', 'float64_bits', 'read_write'), ('vy_dk', 'float64_bits', 'read_write'), ('vz_dx', 'float64_bits', 'read_write'), ('vz_dy', 'float64_bits', 'read_write'), ('vz_dk', 'float64_bits', 'read_write'), ('rate_dx', 'float64_bits', 'read_write'), ('rate_dy', 'float64_bits', 'read_write'), ('rate_dk', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_LIPSCHITZ_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1015,7 +1015,7 @@ HEX_EXNER_PRESSURE_DIAGNOSTIC_SHAPES = (('exner', (('nlev', 'ncells'),)), ('pres
 HEX_EXNER_PRESSURE_DIAGNOSTIC_PARAM_FIELDS = [('nlev', 'ctypes.c_int32'), ('ncells', 'ctypes.c_int32'), ('rgas_over_reference_pressure', 'ctypes.c_float'), ('exner_exponent', 'ctypes.c_float'), ('rgas', 'ctypes.c_float')]
 HEX_EXNER_PRESSURE_DIAGNOSTIC_THREADS_PER_GROUP = 128
 HEX_EXNER_PRESSURE_DIAGNOSTIC_LAYOUT_HASH = 'b9d4c3c3f00f7ecbe8089057dd6a01fecf321f37cdd9ac9f4cdbbc642055a6f7'
-HEX_EXNER_PRESSURE_DIAGNOSTIC_SHADER_HASH = '8f9097a51f6c95844fde46fe828a0e58f0f697334fee2325027fd9dfdeafbf0e'
+HEX_EXNER_PRESSURE_DIAGNOSTIC_SHADER_HASH = '1a450bb1705a636ed9514fc2ee79586b30f5e7638862d3e77a59abbfbfe468b7'
 
 HEX_FCT_APPLY_FRAGMENT_RESOURCES = (('mass', 'float', 'read'), ('target_density', 'float', 'read'), ('horizontal_residual', 'float', 'read'), ('vertical_residual', 'float', 'read'), ('scale_in', 'float', 'read'), ('scale_out', 'float', 'read'), ('rdnw', 'float', 'read'), ('edges_on_cell', 'int32', 'read'), ('n_edges_on_cell', 'int32', 'read'), ('edge_signs', 'float', 'read'), ('area_cell', 'float', 'read'), ('inv_area_cell', 'float', 'read'), ('updated', 'float', 'read_write'))
 HEX_FCT_APPLY_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -1391,7 +1391,7 @@ MILBRANDT2_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('pii', (('nz
 MILBRANDT2_FINISH_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('no_mp_heating', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float')]
 MILBRANDT2_FINISH_THREADS_PER_GROUP = 128
 MILBRANDT2_FINISH_LAYOUT_HASH = 'd3a062fddc5aefc4eebcc58264ee53063e73ef9d4e908b716d2ea44800b2f770'
-MILBRANDT2_FINISH_SHADER_HASH = '8932b297c0b165ee03b7560fe646ee6e24aa05ee76e5cff44a357100c81b13ee'
+MILBRANDT2_FINISH_SHADER_HASH = '62a4fb43baff511afb56221d450985902d3af03369091d41f051adecee05a8c3'
 
 MILBRANDT2_GEOMETRY_RESOURCES = (('pres', 'float', 'read'), ('psfc', 'float', 'read'), ('DE', 'float', 'read'), ('DZ', 'float', 'read_write'), ('iDZ', 'float', 'read_write'))
 MILBRANDT2_GEOMETRY_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
@@ -1415,7 +1415,7 @@ MILBRANDT2_PREPARE_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('p', (('nz'
 MILBRANDT2_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nzi', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 MILBRANDT2_PREPARE_THREADS_PER_GROUP = 128
 MILBRANDT2_PREPARE_LAYOUT_HASH = 'd843f8f212c7367e64047b8aa6e2c385abba7229453c125f5616ba39bf5f4eff'
-MILBRANDT2_PREPARE_SHADER_HASH = '8932b297c0b165ee03b7560fe646ee6e24aa05ee76e5cff44a357100c81b13ee'
+MILBRANDT2_PREPARE_SHADER_HASH = '62a4fb43baff511afb56221d450985902d3af03369091d41f051adecee05a8c3'
 
 MILBRANDT2_SEDIMENT_256_RESOURCES = (('T', 'float', 'read'), ('Q', 'float', 'read_write'), ('QC', 'float', 'read_write'), ('QR', 'float', 'read_write'), ('QI', 'float', 'read_write'), ('QN', 'float', 'read_write'), ('QG', 'float', 'read_write'), ('QH', 'float', 'read_write'), ('NC', 'float', 'read_write'), ('NR', 'float', 'read_write'), ('NY', 'float', 'read_write'), ('NN', 'float', 'read_write'), ('NG', 'float', 'read_write'), ('NH', 'float', 'read_write'), ('DE', 'float', 'read'), ('iDE', 'float', 'read'), ('DZ', 'float', 'read'), ('iDZ', 'float', 'read'), ('gamfact', 'float', 'read'), ('rainnc', 'float', 'read_write'), ('rainncv', 'float', 'read_write'), ('snownc', 'float', 'read_write'), ('snowncv', 'float', 'read_write'), ('graupelnc', 'float', 'read_write'), ('graupelncv', 'float', 'read_write'), ('hailnc', 'float', 'read_write'), ('hailncv', 'float', 'read_write'), ('sr', 'float', 'read_write'), ('ck', 'float', 'read'))
 MILBRANDT2_SEDIMENT_256_ACCESS = ('read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read')
@@ -2039,7 +2039,7 @@ NSSL2_RADIUS_MICRONS_SHAPES = (('cloud', (('nz', 'ny', 'nx'),)), ('ice', (('nz',
 NSSL2_RADIUS_MICRONS_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 NSSL2_RADIUS_MICRONS_THREADS_PER_GROUP = 256
 NSSL2_RADIUS_MICRONS_LAYOUT_HASH = 'b696fec9f64a2f72c75473060ec4cfc4a307d6b5ae6b7bcc87368f77dfb6c7f0'
-NSSL2_RADIUS_MICRONS_SHADER_HASH = '43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e'
+NSSL2_RADIUS_MICRONS_SHADER_HASH = 'ddf78404fddd5161b471111f5c0c85e68d4c8684f6c30563e36a7153938ca421'
 
 NSSL2_RUNTIME_FINISH_RESOURCES = (('theta', 'float', 'read'), ('heating', 'float', 'read_write'), ('theta_perturbation', 'float', 'read_write'))
 NSSL2_RUNTIME_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -2047,7 +2047,7 @@ NSSL2_RUNTIME_FINISH_SHAPES = (('heating', (('nz', 'ny', 'nx'),)), ('theta', (('
 NSSL2_RUNTIME_FINISH_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float'), ('no_mp_heating', 'ctypes.c_int32')]
 NSSL2_RUNTIME_FINISH_THREADS_PER_GROUP = 256
 NSSL2_RUNTIME_FINISH_LAYOUT_HASH = '5999a158a76a582f1a1273903dff52728968e0ac994493a1ae2aee534842aaf1'
-NSSL2_RUNTIME_FINISH_SHADER_HASH = '43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e'
+NSSL2_RUNTIME_FINISH_SHADER_HASH = 'ddf78404fddd5161b471111f5c0c85e68d4c8684f6c30563e36a7153938ca421'
 
 NSSL2_RUNTIME_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('alt', 'float', 'read'), ('pressure', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('theta', 'float', 'read_write'), ('rho', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 NSSL2_RUNTIME_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -2055,7 +2055,7 @@ NSSL2_RUNTIME_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('dz', (('nz', '
 NSSL2_RUNTIME_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 NSSL2_RUNTIME_PREPARE_THREADS_PER_GROUP = 256
 NSSL2_RUNTIME_PREPARE_LAYOUT_HASH = '58feb3c6888ecc2260a1017a578d8b1f0aad494f4c95f2c7fc13f88f1877a8ea'
-NSSL2_RUNTIME_PREPARE_SHADER_HASH = '43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e'
+NSSL2_RUNTIME_PREPARE_SHADER_HASH = 'ddf78404fddd5161b471111f5c0c85e68d4c8684f6c30563e36a7153938ca421'
 
 NSSL2_SEDIMENT_ALL_256_RESOURCES = (('air_density', 'float', 'read'), ('temperature_k', 'float', 'read'), ('state', 'float', 'read_write'), ('dz', 'float', 'read'), ('ignored_accumulator', 'float', 'read_write'), ('category_export', 'float', 'read_write'))
 NSSL2_SEDIMENT_ALL_256_ACCESS = ('read', 'read', 'read_write', 'read', 'read_write', 'read_write')
@@ -2487,7 +2487,7 @@ REFL10CM_KESSLER_CELL_SHAPES = (('p', (('nz', 'ny', 'nx'),)), ('qr', (('nz', 'ny
 REFL10CM_KESSLER_CELL_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 REFL10CM_KESSLER_CELL_THREADS_PER_GROUP = 256
 REFL10CM_KESSLER_CELL_LAYOUT_HASH = '6f2c2ec649ced58008679d0e36fa0cb774c26ddbeb843bc56cf1ecefc799a3b5'
-REFL10CM_KESSLER_CELL_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
+REFL10CM_KESSLER_CELL_SHADER_HASH = 'ab88602de624577eb57668cce5e40182cefa64e7ec3e44c6510139bd3611828a'
 
 REFL10CM_MORRISON_COLUMN_RESOURCES = (('qv', 'float', 'read'), ('qr', 'float', 'read'), ('nr', 'float', 'read'), ('qs', 'float', 'read'), ('ns', 'float', 'read'), ('qg', 'float', 'read'), ('ng', 'float', 'read'), ('theta', 'float', 'read'), ('pii', 'float', 'read'), ('p', 'float', 'read'), ('refl', 'float', 'read_write'), ('tables', 'uint64', 'read'))
 REFL10CM_MORRISON_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')
@@ -2511,7 +2511,7 @@ REFL_TEMPERATURE_PRODUCT_SHAPES = (('pii', (('nz', 'ny', 'nx'),)), ('temperature
 REFL_TEMPERATURE_PRODUCT_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 REFL_TEMPERATURE_PRODUCT_THREADS_PER_GROUP = 256
 REFL_TEMPERATURE_PRODUCT_LAYOUT_HASH = 'c4191db1c177310b76a2d69785b7cbe7a2e59463a5a12ff50dba5a70720e9ddf'
-REFL_TEMPERATURE_PRODUCT_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
+REFL_TEMPERATURE_PRODUCT_SHADER_HASH = 'ab88602de624577eb57668cce5e40182cefa64e7ec3e44c6510139bd3611828a'
 
 RK_TOTAL_MU_RESOURCES = (('mub2d', 'float', 'read'), ('mup', 'float', 'read'), ('out', 'float', 'read_write'))
 RK_TOTAL_MU_ACCESS = ('read', 'read', 'read_write')
@@ -4903,7 +4903,7 @@ WSM6_COLUMN_SHAPES = (('den', (('nz', 'ny', 'nx'),)), ('dz', (('nz', 'ny', 'nx')
 WSM6_COLUMN_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('hail_opt', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 WSM6_COLUMN_THREADS_PER_GROUP = 32
 WSM6_COLUMN_LAYOUT_HASH = '081a60e13f12430bfee93f9bcfa5e27b6d6adeec301fc8eb3d29db6ac9498afb'
-WSM6_COLUMN_SHADER_HASH = 'ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557'
+WSM6_COLUMN_SHADER_HASH = '480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550'
 
 WSM6_FINISH_RESOURCES = (('theta', 'float', 'read'), ('thp', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_FINISH_ACCESS = ('read', 'read_write', 'read_write')
@@ -4911,7 +4911,7 @@ WSM6_FINISH_SHAPES = (('h_diabatic', (('nz', 'ny', 'nx'),)), ('theta', (('nz', '
 WSM6_FINISH_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('no_mp_heating', 'ctypes.c_int32'), ('dt', 'ctypes.c_float'), ('limit', 'ctypes.c_float')]
 WSM6_FINISH_THREADS_PER_GROUP = 128
 WSM6_FINISH_LAYOUT_HASH = '9756e7a0c13f5614b5e6f84d9c852d3778a87c5ba4a5aa5a137fcc39826f914e'
-WSM6_FINISH_SHADER_HASH = 'ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557'
+WSM6_FINISH_SHADER_HASH = '480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550'
 
 WSM6_PREPARE_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('p', 'float', 'read'), ('alt', 'float', 'read'), ('phb', 'float', 'read'), ('php', 'float', 'read'), ('theta', 'float', 'read_write'), ('den', 'float', 'read_write'), ('pii', 'float', 'read_write'), ('dz', 'float', 'read_write'), ('z8w', 'float', 'read_write'), ('h_diabatic', 'float', 'read_write'))
 WSM6_PREPARE_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -4919,7 +4919,7 @@ WSM6_PREPARE_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('den', (('nz', 'ny', 'nx
 WSM6_PREPARE_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('nzi', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('phb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float'), ('gravity', 'ctypes.c_float')]
 WSM6_PREPARE_THREADS_PER_GROUP = 128
 WSM6_PREPARE_LAYOUT_HASH = '81f6fca3462936ba1f3a8ef197f0db323053cff947f4843f0d23a7c254f02245'
-WSM6_PREPARE_SHADER_HASH = 'ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557'
+WSM6_PREPARE_SHADER_HASH = '480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550'
 
 YSU_COLUMN_RESOURCES = (('u', 'float', 'read'), ('v', 'float', 'read'), ('theta', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('p', 'float', 'read'), ('p_interface', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('rthraten', 'float', 'read'), ('psfc', 'float', 'read'), ('znt', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('wspd', 'float', 'read'), ('br', 'float', 'read'), ('psim', 'float', 'read'), ('psih', 'float', 'read'), ('xland', 'float', 'read'), ('u10', 'float', 'read'), ('v10', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dtheta', 'float', 'read_write'), ('dqv', 'float', 'read_write'), ('dqc', 'float', 'read_write'), ('dqi', 'float', 'read_write'), ('exch_h', 'float', 'read_write'), ('exch_m', 'float', 'read_write'), ('hpbl', 'float', 'read_write'), ('kpbl', 'int32', 'read_write'), ('wstar', 'float', 'read_write'), ('delta', 'float', 'read_write'), ('topdown_radsum', 'float', 'read_write'), ('wstar3_2', 'float', 'read_write'), ('cloudflg', 'int32', 'read_write'), ('ws', 'float', 'read_write'), ('ctopo', 'float', 'read'), ('ctopo2', 'float', 'read'), ('u10o', 'float', 'read_write'), ('v10o', 'float', 'read_write'))
 YSU_COLUMN_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read', 'read_write', 'read_write')
@@ -5119,7 +5119,7 @@ GLOBAL_SEMILAG_ZONAL_DERIVATIVE_FRAGMENT_SHAPES = (('coefficients', (('any_1d',)
 GLOBAL_SEMILAG_ZONAL_DERIVATIVE_FRAGMENT_PARAM_FIELDS = [('truncation', 'ctypes.c_int32'), ('coefficient_count', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_ZONAL_DERIVATIVE_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_ZONAL_DERIVATIVE_FRAGMENT_LAYOUT_HASH = '13c2d4ecdb677bd295c06f416ad1f696fb08d31b41db0cf6259c9e8c44c9ef82'
-GLOBAL_SEMILAG_ZONAL_DERIVATIVE_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_ZONAL_DERIVATIVE_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_WIND_SYNTHESIS_FRAGMENT_RESOURCES = (('east', 'float64_bits', 'read'), ('north', 'float64_bits', 'read'), ('coslat', 'float64_bits', 'read'), ('radius', 'float64_bits', 'read'), ('u', 'float64_bits', 'read_write'), ('v', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_WIND_SYNTHESIS_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -5127,7 +5127,7 @@ GLOBAL_SEMILAG_WIND_SYNTHESIS_FRAGMENT_SHAPES = (('coslat', (('any_1d',),)), ('e
 GLOBAL_SEMILAG_WIND_SYNTHESIS_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlat', 'ctypes.c_int32'), ('nlon', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_WIND_SYNTHESIS_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_WIND_SYNTHESIS_FRAGMENT_LAYOUT_HASH = '20012c53025445803f364a83062f805af6176a7356372cc6f8c45502f24259a8'
-GLOBAL_SEMILAG_WIND_SYNTHESIS_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_WIND_SYNTHESIS_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_THERMODYNAMICS_FRAGMENT_RESOURCES = (('theta', 'float64_bits', 'read'), ('pressure_full', 'float64_bits', 'read'), ('qv', 'float64_bits', 'read'), ('qc', 'float64_bits', 'read'), ('qr', 'float64_bits', 'read'), ('qi', 'float64_bits', 'read'), ('qs', 'float64_bits', 'read'), ('qg', 'float64_bits', 'read'), ('temperature', 'float64_bits', 'read_write'), ('virtual_temperature', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_THERMODYNAMICS_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write')
@@ -5135,7 +5135,7 @@ GLOBAL_SEMILAG_THERMODYNAMICS_FRAGMENT_SHAPES = (('pressure_full', (('any_1d',),
 GLOBAL_SEMILAG_THERMODYNAMICS_FRAGMENT_PARAM_FIELDS = [('count', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_THERMODYNAMICS_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_THERMODYNAMICS_FRAGMENT_LAYOUT_HASH = 'bc1a2a4101b262daaff31c4b0f0ce4e2eea2bd24707899f1eccb57736e131b60'
-GLOBAL_SEMILAG_THERMODYNAMICS_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_THERMODYNAMICS_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_HYDROSTATIC_FRAGMENT_RESOURCES = (('virtual_temperature', 'float64_bits', 'read'), ('ln_full', 'float64_bits', 'read'), ('ln_ratio', 'float64_bits', 'read'), ('surface_geopotential', 'float64_bits', 'read'), ('gas_constant', 'float64_bits', 'read'), ('geopotential', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_HYDROSTATIC_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read_write')
@@ -5143,7 +5143,7 @@ GLOBAL_SEMILAG_HYDROSTATIC_FRAGMENT_SHAPES = (('gas_constant', ((1,),)), ('geopo
 GLOBAL_SEMILAG_HYDROSTATIC_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlat', 'ctypes.c_int32'), ('nlon', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_HYDROSTATIC_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_HYDROSTATIC_FRAGMENT_LAYOUT_HASH = '13552b4c1f79dc0da84d4780cca9d4b1e44a11bbeadd24a18f6fb53caa45fe98'
-GLOBAL_SEMILAG_HYDROSTATIC_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_HYDROSTATIC_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_MASS_FLUX_FRAGMENT_RESOURCES = (('dp', 'float64_bits', 'read'), ('u', 'float64_bits', 'read'), ('v', 'float64_bits', 'read'), ('flux_u', 'float64_bits', 'read_write'), ('flux_v', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_MASS_FLUX_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
@@ -5151,7 +5151,7 @@ GLOBAL_SEMILAG_MASS_FLUX_FRAGMENT_SHAPES = (('dp', (('any_1d',),)), ('flux_u', (
 GLOBAL_SEMILAG_MASS_FLUX_FRAGMENT_PARAM_FIELDS = [('count', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_MASS_FLUX_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_MASS_FLUX_FRAGMENT_LAYOUT_HASH = '5a843c9cc5a54bbc0734ce2f46f35290afc1c71c22e9d6efbd0a061deb37f66e'
-GLOBAL_SEMILAG_MASS_FLUX_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_MASS_FLUX_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_MASS_FLUX_REDUCTION_FRAGMENT_RESOURCES = (('divergence_mass', 'float64_bits', 'read'), ('ps_t', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_MASS_FLUX_REDUCTION_FRAGMENT_ACCESS = ('read', 'read_write')
@@ -5159,7 +5159,7 @@ GLOBAL_SEMILAG_MASS_FLUX_REDUCTION_FRAGMENT_SHAPES = (('divergence_mass', (('any
 GLOBAL_SEMILAG_MASS_FLUX_REDUCTION_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlat', 'ctypes.c_int32'), ('nlon', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_MASS_FLUX_REDUCTION_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_MASS_FLUX_REDUCTION_FRAGMENT_LAYOUT_HASH = '16d4386eaaca018546a3c34b632f23c432c7f184aeac1cfc9226de96a6daac11'
-GLOBAL_SEMILAG_MASS_FLUX_REDUCTION_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_MASS_FLUX_REDUCTION_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_CONTINUITY_FRAGMENT_RESOURCES = (('divergence_mass', 'float64_bits', 'read'), ('ps_t', 'float64_bits', 'read'), ('delta_b', 'float64_bits', 'read'), ('omega', 'float64_bits', 'read_write'), ('residual', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_CONTINUITY_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
@@ -5167,7 +5167,7 @@ GLOBAL_SEMILAG_CONTINUITY_FRAGMENT_SHAPES = (('delta_b', (('any_1d',),)), ('dive
 GLOBAL_SEMILAG_CONTINUITY_FRAGMENT_PARAM_FIELDS = [('nlevel', 'ctypes.c_int32'), ('nlat', 'ctypes.c_int32'), ('nlon', 'ctypes.c_int32')]
 GLOBAL_SEMILAG_CONTINUITY_FRAGMENT_THREADS_PER_GROUP = 128
 GLOBAL_SEMILAG_CONTINUITY_FRAGMENT_LAYOUT_HASH = '09048224638261ee69e35d4ae146f5c93d8d7826e7f16167d312c6c723dfa94d'
-GLOBAL_SEMILAG_CONTINUITY_FRAGMENT_SHADER_HASH = '2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881'
+GLOBAL_SEMILAG_CONTINUITY_FRAGMENT_SHADER_HASH = '8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e'
 
 GLOBAL_SEMILAG_PRESSURE_FRAGMENT_RESOURCES = (('log_surface_pressure', 'float64_bits', 'read'), ('a_half', 'float64_bits', 'read'), ('b_half', 'float64_bits', 'read'), ('surface_pressure', 'float64_bits', 'read_write'), ('pressure_half', 'float64_bits', 'read_write'), ('pressure_full', 'float64_bits', 'read_write'), ('layer_thickness', 'float64_bits', 'read_write'), ('ln_ratio', 'float64_bits', 'read_write'))
 GLOBAL_SEMILAG_PRESSURE_FRAGMENT_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -6511,7 +6511,7 @@ DA_AIR_DENSITY_SHAPES = (('alt', (('nz', 'ny', 'nx'),)), ('air_density', (('nz',
 DA_AIR_DENSITY_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32')]
 DA_AIR_DENSITY_THREADS_PER_GROUP = 256
 DA_AIR_DENSITY_LAYOUT_HASH = '1fd34a9242f7ad76cd60505b3d7b722e5dd8c516ece85d82d213e992e6da5141'
-DA_AIR_DENSITY_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
+DA_AIR_DENSITY_SHADER_HASH = 'ab88602de624577eb57668cce5e40182cefa64e7ec3e44c6510139bd3611828a'
 
 DA_OBSERVATION_THERMODYNAMICS_RESOURCES = (('thb', 'float', 'read'), ('thp', 'float', 'read'), ('pressure', 'float', 'read'), ('temperature', 'float', 'read_write'))
 DA_OBSERVATION_THERMODYNAMICS_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -6519,7 +6519,7 @@ DA_OBSERVATION_THERMODYNAMICS_SHAPES = (('thb', (('nz',), ('nz', 'ny', 'nx'))), 
 DA_OBSERVATION_THERMODYNAMICS_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('nz', 'ctypes.c_int32'), ('ny', 'ctypes.c_int32'), ('nx', 'ctypes.c_int32'), ('thb_3d', 'ctypes.c_int32'), ('p0', 'ctypes.c_float'), ('rcp', 'ctypes.c_float')]
 DA_OBSERVATION_THERMODYNAMICS_THREADS_PER_GROUP = 256
 DA_OBSERVATION_THERMODYNAMICS_LAYOUT_HASH = '6247181d839be28ba6fae82c8eccad9eb8b7d4310d6f9ab34ca20a57e5380ce5'
-DA_OBSERVATION_THERMODYNAMICS_SHADER_HASH = 'ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026'
+DA_OBSERVATION_THERMODYNAMICS_SHADER_HASH = 'ab88602de624577eb57668cce5e40182cefa64e7ec3e44c6510139bd3611828a'
 
 MILBRANDT2_ZET_RESOURCES = (('temperature', 'float', 'read'), ('pressure', 'float', 'read'), ('qr', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('qg', 'float', 'read'), ('qh', 'float', 'read'), ('nr', 'float', 'read'), ('ni', 'float', 'read'), ('ns', 'float', 'read'), ('ng', 'float', 'read'), ('nh', 'float', 'read'), ('refl', 'float', 'read_write'), ('ck', 'float', 'read'))
 MILBRANDT2_ZET_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read')

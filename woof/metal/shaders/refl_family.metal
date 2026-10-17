@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#include "pressure_power.metalh"
 using namespace metal;
 #include "refl10cm_kessler_cell_bindings.metalh"
 #include "refl_temperature_product_bindings.metalh"
@@ -14,7 +15,7 @@ kernel void da_observation_thermodynamics(
     if (idx >= uint(p.n)) return;
     const uint k = idx / uint(p.ny * p.nx);
     const float theta = r.thb[p.thb_3d ? idx : k] + r.thp[idx];
-    const float exner = pow(r.pressure[idx] / p.p0, p.rcp);
+    const float exner = fp32_pressure_power(r.pressure[idx], p.p0, p.rcp);
     r.temperature[idx] = theta * exner;
 }
 

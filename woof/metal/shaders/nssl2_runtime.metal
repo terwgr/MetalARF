@@ -1,4 +1,5 @@
 #include <metal_stdlib>
+#include "pressure_power.metalh"
 using namespace metal;
 #include "nssl2_runtime_prepare_bindings.metalh"
 #include "nssl2_runtime_finish_bindings.metalh"
@@ -17,7 +18,7 @@ kernel void nssl2_runtime_prepare(
     const float th = thb + r.thp[idx];
     r.theta[idx] = th;
     r.rho[idx] = 1.0f / r.alt[idx];
-    r.pii[idx] = pow(r.pressure[idx] / p.p0, p.rcp);
+    r.pii[idx] = fp32_pressure_power(r.pressure[idx], p.p0, p.rcp);
     r.h_diabatic[idx] = th;
     const float z0 = (phb0 + r.php[idx]) / p.gravity;
     const float z1 = (phb1 + r.php[idx + uint(p.ncol)]) / p.gravity;

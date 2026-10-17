@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "df21e890ac16d297b122afa71eb7dee783501898aa03b8d926c7131257dd6e8b",
-      "size": 12683691
+      "sha256": "c6e04d76c796898c487b414ce3de3f421c60a4e5ce1c71082149b81faa638634",
+      "size": 12749403
     },
     "woof_exact.metallib": {
-      "sha256": "ddaca50f02641dd50e77c0edfbfa2e52f82f02f4d5ebbc79cfc8c455393e5a2a",
-      "size": 8179326
+      "sha256": "9497cdfc7920aa2af1606a00f5e7ef122136aa2b3574ada50f1e4022a14567e2",
+      "size": 8208766
     }
   },
   "implementation_file_count": 1152,
-  "implementation_sha256": "3d2591dbf33209d07a9a9f8a963ef0a7185359916186e6493a79753604ba2672",
-  "metal_inputs_sha256": "f26b9cf13cd9af4cb2fe57fe3a6a645c6b260db05c4df66e785a9d284f8fdd72",
+  "implementation_sha256": "42a579f1350debd4fc9e4d39a977a6a5c0d06cf62e7b1a3f03f16d7490a52935",
+  "metal_inputs_sha256": "ad44187b19516c6886832591b49473425ef76f828a7fad30ffc0605a29626044",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -484,8 +484,8 @@
         "size": 2384
       },
       "woof/metal/shaders/global_semilag_vector_fragment.metal": {
-        "sha256": "2c589726616255f9033c350c6ecf7cfd6212e5597184ac5f2441b8205a7c5881",
-        "size": 10291
+        "sha256": "8cbf45182b659ecadfe6fff3405baaa0340309911fbc85c55704cef8333d7b0e",
+        "size": 10234
       },
       "woof/metal/shaders/global_semilag_water_column_fragment.metal": {
         "sha256": "10a1b20163539af4c49167700fd7068dbaba154e91f2620e442fbc0765b6e18f",
@@ -632,8 +632,8 @@
         "size": 815
       },
       "woof/metal/shaders/hex_exner_pressure_diagnostic_fragment.metal": {
-        "sha256": "8f9097a51f6c95844fde46fe828a0e58f0f697334fee2325027fd9dfdeafbf0e",
-        "size": 970
+        "sha256": "1a450bb1705a636ed9514fc2ee79586b30f5e7638862d3e77a59abbfbfe468b7",
+        "size": 1025
       },
       "woof/metal/shaders/hex_fct_apply_fragment.metal": {
         "sha256": "b5ae5432db787ea6e482046042d83726aea86b6cc29503c72bf51f121939ebcf",
@@ -1316,8 +1316,8 @@
         "size": 84724
       },
       "woof/metal/shaders/milbrandt2_fields.metal": {
-        "sha256": "8932b297c0b165ee03b7560fe646ee6e24aa05ee76e5cff44a357100c81b13ee",
-        "size": 2511
+        "sha256": "62a4fb43baff511afb56221d450985902d3af03369091d41f051adecee05a8c3",
+        "size": 2559
       },
       "woof/metal/shaders/milbrandt2_zet.metal": {
         "sha256": "9f578220676bd075e9c392f3b2ddc607a89c805ecc2368fa78a0b86e732c8009",
@@ -1456,8 +1456,8 @@
         "size": 27520
       },
       "woof/metal/shaders/nssl2_runtime.metal": {
-        "sha256": "43291c42753586863ce32906a986efcc65a0634c32ba2d68ecac141751e3380e",
-        "size": 1867
+        "sha256": "ddf78404fddd5161b471111f5c0c85e68d4c8684f6c30563e36a7153938ca421",
+        "size": 1915
       },
       "woof/metal/shaders/nssl2_sedimentation.metal": {
         "sha256": "3978ff4606512e2da623a33bd0fa026b976b1110c2a97705d3238737c6934be8",
@@ -1544,8 +1544,8 @@
         "size": 679
       },
       "woof/metal/shaders/refl_family.metal": {
-        "sha256": "ca14a960205273041cf9737a7f290b742d00c98468fc619d0b2576663d729026",
-        "size": 3956
+        "sha256": "ab88602de624577eb57668cce5e40182cefa64e7ec3e44c6510139bd3611828a",
+        "size": 4004
       },
       "woof/metal/shaders/rk_bookkeeping.metal": {
         "sha256": "abf1b8b89f38ae69242d25816e65a9692f5c648d252807cfb24035b7e370f33a",
@@ -2100,8 +2100,8 @@
         "size": 3628
       },
       "woof/metal/shaders/wsm6_family.metal": {
-        "sha256": "ea7135e76b70dab69b7ba48a393af4cb841409ba10fdd60285449088222c0557",
-        "size": 33570
+        "sha256": "480ee8b8c9354b77814444c6d63c92781b0b7af2e8760e8e0a1704f58844c550",
+        "size": 33618
       },
       "woof/metal/shaders/wsm6_reflectivity.metal": {
         "sha256": "fe3a8967da6e0c9b00fa491349676a0f6568d613788a099020005aca9e744fd4",
@@ -4020,6 +4020,6 @@
         "size": 296
       }
     },
-    "sha256": "f26b9cf13cd9af4cb2fe57fe3a6a645c6b260db05c4df66e785a9d284f8fdd72"
+    "sha256": "ad44187b19516c6886832591b49473425ef76f828a7fad30ffc0605a29626044"
   }
 }
