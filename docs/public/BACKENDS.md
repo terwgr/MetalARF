@@ -80,9 +80,12 @@ Other commands select Metal the same way:
   radar analysis is heated from that window's radar file for one cadence,
   and so is the first cadence of the short forecast. It needs a radar route
   and microphysics, and is refused before anything is fetched otherwise;
-  continuous windows (`--continuous`) refuse it for now. Each member writes
-  `radar-tten.json` beside its outputs. The Metal kernels follow the CUDA
-  source's arithmetic operation for operation.
+  continuous windows (`--continuous`) refuse it for now. The forcing stays
+  attached for the whole leg, so HRRR's microphysics clamp (`mp_tend_lim`,
+  0.07 K/s) applies past the heated cadence too, and its two slots (a few
+  state-sized arrays) are not in the plan's memory price. Each member
+  writes `radar-tten.json` beside its outputs. The Metal kernels follow the
+  CUDA source's arithmetic operation for operation.
 - `tools/da_cycle_prepared.py --state-backend metal` runs the research
   radar-DA cycle on a Mac: perturbed members, restart sets between legs,
   the LETKF solve (`--solve-device metal` by default there, or `host`),
@@ -91,6 +94,10 @@ Other commands select Metal the same way:
   `--resume-ensemble`. The perturbation, the increments and the hot start
   are computed on host copies of the state and written back. The nest
   options stay CUDA only and are refused.
+- `woof cycle --parent-kind mpas-metal` cycles an MPAS-mesh parent on the
+  Metal Hex engine (no `--port-root`): each leg runs in its own process and
+  hands its state on through anchors. A null arm reproduces the
+  uninterrupted run bit for bit.
 
 Regional Metal
 coverage follows the capability table and admitted scheme combinations, and

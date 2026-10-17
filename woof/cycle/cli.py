@@ -152,7 +152,8 @@ def register_cli(subparsers) -> None:
                             "both arms to mean anything")
 
     port = parser.add_argument_group(
-        "model parent (--parent-kind mpas-cuda / mpas-cuda-frames)",
+        "model parent (--parent-kind mpas-cuda / mpas-cuda-frames / "
+        "mpas-metal / mpas-metal-frames)",
         "how the door reaches the port's device stack.  Every leg runs in "
         "a FRESH PROCESS and talks to this one only through anchors and "
         "segments on disk: the port pins its own woof checkout and "
@@ -160,16 +161,22 @@ def register_cli(subparsers) -> None:
         "only route that works on a real card")
     port.add_argument("--port-root", default=None, metavar="PATH",
                       help="the MPAS port checkout the forecast worker "
-                           "runs from. Required for a model parent kind")
+                           "runs from. Required for the mpas-cuda kinds; "
+                           "the mpas-metal kinds run this tree's Hex "
+                           "engine and take none")
     port.add_argument("--port-config", default=None, metavar="PATH",
-                      help="the port's case configuration JSON. Required "
-                           "for a model parent kind")
+                      help="the port's case configuration JSON (for "
+                           "mpas-metal: mesh, grid, static, init, "
+                           "start_time and optionally lbc_dir, "
+                           "convection, pbl_cadence, horiz_mixing). "
+                           "Required for a model parent kind")
     port.add_argument("--port-steps", type=positive_int, default=None,
                       help="dycore steps per cycle boundary. Required for "
                            "a model parent kind; the step RECEIPTS the "
                            "worker returns are counted against this "
                            "number, and a leg that ran fewer steps than "
-                           "asked cannot earn the mpas-cuda stamp")
+                           "asked cannot earn the mpas-cuda (or "
+                           "mpas-metal) stamp")
     port.add_argument("--port-timeout", type=positive_float, default=None,
                       help="seconds to wait for one forecast segment "
                            "(default: no timeout)")
@@ -646,12 +653,31 @@ def _engine_for(args, clock):
     # A model parent's state comes OFF THE DEVICE, so it needs the port
     # rather than a recorded series.  Requiring --parent-state of it
     # would be asking for frames that the run then ignores.
+    metal = args.parent_kind.startswith("mpas-metal")
+    if build_model is not None and args.parent_kind.startswith("mpas-cuda"):
+        # The model parent is the Hex CUDA forecast, run out of process.
+        from woof import capabilities
+        capabilities.require(
+            "woof cycle --parent-kind " + args.parent_kind,
+            capabilities.GPU_RUNTIME,
+            before="Refusing here, before the ledger is opened.")
+    if build_model is not None and metal:
+        # The Metal kinds run this tree's own Hex engine, out of process.
+        from woof import capabilities
+        if not capabilities.apple_silicon():
+            raise CycleRefusal(
+                "--parent-kind " + args.parent_kind + " runs the Metal Hex "
+                "engine and this host is not an Apple Silicon Mac",
+                parent_kind=args.parent_kind,
+                remedy="use --parent-kind mpas-cuda on a CUDA host, or "
+                       "--parent-kind replay to rehearse the lattice")
     if build_model is not None:
         missing = [flag for flag, value in (("--port-root", args.port_root),
                                             ("--port-config",
                                              args.port_config),
                                             ("--port-steps", args.port_steps))
-                   if value in (None, "")]
+                   if value in (None, "") and not (metal
+                                                   and flag == "--port-root")]
         if missing:
             raise CycleRefusal(
                 "a model parent runs the port's dycore out of process and "

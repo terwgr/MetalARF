@@ -163,36 +163,76 @@ def child_environment(extra: Mapping[str, str] | None = None) -> dict[str, str]:
     return env
 
 
+#: The families of model parent.  CUDA runs the frozen port's worker; Metal
+#: runs this tree's own Hex engine in a process of its own.
+METAL_WORKER_MODULE = "woof.cycle.metal_worker"
+METAL_ENGINE = "woof.hex metal"
+METAL_KINDS = ("mpas-metal", "mpas-metal-frames")
+
+
+def is_metal(parent_kind: str) -> bool:
+    return str(parent_kind) in METAL_KINDS
+
+
+def _footprint_kind(parent_kind: str) -> str:
+    """The footprint row a kind reads its mesh off: every CUDA kind
+    (``mpas-cuda``, ``mpas-cuda-frames``) binds the same port files."""
+    return "mpas-metal" if is_metal(parent_kind) else "mpas-cuda"
+
+
+def metal_environment() -> dict[str, str]:
+    """What a Metal leg needs beyond the base environment: the tree it runs
+    from (a checkout is not installed) and every ``WOOF_*`` setting, such as
+    the mesh rows and the memory fraction."""
+    env = {name: value for name, value in os.environ.items()
+           if name.startswith("WOOF_")}
+    env["PYTHONPATH"] = str(bridge_root())
+    return env
+
+
 # --------------------------------------------------------------------------
 # launching
 
 
-def launch(*, phase: str, port_root: str | os.PathLike[str],
+def launch(*, phase: str, port_root: str | os.PathLike[str] | None,
            port_config: str | os.PathLike[str], steps: int,
            out: str | os.PathLike[str],
            anchor: str | os.PathLike[str] | None = None,
            python: str | None = None,
            env: Mapping[str, str] | None = None,
            timeout: float | None = None,
-           check: bool = True) -> dict[str, Any]:
+           check: bool = True,
+           parent_kind: str = "mpas-cuda") -> dict[str, Any]:
     """Run one forecast segment in a fresh process and return its receipt.
 
     Returns the parsed ``segment.json``.  Refuses -- naming the child's
     exit code, its log and its recorded traceback -- if the child failed,
     if it wrote no segment, or if it reports that woof came from
     anywhere but the pinned Arwen checkout.
+
+    A Metal ``parent_kind`` runs :mod:`woof.cycle.metal_worker` from this
+    tree instead (no port checkout, so ``port_root`` is unused) and asks
+    for its provenance block rather than the Arwen pin.
     """
     out_dir = Path(out).expanduser().absolute()
     out_dir.mkdir(parents=True, exist_ok=True)
     verify_bridge_purity()
 
-    argv: list[str] = [python or sys.executable, str(worker_path()), phase,
-                       "--port-root", str(port_root),
-                       "--port-config", str(port_config),
-                       "--steps", str(int(steps)),
-                       "--out", str(out_dir)]
+    metal = is_metal(parent_kind)
+    argv: list[str] = [python or sys.executable]
+    if metal:
+        argv += ["-m", METAL_WORKER_MODULE, phase]
+        env = {**metal_environment(), **dict(env or {})}
+    else:
+        argv += [str(worker_path()), phase, "--port-root",
+                 str(Path(port_root).expanduser().absolute())]
+    # The worker runs from the bridge root, so caller-relative paths are
+    # made absolute here.
+    argv += ["--port-config", str(Path(port_config).expanduser().absolute()),
+             "--steps", str(int(steps)),
+             "--out", str(out_dir)]
     if anchor is not None:
-        argv += ["--anchor", str(anchor)]
+        argv += ["--anchor", str(Path(anchor).expanduser().absolute())]
 
     log_path = out_dir / WORKER_LOG
     completed = subprocess.run(argv, env=child_environment(env),
@@ -222,6 +262,23 @@ def launch(*, phase: str, port_root: str | os.PathLike[str],
             "the forecast worker exited zero but published no segment",
             phase=phase, expected=str(manifest_path), log=str(log_path))
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if metal:
+        if (manifest.get("provenance") or {}).get("engine") != METAL_ENGINE:
+            raise BridgeRefusal(
+                "the forecast process did not report running the Metal Hex "
+                "engine, so its numbers are not that physics",
+                phase=phase, provenance=manifest.get("provenance"),
+                log=str(log_path))
+        ran = manifest["provenance"].get("module_path")
+        here = str(Path(__file__).resolve().parents[1])
+        if ran != here:
+            raise BridgeRefusal(
+                f"the forecast process ran woof from {ran}, not this "
+                f"tree's {here}, so its numbers are not this physics",
+                phase=phase, provenance=manifest.get("provenance"),
+                log=str(log_path))
+        manifest["_dir"] = str(manifest_path.parent)
+        return manifest
     pin = manifest.get("arwen_pin") or {}
     if pin.get("obeyed") is not True:
         raise BridgeRefusal(
@@ -280,6 +337,12 @@ PARENT_DEVICE_FOOTPRINT: Mapping[str, Mapping[str, Any]] = {
         "levels_dimension": "nVertLevels",
     },
 }
+#: The Metal kinds are priced by ``woof.metal.memory_gate.estimate_hex``, so
+#: their rows name only where the cell and level counts are read.
+for _kind in METAL_KINDS:
+    PARENT_DEVICE_FOOTPRINT[_kind] = {
+        "mesh_file_role": "grid", "cells_dimension": "nCells",
+        "levels_file_role": "init", "levels_dimension": "nVertLevels"}
 
 #: The functions a port's admission module must publish to price a leg.
 #: Port trees from 2026-08-25 to 2026-08-27 have a ``device_admission``
@@ -361,7 +424,7 @@ def mesh_cells(port_config: str | os.PathLike[str], *,
 
     from woof.netcdf_bridge import open_dataset
 
-    row = PARENT_DEVICE_FOOTPRINT[parent_kind]
+    row = PARENT_DEVICE_FOOTPRINT[_footprint_kind(parent_kind)]
     config = json.loads(Path(port_config).expanduser().read_text(encoding="utf-8"))
     grid = _port_file(config, row["mesh_file_role"])
     dimensions = open_dataset(grid).dimensions
@@ -385,7 +448,7 @@ def mesh_levels(port_config: str | os.PathLike[str], *,
 
     from woof.netcdf_bridge import open_dataset
 
-    row = PARENT_DEVICE_FOOTPRINT[parent_kind]
+    row = PARENT_DEVICE_FOOTPRINT[_footprint_kind(parent_kind)]
     config = json.loads(Path(port_config).expanduser().read_text(encoding="utf-8"))
     dimensions = open_dataset(
         _port_file(config, row["levels_file_role"])).dimensions
@@ -473,6 +536,41 @@ def admit_parent_device(*, port_root: str | os.PathLike[str], cells: int,
     return receipt
 
 
+def admit_metal_device(*, cells: int, mesh: str,
+                       levels: int | None) -> dict[str, Any]:
+    """Refuse, before a leg starts, a mesh the Metal device cannot hold.
+
+    Priced by the same ``estimate_hex`` the Hex forecast door admits with,
+    from a context opened and closed here so this process holds no device.
+    """
+
+    from woof.metal.memory_gate import FRACTION_ENV, estimate_hex
+    from woof.metal.runtime import MetalContext
+
+    if levels is None:
+        return {"sized": False, "mesh": mesh, "cells": int(cells),
+                "reason": "the case's init carries no nVertLevels"}
+    context = MetalContext()
+    try:
+        estimate = estimate_hex(int(cells), int(levels), context)
+    finally:
+        context.close()
+    mib = 1024 ** 2
+    receipt = {"sized": True, "mesh": mesh, "cells": int(cells),
+               "card": "Metal", "levels": int(levels),
+               "required_mib": round(estimate.peak_bytes / mib, 1),
+               "free_mib": round(estimate.limit_bytes / mib, 1)}
+    if not estimate.fits_device:
+        raise BridgeRefusal(
+            f"the Metal Hex stack for {mesh} ({int(cells):,} cells, "
+            f"{int(levels)} levels) needs an estimated "
+            f"{receipt['required_mib']:,.0f} MiB and the device budget is "
+            f"{receipt['free_mib']:,.0f} MiB ({estimate.fraction:.0%} of its "
+            "recommended working set)", **receipt,
+            remedy=f"bind a coarser mesh, or override with {FRACTION_ENV}")
+    return receipt
+
+
 def _segment_manifest_path(out_dir: Path, phase: str) -> Path:
     # ``seed`` writes two segments side by side; the caller asks for them
     # with read_segment().  Everything else writes one, in ``out``.
@@ -548,7 +646,8 @@ CLOSED_KIND = "mpas-cuda"
 
 
 def stamp_for_segment(manifest: Mapping[str, Any], *,
-                      steps_requested: int) -> dict[str, Any]:
+                      steps_requested: int,
+                      parent_kind: str = CLOSED_KIND) -> dict[str, Any]:
     """Decide the parent kind from evidence, and say why.
 
     ``mpas-cuda`` is only earned when every one of these holds:
@@ -567,14 +666,22 @@ def stamp_for_segment(manifest: Mapping[str, Any], *,
     Anything short of all four is stamped ``mpas-cuda-frames``, with the
     gaps listed.  A stamp that overstates is worse than a missing
     feature: the next reader has no way to tell it apart from a real one.
+
+    For a Metal ``parent_kind`` the same four conditions grade the Metal
+    worker: rehydration through ``open_metal_physics_stack_v841`` and the
+    worker's provenance block in place of the Arwen pin, earning
+    ``mpas-metal`` or ``mpas-metal-frames``.
     """
+    metal = is_metal(parent_kind)
+    seam_name = ("open_metal_physics_stack_v841" if metal
+                 else "_construct_device_stack")
     gaps: list[str] = []
     executed = manifest.get("steps_executed")
     if not executed or int(executed) != int(steps_requested):
         gaps.append(
             f"step receipts: {executed!r} for {int(steps_requested)} steps "
             "requested; the dycore may not have run")
-    if not manifest.get("rehydration", "").startswith("_construct_device_stack"):
+    if not manifest.get("rehydration", "").startswith(seam_name):
         gaps.append("no rehydration through the port's state seam")
     rehydrated = manifest.get("rehydrated_sha256")
     analysed = manifest.get("analysed_sha256")
@@ -586,10 +693,14 @@ def stamp_for_segment(manifest: Mapping[str, Any], *,
             "the state read back off the device after rehydration does not "
             f"match the analysed state on disk ({rehydrated[:16]} != "
             f"{analysed[:16]}): the analysis did NOT re-enter the dycore")
-    if (manifest.get("arwen_pin") or {}).get("obeyed") is not True:
+    if metal:
+        if (manifest.get("provenance") or {}).get("engine") != METAL_ENGINE:
+            gaps.append("the worker reported no Metal Hex engine provenance")
+    elif (manifest.get("arwen_pin") or {}).get("obeyed") is not True:
         gaps.append("woof did not come from the pinned WOOF checkout")
+    closed, frames = METAL_KINDS if metal else (CLOSED_KIND, FRAMES_KIND)
     return {
-        "parent_kind": CLOSED_KIND if not gaps else FRAMES_KIND,
+        "parent_kind": closed if not gaps else frames,
         "evidence_gaps": gaps,
         "steps_executed": executed,
         "rehydrated_sha256": rehydrated,
@@ -600,7 +711,8 @@ def stamp_for_segment(manifest: Mapping[str, Any], *,
 
 
 __all__ = ["ADMISSION_SURFACE", "BridgeRefusal", "CLOSED_KIND",
-           "FRAMES_KIND", "PARENT_DEVICE_FOOTPRINT", "admit_parent_device",
+           "FRAMES_KIND", "METAL_KINDS", "PARENT_DEVICE_FOOTPRINT",
+           "admit_metal_device", "admit_parent_device", "is_metal",
            "bridge_root", "child_environment", "launch", "mesh_cells",
            "mesh_levels", "probe_card",
            "read_segment", "segment_arrays", "stamp_for_segment",

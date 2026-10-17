@@ -120,6 +120,7 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 | option | what it does |
 |---|---|
 | `--allow-shared-gpu` | UNSUPPORTED: permit another substantial CUDA compute context; device verification and the GPUWM UUID lock remain enforced |
+| `--backend {cuda,metal}` | state and forecast backend (default cuda); a Metal run integrates in this process, without the CUDA supervisor |
 | `--directory-input-hash {inventory,content}` | how declared directory inputs (the static geography tree) are bound to this run's identity: 'inventory' (default) uses relative path, size, and mtime; 'content' reads every file and uses its SHA-256. Use 'content' when two runs being compared for byte identity stage their geography separately, and when an mtime-preserving change to that tree must not go unnoticed (docs/public/DETERMINISM.md). Also settable as WOOF_DIRECTORY_INPUT_HASH. |
 | `--explain` | print the full reasoning, alternate routes and per-item evidence behind this command's output, instead of the default one-line-per-item summary |
 | `--from CKPT\|latest` | explicit gpuwmrst_*.npz checkpoint to branch from, or 'latest' (default) for the newest valid set in --from-run |
@@ -412,7 +413,7 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 | `--parent-dt-seconds` | parent model step; must be a whole number of milliseconds (default 120.0) |
 | `--parent-dx-m` | the parent's grid spacing in metres. Required with a placement provider: the child/parent refinement ratio is derived from it and a guessed spacing silently changes every placement |
 | `--parent-geo-file PATH` | XLAT/XLONG for the parent's mass grid: a radar-grid NetCDF or an npz carrying both. Defaults to the first --placement-obs-file, whose grid IS the target model grid by contract |
-| `--parent-kind {mpas-cuda,mpas-cuda-frames,arwen,replay}` | which engine advances the parent |
+| `--parent-kind {mpas-cuda,mpas-cuda-frames,mpas-metal,mpas-metal-frames,arwen,replay}` | which engine advances the parent |
 | `--parent-mesh-id ID` | the mesh identity written into every anchor. No default: an identity the spine guessed is an identity no downstream reader can trust |
 | `--parent-state GLOB` | the parent's state series: a glob of npz frames in the SAME on-disk shape tools/cycle_mpas_leg.py --history reads (flat npz: prognostic fields, time_seconds, and the derived diagnostics beside them). Required for a real run; --dry-run does not need it |
 | `--placement-obs-field NAME` | which observation plane the obs provider places on (default z_obs). The radar-grid contract ships z_obs, z_max and z_mean side by side and calls the choice the consumer's; an absent name is refused naming what the file does carry |
@@ -420,9 +421,9 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 | `--placement-provider {tracker,schedule,obs,none}` | where each cycle's child placements come from (default none: parent-only cycling) |
 | `--placement-threshold` | trigger value a peak must reach to earn a child, in the placement field's own units (default 40.0) |
 | `--placement-tracker-field NAME` | which PARENT plane the tracker provider places on (default composite_reflectivity) |
-| `--port-config PATH` | the port's case configuration JSON. Required for a model parent kind |
-| `--port-root PATH` | the MPAS port checkout the forecast worker runs from. Required for a model parent kind |
-| `--port-steps` | dycore steps per cycle boundary. Required for a model parent kind; the step RECEIPTS the worker returns are counted against this number, and a leg that ran fewer steps than asked cannot earn the mpas-cuda stamp |
+| `--port-config PATH` | the port's case configuration JSON (for mpas-metal: mesh, grid, static, init, start_time and optionally lbc_dir, convection, pbl_cadence, horiz_mixing). Required for a model parent kind |
+| `--port-root PATH` | the MPAS port checkout the forecast worker runs from. Required for the mpas-cuda kinds; the mpas-metal kinds run this tree's Hex engine and take none |
+| `--port-steps` | dycore steps per cycle boundary. Required for a model parent kind; the step RECEIPTS the worker returns are counted against this number, and a leg that ran fewer steps than asked cannot earn the mpas-cuda (or mpas-metal) stamp |
 | `--port-timeout` | seconds to wait for one forecast segment (default: no timeout) |
 | `--render-products LIST` | which products each boundary is drawn into ROOT/png as it lands, from its frame in ROOT/wrfout: a comma-separated list of catalog slugs, 'all', or 'none' to draw nothing (default: the renderer's default set). A boundary is drawn when the parent's planes sit on a latitude/longitude grid: its own XLAT/XLONG, --parent-geo-file or the first --placement-obs-file |
 | `--resume` | continue after the last completed cycle in the ledger (default) |
@@ -563,6 +564,7 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 |---|---|
 | `--accept-parent-cadence` | accept the archive's own cadence as the ceiling (prints the 15-min guidance when coarser); mutually exclusive with --max-boundary-interval-seconds |
 | `--auto-vram` | measure local total AND free GPU memory and price the child on it: fits the extent when --child-size is absent, prices the given extent or child config otherwise; exclusive with --card and --vram-gib |
+| `--backend {cuda,metal}` | forecast backend for the child (default cuda); a Metal child interpolates its parent on the CPU and runs resident |
 | `--card` | card for --point sizing (default 24gb): a tier (12gb/16gb/24gb/32gb), a size ('10gb') or a model with a recorded size ('RTX 3080'), the same spellings `woof domain` accepts |
 | `--child-config` | legacy RunConfig TOML for the child (specified=true, nested=false) |
 | `--child-config-sha256` | require the exact reviewed child configuration bytes |
@@ -861,11 +863,13 @@ Everything is listed with the help text the tool itself prints.  A door's positi
 | `--obs-table` | existing neutral observation table; repeatable |
 | `--out` | new directory to publish experiment.toml, ensemble.toml, experiment.namelist.wps, every other file the published configuration is read with on its own input route, and local-da.json into; refused if it exists |
 | `--point` | latitude,longitude |
+| `--precip-analysis {off,clear}` | after each radar analysis, clear precipitating mass and its moments where the radar observed no echo (NOAA's HRRRDAS member rule); off by default |
 | `--prepared-config` | configuration authority consumed by the supplied prepared bundle |
 | `--prepared-namelist` | WPS authority consumed by the supplied prepared bundle |
 | `--prepared-root` | existing portable single-domain prepared bundle, verified by the ordinary forecast reader |
 | `--profile` | physics profile name resolved by the authoring authority; defaults to the profile that authority selects at the grid spacing of the selected rung |
 | `--radar-grid` | existing radar-grid observation file; repeatable |
+| `--radar-tten` | heat each forecast leg after a radar analysis with that window's radar latent heating (HRRR's mp_tend_radar), for one cadence; needs a radar route and microphysics; off by default |
 | `--region` | west,south,east,north; east<west crosses the dateline |
 | `--request-json` | arwen.local-da-request.v1 file, or - for stdin |
 | `--run` | launch after publishing the reviewed configuration |
@@ -1577,6 +1581,7 @@ Takes no options of its own.
 | option | what it does |
 |---|---|
 | `--allow-shared-gpu` | UNSUPPORTED: permit another substantial CUDA compute context; device verification and the GPUWM UUID lock remain enforced |
+| `--backend {cuda,metal}` | state and forecast backend (default cuda); a Metal run integrates in this process, without the CUDA supervisor |
 | `--directory-input-hash {inventory,content}` | how declared directory inputs (the static geography tree) are bound to this run's identity: 'inventory' (default) uses relative path, size, and mtime; 'content' reads every file and uses its SHA-256. Use 'content' when two runs being compared for byte identity stage their geography separately, and when an mtime-preserving change to that tree must not go unnoticed (docs/public/DETERMINISM.md). Also settable as WOOF_DIRECTORY_INPUT_HASH. |
 | `--explain` | print the full reasoning, alternate routes and per-item evidence behind this command's output, instead of the default one-line-per-item summary |
 | `--from CKPT\|latest` | explicit gpuwmrst_*.npz checkpoint, or 'latest' (default) to take the newest set in --outdir whose members validate |
@@ -1602,6 +1607,7 @@ Takes no options of its own.
 | option | what it does |
 |---|---|
 | `--allow-shared-gpu` | UNSUPPORTED: permit another substantial CUDA compute context; device verification and the GPUWM UUID lock remain enforced |
+| `--backend {cuda,metal}` | state and forecast backend (default cuda); a Metal run integrates in this process, without the CUDA supervisor |
 | `--directory-input-hash {inventory,content}` | how declared directory inputs (the static geography tree) are bound to this run's identity: 'inventory' (default) uses relative path, size, and mtime; 'content' reads every file and uses its SHA-256. Use 'content' when two runs being compared for byte identity stage their geography separately, and when an mtime-preserving change to that tree must not go unnoticed (docs/public/DETERMINISM.md). Also settable as WOOF_DIRECTORY_INPUT_HASH. |
 | `--explain` | print the full reasoning, alternate routes and per-item evidence behind this command's output, instead of the default one-line-per-item summary |
 | `--gpu-uuid GPU-UUID` | physical GPU UUID to lock (required on multi-GPU hosts) |
@@ -1669,6 +1675,7 @@ Takes no options of its own.
 
 | option | what it does |
 |---|---|
+| `--backend {cuda,metal}` | state and forecast backend, as woof go --backend; default: the one the bundle names, else cuda |
 | `--devices N` | resident slab count; replaces [devices] count (on a tree, for every grid [devices] domains names) |
 | `--devices-table JSON` | [devices] table as JSON (count, grid, ids, transport, and on a tree domains); validated by the runner, without modifying the prepared configuration or its digests |
 | `--experiment-config TOML` | the experiment TOML this preparation was bound to (the tree runner binds its digest; the single-domain runner binds it through the proof) |
@@ -1858,6 +1865,7 @@ Takes no options of its own.
 
 | option | what it does |
 |---|---|
+| `--backend {cuda,metal}` | forecast backend; a Metal record is a warm record whose pipelines are built before the clock starts |
 | `--cold-cache-dir DIR` | EMPTY this directory and point CUPY_CACHE_DIR at it for the run, so a cold-cache record can be set on a machine whose own cache is warm. Only a directory that is absent, empty, or already a CuPy kernel cache is emptied; anything else -- and the inherited cache, the working directory and your home directory by name -- is REFUSED rather than deleted |
 | `--compare ('A', 'B')` | compare two records. REFUSED, by name, when they are not records of the same course, the same product set and the same compile mode |
 | `--compile-mode {cold,warm}` | which kernel-cache class this record belongs to (default: whatever the course declares). The door MEASURES the cache before the clock starts and refuses a mismatch, because the one-time NVRTC compile is roughly a minute and it is always inside the clock -- a cold record and a warm record are different records and are never compared |
@@ -1906,6 +1914,7 @@ Takes no options of its own.
 
 | option | what it does |
 |---|---|
+| `--backend {cuda,metal}` | verification backend (default: cuda) |
 | `--explain` | print the full reasoning, alternate routes and per-item evidence behind this command's output, instead of the default one-line-per-item summary |
 | `--outdir OUT` | directory for the PNG and wrfout NetCDF output (omit to compute metrics only) |
 

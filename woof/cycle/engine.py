@@ -384,9 +384,14 @@ def build_model_parent_engine(*, root, clock, parent_kind: str, mesh_id: str,
     ``history_frames`` is accepted and IGNORED: this engine's state comes
     off the device, not out of a recorded series.  It is in the signature
     only so the door can call model and replay kinds identically.
+
+    ``mpas-metal`` / ``mpas-metal-frames`` take the same route through
+    :mod:`woof.cycle.metal_worker`, this tree's Metal Hex engine; they need
+    no ``port_root``.
     """
     from woof.cycle import mpas_bridge
 
+    metal = mpas_bridge.is_metal(parent_kind)
     root = Path(root)
     port_steps = int(port_steps)
     if port_steps <= 0:
@@ -399,8 +404,8 @@ def build_model_parent_engine(*, root, clock, parent_kind: str, mesh_id: str,
 
     def _publish(cycle_index: int, segment: Mapping[str, Any],
                  *, ingestion, background_sha: str, analysis_state: str):
-        stamp = mpas_bridge.stamp_for_segment(segment,
-                                              steps_requested=port_steps)
+        stamp = mpas_bridge.stamp_for_segment(
+            segment, steps_requested=port_steps, parent_kind=parent_kind)
         arrays = mpas_bridge.segment_arrays(segment)
         prognostic = arrays["prognostic"]
         derived = arrays["derived"]
@@ -488,15 +493,21 @@ def build_model_parent_engine(*, root, clock, parent_kind: str, mesh_id: str,
         # the host preparation.  Priced by the port's own model.
         if admission:
             return
-        cells, mesh = mpas_bridge.mesh_cells(port_config)
-        admission.update(mpas_bridge.admit_parent_device(
-            port_root=port_root, cells=cells, mesh=mesh,
-            levels=mpas_bridge.mesh_levels(port_config),
-            card=mpas_bridge.probe_card()))
+        cells, mesh = mpas_bridge.mesh_cells(port_config,
+                                             parent_kind=parent_kind)
+        levels = mpas_bridge.mesh_levels(port_config, parent_kind=parent_kind)
+        if metal:
+            admission.update(mpas_bridge.admit_metal_device(
+                cells=cells, mesh=mesh, levels=levels))
+        else:
+            admission.update(mpas_bridge.admit_parent_device(
+                port_root=port_root, cells=cells, mesh=mesh, levels=levels,
+                card=mpas_bridge.probe_card()))
         if admission.get("sized"):
             print(f"cycle: device -- {mesh} ({cells:,} cells) needs "
                   f"{admission['required_mib']:,.0f} MiB of "
-                  f"{admission['free_mib']:,.0f} MiB free on "
+                  f"{admission['free_mib']:,.0f} MiB "
+                  f"{'budget' if metal else 'free'} on "
                   f"{admission['card']}", file=sys.stderr, flush=True)
         else:
             print(f"cycle: device -- not sized: {admission['reason']}",
@@ -514,7 +525,8 @@ def build_model_parent_engine(*, root, clock, parent_kind: str, mesh_id: str,
             # the first real analysis will be applied to.
             mpas_bridge.launch(phase="seed", port_root=port_root,
                                port_config=port_config, steps=port_steps,
-                               out=out, timeout=timeout)
+                               out=out, timeout=timeout,
+                               parent_kind=parent_kind)
             segment = mpas_bridge.read_segment(out / "anchor")
             arrays = mpas_bridge.segment_arrays(segment)
             return _publish(cycle_index, segment, ingestion=None,
@@ -530,7 +542,8 @@ def build_model_parent_engine(*, root, clock, parent_kind: str, mesh_id: str,
 
         segment = mpas_bridge.launch(
             phase="segment", port_root=port_root, port_config=port_config,
-            steps=port_steps, anchor=previous, out=out, timeout=timeout)
+            steps=port_steps, anchor=previous, out=out, timeout=timeout,
+            parent_kind=parent_kind)
 
         # The gate is fed the hash the DEVICE gave back after rehydration,
         # not the host copy that was uploaded.  A host-side comparison

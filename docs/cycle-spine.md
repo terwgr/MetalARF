@@ -260,6 +260,16 @@ constructs the port in-process hits an import wall on a real card. Every leg
 spawns `mpas_cycle_bridge.worker` in a fresh interpreter and the two sides talk
 only through anchors and segments on disk.
 
+`--parent-kind mpas-metal` (and `mpas-metal-frames`) run this tree's own Hex
+engine on Apple Metal, also out of process: each leg spawns
+`python -m woof.cycle.metal_worker`, because a process binds one mesh. No
+`--port-root`; `--port-config` names the mesh row, grid, static, init and
+start time (optionally `lbc_dir`). The anchor carries the Metal restart
+payload (the physics seam, the surface accumulators and the GF dynamics
+forcing), and a null arm reproduces an uninterrupted run bit for bit. The
+seed leg is stamped `mpas-metal-frames`, as the CUDA seed is; a segment
+earns `mpas-metal` on the same evidence.
+
 **The stamp is earned, not requested.** `--parent-kind` says which engine you
 asked for; what lands on the anchor is what the evidence grades out at. A leg
 that cannot show step receipts matching `--port-steps`, rehydration through the

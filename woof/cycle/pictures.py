@@ -149,7 +149,8 @@ def _latlon_file(path: Path):
 #: (:func:`woof.cycle.mpas_bridge.stamp_for_segment`): every model
 #: parent the door runs goes through the port's bridge and comes back
 #: stamped one of these.
-MESH_PARENT_KINDS = ("mpas-cuda", "mpas-cuda-frames")
+MESH_PARENT_KINDS = ("mpas-cuda", "mpas-cuda-frames", "mpas-metal",
+                     "mpas-metal-frames")
 
 #: Why a mesh parent draws nothing, in one sentence.
 MESH_SENTENCE = (

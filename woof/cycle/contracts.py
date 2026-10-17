@@ -46,11 +46,17 @@ TICK_HZ = 1000
 #:     anchor -> device-stack round trip, so the analysis did NOT feed
 #:     back into the dycore.  Distinct from ``mpas-cuda`` on purpose: a
 #:     reader must never mistake an open loop for a closed one.
+#: ``mpas-metal`` / ``mpas-metal-frames``
+#:     The same two claims for the Metal Hex engine (``woof.cycle.
+#:     metal_worker``): ``mpas-metal`` when the analysed state re-entered
+#:     the Metal physics stack and was read back off the device unchanged,
+#:     ``mpas-metal-frames`` when it did not.
 #: ``arwen``
 #:     The ArWen child engine.
 #: ``replay``
 #:     The LOUD STUB.  No dycore integrated anything.
-PARENT_KINDS = ("mpas-cuda", "mpas-cuda-frames", "arwen", "replay")
+PARENT_KINDS = ("mpas-cuda", "mpas-cuda-frames", "mpas-metal",
+                "mpas-metal-frames", "arwen", "replay")
 
 ANALYSIS_STATES = ("APPLIED", "SKIPPED_NO_OBS", "REJECTED", "NULL_ARM")
 
