@@ -993,6 +993,8 @@ def metal_experiment_refusals(experiment) -> list[str]:
     The doors that select Metal ask this before fetching or preparing
     anything; the runners repeat the full admission with their adapters.
     """
+    from woof.core import streaming
+
     domains = list(experiment.domains)
     refusals = []
     for domain in domains:
@@ -1001,6 +1003,17 @@ def metal_experiment_refusals(experiment) -> list[str]:
             prefix + message for message in _metal_admission_refusals(
                 domain.run, radiation=None, cumulus=None, cam_ozone=None)
             if not message.startswith(("radiation adapter", "cumulus adapter")))
+        tiles = streaming.options_for_domain(
+            domain, getattr(experiment, "tiles", None))
+        if not tiles.enabled:
+            continue
+        if (tiles.mode != "on" or tiles.tile_nx is None
+                or tiles.tile_ny is None):
+            refusals.append(prefix + "Metal tile streaming needs mode = 'on' "
+                            "with a pinned tile extent")
+        elif tiles.store != "device":
+            refusals.append(prefix + "Metal tile streaming needs store = "
+                            "'device'; host-store streaming runs on CUDA only")
     return refusals
 
 

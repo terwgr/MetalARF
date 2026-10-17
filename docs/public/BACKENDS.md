@@ -51,7 +51,10 @@ woof global run CONFIG.toml --metal
 ```
 
 The legacy `woof run` command does not expose a Metal selector. Regional Metal
-coverage follows the capability table and admitted scheme combinations; Hex
+coverage follows the capability table and admitted scheme combinations, and
+Metal tile streaming runs only `[tiles] mode = "on"` with a pinned tile
+extent and `store = "device"` (no `auto` mode and no host store, so no
+larger-than-memory domains); Hex
 and Global are preview models, and their Metal coverage is limited to the
 implemented forecast paths. Global's `--metal` is on `woof global run`, `go`,
 `cycle` and `da cycle`, `da forecast` and `da fresh`. It runs configs with
