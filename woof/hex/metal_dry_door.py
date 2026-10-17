@@ -36,16 +36,28 @@ def _tiny_icosahedral_mesh():
     ) for a, b in edge_cells]
     if any(len(pair) != 2 for pair in edge_vertices):
         raise ValueError("tiny icosahedral mesh has an invalid edge")
-    cell_edges = [[i for i, edge in enumerate(edge_cells) if cell in edge]
-                  for cell in range(n_cells)]
+    def counterclockwise(cell, row):
+        # MPAS slot order: a cell's edges counterclockwise seen from outside.
+        centre = vertices[cell]
+        toward = [vertices[sum(edge_cells[edge]) - cell] for edge in row]
+        reference = toward[0]
+        bearing = [np.arctan2(np.dot(np.cross(reference, point), centre),
+                              np.dot(reference, point)) % (2.0 * np.pi)
+                   for point in toward]
+        return [edge for _, edge in sorted(zip(bearing, row))]
+
+    cell_edges = [counterclockwise(cell, [
+        i for i, edge in enumerate(edge_cells) if cell in edge])
+        for cell in range(n_cells)]
     cell_neighbors = [[edge_cells[edge][1] if edge_cells[edge][0] == cell
                        else edge_cells[edge][0] for edge in row]
                       for cell, row in enumerate(cell_edges)]
     # Primal icosahedron vertices are the cells and its faces the dual
-    # vertices: a cell's vertices are its incident faces, a vertex's cells
-    # the corners of its face.
-    cell_vertices = [np.flatnonzero(np.any(faces == cell, axis=1)).tolist()
-                     for cell in range(n_cells)]
+    # vertices.  Edge slot k of a cell joins its vertex slots k and k + 1,
+    # and a vertex's cells are the corners of its face.
+    cell_vertices = [[
+        (set(edge_vertices[row[slot - 1]]) & set(edge_vertices[row[slot]])).pop()
+        for slot in range(len(row))] for row in cell_edges]
     vertex_cells = faces.tolist()
     vertex_edges = [[i for i, pair in enumerate(edge_vertices) if vertex in pair]
                     for vertex in range(n_vertices)]
@@ -70,12 +82,17 @@ def _tiny_icosahedral_mesh():
     longitude = lambda xyz: np.arctan2(xyz[:, 1], xyz[:, 0])
     edge_xyz = vertices[cells_on_edge].sum(axis=1)
     edge_xyz /= np.linalg.norm(edge_xyz, axis=1)[:, None]
+    face_xyz = vertices[faces].sum(axis=1)
+    face_xyz /= np.linalg.norm(face_xyz, axis=1)[:, None]
+    arc = lambda ends: earth_radius * np.arccos(np.clip(
+        np.einsum("ij,ij->i", ends[:, 0], ends[:, 1]), -1.0, 1.0))
+    dc_edge = arc(vertices[cells_on_edge])
     n_edges = len(edge_cells)
     mesh_arrays = {
         "areaCell": area_cell,
         "areaTriangle": area_triangle,
-        "dcEdge": np.full(n_edges, 4e6),
-        "dvEdge": np.full(n_edges, 4e6),
+        "dcEdge": dc_edge,
+        "dvEdge": arc(face_xyz[vertices_on_edge]),
         "latCell": latitude(vertices),
         "lonCell": longitude(vertices),
         "latEdge": latitude(edge_xyz),
@@ -98,7 +115,7 @@ def _tiny_icosahedral_mesh():
         "fEdge": np.zeros(n_edges),
         "angleEdge": np.zeros(n_edges),
         "meshDensity": np.ones(n_cells),
-        "nominalMinDc": np.asarray(4e6, dtype=np.float32),
+        "nominalMinDc": np.asarray(dc_edge.min(), dtype=np.float32),
     }
 
     class Mesh:
