@@ -91,6 +91,7 @@ def _config(arguments: argparse.Namespace) -> CascadeConfig:
         max_slots_per_cycle=int(arguments.max_slots),
         lbc_interval_seconds=int(arguments.lbc_interval_seconds),
         render=bool(arguments.render),
+        backend=str(arguments.backend),
         delayed_start=bool(arguments.delayed_start),
         state=None if arguments.state is None else Path(arguments.state),
         metrics=None if arguments.metrics is None else Path(arguments.metrics),
@@ -201,6 +202,22 @@ def run_cycle_plan(arguments: argparse.Namespace) -> int:
 
 
 def run_cycle_run(arguments: argparse.Namespace) -> int:
+    from woof import capabilities
+
+    if arguments.backend == "metal":
+        if not capabilities.apple_silicon():
+            raise MpasPortError(
+                "woof hex cycle run --backend metal runs on Apple Silicon "
+                "only; refusing here, before any cycle is planned or cut")
+        if arguments.gpuwm_checkout is not None:
+            raise MpasPortError(
+                "--gpuwm-checkout names a CUDA engine checkout; the Metal "
+                "forecast door runs the installed engine")
+    else:
+        # The cuda cascade drives the CUDA regional contract and forecast door.
+        capabilities.require(
+            "woof hex cycle run", capabilities.GPU_RUNTIME,
+            before="Refusing here, before any cycle is planned or cut.")
     config = _config(arguments)
     receipt = run_cascade(config)
     print(json.dumps({
@@ -307,6 +324,10 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--policy", type=Path, default=None, metavar="FILE")
     parser.add_argument("--no-render", dest="render", action="store_false", default=True,
                         help="skip the frame; the forecast still runs")
+    parser.add_argument(
+        "--backend", choices=("cuda", "metal"), default="cuda",
+        help="forecast backend for the fine legs; on metal the contract deck, "
+             "a CUDA regional-kernel check, is skipped and recorded as skipped")
     parser.add_argument(
         "--no-delayed-start", dest="delayed_start", action="store_false", default=True,
         help="REFUSE a late swath instead of starting it mid-window. This is "

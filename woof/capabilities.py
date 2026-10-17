@@ -124,7 +124,8 @@ METAL_ALTERNATIVE = (
     "  CUDA does not run on this Mac; most commands take --backend metal\n"
     "  (docs/public/BACKENDS.md lists them), for example:\n"
     "  remedy: woof go CONFIG --backend metal\n"
-    "  #   or: woof prep ... --state-backend metal, then woof sim")
+    "  #   or: woof prep ..., then woof sim ... --backend metal\n"
+    "  #   Hex: woof hex forecast ... --backend metal")
 
 
 def apple_silicon() -> bool:

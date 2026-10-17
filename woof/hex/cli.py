@@ -347,7 +347,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         return int(arguments.handler(arguments))
     except (MpasPortError, OSError, ValueError) as error:
-        print(f"woof hex: {error}", file=sys.stderr)
+        from woof.explain import render
+
+        print(f"woof hex: {render(str(error), explain=False)}", file=sys.stderr)
         return 2
 
 

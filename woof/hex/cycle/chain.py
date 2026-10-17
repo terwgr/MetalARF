@@ -271,6 +271,7 @@ class CascadeConfig:
     max_slots_per_cycle: int = 1
     lbc_interval_seconds: int = 3600
     render: bool = True
+    backend: str = "cuda"
     delayed_start: bool = True
     python: str = sys.executable
     state: Path | None = None
@@ -475,7 +476,9 @@ def run_fine_forecast(
         "--start-time", _stamp(start),
         "--hours", repr(float(config.fine_hours)),
         "--history-every-minutes", str(int(config.history_every_minutes)),
-        "--out", out, "--scratch", scratch, "--receipt", receipt,
+        "--out", out, "--receipt", receipt,
+        *(("--backend", "metal") if config.backend == "metal"
+          else ("--scratch", scratch)),
         *(() if config.gpuwm_checkout is None
           else ("--gpuwm-checkout", config.gpuwm_checkout)),
         "--case-label", label,
@@ -755,17 +758,26 @@ def run_slot(
         "files": boundaries["files"]}).as_dict())
 
     mesh_row = f"cascade-{tag}"
-    contract = run_contract_deck(
-        config, grid, init, slot_dir / "lbc",
-        slot_dir / "contract.json", mesh_row, logs / "contract.log",
-        start=start,
-    )
-    legs.append(LegTiming("contract-deck", contract["seconds"], {
-        "all_decks_bitwise": contract["all_decks_bitwise"],
-        "n_cells": contract["n_cells"],
-    }).as_dict())
-    ledger.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(slot_dir / "contract.json", ledger / f"{tag}.contract.json")
+    if config.backend == "metal":
+        # The deck checks the CUDA regional kernels against the CPU
+        # authority, and only the CUDA forecast door reads its ledger.
+        contract = {"seconds": 0.0, "skipped": "metal backend: the contract "
+                    "deck checks the CUDA regional kernels"}
+        legs.append(LegTiming("contract-deck", 0.0,
+                              {"skipped": contract["skipped"]}).as_dict())
+    else:
+        contract = run_contract_deck(
+            config, grid, init, slot_dir / "lbc",
+            slot_dir / "contract.json", mesh_row, logs / "contract.log",
+            start=start,
+        )
+        legs.append(LegTiming("contract-deck", contract["seconds"], {
+            "all_decks_bitwise": contract["all_decks_bitwise"],
+            "n_cells": contract["n_cells"],
+        }).as_dict())
+        ledger.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(slot_dir / "contract.json",
+                        ledger / f"{tag}.contract.json")
 
     described = cascade_row.describe_cull(
         name=mesh_row,
