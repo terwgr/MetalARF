@@ -3948,9 +3948,7 @@ class PhysicsDriver:
                 cu_rates=self.cu_rates, cu_nca=self.cu_nca,
                 cu_pratec=self.cu_pratec, cu_raincv=self.cu_raincv,
                 new_rates=new_rates, nca_seconds=nca_new,
-                pratec=pratec_new, clock_dt=clock_dt,
-                specified=bool(cfg.specified or cfg.nested),
-                spec_zone=int(getattr(cfg, "spec_zone", 0) or 0))
+                pratec=pratec_new, clock_dt=clock_dt)
             cumulus_components = _cumulus_optional_tendency_components(cfg)
             self.cumulus_tendencies = couple_column_tendencies(
                 state, cfg, rtheta=self.cu_rates["rthcuten"],

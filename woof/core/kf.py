@@ -560,12 +560,8 @@ class KainFritsch:
 
     def __call__(self, *, atmosphere, fields, state, cfg):
         if getattr(state, "_metal_setup_state", False):
-            specified = getattr(cfg, "specified", False)
-            spec_zone = getattr(cfg, "spec_zone", None)
-            if not isinstance(specified, (bool, np.bool_)):
-                raise TypeError("Metal KF requires cfg.specified to be bool")
-            if spec_zone is None:
-                raise ValueError("Metal KF requires cfg.spec_zone")
+            # Every column runs, the specified-zone ring included, as on
+            # the CUDA route.
             if (self.w0avg is None or self._history_state is not state
                     or self._history_time != float(state.elapsed_seconds)):
                 self.update_trigger_history(state=state, cfg=cfg)
@@ -587,8 +583,7 @@ class KainFritsch:
                 qv=atmosphere["qv"], qc=atmosphere["qc"],
                 pressure=atmosphere["pressure"], exner=atmosphere["exner"],
                 dz=atmosphere["dz"], dx=cfg.dx, dt=clock_dt, cudt=cudt,
-                phase_mode=phase_mode, table=load_kf_table(),
-                specified=bool(specified), spec_zone=int(spec_zone))
+                phase_mode=phase_mode, table=load_kf_table())
             from woof.core.physics import _NativeKFCumulusResult
             separate_ice = phase_mode == KFPhaseMode.SEPARATE_ICE_SNOW
             separate_snow = phase_mode in (
