@@ -82,7 +82,7 @@ _PREPARE_KEYS = frozenset({
     "acknowledgements",
 })
 _RUN_KEYS = frozenset({
-    "io_mode", "health_debug", "gpu_uuid", "allow_shared_gpu",
+    "io_mode", "health_debug", "gpu_uuid", "allow_shared_gpu", "backend",
 })
 _HEX = frozenset("0123456789abcdef")
 _USER_AGENT = "gpuwm-stream/1"
@@ -137,6 +137,7 @@ class StreamPlan:
     health_debug: bool
     gpu_uuid: str | None
     allow_shared_gpu: bool
+    state_backend: str
     experiment: object
     authority_sources: tuple[tuple[str, Path, str], ...]
     geog_manifest_path: Path
@@ -323,6 +324,28 @@ def load_stream_plan(path: str | Path) -> StreamPlan:
     allow_shared_gpu = run.get("allow_shared_gpu", False)
     if not isinstance(allow_shared_gpu, bool):
         raise ValueError("[run] allow_shared_gpu must be true or false")
+    state_backend = run.get("backend", "cuda")
+    if state_backend not in ("cuda", "metal"):
+        raise ValueError("[run] backend must be 'cuda' or 'metal'")
+    if state_backend == "metal":
+        # Every Metal refusal decidable from the plan, before a cycle is
+        # fetched: the GPU options name a CUDA card, the CUDA preprocess
+        # needs CuPy, and the experiment must pass the Metal admission.
+        if gpu_uuid is not None or allow_shared_gpu:
+            raise ValueError(
+                "[run] gpu_uuid and allow_shared_gpu select a CUDA card; a "
+                "Metal stream runs on this Mac's GPU")
+        if backend_name == "cuda":
+            raise ValueError(
+                "[prepare] preprocess_backend = 'cuda' needs CuPy; a Metal "
+                "stream prepares on the CPU")
+        backend_name = "cpu"
+        from woof.core.physics import metal_experiment_refusals
+        refusals = metal_experiment_refusals(experiment)
+        if refusals:
+            raise ValueError(
+                "the stream experiment is not admitted on Metal: "
+                + "; ".join(refusals))
     profile = prepare["physics_profile"]
     if not isinstance(profile, str) or not profile.strip():
         raise ValueError("[prepare] physics_profile must be a non-empty id")
@@ -435,6 +458,7 @@ def load_stream_plan(path: str | Path) -> StreamPlan:
         health_debug=health_debug,
         gpu_uuid=gpu_uuid,
         allow_shared_gpu=allow_shared_gpu,
+        state_backend=state_backend,
         experiment=experiment,
         authority_sources=tuple(
             (label, path, sha256_file(path))
@@ -1037,6 +1061,19 @@ class ProductionBackend:
     @contextmanager
     def gpu_allocation(self, plan: StreamPlan):
         """Use the supervisor's UUID lock namespace and explicit CUDA mask."""
+        if plan.state_backend == "metal":
+            # One Metal device per Mac; its legs run one at a time.
+            self._command_env = {**os.environ, "WOOF_STATE_BACKEND": "metal"}
+            try:
+                yield {
+                    "schema": "gpuwm-stream-gpu-allocation-v1",
+                    "status": "PASS",
+                    "plan_identity_sha256": plan.identity_sha256,
+                    "backend": "metal",
+                }
+            finally:
+                self._command_env = None
+            return
         from woof.supervisor import (
             GPUFileLock, default_lock_path, preflight_exclusive_gpu,
             priced_reservation_bytes, select_gpu,
@@ -1235,13 +1272,20 @@ class ProductionBackend:
                 "rust", progress=self.progress)
         return self._engine
 
-    def preflight_fetch(self, _plan: StreamPlan) -> None:
+    def preflight_fetch(self, plan: StreamPlan) -> None:
         """Refuse an install that cannot integrate the cycles, then resolve
         and probe the required Rust fetcher, both before a long wait."""
         from woof import capabilities
-        capabilities.require(
-            "woof stream", capabilities.GPU_RUNTIME,
-            before="Refusing here, before any cycle is fetched or prepared.")
+        if plan.state_backend == "metal":
+            if not capabilities.apple_silicon():
+                raise ValueError(
+                    "[run] backend = 'metal' runs on Apple Silicon only; "
+                    "refusing here, before any cycle is fetched or prepared")
+        else:
+            capabilities.require(
+                "woof stream", capabilities.GPU_RUNTIME,
+                before="Refusing here, before any cycle is fetched or "
+                       "prepared.")
         self._ensure_fetch_engine()
 
     def fetch_prefix(self, plan: StreamPlan, cycle: datetime, lead: int,
@@ -1880,6 +1924,8 @@ def _run_command(plan: StreamPlan, *, hierarchy: Path, experiment: Path,
         argv.extend(("--restart", str(restart)))
     if plan.health_debug:
         argv.append("--health-debug")
+    if plan.state_backend == "metal":
+        argv.extend(("--state-backend", "metal"))
     return argv
 
 
