@@ -7776,7 +7776,7 @@
       "name": "thompson_final_phase_cleanup_with_columns",
       "parameter_size": 20,
       "resource_count": 7,
-      "shader_hash": "1da9c57441c137117863230945836d550d9caee348d7ea6b2a2149e2b6ebd548",
+      "shader_hash": "c2e0e565de5c168cfda9512eb37c577ca064f00ea626dfa8058299eb22de9448",
       "threads_per_group": 256
     },
     {
@@ -7794,7 +7794,7 @@
       "name": "thompson_frozen_vapor_cloud_network",
       "parameter_size": 24,
       "resource_count": 39,
-      "shader_hash": "9c7b3420bff1ce618d79ac21c7cb27d4e66f6ab01abd43e641893a79f0cdcd24",
+      "shader_hash": "ba03e55691da242cfa4fc333dd4e067d48c20bb13d86133e7513eaca077054d8",
       "threads_per_group": 64
     },
     {

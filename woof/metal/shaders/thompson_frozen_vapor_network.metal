@@ -237,7 +237,7 @@ kernel void thompson_frozen_vapor_cloud_network(
      ulong meltarg=tdiv(tmul(tmul(0x3fb1a9fbe76c8b44ul,tsd),tsd),am64);
      ulong melt=soft64_plm_pow(meltarg,0x3fd5555555555555ul);
      ulong frac=tdiv(tcd,melt);float eff=0.f;
-     if(!soft64_greater(frac,0x3fd0000000000000ul)&&!soft64_less(tcd,0x3ed92a737110e454ul)&&!soft64_less(sv,0x3f50624dd2f1a9fcul)){
+     if(!soft64_greater(frac,0x3fd0000000000000ul)&&!soft64_less(tcd,t64(6.e-6f))&&!soft64_less(sv,t64(1.e-3f))){
        // CUDA/WRF divide by 9 * viscosity * diameter. Omitting 9 raises
        // the snow/cloud collision Stokes number and overstates riming.
        ulong stokes=tdiv(tmul(tmul(tmul(tcd,tcd),sv),0x408f400000000000ul),tmul(tmul(t64(9.f),0x3ef203b89c3e39a2ul),melt));

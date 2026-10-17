@@ -105,6 +105,6 @@ kernel void thompson_final_phase_cleanup_with_columns(
         const ulong uncapped = soft64_mul(cleanup64(sixth_over_mass), lambda3);
         const ulong cap = soft64_div(cleanup64(999.0e3f), cleanup64(rho));
         const ulong number = soft64_less(uncapped, cap) ? uncapped : cap;
-        r.ni[idx] = cleanup32(soft64_to_f32_bits(number));
+        r.ni[idx] = cleanup32(number);
     }
 }

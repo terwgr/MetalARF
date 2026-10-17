@@ -6,17 +6,17 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "276080cedebb6203ff248531e2461eedb1f083ee7d251053e2fb402eef798c32",
-      "size": 12486843
+      "sha256": "a2913e2a806a831f37a5ce785516e02bfbd98dab9343132cf8e70904d37e9778",
+      "size": 12486811
     },
     "woof_exact.metallib": {
-      "sha256": "01f35566b3b498d377ad6f3467a37717a3692d10270f992ddcc28191014d4bde",
-      "size": 8138148
+      "sha256": "f5e19d29444c351472202583d7ee286015fe21bfe5a6a40128026de4a690ff88",
+      "size": 8138116
     }
   },
   "implementation_file_count": 1140,
-  "implementation_sha256": "a6df44b1539f472f5291707fc3326d42b18f09d03dd179b5d1e8e903a3660426",
-  "metal_inputs_sha256": "5730d8bb5022592bb64c7092cba6c3b43ff8e01d74b9f3925fee5f3b00a87a96",
+  "implementation_sha256": "3e49451534d92df33b916bba5f04a6ee38a6d2aa9603ae0da0e516acb2221378",
+  "metal_inputs_sha256": "eddecb32f51cf4105dc99c14ceb6f35a5831c5bdc83cda2ff82415c4bf9f92b9",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -1776,12 +1776,12 @@
         "size": 19824
       },
       "woof/metal/shaders/thompson_final_phase_cleanup.metal": {
-        "sha256": "1da9c57441c137117863230945836d550d9caee348d7ea6b2a2149e2b6ebd548",
-        "size": 4524
+        "sha256": "c2e0e565de5c168cfda9512eb37c577ca064f00ea626dfa8058299eb22de9448",
+        "size": 4504
       },
       "woof/metal/shaders/thompson_frozen_vapor_network.metal": {
-        "sha256": "9c7b3420bff1ce618d79ac21c7cb27d4e66f6ab01abd43e641893a79f0cdcd24",
-        "size": 28577
+        "sha256": "ba03e55691da242cfa4fc333dd4e067d48c20bb13d86133e7513eaca077054d8",
+        "size": 28559
       },
       "woof/metal/shaders/thompson_graupel_sedimentation.metal": {
         "sha256": "cab554907f60d12776a52242a1685950902241b630d42286d9f4eaaed7ee8f4b",
@@ -3980,6 +3980,6 @@
         "size": 296
       }
     },
-    "sha256": "5730d8bb5022592bb64c7092cba6c3b43ff8e01d74b9f3925fee5f3b00a87a96"
+    "sha256": "eddecb32f51cf4105dc99c14ceb6f35a5831c5bdc83cda2ff82415c4bf9f92b9"
   }
 }
