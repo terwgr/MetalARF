@@ -319,7 +319,47 @@ def _direct_cache_counts(events) -> dict:
 
 
 def warm_kernels_main(args) -> int:
-    from woof import physics_menu
+    from woof import capabilities, physics_menu
+
+    if (capabilities.apple_silicon()
+            and not capabilities.is_installed(capabilities.GPU_RUNTIME.module)):
+        # The metallib ships compiled to AIR; the driver builds each GPU
+        # pipeline at first use and caches it system-wide. Build them all now.
+        ignored = [flag for flag, given in (
+            ("--profile", args.profile), ("--all-profiles", args.all_profiles),
+            ("--levels", args.levels != DEFAULT_LEVELS)) if given]
+        if ignored:
+            print("warm-kernels: " + ", ".join(ignored) + " select a CUDA "
+                  "compile domain and mean nothing on Metal, which builds "
+                  "every pipeline once", file=sys.stderr)
+            return 2
+        import time
+        from woof.metal.runtime import MetalContext
+        if not args.json:
+            print("warm-kernels: building the Metal kernel pipelines", flush=True)
+        start = time.perf_counter()
+        try:
+            with MetalContext() as context:
+                count, unbuilt = context.warm_pipelines()
+        except (OSError, RuntimeError) as error:
+            print(f"warm-kernels: no usable Metal device ({error}); "
+                  "`woof doctor` checks the Metal runtime", file=sys.stderr)
+            return 1
+        seconds = time.perf_counter() - start
+        if args.json:
+            print(json.dumps({"schema": WARM_KERNELS_SCHEMA, "backend": "metal",
+                              "kernels_compiled": count,
+                              "kernels_unbuildable": list(unbuilt),
+                              "compile_seconds": round(seconds, 3)}))
+        else:
+            print(f"warm-kernels: {count} Metal pipelines ready "
+                  f"({seconds:.1f} s)", flush=True)
+            if unbuilt:
+                print(f"warm-kernels: this GPU cannot build {len(unbuilt)}: "
+                      + ", ".join(unbuilt), flush=True)
+        return 0
+    capabilities.require("woof warm-kernels", capabilities.GPU_RUNTIME,
+                         before="Refusing here, before a kernel is compiled.")
 
     if args.all_profiles:
         profiles = physics_menu.shipped_profiles()

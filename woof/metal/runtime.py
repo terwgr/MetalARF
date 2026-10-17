@@ -254,6 +254,21 @@ class MetalContext:
         self._fatal_error: Exception | None = None
         self._closed = False
 
+    def warm_pipelines(self) -> tuple[int, tuple[str, ...]]:
+        """Build every kernel pipeline in the bundle.
+
+        Returns the number built and the kernels this GPU cannot build. The
+        system keeps built pipelines in its cache, so later processes skip
+        the driver compile a kernel otherwise pays at first use.
+        """
+        if self._closed:
+            raise RuntimeError("Metal context is closed")
+        count = _U32()
+        failed = ctypes.create_string_buffer(1 << 16)
+        self._check(self._lib.woof_metal_warm_pipelines(
+            self._handle, ctypes.byref(count), failed, len(failed)))
+        return count.value, tuple(failed.value.decode().split())
+
     def allocation_snapshot(self):
         """Return a read-only snapshot of WOOF-owned Metal buffer storage.
 
@@ -373,6 +388,9 @@ class MetalContext:
             _HANDLE, _U64, ctypes.POINTER(_U64), _U32, _I32,
             ctypes.POINTER(_HANDLE)]
         lib.woof_metal_submit_fft2.restype = _I32
+        lib.woof_metal_warm_pipelines.argtypes = [
+            _HANDLE, ctypes.POINTER(_U32), ctypes.c_char_p, _U32]
+        lib.woof_metal_warm_pipelines.restype = _I32
 
         lib.woof_metal_submission_poll.argtypes = [
             _HANDLE, ctypes.POINTER(_I32)]

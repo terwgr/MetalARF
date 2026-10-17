@@ -140,7 +140,8 @@ NO_METAL_ROUTE = "  CUDA does not run on this Mac; this command has no Metal rou
 #: The front doors that take ``--backend metal``; only these point the
 #: reader at it.
 METAL_DOORS = frozenset(
-    ("woof go", "woof ensemble", "woof sim", "woof verify"))
+    ("woof go", "woof ensemble", "woof sim", "woof verify",
+     "woof warm-kernels"))
 
 
 GPU_RUNTIME = Requirement(
@@ -651,7 +652,6 @@ COMMAND_REQUIREMENTS: dict[str, tuple[Requirement, ...]] = {
     # in its production backend instead, for the reason given above.
     "branch": (GPU_RUNTIME,),
     "downscale": (GPU_RUNTIME,),
-    "warm-kernels": (GPU_RUNTIME,),
 }
 
 #: What each command would have spent before the old failure point.
@@ -673,7 +673,6 @@ _BEFORE = {
     "branch": "Refusing here, before the branched run directory is written.",
     "downscale": ("Refusing here, before the parent archive is read and "
                   "the child domain prepared."),
-    "warm-kernels": "Refusing here, before a kernel is compiled.",
 }
 
 

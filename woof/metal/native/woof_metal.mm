@@ -9,6 +9,7 @@
 #include "woof_metal.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <condition_variable>
 #include <deque>
@@ -1794,6 +1795,45 @@ extern "C" int32_t woof_metal_submission_destroy(woof_metal_handle handle) {
     forget_submission(handle);
     g_last_error.clear();
     return WOOF_METAL_OK;
+}
+
+extern "C" int32_t woof_metal_warm_pipelines(
+        woof_metal_handle context_handle, uint32_t *out_count,
+        char *failed_names, uint32_t failed_names_size) {
+    @autoreleasepool {
+        auto context = context_for(context_handle);
+        if (!context)
+            return fail(WOOF_METAL_INVALID_HANDLE, "invalid Metal context handle");
+        if (!out_count || !failed_names || failed_names_size == 0)
+            return fail(WOOF_METAL_INVALID_ARGUMENT, "missing pipeline warm outputs");
+        // Building each kernel pipeline once fills the system's pipeline
+        // cache, so later processes skip the driver compile at first use.
+        // Kernels this GPU cannot build are listed, newline-separated.
+        uint32_t count = 0;
+        std::string failed;
+        for (id<MTLLibrary> library in @[context->default_library,
+                                         context->exact_library]) {
+            for (NSString *name in library.functionNames) {
+                @autoreleasepool {
+                    id<MTLFunction> function = [library newFunctionWithName:name];
+                    if (!function || function.functionType != MTLFunctionTypeKernel)
+                        continue;
+                    NSError *error = nil;
+                    if (![context->device newComputePipelineStateWithFunction:function
+                                                                       error:&error]) {
+                        failed += name.UTF8String;
+                        failed += '\n';
+                        continue;
+                    }
+                    ++count;
+                }
+            }
+        }
+        *out_count = count;
+        std::snprintf(failed_names, failed_names_size, "%s", failed.c_str());
+        g_last_error.clear();
+        return WOOF_METAL_OK;
+    }
 }
 
 extern "C" const char *woof_metal_last_error(void) {

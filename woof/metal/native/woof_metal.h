@@ -154,6 +154,9 @@ int32_t woof_metal_submission_poll(woof_metal_handle submission,
                                    int32_t *complete);
 int32_t woof_metal_submission_wait(woof_metal_handle submission);
 int32_t woof_metal_submission_destroy(woof_metal_handle submission);
+int32_t woof_metal_warm_pipelines(woof_metal_handle context,
+                                  uint32_t *out_count, char *failed_names,
+                                  uint32_t failed_names_size);
 
 const char *woof_metal_last_error(void);
 uint32_t woof_metal_abi_version(void);
