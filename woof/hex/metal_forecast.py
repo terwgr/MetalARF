@@ -48,7 +48,7 @@ def _initial_time(dataset: Any) -> datetime:
 _IMPLEMENTED = frozenset({
     "mesh", "backend", "init", "init_source", "start_time", "hours",
     "history_every_minutes", "out", "receipt", "case_label", "repo",
-    "horiz_mixing",
+    "horiz_mixing", "checkpoint", "restart",
 })
 
 
@@ -170,11 +170,37 @@ def run_metal_forecast(arguments: Any) -> int:
             f"{binding.n_edges} edges"
         )
     horiz_mixing = str(getattr(arguments, "horiz_mixing", "2d_smagorinsky"))
+    restart = getattr(arguments, "restart", None)
+    checkpoint = getattr(arguments, "checkpoint", None)
+    if checkpoint is not None:
+        checkpoint = Path(checkpoint).expanduser().absolute()
+        if not checkpoint.parent.is_dir():
+            raise _refuse(f"--checkpoint parent directory does not exist: {checkpoint.parent}")
     native = load_mpas_vertical_grid(init, mesh)
     state, reference, saved = load_mpas_initial_state(
         init, mesh, native.vertical_grid, scalar_names=("qv",),
         terrain_metrics=native.terrain_metrics, return_saved_diagnostics=True,
     )
+    first_step = 0
+    if restart is not None:
+        from .checkpoint import read_checkpoint
+
+        restored, restored_saved = read_checkpoint(restart)
+        if restored_saved is None:
+            raise _refuse(f"--restart {restart} carries no saved diagnostics")
+        for name in ("rho", "rho_theta", "rho_u", "rho_w", "scalars"):
+            if getattr(restored, name).shape != getattr(state, name).shape:
+                raise _refuse(
+                    f"--restart {restart} does not match --init: {name} has "
+                    f"shape {getattr(restored, name).shape}, the init "
+                    f"{getattr(state, name).shape}")
+        elapsed = float(restored.time_seconds)
+        first_step = int(round(elapsed / float(row.dt_seconds)))
+        if first_step * float(row.dt_seconds) != elapsed:
+            raise _refuse(
+                f"--restart {restart} time {elapsed} s is not a whole number "
+                f"of {row.dt_seconds:.0f} s steps")
+        state, saved = restored, restored_saved
     # The dycore of the CUDA v8.4.1 lane (config_v841.py), without physics.
     config = V841DryDycoreConfig(
         config_dt=float(row.dt_seconds),
@@ -211,7 +237,7 @@ def run_metal_forecast(arguments: Any) -> int:
             saved_diagnostics=saved, terrain_metrics=native.terrain_metrics,
             reference_wind_profiles=wind,
         )
-        for step in range(1, steps + 1):
+        for step in range(first_step + 1, first_step + steps + 1):
             driver.step_device()
             if step % stride == 0:
                 state = driver.atmosphere.state.to_host()
@@ -221,6 +247,11 @@ def run_metal_forecast(arguments: Any) -> int:
                     initial_time=valid_time, vertical_grid=native.vertical_grid,
                 )
         state = driver.atmosphere.state.to_host()
+        if checkpoint is not None:
+            from .checkpoint import write_checkpoint
+
+            write_checkpoint(checkpoint, state,
+                             saved_diagnostics=driver.atmosphere.saved.to_host())
         state.validate(
             n_cells=int(mesh.dimensions["nCells"]),
             n_edges=int(mesh.dimensions["nEdges"]),
@@ -240,6 +271,9 @@ def run_metal_forecast(arguments: Any) -> int:
         "hours": float(hours),
         "dt_seconds": float(row.dt_seconds),
         "steps": steps,
+        "first_step": first_step,
+        "restart": None if restart is None else str(Path(restart).resolve()),
+        "checkpoint": None if checkpoint is None else str(checkpoint),
         "history_every_minutes": int(history_minutes),
         "finite": True,
         "state": state.bounds_receipt(),

@@ -1848,6 +1848,9 @@ def run_forecast(arguments: argparse.Namespace) -> int:
         from .metal_forecast import run_metal_forecast
 
         return run_metal_forecast(arguments)
+    for flag, dest in (("--checkpoint", "checkpoint"), ("--restart", "restart")):
+        if getattr(arguments, dest, None) is not None:
+            raise _refuse(f"{flag} is implemented by --backend metal only")
 
     started = time.monotonic()
     request = resolve_request(arguments)
@@ -2050,6 +2053,14 @@ def add_forecast_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--out", type=Path, default=None, metavar="DIR",
         help="fresh directory for history frames and the run receipt")
+    parser.add_argument(
+        "--checkpoint", type=Path, default=None, metavar="FILE",
+        help="write a restart checkpoint after the final step "
+             "(--backend metal)")
+    parser.add_argument(
+        "--restart", type=Path, default=None, metavar="FILE",
+        help="continue from a checkpoint written by --checkpoint; --hours "
+             "counts from the checkpoint time (--backend metal)")
     parser.add_argument(
         "--scratch", type=Path, default=None, metavar="DIR",
         help="kernel-cache dir OUTSIDE --out "
