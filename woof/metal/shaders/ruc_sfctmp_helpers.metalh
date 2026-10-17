@@ -147,6 +147,8 @@ static inline void ruc_soil_phase_partition(
                     maximum,
                     ruc_powf_rn(base, exponent)),
                 qmin);
+            fwsat[index] = ruc_fsub_rn(dqm, liquid);
+            lwsat[index] = ruc_fadd_rn(liquid, qmin);
             liquid = ruc_fused_max(zero, liquid);
             liquid = ruc_fused_min(liquid, middle_moisture);
             float ice = ruc_fdiv_rn(
@@ -158,14 +160,11 @@ static inline void ruc_soil_phase_partition(
                 liquid = ruc_fused_max(
                     zero,
                     ruc_fsub_rn(middle_moisture, ruc_fmul_rn(ice, riw)));
+                fwsat[index] = ruc_fsub_rn(dqm, liquid);
+                lwsat[index] = ruc_fadd_rn(liquid, qmin);
             }
             soiliqwm[index] = liquid;
             soilicem[index] = ice;
-            // WRF forms the saturation fractions from the bounded liquid
-            // state (module_sf_ruclsm.F:2340-2366), after the freezing-curve
-            // result is clamped to 0..soilmoism and the keepfr limit applies.
-            fwsat[index] = ruc_fsub_rn(dqm, liquid);
-            lwsat[index] = ruc_fadd_rn(liquid, qmin);
         } else {
             soiliqwm[index] = middle_moisture;
             lwsat[index] = maximum;
