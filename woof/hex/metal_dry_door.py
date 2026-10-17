@@ -41,12 +41,12 @@ def _tiny_icosahedral_mesh():
     cell_neighbors = [[edge_cells[edge][1] if edge_cells[edge][0] == cell
                        else edge_cells[edge][0] for edge in row]
                       for cell, row in enumerate(cell_edges)]
-    cell_vertices = [sorted(set(int(vertex) for face in faces[
-        np.any(faces == cell, axis=1)] for vertex in face))
-        for cell in range(n_cells)]
-    vertex_cells = [[cell for cell in range(n_cells)
-                     if vertex in cell_vertices[cell]]
-                    for vertex in range(n_vertices)]
+    # Primal icosahedron vertices are the cells and its faces the dual
+    # vertices: a cell's vertices are its incident faces, a vertex's cells
+    # the corners of its face.
+    cell_vertices = [np.flatnonzero(np.any(faces == cell, axis=1)).tolist()
+                     for cell in range(n_cells)]
+    vertex_cells = faces.tolist()
     vertex_edges = [[i for i, pair in enumerate(edge_vertices) if vertex in pair]
                     for vertex in range(n_vertices)]
     edge_neighbors = [[j for j, edge in enumerate(edge_cells)
