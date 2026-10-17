@@ -190,7 +190,7 @@ CARRIER_KEY = "radiation/o33d_grid"
 
 class DriverOzoneProvider:
     """Routing marker for a child whose field is carried by its driver."""
-    def __call__(self):
+    def __call__(self, array_module=None):
         raise RuntimeError("child CAM ozone requires the driver's retained field; "
                            "the parent-to-child FORCE transfer has not been bound")
 

@@ -839,12 +839,6 @@ METAL_KNOWN_CONFLICTS = (
     ("spp_pbl has no Metal MYNN caller",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "spp_pbl", 0)) != 0),
-    ("a nested legacy-RRTMG child interpolates CAM ozone (o3input=2) from "
-     "its parent, which has no Metal caller",
-     lambda cfg, radiation, cumulus, cam_ozone:
-     bool(getattr(cfg, "nested", False))
-     and int(getattr(cfg, "o3input", 2)) == 2
-     and _metal_legacy_rrtmg_selected(cfg)),
     ("Metal NSSL microphysics (mp_physics=18) sediments at most 128 levels",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(cfg.mp_physics) == 18 and int(cfg.nz) > 128),

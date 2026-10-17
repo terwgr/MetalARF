@@ -1164,15 +1164,13 @@ class ParentOzoneProvider:
         self.parent = None
         self.released = True
 
-    def __call__(self):
+    def __call__(self, array_module=None):
         if self.released:
             raise RuntimeError(
                 "child rrtmg_legacy radiation called through an ozone "
                 "provider released with its superseded startup build; a "
                 "nest waiting for its start is rebuilt against its "
                 "parent's current radiation before it radiates")
-        import cupy as cp
-
         from woof.core import nest_interp as _nest
 
         grid = getattr(self.parent, "_o33d_grid", None)
@@ -1184,7 +1182,12 @@ class ParentOzoneProvider:
                 "parent->child interpolation routing); fix the call "
                 "sequencing instead of falling back to a per-nest "
                 "climatology WRF never evaluates")
-        child = cp.asnumpy(_nest.sint(cp.asarray(grid), self.registration))
+        if getattr(array_module, "__woof_metal_array_module__", False):
+            child = _nest.sint(array_module.asarray(grid),
+                               self.registration).to_numpy()
+        else:
+            import cupy as cp
+            child = cp.asnumpy(_nest.sint(cp.asarray(grid), self.registration))
         nz = child.shape[0]
         return np.ascontiguousarray(
             child.transpose(1, 2, 0).reshape(-1, nz))
@@ -1726,7 +1729,20 @@ class RRTMGLegacyRadiation:
         o33d = None
         if self.o3input == 2:
             if self._ozone_provider is not None:
-                o33d = np.asarray(self._host(self._ozone_provider()), np.float32)
+                # As the CUDA path: a tree child reads the field its
+                # parent's FORCE carried; a case child SINTs its parent.
+                driver = getattr(state, "physics", None)
+                owner = getattr(driver, "cam_ozone", None)
+                if owner is not None and owner.mode == "parent-interpolated":
+                    if driver.call_counts.get("cam_ozone", 0) == 0:
+                        raise RuntimeError(
+                            "child radiation ran before parent CAM ozone FORCE")
+                    grid = self._host(driver.o3rad)
+                    o33d = np.ascontiguousarray(
+                        grid.transpose(1, 2, 0).reshape(-1, nz))
+                else:
+                    o33d = np.asarray(self._ozone_provider(
+                        array_module=state._array_module), np.float32)
             else:
                 ozmixt = np.asarray(self._ozone.ozn_latitude_time_int(
                     julday, julian, self.latitude_deg.reshape(-1),
