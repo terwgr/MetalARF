@@ -3342,14 +3342,14 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_surface.cu",
       "cuda_symbol": "mynn_surface_column",
-      "layout_hash": "10f77d584ef4107de60ec4e087209aafcb24a727f563c85f051bdb1f021349f7",
+      "layout_hash": "cb17cef9de13eb34a598ea1cfdc0ba4775be2650f983483aeef0bfd1564ade35",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/mynn_surface_family.metal",
       "module": "mynn_surface_family",
       "name": "mynn_surface_column",
-      "parameter_size": 20,
+      "parameter_size": 24,
       "resource_count": 58,
-      "shader_hash": "7acfcd0f45ec9cf31f0263d2dcdbf5b13727134c9423802dfb4b586a12587f2d",
+      "shader_hash": "7e6083231994fbb752f374ec316e3de486286f8f4e306d59601a8c2484d69a77",
       "threads_per_group": 128
     },
     {
@@ -3365,7 +3365,7 @@
       "name": "mynn_surface_seed",
       "parameter_size": 4,
       "resource_count": 7,
-      "shader_hash": "7acfcd0f45ec9cf31f0263d2dcdbf5b13727134c9423802dfb4b586a12587f2d",
+      "shader_hash": "7e6083231994fbb752f374ec316e3de486286f8f4e306d59601a8c2484d69a77",
       "threads_per_group": 128
     },
     {

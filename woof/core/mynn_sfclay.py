@@ -238,7 +238,7 @@ def launch_mynn_surface_layer(
         submit_mynn_surface_layer(
             inputs["u1"].buffer.context, inputs, mol, ustm, result,
             dx=dx, itimestep=itimestep, isfflx=isfflx,
-            isftcflx=isftcflx)
+            isftcflx=isftcflx, variant=variant)
         return
 
     shape = inputs["u1"].shape

@@ -62,7 +62,7 @@ def _validate_options(dx, itimestep, isfflx, isftcflx):
 
 def submit_mynn_surface_layer(context, inputs: Mapping[str, object], mol,
                               ustm, result, *, dx=3000.0, itimestep=1,
-                              isfflx=1, isftcflx=0):
+                              isfflx=1, isftcflx=0, variant="wrf_461"):
     """Submit one independent surface column per flattened horizontal cell.
 
     Inputs, the persistent ``mol``/``ustm`` values, and every result field
@@ -103,5 +103,6 @@ def submit_mynn_surface_layer(context, inputs: Mapping[str, object], mol,
     return context.submit_kernel(
         "mynn_surface_column", flattened,
         {"dx": float(np.float32(dx)), "itimestep": int(itimestep),
-         "isfflx": int(isfflx), "isftcflx": int(isftcflx), "n": count},
+         "isfflx": int(isfflx), "isftcflx": int(isftcflx), "n": count,
+         "gsl_wrf39": int(variant == "gsl_wrf39")},
         exact_policy=False, grid_size=count)

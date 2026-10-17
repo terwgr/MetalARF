@@ -4493,6 +4493,7 @@ class PhysicsDriver:
                     sea_inputs, f["mol_sea"], f["ustm_sea"],
                     self.mynn_sfclay_sea_result,
                     dx=cfg.dx, itimestep=itimestep, isfflx=cfg.isfflx,
+                    variant=cfg.mynn_sfclay_variant,
                 )
                 for name in (
                         "br", "gz1oz0", "mol", "psih", "psim", "rmol",

@@ -101,32 +101,34 @@ static inline float mynn_psih_unstable_full(float z)
     return (psihk + z * z * psihc) / (1.0f + z * z);
 }
 
+static inline float mynn_psi_full(float z, int which)
+{
+    if (which == 0) return mynn_psim_stable_full(z);
+    if (which == 1) return mynn_psih_stable_full(z);
+    if (which == 2) return mynn_psim_unstable_full(z);
+    return mynn_psih_unstable_full(z);
+}
+
 static inline float mynn_table(float z, int which)
 {
     // which: 0 psim stable, 1 psih stable, 2 psim unstable, 3 psih unstable.
     bool unstable = which >= 2;
     float scaled = (unstable ? -z : z) * 100.0f;
     int index = (int)scaled;
-    if (index + 1 > 1000) {
-        if (which == 0) return mynn_psim_stable_full(z);
-        if (which == 1) return mynn_psih_stable_full(z);
-        if (which == 2) return mynn_psim_unstable_full(z);
-        return mynn_psih_unstable_full(z);
-    }
-    float fraction = scaled - (float)index;
+    // Past the table the full function is used directly.  Both cases share
+    // one rolled evaluation so each call site inlines a single psi body.
+    const bool direct = index + 1 > 1000;
     float sign = unstable ? -1.0f : 1.0f;
-    float z0 = sign * 0.01f * (float)index;
-    float z1 = sign * 0.01f * (float)(index + 1);
-    float f0, f1;
-    if (which == 0) {
-        f0 = mynn_psim_stable_full(z0); f1 = mynn_psim_stable_full(z1);
-    } else if (which == 1) {
-        f0 = mynn_psih_stable_full(z0); f1 = mynn_psih_stable_full(z1);
-    } else if (which == 2) {
-        f0 = mynn_psim_unstable_full(z0); f1 = mynn_psim_unstable_full(z1);
-    } else {
-        f0 = mynn_psih_unstable_full(z0); f1 = mynn_psih_unstable_full(z1);
+    float f0 = 0.0f, f1 = 0.0f;
+    #pragma clang loop unroll(disable)
+    for (int k = 0; k < (direct ? 1 : 2); ++k) {
+        float f = mynn_psi_full(
+            direct ? z : sign * 0.01f * (float)(index + k), which);
+        if (k == 0) f0 = f;
+        else f1 = f;
     }
+    if (direct) return f0;
+    float fraction = scaled - (float)index;
     return f0 + fraction * (f1 - f0);
 }
 
@@ -171,6 +173,7 @@ static inline float mynn_zolrib(
     float zolold = ri < 0.0f ? -99999.0f : 99999.0f;
     float result = ri < 0.0f ? -66666.0f : 66666.0f;
     int iteration = 1;
+    #pragma clang loop unroll(disable)
     while (fabs(zolold - result) > 0.01f && iteration < 20) {
         zolold = iteration == 1 ? zol1 : result;
         float zol20 = zolold * z0 / za;
@@ -193,6 +196,72 @@ static inline float mynn_zolrib(
     }
     if (iteration == 20 && fabs(zolold - result) > 0.01f)
         result = mynn_li_etal_2010(ri, za / z0, z0 / zt);
+    return result;
+}
+
+// Metal compiles with fast math, where isfinite() may fold away.
+static inline bool mynn_finite(float x)
+{ return (as_type<uint>(x) & 0x7f800000u) != 0x7f800000u; }
+
+// mynn_sfclay_variant = "gsl_wrf39": the GSL WRF 3.9 fork's zolri2/zolri
+// (module_sf_mynn.F:1954-1993, :1899-1952).  See mynn_surface.cu.
+static inline float mynn_zolri2(
+    float zol2, float ri2, float za, float z0, float zt)
+{
+    float zol20 = mynn_mul_rn(zol2, z0) / za;
+    float zol3 = mynn_add_rn(zol2, zol20);
+    float psix2, psit2;
+    if (ri2 < 0.0f) {
+        psix2 = mynn_sf_log((za + z0) / z0)
+            - (mynn_psim_unstable(zol3) - mynn_psim_unstable(zol20));
+        psit2 = mynn_sf_log((za + zt) / zt)
+            - (mynn_psih_unstable(zol3) - mynn_psih_unstable(zol20));
+    } else {
+        psix2 = mynn_sf_log((za + z0) / z0)
+            - (mynn_psim_stable(zol3) - mynn_psim_stable(zol20));
+        psit2 = mynn_sf_log((za + zt) / zt)
+            - (mynn_psih_stable(zol3) - mynn_psih_stable(zol20));
+    }
+    return mynn_mul_rn(zol2, psit2) / mynn_mul_rn(psix2, psix2) - ri2;
+}
+
+// ZOL2 is INTENT(INOUT) in the fork: an iterate of the wrong sign is reset
+// to zero, and the caller keeps the reset value.
+static inline float mynn_zolri_iterate(float zol2, float ri2)
+{ return zol2 * ri2 < 0.0f ? 0.0f : zol2; }
+
+static inline float mynn_zolri(
+    float ri, float za, float z0, float zt, float zol1)
+{
+    float giveup = ri < 0.0f ? ri * 5.0f : ri * 8.0f;
+    float x1, x2;
+    if (ri < 0.0f) { x1 = zol1 - 0.02f; x2 = 0.0f; }
+    else           { x1 = 0.0f; x2 = zol1 + 0.02f; }
+    x1 = mynn_zolri_iterate(x1, ri);
+    x2 = mynn_zolri_iterate(x2, ri);
+    float fx1 = mynn_zolri2(x1, ri, za, z0, zt);
+    float fx2 = mynn_zolri2(x2, ri, za, z0, zt);
+    bool ok = mynn_finite(fx1) && mynn_finite(fx2);
+    float result = giveup;
+    int n = 0;
+    // One zolri2 evaluation per iteration, kept rolled: inlined copies of
+    // the software log and psi functions otherwise stall pipeline creation.
+    #pragma clang loop unroll(disable)
+    while (ok && fabs(x1 - x2) > 0.01f && n < 5) {
+        float denom = fx2 - fx1;
+        if (denom == 0.0f) { ok = false; break; }
+        const bool left = fabs(fx2) < fabs(fx1);
+        float x = left ? x1 - mynn_mul_rn(fx1 / denom, x2 - x1)
+                       : x2 - mynn_mul_rn(fx2 / denom, x2 - x1);
+        x = mynn_zolri_iterate(x, ri);
+        float fx = mynn_zolri2(x, ri, za, z0, zt);
+        if (left) { x1 = x; fx1 = fx; }
+        else      { x2 = x; fx2 = fx; }
+        result = x;
+        ok = mynn_finite(fx);
+        ++n;
+    }
+    if (!ok || (n == 5 && fabs(x1 - x2) >= 0.01f)) result = giveup;
     return result;
 }
 
@@ -457,7 +526,8 @@ kernel void mynn_surface_column(
     float vsgd = 0.32f * mynn_sf_pow(fmax(mynn_div_rn(dx, 5000.0f) - 1.0f, 0.0f), 0.33f);
     wsp = fmax(mynn_sf_sqrt(wsp * wsp + wstar * wstar + vsgd * vsgd), wmin);
     float br = govrth * za * dthvdz / (wsp * wsp);
-    float limit = itimestep == 1 ? 2.0f : 4.0f;
+    const bool gsl = p.gsl_wrf39 != 0;
+    float limit = itimestep == 1 ? 2.0f : (gsl ? 50.0f : 4.0f);
     br = fmin(fmax(br, -limit), limit);
 
     float visc = 1.326e-5f * (1.0f + 6.542e-3f * tc1
@@ -474,25 +544,36 @@ kernel void mynn_surface_column(
 
     float zratio = z0 / zt;
     float gz1oz0 = mynn_sf_log((za + z0) / z0);
-    float gz1ozt = mynn_sf_log((za + z0) / zt);
-    float gz2ozt = mynn_sf_log((2.0f + z0) / zt);
+    // gsl_wrf39 (fork :771-775): zt, not z0, in the heat log numerators;
+    // z/L is capped at 50 rather than 20.
+    const float zt_num = gsl ? zt : z0;
+    const float zol_cap = gsl ? 50.0f : 20.0f;
+    float gz1ozt = mynn_sf_log((za + zt_num) / zt);
+    float gz2ozt = mynn_sf_log((2.0f + zt_num) / zt);
     float gz10oz0 = mynn_sf_log((10.0f + z0) / z0);
-    float gz10ozt = mynn_sf_log((10.0f + z0) / zt);
+    float gz10ozt = mynn_sf_log((10.0f + zt_num) / zt);
 
-    float regime, zol, psim, psih, psim10, psih10, psih2;
-    if (br > 0.0f) {
-        regime = br > 0.2f ? 1.0f : 2.0f;
+    float regime, zol = 0.0f, psim, psih, psim10, psih10, psih2;
+    if (br != 0.0f) {
+        // One call site per solver for both regimes keeps the kernel small.
+        const float lo = br > 0.0f ? 0.0f : -zol_cap;
+        const float hi = br > 0.0f ? zol_cap : 0.0f;
         if (itimestep <= 1) zol = mynn_li_etal_2010(br, za / z0, zratio);
         else {
-            zol = za * karman * grav * mol / (th1 * fmax(ust * ust, 0.0001f));
-            zol = fmin(fmax(zol, 0.0f), 20.0f);
+            zol = za * karman * grav * mol
+                / (th1 * fmax(ust * ust, br > 0.0f ? 0.0001f : 0.001f));
+            zol = fmin(fmax(zol, lo), hi);
         }
-        zol = fmin(fmax(mynn_zolrib(br, za, z0, zt, gz1oz0, gz1ozt, zol),
-                           0.0f), 20.0f);
+        zol = fmin(fmax(gsl ? mynn_zolri(br, za, z0, zt, zol)
+            : mynn_zolrib(br, za, z0, zt, gz1oz0, gz1ozt, zol), lo), hi);
+    }
+    if (br > 0.0f) {
+        regime = br > 0.2f ? 1.0f : 2.0f;
         float zolzt = zol * zt / za, zolz0 = zol * z0 / za;
         float zolza = zol * (za + z0) / za;
         float zol10 = zol * (10.0f + z0) / za;
         float zol2 = zol * (2.0f + z0) / za;
+        if (gsl) zolzt = zolz0;   // fork: psih's lower limit is z0/L
         psim = mynn_psim_stable(zolza) - mynn_psim_stable(zolz0);
         psih = mynn_psih_stable(zolza) - mynn_psih_stable(zolzt);
         psim10 = mynn_psim_stable(zol10) - mynn_psim_stable(zolz0);
@@ -500,20 +581,18 @@ kernel void mynn_surface_column(
         psih2 = mynn_psih_stable(zol2) - mynn_psih_stable(zolz0);
     } else if (br == 0.0f) {
         regime = 3.0f; zol = 0.0f;
+        if (gsl) {   // fork :875-880, from the incoming u* and MOL
+            if (ust < 0.01f) zol = br * gz1oz0;
+            else zol = karman * govrth * za * mol / fmax(ust * ust, 0.001f);
+        }
         psim = 0.0f; psih = 0.0f; psim10 = 0.0f; psih10 = 0.0f; psih2 = 0.0f;
     } else {
         regime = 4.0f;
-        if (itimestep <= 1) zol = mynn_li_etal_2010(br, za / z0, zratio);
-        else {
-            zol = za * karman * grav * mol / (th1 * fmax(ust * ust, 0.001f));
-            zol = fmin(fmax(zol, -20.0f), 0.0f);
-        }
-        zol = fmin(fmax(mynn_zolrib(br, za, z0, zt, gz1oz0, gz1ozt, zol),
-                           -20.0f), 0.0f);
         float zolzt = zol * zt / za, zolz0 = zol * z0 / za;
         float zolza = zol * (za + z0) / za;
         float zol10 = zol * (10.0f + z0) / za;
         float zol2 = zol * (2.0f + z0) / za;
+        if (gsl) zolzt = zolz0;   // fork: psih's lower limit is z0/L
         psim = mynn_psim_unstable(zolza) - mynn_psim_unstable(zolz0);
         psih = mynn_psih_unstable(zolza) - mynn_psih_unstable(zolzt);
         psim10 = mynn_psim_unstable(zol10) - mynn_psim_unstable(zolz0);
@@ -538,13 +617,14 @@ kernel void mynn_surface_column(
         ustm = ust;
     }
 
-    gz1ozt = mynn_sf_log((za + z0) / zt);
-    gz2ozt = mynn_sf_log((2.0f + z0) / zt);
+    gz1ozt = mynn_sf_log((za + zt_num) / zt);
+    gz2ozt = mynn_sf_log((2.0f + zt_num) / zt);
+    const float zq_num = gsl ? zq : z0;
     float psit = fmax(gz1ozt - psih, 1.0f);
     float psit2 = fmax(gz2ozt - psih2, 1.0f);
-    float psiq = fmax(mynn_sf_log((za + z0) / zq) - psih, 1.0f);
-    float psiq2 = fmax(mynn_sf_log((2.0f + z0) / zq) - psih2, 1.0f);
-    float psiq10 = fmax(mynn_sf_log((10.0f + z0) / zq) - psih10, 1.0f);
+    float psiq = fmax(mynn_sf_log((za + zq_num) / zq) - psih, 1.0f);
+    float psiq2 = fmax(mynn_sf_log((2.0f + zq_num) / zq) - psih2, 1.0f);
+    float psiq10 = fmax(mynn_sf_log((10.0f + zq_num) / zq) - psih10, 1.0f);
     mol = karman * (thv1 - thvgb) / psit / prt;
     float qstar = karman * (qvsh - qsfc) * 1000.0f / psiq / prt;
 
