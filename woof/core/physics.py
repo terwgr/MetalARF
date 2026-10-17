@@ -832,10 +832,6 @@ METAL_KNOWN_CONFLICTS = (
     ("km_opt=0 runs on Metal only under the SASE PBL (bl_pbl_physics=900)",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(cfg.km_opt) == 0 and int(cfg.bl_pbl_physics) != 900),
-    ("SASE has no Metal specified or nested boundary floor",
-     lambda cfg, radiation, cumulus, cam_ozone:
-     int(cfg.bl_pbl_physics) == 900
-     and (bool(cfg.specified) or bool(getattr(cfg, "nested", False)))),
     ("Metal RRTMGP holds at most 128 layers including its model-top layer",
      lambda cfg, radiation, cumulus, cam_ozone:
      radiation_enabled(cfg) and 4 in radiation_scheme_ids(cfg)
@@ -6912,9 +6908,6 @@ class PhysicsDriver:
         dz_mean = float(dzf.to_numpy().mean(dtype=np.float64))
         boundary_width = (int(cfg.spec_bdy_width)
                           if cfg.specified or cfg.nested else 0)
-        if boundary_width:
-            raise NotImplementedError(
-                "SASE Metal specified/nested e-boundary floor is not wired")
         zdamp = (float(cfg.zdamp)
                  if cfg.damp_opt == 3 and cfg.zdamp > 0.0 else None)
         ledger = launch_sase_step(
@@ -6922,6 +6915,7 @@ class PhysicsDriver:
             dx=float(cfg.dx), dy=float(cfg.dy), dz=dz_mean,
             delta=math.sqrt(float(cfg.dx) * float(cfg.dy)), dt=float(dt),
             n2=n2, dz_col=dzf, heat=heat, z0=0.0, zdamp=zdamp,
+            exclude_boundary_width=boundary_width,
             ust=f["ust"], wspd_sfc=f["wspd"], n2_moist=(
                 n2_eff if sase_switch_value(cfg, "sase_moist_n2") else None),
             stable_dissipation=sase_switch_value(
@@ -6949,6 +6943,20 @@ class PhysicsDriver:
             submit_sase_vent_flux_diag(
                 context, vent[0], vent_scale, self.sase_flux_diag["fth_vent"],
                 fac=float(SASE_CP_AIR))
+        if boundary_width:
+            # The CUDA path's specified-boundary policy (see its docstring):
+            # e_sgs held at the floor across the outer spec_bdy_width rows.
+            from woof.metal.spec_zone_ring import submit_spec_zone_ring_copy
+            nz_e, ny, nx = state.e_sgs.shape
+            bw = boundary_width
+            for row_start, rows, column_start, columns in (
+                    (0, bw, 0, nx), (ny - bw, bw, 0, nx),
+                    (0, ny, 0, bw), (0, ny, nx - bw, bw)):
+                floor = arrays.empty((nz_e, rows, columns), dtype=DTYPE)
+                floor.fill(DTYPE(SASE_E_MIN))
+                submit_spec_zone_ring_copy(
+                    state.e_sgs, floor, row_start=row_start, rows=rows,
+                    column_start=column_start, columns=columns, direction=1)
 
         du = arrays.empty(state.p.shape, dtype=DTYPE)
         dv = arrays.empty(state.p.shape, dtype=DTYPE)
