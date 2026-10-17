@@ -203,13 +203,13 @@ def is_native_gf_result(result, owner, state, cfg) -> bool:
         shape = tuple(state.p.shape)
         surface_shape = shape[1:]
         if any(getattr(result, name) is not None for name in (
-                "rqrcuten", "rqscuten", "nca_seconds", "pratec")):
+                "rqrcuten", "rqscuten", "rucuten", "rvcuten",
+                "nca_seconds", "pratec")):
             return False
         if ((result.rqicuten is not None)
                 != (getattr(state, "qi", None) is not None)):
             return False
-        for name in ("rthcuten", "rqvcuten", "rqccuten", "rqicuten",
-                     "rucuten", "rvcuten"):
+        for name in ("rthcuten", "rqvcuten", "rqccuten", "rqicuten"):
             value = getattr(result, name)
             if value is None and name == "rqicuten":
                 continue
@@ -670,7 +670,6 @@ class GrellFreitas:
             owner=self,
             rthcuten=output["rthcuten"], rqvcuten=output["rqvcuten"],
             rqccuten=output["rqccuten"], rqicuten=rqicuten,
-            rucuten=output["rucuten"], rvcuten=output["rvcuten"],
             rainc=rainc)
 
 
