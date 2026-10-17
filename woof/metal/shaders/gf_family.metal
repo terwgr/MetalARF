@@ -3494,9 +3494,11 @@ static inline float gfd_neg_check(int is_shallow, float dt, GfCol outq,
 kernel void gf_gfdrv_stage(
     constant GfGfdrvStageResources &r [[buffer(0)]],
     constant GfGfdrvStageParams &q [[buffer(1)]],
-    uint col [[thread_position_in_grid]]) {
+    uint tid [[thread_position_in_grid]]) {
     const int n = q.ncol;
     const int nz = q.nz;
+    // One launch covers the column batch that starts at col0.
+    const uint col = tid + uint(q.col0);
     if (col >= uint(n)) return;
     device float *gfws_col = r.workspace
         + (ulong)(col / GFWS_LANES) * GFWS_BLOCK_FLOATS

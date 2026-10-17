@@ -14,6 +14,11 @@ _SIGNATURE_PATH = (Path(__file__).resolve().parent
                    / "signature_fragments" / "gf_family.json")
 with _SIGNATURE_PATH.open(encoding="utf-8") as _stream:
     _ENTRY = json.load(_stream)["kernels"][0]
+#: Columns per command buffer.  A full mesh in one launch outlives the
+#: GPU watchdog on a display GPU (kIOGPUCommandBufferCallbackErrorImpacting-
+#: Interactivity); each batch is its own submission.
+GF_COLUMNS_PER_SUBMIT = 2048
+
 _DTYPES = {"float": np.dtype(np.float32),
            "float32": np.dtype(np.float32),
            "int32": np.dtype(np.int32)}
@@ -27,7 +32,8 @@ def submit_gf_gfdrv_stage(resources: dict, parameters: dict, *, ncol: int):
     if ncol <= 0 or ncol > 0x7fffffff:
         raise ValueError("GF column count must fit positive int32")
     resource_specs = {item[0]: item[1] for item in _ENTRY["resources"]}
-    parameter_specs = {item[0]: item[1] for item in _ENTRY["parameters"]}
+    parameter_specs = {item[0]: item[1] for item in _ENTRY["parameters"]
+                       if item[0] != "col0"}
     if set(resources) != set(resource_specs):
         missing = sorted(set(resource_specs) - set(resources))
         extra = sorted(set(resources) - set(resource_specs))
@@ -63,9 +69,14 @@ def submit_gf_gfdrv_stage(resources: dict, parameters: dict, *, ncol: int):
         raise ValueError("GF ncol parameter does not match launch width")
     if int(scalar_values["nz"]) <= 0:
         raise ValueError("GF nz must be positive")
-    return context.submit_kernel(
-        "gf_gfdrv_stage", arrays, scalar_values, exact_policy=False,
-        grid_size=ncol, threads_per_group=64)
+    result = None
+    for col0 in range(0, ncol, GF_COLUMNS_PER_SUBMIT):
+        result = context.submit_kernel(
+            "gf_gfdrv_stage", arrays, {**scalar_values, "col0": col0},
+            exact_policy=False,
+            grid_size=min(GF_COLUMNS_PER_SUBMIT, ncol - col0),
+            threads_per_group=64)
+    return result
 
 
-__all__ = ["submit_gf_gfdrv_stage"]
+__all__ = ["GF_COLUMNS_PER_SUBMIT", "submit_gf_gfdrv_stage"]

@@ -6,8 +6,8 @@
       "size": 187856
     },
     "woof_default.metallib": {
-      "sha256": "849db92f1313cabfbbd5b2dcb4a059da599101f7ee7e04f1d1c4112a974e3e24",
-      "size": 11312092
+      "sha256": "6ef27c712f603f2005d4203d5ffdb95503ca76186f2a135784fa4712835e4584",
+      "size": 11312140
     },
     "woof_exact.metallib": {
       "sha256": "017b8a398514b6f4d50366b83af61dc25fad1d1d6c805f9d4f73e8ae71949458",
@@ -15,8 +15,8 @@
     }
   },
   "implementation_file_count": 887,
-  "implementation_sha256": "b68187b8a83de1020179dfcd29784d06f2af0d4c6d27a5c30029e2d942682c99",
-  "metal_inputs_sha256": "abf79dfda010a21b94f4113c33ed105da907d6ffc9e2ab3dd54cebe18bba5955",
+  "implementation_sha256": "d4275670accb8eb14d8746ace7c09771b5a6a0e30a0477b5cdebc6e271204014",
+  "metal_inputs_sha256": "563711ab19800374186cecafaf2fef79a2134449349971a48f4fb1f9d38909b8",
   "minimum_os": "14.0",
   "platform": "darwin-arm64",
   "schema": "woof-metal-bundle-v2",
@@ -36,8 +36,8 @@
         "size": 1296
       },
       "woof/metal/kernel_signatures.json": {
-        "sha256": "e00adab83c1c9f712a7bea164fe531e530a5989763ce712774126d43e38f34c4",
-        "size": 2263369
+        "sha256": "bcf7a4c9c2139bef1c5dc41d91472a6fdd040516c33cd5305ea7f57b1d70432e",
+        "size": 2263426
       },
       "woof/metal/native/woof_metal.h": {
         "sha256": "326bea8d06cdaa90324506c9a44da1396dffe85a326f9e0ace7167ab721d7c51",
@@ -184,8 +184,8 @@
         "size": 14419
       },
       "woof/metal/shaders/gf_family.metal": {
-        "sha256": "7fd50e12ee7c98cce993cc4c90b51a859e8f077b3708b3edd03b35d2ea20020b",
-        "size": 145605
+        "sha256": "c0dd1442bc699c848777956b2bc3615ace2b4eb18850abf619af4ecdaaefb53a",
+        "size": 145709
       },
       "woof/metal/shaders/global_any_u32_fragment.metal": {
         "sha256": "626ac3e3bc43917dcd79e8ab627e1a86a7276f6913f790f78b7b7223be5a7238",
@@ -1688,8 +1688,8 @@
         "size": 3947
       },
       "woof/metal/signature_fragments/gf_family.json": {
-        "sha256": "0a69d85beb8b11d29c6ca17e905bd6915d17cf5d6691038d141b1237ecee7bbd",
-        "size": 5719
+        "sha256": "8252bdce48bddceb8b80f72f98b9a60dfc6cca3d19b0b96544311269b8bbefe2",
+        "size": 5776
       },
       "woof/metal/signature_fragments/global_any_u32_fragment.json": {
         "sha256": "5e922074fdf71a845c8b8ab3cac5f51a03c10136de68931b4f90556eb678ee34",
@@ -2968,6 +2968,6 @@
         "size": 296
       }
     },
-    "sha256": "abf79dfda010a21b94f4113c33ed105da907d6ffc9e2ab3dd54cebe18bba5955"
+    "sha256": "563711ab19800374186cecafaf2fef79a2134449349971a48f4fb1f9d38909b8"
   }
 }

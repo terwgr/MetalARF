@@ -829,14 +829,14 @@
       ],
       "cuda_source": "woof/core/kernels/gf.cu",
       "cuda_symbol": "gf_gfdrv_stage",
-      "layout_hash": "cf40ec8c82f3d3afb212a226810202c907c2d4f3493465472b0d17f5eb580826",
+      "layout_hash": "1f26617228eda4facdee7147fb29b1ac3e34bc36ffe3787b557379ade04ae881",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/gf_family.metal",
       "module": "gf_family",
       "name": "gf_gfdrv_stage",
-      "parameter_size": 32,
+      "parameter_size": 36,
       "resource_count": 31,
-      "shader_hash": "7fd50e12ee7c98cce993cc4c90b51a859e8f077b3708b3edd03b35d2ea20020b",
+      "shader_hash": "c0dd1442bc699c848777956b2bc3615ace2b4eb18850abf619af4ecdaaefb53a",
       "threads_per_group": 64
     },
     {
