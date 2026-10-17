@@ -834,12 +834,13 @@ METAL_KNOWN_CONFLICTS = (
      lambda cfg, radiation, cumulus, cam_ozone:
      radiation_enabled(cfg) and 4 in radiation_scheme_ids(cfg)
      and not _metal_legacy_rrtmg_selected(cfg) and int(cfg.nz) > 127),
-    ("spp_pbl has no Metal MYNN caller",
-     lambda cfg, radiation, cumulus, cam_ozone:
-     int(getattr(cfg, "spp_pbl", 0)) != 0),
     ("Metal NSSL microphysics (mp_physics=18) sediments at most 128 levels",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(cfg.mp_physics) == 18 and int(cfg.nz) > 128),
+    ("spp_pbl: the Metal MYNN kernels support SPP, but no Metal route "
+     "supplies a perturbation pattern yet",
+     lambda cfg, radiation, cumulus, cam_ozone:
+     int(getattr(cfg, "spp_pbl", 0)) != 0),
     ("diff_opt=1 (coordinate-surface mixing) has no Metal kernels; use diff_opt=2",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "diff_opt", 2)) == 1),

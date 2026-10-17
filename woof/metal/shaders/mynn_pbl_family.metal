@@ -10,6 +10,7 @@
 #include "mynn_driver_surface_columns_bindings.metalh"
 #include "mynn_driver_surface_gsd41_columns_bindings.metalh"
 #include "mynn_predict_default_columns_bindings.metalh"
+#include "mynn_spp_diffusivity_bindings.metalh"
 #include "mynn_driver_prep_columns_bindings.metalh"
 #include "mynn_wrapper_to_specific_bindings.metalh"
 #include "mynn_wrapper_from_specific_bindings.metalh"
@@ -1283,6 +1284,22 @@ static inline void mynn_turbulence_interface(
     r.dfq[idx] = r.dfm[idx];
 }
 
+// WRF module_bl_mynn.F:3135-3140 under spp_pbl=1 (spp_kernel_sources.py
+// mynn_spp_diffusivity). DFQ keeps the unperturbed momentum diffusivity.
+kernel void mynn_spp_diffusivity(
+    constant MynnSppDiffusivityResources &r [[buffer(0)]],
+    constant MynnSppDiffusivityParams &p [[buffer(1)]],
+    uint i [[thread_position_in_grid]]) {
+    if (i >= uint(p.count)) return;
+    const float exponent = mynn_f32_div(
+        -mynn_f32_max2(mynn_f32_sub(r.zw[i], 8000.0f), 0.0f), 2000.0f);
+    const float taper = mynn_f32_max2(mynn_gfk_expf(exponent), 0.001f);
+    r.dfm[i] = mynn_f32_add(r.dfm[i], mynn_f32_mul(mynn_f32_mul(
+        mynn_f32_mul(r.dfm[i], r.rstoch[i]), 1.5f), taper));
+    r.dfh[i] = mynn_f32_add(r.dfh[i], mynn_f32_mul(mynn_f32_mul(
+        mynn_f32_mul(r.dfh[i], r.rstoch[i]), 1.5f), taper));
+}
+
 kernel void mynn_turbulence_default_interfaces(
     constant MynnTurbulenceDefaultInterfacesResources &r [[buffer(0)]],
     constant MynnTurbulenceDefaultInterfacesParams &q [[buffer(1)]],
@@ -1360,9 +1377,12 @@ kernel void mynn_condensation_default_columns(
             mynn_f32_div(mynn_f32_mul(xl, rsl), cpm)));
         const float b = mynn_f32_mul(a, rsl);
 
-        const float qw_pert = mynn_f32_add(r.qw[idx], mynn_f32_mul(
-            mynn_f32_mul(mynn_f32_mul(r.qw[idx], 0.5f), r.rstoch[idx]),
-            0.0f));
+        // spp_pbl=1 perturbs the saturation deficit; the deterministic
+        // source keeps its vanishing term, operation for operation.
+        const float qw_spp = mynn_f32_mul(
+            mynn_f32_mul(r.qw[idx], 0.5f), r.rstoch[idx]);
+        const float qw_pert = mynn_f32_add(r.qw[idx], q.spp_pbl != 0
+            ? qw_spp : mynn_f32_mul(qw_spp, 0.0f));
         const float qmq = mynn_f32_sub(qw_pert, qsat_tk);
         const float qsq_floor = mynn_f32_max2(r.qsq[idx], 0.0f);
         const float sgm_root = mynn_f64_to_f32(soft64_sqrt(

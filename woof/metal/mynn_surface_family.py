@@ -62,7 +62,8 @@ def _validate_options(dx, itimestep, isfflx, isftcflx):
 
 def submit_mynn_surface_layer(context, inputs: Mapping[str, object], mol,
                               ustm, result, *, dx=3000.0, itimestep=1,
-                              isfflx=1, isftcflx=0, variant="wrf_461"):
+                              isfflx=1, isftcflx=0, variant="wrf_461",
+                              spp_pbl=0, pattern_spp_pbl=None):
     """Submit one independent surface column per flattened horizontal cell.
 
     Inputs, the persistent ``mol``/``ustm`` values, and every result field
@@ -82,6 +83,14 @@ def submit_mynn_surface_layer(context, inputs: Mapping[str, object], mol,
         resources[f"input_{name}"] = inputs[name]
     resources["input_mol"] = mol
     resources["input_ustm"] = ustm
+    if spp_pbl:
+        if not isinstance(pattern_spp_pbl, MetalArray):
+            raise ValueError("MYNN surface SPP requires a pattern_spp_pbl[ny,nx] MetalArray")
+        if not np.isfinite(pattern_spp_pbl.to_numpy()).all():
+            raise ValueError("MYNN surface SPP pattern must be finite")
+    # Without SPP the kernel never reads the pattern slot; u1 fills it.
+    resources["input_pattern_spp_pbl"] = (
+        pattern_spp_pbl if spp_pbl else inputs["u1"])
     for name in MYNN_SURFACE_OUTPUTS:
         try:
             resources[f"output_{name}"] = getattr(result, name)
@@ -106,5 +115,6 @@ def submit_mynn_surface_layer(context, inputs: Mapping[str, object], mol,
         {"dx": float(np.float32(dx)), "itimestep": int(itimestep),
          "isfflx": int(isfflx), "isftcflx": int(isftcflx), "n": count,
          "gsl_wrf39": int(variant == "gsl_wrf39"),
+         "spp_pbl": int(bool(spp_pbl)),
          **metal_mynn_parameters("mynn_surface_column")},
         exact_policy=False, grid_size=count)

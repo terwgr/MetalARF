@@ -1,0 +1,66 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/spp_kernel_sources.py",
+      "cuda_symbol": "mynn_spp_diffusivity",
+      "layout_version": 1,
+      "module": "mynn_pbl_family",
+      "name": "mynn_spp_diffusivity",
+      "parameters": [
+        [
+          "count",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "dfm",
+          "float",
+          "read_write"
+        ],
+        [
+          "dfh",
+          "float",
+          "read_write"
+        ],
+        [
+          "rstoch",
+          "float",
+          "read"
+        ],
+        [
+          "zw",
+          "float",
+          "read"
+        ]
+      ],
+      "shapes": {
+        "dfh": [
+          [
+            "count"
+          ]
+        ],
+        "dfm": [
+          [
+            "count"
+          ]
+        ],
+        "rstoch": [
+          [
+            "count"
+          ]
+        ],
+        "zw": [
+          [
+            "count"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/mynn_pbl_family.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

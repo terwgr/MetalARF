@@ -1598,6 +1598,10 @@
         [
           "czil",
           "float32"
+        ],
+        [
+          "spp_pbl",
+          "int32"
         ]
       ],
       "resources": [
@@ -1890,6 +1894,11 @@
           "output_znt",
           "float",
           "read_write"
+        ],
+        [
+          "input_pattern_spp_pbl",
+          "float",
+          "read"
         ]
       ],
       "shapes": {
@@ -1919,6 +1928,11 @@
           ]
         ],
         "input_p1": [
+          [
+            "n"
+          ]
+        ],
+        "input_pattern_spp_pbl": [
           [
             "n"
           ]

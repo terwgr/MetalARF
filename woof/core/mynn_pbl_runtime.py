@@ -207,7 +207,21 @@ def mynn_pbl_step(
     from woof.core.spp_kernel_sources import spp_flag
     stochastic = spp_flag(spp_pbl, "spp_pbl")
     stochastic_flat = None
-    if stochastic:
+    try:
+        from woof.metal.array import MetalArray
+    except ImportError:
+        MetalArray = ()
+    if stochastic and isinstance(theta, MetalArray):
+        if (not isinstance(pattern_spp_pbl, MetalArray)
+                or pattern_spp_pbl.shape != (nz, ny, nx)
+                or pattern_spp_pbl.dtype != DTYPE
+                or not pattern_spp_pbl.flags.c_contiguous
+                or pattern_spp_pbl.buffer.context is not theta.buffer.context):
+            raise ValueError("MYNN SPP requires float32 pattern_spp_pbl[nz,ny,nx] in the atmosphere's Metal context")
+        if not np.isfinite(pattern_spp_pbl.to_numpy()).all():
+            raise ValueError("MYNN SPP pattern must be finite")
+        stochastic_flat = pattern_spp_pbl.view((nz, ncol))
+    elif stochastic:
         if (not isinstance(pattern_spp_pbl, cp.ndarray)
                 or pattern_spp_pbl.shape != (nz, ny, nx)
                 or pattern_spp_pbl.dtype != DTYPE
@@ -220,16 +234,12 @@ def mynn_pbl_step(
         raise ValueError("MYNN PBL needs w on the lower interface of each "
                          "layer, i.e. at least nz levels")
 
-    try:
-        from woof.metal.array import MetalArray
-    except ImportError:
-        MetalArray = ()
     if isinstance(theta, MetalArray):
         return _mynn_pbl_step_metal(
             atmosphere, fields, w=w, dx=dx, delt=delt,
             itimestep=itimestep, mp_physics=mp_physics, state=state,
             qn_scalars=qn_scalars, scalar_pblmix=scalar_pblmix,
-            options=options)
+            options=options, rstoch=stochastic_flat)
 
     chunk = (resolve_mynn_column_chunk(nz) if column_chunk is None
              else int(column_chunk))
@@ -394,7 +404,7 @@ def mynn_pbl_step(
 
 def _mynn_pbl_step_metal(atmosphere, fields, *, w, dx, delt, itimestep,
                          mp_physics, state, qn_scalars, scalar_pblmix,
-                         options):
+                         options, rstoch=None):
     """MetalArray caller for the admitted MYNN momentum-only source chain."""
     from woof.metal.array import MetalArray
     from woof.metal.mynn_pbl_family import (
@@ -417,7 +427,7 @@ def _mynn_pbl_step_metal(atmosphere, fields, *, w, dx, delt, itimestep,
         "bl_mynn_edmf_tke": 0, "bl_mynn_mixscalars": 0,
         "bl_mynn_cloudmix": 1, "bl_mynn_mixqt": 0,
         "bl_mynn_output": 0, "bl_mynn_tkeadvect": False,
-        "icloud_bl": 1, "tke_budget": 0, "spp_pbl": 0,
+        "icloud_bl": 1, "tke_budget": 0,
         "mix_chem": False, "flag_qc": True, "flag_qi": True,
         "flag_qs": mynn_flag_qs(mp_physics), "flag_qnc": False,
         "flag_qni": False, "flag_qnwfa": False, "flag_qnifa": False,
@@ -489,7 +499,7 @@ def _mynn_pbl_step_metal(atmosphere, fields, *, w, dx, delt, itimestep,
     out = mynn_bl_driver_metal(values, initflag=1 if int(itimestep) == 1 else 0,
         delt=delt, state=state, flag_qs=mynn_flag_qs(mp_physics),
         bl_mynn_mixlength=selected_mixlength,
-        bl_mynn_version=bl_mynn_version)
+        bl_mynn_version=bl_mynn_version, rstoch=rstoch)
     if bl_mynn_version == "wrf_461":
         submit_mynn_wrapper_from_specific(
             context, sq["sqv"], out["rqvblten"], out["rqcblten"],

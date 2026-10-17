@@ -3118,14 +3118,14 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_pbl.cu",
       "cuda_symbol": "mynn_condensation_default_columns",
-      "layout_hash": "e45787e9678206fea352af94986cc29263c662505e2f38f308b2b1226e1b4f69",
+      "layout_hash": "82f9175da171f146eb3cac06aa80cf7e3a3354e461629e0b6701d1906019d408",
       "layout_version": 1,
       "metal_source": "woof/metal/shaders/mynn_pbl_family.metal",
       "module": "mynn_pbl_family",
       "name": "mynn_condensation_default_columns",
-      "parameter_size": 8,
+      "parameter_size": 12,
       "resource_count": 19,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3141,7 +3141,7 @@
       "name": "mynn_dmp_mf_columns",
       "parameter_size": 12,
       "resource_count": 51,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3157,7 +3157,7 @@
       "name": "mynn_driver_diss_heat_columns",
       "parameter_size": 8,
       "resource_count": 4,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3173,7 +3173,7 @@
       "name": "mynn_driver_exchange_columns",
       "parameter_size": 8,
       "resource_count": 5,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3189,7 +3189,7 @@
       "name": "mynn_driver_prep_columns",
       "parameter_size": 8,
       "resource_count": 13,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3205,7 +3205,7 @@
       "name": "mynn_driver_surface_columns",
       "parameter_size": 8,
       "resource_count": 18,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3221,7 +3221,7 @@
       "name": "mynn_initialize_default_columns",
       "parameter_size": 28,
       "resource_count": 24,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3237,7 +3237,7 @@
       "name": "mynn_level2_columns",
       "parameter_size": 12,
       "resource_count": 14,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3253,7 +3253,7 @@
       "name": "mynn_level2_pairs",
       "parameter_size": 8,
       "resource_count": 21,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3269,7 +3269,7 @@
       "name": "mynn_mixlength_default_columns",
       "parameter_size": 20,
       "resource_count": 20,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3285,7 +3285,7 @@
       "name": "mynn_pblh_scale_columns",
       "parameter_size": 8,
       "resource_count": 10,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3301,7 +3301,7 @@
       "name": "mynn_predict_default_columns",
       "parameter_size": 8,
       "resource_count": 29,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3342,14 +3342,14 @@
       ],
       "cuda_source": "woof/core/kernels/mynn_surface.cu",
       "cuda_symbol": "mynn_surface_column",
-      "layout_hash": "13fb91a6833ba8e33ae1960a3f8e20b9626410cae8659d36ed510afb8c063e89",
+      "layout_hash": "87b0591b48c69758172c49587d131b80e002eb04a58714a06b60eeb263634585",
       "layout_version": 2,
       "metal_source": "woof/metal/shaders/mynn_surface_family.metal",
       "module": "mynn_surface_family",
       "name": "mynn_surface_column",
-      "parameter_size": 28,
-      "resource_count": 58,
-      "shader_hash": "65d6fb2727a6df53e617c04fad2ed0df254d82b6d3784e033c61f215d1a9217a",
+      "parameter_size": 32,
+      "resource_count": 59,
+      "shader_hash": "57a82e863f995130ef1401af7eeecf6936a9ca1d41953a78a5df149e72a4f028",
       "threads_per_group": 128
     },
     {
@@ -3365,7 +3365,7 @@
       "name": "mynn_surface_seed",
       "parameter_size": 4,
       "resource_count": 7,
-      "shader_hash": "65d6fb2727a6df53e617c04fad2ed0df254d82b6d3784e033c61f215d1a9217a",
+      "shader_hash": "57a82e863f995130ef1401af7eeecf6936a9ca1d41953a78a5df149e72a4f028",
       "threads_per_group": 128
     },
     {
@@ -3381,7 +3381,7 @@
       "name": "mynn_tendencies_columns",
       "parameter_size": 28,
       "resource_count": 60,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3397,7 +3397,7 @@
       "name": "mynn_turbulence_default_interfaces",
       "parameter_size": 12,
       "resource_count": 24,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3413,7 +3413,7 @@
       "name": "mynn_wrapper_from_specific",
       "parameter_size": 4,
       "resource_count": 6,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -3429,7 +3429,7 @@
       "name": "mynn_wrapper_to_specific",
       "parameter_size": 4,
       "resource_count": 8,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -12585,7 +12585,7 @@
       "name": "mynn_condensation_gsd41_columns",
       "parameter_size": 8,
       "resource_count": 19,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -12601,7 +12601,7 @@
       "name": "mynn_dmp_mf_gsd41_columns",
       "parameter_size": 12,
       "resource_count": 52,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -12617,7 +12617,7 @@
       "name": "mynn_driver_surface_gsd41_columns",
       "parameter_size": 8,
       "resource_count": 19,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -12633,7 +12633,7 @@
       "name": "mynn_mixlength_gsd41_columns",
       "parameter_size": 8,
       "resource_count": 19,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -12649,7 +12649,7 @@
       "name": "mynn_initialize_gsd41_columns",
       "parameter_size": 24,
       "resource_count": 24,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -13055,7 +13055,7 @@
       "name": "mynn_scalar_pblmix_columns",
       "parameter_size": 12,
       "resource_count": 6,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -15449,7 +15449,7 @@
       "name": "mynn_pblh_scale_gsd41_columns",
       "parameter_size": 8,
       "resource_count": 10,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -15465,7 +15465,7 @@
       "name": "mynn_turbulence_gsd41_interfaces",
       "parameter_size": 12,
       "resource_count": 24,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -15481,7 +15481,7 @@
       "name": "mynn_predict_gsd41_columns",
       "parameter_size": 8,
       "resource_count": 29,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -15497,7 +15497,7 @@
       "name": "mynn_driver_diss_heat_gsd41_columns",
       "parameter_size": 8,
       "resource_count": 4,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -15513,7 +15513,7 @@
       "name": "mynn_tendencies_gsd41_columns",
       "parameter_size": 28,
       "resource_count": 62,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -15529,7 +15529,7 @@
       "name": "mynn_gsd41_thvl_columns",
       "parameter_size": 4,
       "resource_count": 9,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -15545,7 +15545,7 @@
       "name": "mynn_gsd41_cloud_decay",
       "parameter_size": 8,
       "resource_count": 7,
-      "shader_hash": "5334bb75571047c957da3bb3cd30efa1389fbe80d85617923737f09312cf0a5a",
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     },
     {
@@ -15861,6 +15861,22 @@
       "parameter_size": 68,
       "resource_count": 22,
       "shader_hash": "24e56f800b9927a4d95f299c3c0aa293c13f34808cbc006a08130d7f12800def",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/spp_kernel_sources.py",
+      "cuda_symbol": "mynn_spp_diffusivity",
+      "layout_hash": "6f98c4256814529d5da98378611a1e41a9cbd4db3c3f60e5062566d9b8478892",
+      "layout_version": 1,
+      "metal_source": "woof/metal/shaders/mynn_pbl_family.metal",
+      "module": "mynn_pbl_family",
+      "name": "mynn_spp_diffusivity",
+      "parameter_size": 4,
+      "resource_count": 4,
+      "shader_hash": "0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4",
       "threads_per_group": 128
     }
   ],

@@ -307,17 +307,6 @@ static inline float mynn_taylor_yelland_2001(float wsp)
     return fmin(fmax(z0, 1.27e-7f), 2.85e-3f);
 }
 
-// module_sf_mynn.F:1425.  COARE 3.0 zt/zq.  The Ren<=2 test at :1442 selects
-// between two arms that compute the identical expression.  Zq is assigned
-// from the already-clamped Zt (:1466-1467), so zq == zt.
-static inline void mynn_fairall_etal_2003(
-    float restar, thread float &zt, thread float &zq)
-{
-    zt = 5.5e-5f * mynn_sf_pow(restar, -0.60f);
-    zt = fmin(fmax(zt, 2.0e-9f), 1.0e-4f);
-    zq = zt;
-}
-
 // module_sf_mynn.F:1392.  ISFTCFLX=2 zt/zq.  This leaf makes its own
 // landsea-1.5 .GT. 0 test, which is not the .GE. 0 at :625 that selected the
 // water roughness, so a column at exactly XLAND=1.5 arrives here and takes
@@ -335,26 +324,6 @@ static inline void mynn_garratt_1992(
         zq = mynn_div_rn(z0, mynn_sf_pow(2.71828183f, 2.0f));
         zt = zq;
     }
-}
-
-// module_sf_mynn.F:631-710.  ISFTCFLX picks the over-water z0 and then, from
-// the restar that new z0 implies (:675), the zt/zq pair.  COARE_OPT is a REAL
-// PARAMETER fixed at 3.0 (:85), so edson_etal_2013 and fairall_etal_2014 are
-// unreachable through SFCLAY1D_mynn and are deliberately absent from this
-// kernel: they exist in the CPU reference only because the leaf oracle can
-// call them at their own entry points.  ISFTCFLX=4 sets a z0 and then leaves
-// z_t/z_q unassigned (:680-702 has no arm for it), so the host rejects it
-// before launch and this switch has no arm for it either.
-static inline void mynn_water_roughness(
-    int isftcflx, float ustar, float wsp, float visc, float za, float xland,
-    thread float &z0, thread float &restar, thread float &zt, thread float &zq)
-{
-    if (isftcflx == 1 || isftcflx == 2) z0 = mynn_davis_etal_2008(ustar);
-    else if (isftcflx == 3) z0 = mynn_taylor_yelland_2001(wsp);
-    else z0 = mynn_charnock_1955(ustar, wsp, visc, za);
-    restar = fmax(ustar * z0 / visc, 0.1f);
-    if (isftcflx == 2) mynn_garratt_1992(z0, restar, xland, zt, zq);
-    else mynn_fairall_etal_2003(restar, zt, zq);
 }
 
 static inline void mynn_andreas_snow(
@@ -445,6 +414,7 @@ kernel void mynn_surface_column(
     device float *qstar_o = resources.output_qstar;
     device float *cpm_o = resources.output_cpm;
     device float *znt_o = resources.output_znt;
+    const device float *pattern_spp_pbl = resources.input_pattern_spp_pbl;
     const float dx = p.dx;
     const int itimestep = p.itimestep;
     const int isfflx = p.isfflx;
@@ -532,14 +502,53 @@ kernel void mynn_surface_column(
 
     float visc = 1.326e-5f * (1.0f + 6.542e-3f * tc1
               + 8.301e-6f * tc1 * tc1 - 4.84e-9f * tc1 * tc1 * tc1);
+    // module_sf_mynn.F:631-710.  ISFTCFLX picks the over-water z0 and then, from
+    // the restar that new z0 implies (:675), the zt/zq pair.  COARE_OPT is a REAL
+    // PARAMETER fixed at 3.0 (:85), so edson_etal_2013 and fairall_etal_2014 are
+    // unreachable through SFCLAY1D_mynn and are deliberately absent from this
+    // kernel: they exist in the CPU reference only because the leaf oracle can
+    // call them at their own entry points.  ISFTCFLX=4 sets a z0 and then leaves
+    // z_t/z_q unassigned (:680-702 has no arm for it), so the host rejects it
+    // before launch and this switch has no arm for it either.
+    // module_sf_mynn.F:1425 (COARE 3.0): the :1442 Ren<=2 test selects two
+    // arms with the identical expression, and zq is the clamped zt.
+    // spp_pbl=1 (spp_kernel_sources.py, the CUDA SPP roughness chain):
+    // the stochastic z0 is local; the nominal z0 is the persistent state.
+    const bool spp = p.spp_pbl != 0;
+    const float rstoch = spp ? pattern_spp_pbl[idx] : 0.0f;
     float restar, zt, zq;
     if (xland >= 1.5f) {
-        mynn_water_roughness(isftcflx, ust, wsp, visc, za, xland,
-                             z0, restar, zt, zq);
+        if (isftcflx == 1 || isftcflx == 2) z0 = mynn_davis_etal_2008(ust);
+        else if (isftcflx == 3) z0 = mynn_taylor_yelland_2001(wsp);
+        else z0 = mynn_charnock_1955(ust, wsp, visc, za);
+    }
+    const float z0_nominal = z0;
+    if (spp) z0 = fmax(mynn_add_rn(z0, mynn_mul_rn(z0, rstoch)), 1.0e-6f);
+    restar = fmax(ust * z0 / visc, 0.1f);
+    if (xland >= 1.5f) {
+        if (isftcflx == 2) mynn_garratt_1992(z0, restar, xland, zt, zq);
+        else {
+            // mynn_fairall_etal_2003, with the SPP term between the power
+            // and the clamp.
+            zt = 5.5e-5f * mynn_sf_pow(restar, -0.60f);
+            if (spp) {
+                zt = mynn_add_rn(zt, mynn_mul_rn(mynn_mul_rn(zt, 0.5f), rstoch));
+                zt = fmax(fmin(zt, 1.0e-4f), 2.0e-9f);
+            } else {
+                zt = fmin(fmax(zt, 2.0e-9f), 1.0e-4f);
+            }
+            zq = zt;
+        }
     } else {
-        restar = fmax(ust * z0 / visc, 0.1f);
         if (snowh >= 0.1f) mynn_andreas_snow(visc, ust, zt, zq);
-        else mynn_zilitinkevich_land(z0, restar, p.czil, zt, zq);
+        else {
+            mynn_zilitinkevich_land(z0, restar, p.czil, zt, zq);
+            if (spp) {
+                zt = fmax(mynn_add_rn(zt, mynn_mul_rn(mynn_mul_rn(zt, 0.5f), rstoch)),
+                          0.0001f);
+                zq = zt;
+            }
+        }
     }
 
     float zratio = z0 / zt;
@@ -703,5 +712,5 @@ kernel void mynn_surface_column(
     // module_sf_mynn.F:436 declares ZNT INTENT(INOUT); :657 (charnock_1955)
     // mutates it in place over water and the updated value persists into the
     // next step's ZNTstoch/restar/z_t/z_q chain.
-    znt_o[idx] = z0;
+    znt_o[idx] = z0_nominal;
 }

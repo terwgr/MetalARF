@@ -241,6 +241,14 @@ def execute(combo, *, urban=False, turbulence=None, sfclay_option=None,
                 np.zeros((cfg.num_soil_layers, cfg.ny, cfg.nx),
                          dtype=np.float32), dtype=np.float32)
             state.physics.bind_spp_patterns({"lsm": pattern})
+        if cfg.spp_pbl:
+            # A fixed, column-varying perturbation stands in for the
+            # CuPy-only pattern generator.
+            column = np.linspace(-0.3, 0.3, cfg.ny * cfg.nx, dtype=np.float32)
+            pattern = np.broadcast_to(column.reshape(cfg.ny, cfg.nx),
+                                      (cfg.nz, cfg.ny, cfg.nx))
+            state.physics.bind_spp_patterns({
+                "pbl": module.asarray(np.ascontiguousarray(pattern), dtype=np.float32)})
         run_steps(state, cfg, steps)
         arrays = list(vars(state).items())
         driver = getattr(state, "physics", None)

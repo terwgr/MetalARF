@@ -1,0 +1,241 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/mynn_pbl.cu",
+      "cuda_symbol": "mynn_condensation_default_columns",
+      "layout_version": 1,
+      "module": "mynn_pbl_family",
+      "name": "mynn_condensation_default_columns",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "spp_pbl",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "th",
+          "float",
+          "read"
+        ],
+        [
+          "qw",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "qi",
+          "float",
+          "read"
+        ],
+        [
+          "qs",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "qsq",
+          "float",
+          "read"
+        ],
+        [
+          "rstoch",
+          "float",
+          "read"
+        ],
+        [
+          "xland",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read"
+        ],
+        [
+          "sgm_in",
+          "float",
+          "read"
+        ],
+        [
+          "qc_bl",
+          "float",
+          "read_write"
+        ],
+        [
+          "qi_bl",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfra",
+          "float",
+          "read_write"
+        ],
+        [
+          "vt",
+          "float",
+          "read_write"
+        ],
+        [
+          "vq",
+          "float",
+          "read_write"
+        ],
+        [
+          "sgm",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cldfra": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "exner": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "pblh": [
+          [
+            "ncol"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qc_bl": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qi": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qi_bl": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qs": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qsq": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qw": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "rstoch": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "sgm": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "sgm_in": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "th": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vq": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vt": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "xland": [
+          [
+            "ncol"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/mynn_pbl_family.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

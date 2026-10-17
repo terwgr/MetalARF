@@ -734,7 +734,7 @@ def submit_mynn_condensation_default(context, dz, th, qw, qc, qi, qs, p,
                                      exner, qsq, rstoch, xland, pblh,
                                      sgm_in, qc_bl, qi_bl, cldfra, vt, vq,
                                      sgm, *, nz: int, ncol: int,
-                                     experimental=False):
+                                     experimental=False, spp_pbl=0):
     """Experimentally submit the default cloud-PDF condensation columns.
 
     Layer resources are level-major `(nz, ncol)`; column controls are
@@ -776,7 +776,23 @@ def submit_mynn_condensation_default(context, dz, th, qw, qc, qi, qs, p,
     resources.update(dict(zip(column_names,
                               (a.view((ncol,)) for a in column_values))))
     return _submit(context, "mynn_condensation_default_columns", resources,
-                   {"nz": nz, "ncol": ncol}, ncol, experimental)
+                   {"nz": nz, "ncol": ncol, "spp_pbl": int(bool(spp_pbl))},
+                   ncol, experimental)
+
+
+def submit_mynn_spp_diffusivity(context, dfm, dfh, rstoch, zw, *,
+                                experimental=False):
+    """Perturb the MYNN momentum and heat diffusivities under spp_pbl=1.
+
+    Every buffer is level-major ``(nz, ncol)``; ``zw`` is the lower
+    interface height of each layer.
+    """
+    arrays, count = _flat_fp32_arrays(
+        (dfm, dfh, rstoch, zw), ("dfm", "dfh", "rstoch", "zw"))
+    resources = dict(zip(("dfm", "dfh", "rstoch", "zw"),
+                         (array.view((count,)) for array in arrays)))
+    return _submit(context, "mynn_spp_diffusivity", resources,
+                   {"count": count}, count, experimental)
 
 
 def submit_mynn_condensation_gsd41(context, dz, zw, th, thl, qw, p, exner,

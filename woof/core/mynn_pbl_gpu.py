@@ -1482,7 +1482,7 @@ def mynn_dmp_mf_cuda(
                 "output and workspace slots")
         if (bl_mynn_edmf_mom != 1 or bl_mynn_edmf_tke != 0
                 or bl_mynn_mixscalars != 0 or mix_chem is not False
-                or spp_pbl != 0 or bl_mynn_version != "wrf_461"):
+                or bl_mynn_version != "wrf_461"):
             raise NotImplementedError(
                 "Metal MYNN mass flux currently supports the default "
                 "wrf_461 EDMF momentum-only, no-scalar-mixing lane")
@@ -1872,9 +1872,12 @@ def _driver_surface_cuda(layers, qv1, scalars, ncol: int, nz: int, work,
 def mynn_bl_driver_metal(
     values: Mapping[str, object], *, initflag: int, delt: object,
     state, flag_qs: bool = True, bl_mynn_mixlength: int = 1,
-    bl_mynn_version: str = "wrf_461",
+    bl_mynn_version: str = "wrf_461", rstoch=None,
 ) -> dict[str, object]:
     """Run the source-supported MYNN chain on Metal arrays.
+
+    ``rstoch`` is the spp_pbl pattern, level-major ``(nz, ncol)``; None
+    runs the deterministic chain.
 
     ``bl_mynn_mixlength=1`` is the RAP/HRRR form. Value 2 selects the local
     WRF v4.6.1 law, or the GSD cloud-aware law under ``gsd_41``. Other optional
@@ -1892,8 +1895,8 @@ def mynn_bl_driver_metal(
         submit_mynn_initialize_default, submit_mynn_pblh_scale,
         submit_mynn_initialize_gsd41, submit_mynn_level2_columns,
         submit_mynn_mixlength_default, submit_mynn_mixlength_gsd41,
-        submit_mynn_predict_default, submit_mynn_tendencies,
-        submit_mynn_turbulence_default,
+        submit_mynn_predict_default, submit_mynn_spp_diffusivity,
+        submit_mynn_tendencies, submit_mynn_turbulence_default,
     )
 
     if type(initflag) is not int or initflag not in (0, 1):
@@ -1901,6 +1904,9 @@ def mynn_bl_driver_metal(
     if type(bl_mynn_mixlength) is not int or bl_mynn_mixlength not in (1, 2):
         raise ValueError("MYNN Metal driver requires bl_mynn_mixlength in {1,2}")
     _mynn_version_check(bl_mynn_version)
+    if rstoch is not None and bl_mynn_version == "gsd_41":
+        raise NotImplementedError(
+            "bl_mynn_version='gsd_41' with spp_pbl=1 has no source form")
     if bl_mynn_version == "gsd_41" and bl_mynn_mixlength != 2:
         raise NotImplementedError(
             "Metal MYNN GSD 4.1 currently requires bl_mynn_mixlength=2")
@@ -2028,14 +2034,17 @@ def mynn_bl_driver_metal(
         submit_mynn_condensation_default(context, layers["dz"], layers["th"],
             sqw, layers["sqc"], layers["sqi"],
             layers["sqs"] if flag_qs else zero, layers["p"], layers["exner"],
-            layers["qsq"], zero, scalars["xland"], pblh_out, zero,
+            layers["qsq"], zero if rstoch is None else rstoch,
+            scalars["xland"], pblh_out, zero,
             cond["qc_bl"], cond["qi_bl"], cond["cldfra"], cond["vt"],
-            cond["vq"], cond["sgm"], nz=nz, ncol=ncol, experimental=True)
+            cond["vq"], cond["sgm"], nz=nz, ncol=ncol, experimental=True,
+            spp_pbl=int(rstoch is not None))
     dmp_inputs = {"dz": layers["dz"], "zw": zw, "p": layers["p"],
         "rho": layers["rho"], "u": layers["u"], "v": layers["v"],
         "w": layers["w"], "th": layers["th"], "thl": thl, "thv": thetav,
         "tk": layers["tk"], "qt": sqw, "qv": layers["sqv"],
-        "qc": layers["sqc"], "exner": layers["exner"], "rstoch": zero,
+        "qc": layers["sqc"], "exner": layers["exner"],
+        "rstoch": zero if rstoch is None else rstoch,
         "qc_bl": cond["qc_bl"], "cldfra_bl": cond["cldfra"],
         "vt": cond["vt"], "vq": cond["vq"], "flt": surf["flt"],
         "fltv": surf["fltv"], "flq": surf["flq"], "pblh": pblh_out,
@@ -2080,6 +2089,9 @@ def mynn_bl_driver_metal(
         t["sm"], t["sh"], t["dfm"], t["dfh"], t["dfq"], t["pdk"],
         t["pdt"], t["pdq"], t["pdc"], t["tcd"], t["qcd"],
         nz=nz, gsd41=gsd41, experimental=True)
+    if rstoch is not None:
+        submit_mynn_spp_diffusivity(context, t["dfm"], t["dfh"], rstoch,
+                                    zw[:nz], experimental=True)
     pred = {name: slot(f"predict_{name}", L) for name in (
         "qke", "tsq", "qsq", "cov", "qkw", "rhoinv", "kqdz", "kmdz",
         "a", "b", "c", "d", "cp", "dp")}

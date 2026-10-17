@@ -238,7 +238,8 @@ def launch_mynn_surface_layer(
         submit_mynn_surface_layer(
             inputs["u1"].buffer.context, inputs, mol, ustm, result,
             dx=dx, itimestep=itimestep, isfflx=isfflx,
-            isftcflx=isftcflx, variant=variant)
+            isftcflx=isftcflx, variant=variant, spp_pbl=int(stochastic),
+            pattern_spp_pbl=pattern_spp_pbl if stochastic else None)
         return
 
     shape = inputs["u1"].shape
