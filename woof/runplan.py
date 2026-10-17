@@ -7185,6 +7185,20 @@ def missing_inputs_refusal(missing: Sequence[Mapping[str, Any]], *,
 
 
 def execute_plan(plan: RunPlan, *, events: EventStream) -> int:
+    """Run one plan (:func:`_execute_plan`), leaving the process
+    environment as it found it: the plan's ``state_backend`` is set for
+    the stages this run starts, then restored."""
+    previous = os.environ.get("WOOF_STATE_BACKEND")
+    try:
+        return _execute_plan(plan, events=events)
+    finally:
+        if previous is None:
+            os.environ.pop("WOOF_STATE_BACKEND", None)
+        else:
+            os.environ["WOOF_STATE_BACKEND"] = previous
+
+
+def _execute_plan(plan: RunPlan, *, events: EventStream) -> int:
     """Run one plan to completion, or to its ``failed`` event.
 
     Returns the process exit code: 0 when a ``completed`` event was the
