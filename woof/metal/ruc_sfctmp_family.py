@@ -35,8 +35,8 @@ def submit_stage(stage: int, *, raw, flags, parameters: dict[str, object],
     """
     if type(stage) is not int or stage not in _STAGES:
         raise ValueError("RUC SFCTMP Metal stage must be 0, 1, or 2")
-    stage_parameters = (_PARAMETERS + ("spp_lsm", "has_field_sf")
-                        if stage == 0 else _PARAMETERS)
+    parameters = {"spp_lsm": 0, "has_field_sf": 0, **parameters}
+    stage_parameters = _PARAMETERS + ("spp_lsm", "has_field_sf")
     missing = [name for name in stage_parameters if name not in parameters]
     if missing:
         raise TypeError(f"missing RUC SFCTMP parameters: {', '.join(missing)}")
@@ -69,31 +69,30 @@ def submit_stage(stage: int, *, raw, flags, parameters: dict[str, object],
             raise ValueError(f"RUC SFCTMP Metal parameter {name} is out of range")
     launch_parameters = {name: parameters[name] for name in stage_parameters}
     resources = {"raw": raw, "flags": flags}
-    if stage == 0:
-        enabled = parameters["spp_lsm"] == 1
-        has_field_sf = parameters["has_field_sf"] == 1
-        dummy = raw.view((raw.size,), np.float32)
-        pattern = pattern_spp_lsm if enabled else dummy
-        output = field_sf if enabled and has_field_sf else dummy
-        for name, array in (("pattern_spp_lsm", pattern), ("field_sf", output)):
-            if (not isinstance(array, MetalArray)
-                    or array.dtype != np.dtype(np.float32)
-                    or array.ndim != 1 or not array.flags.c_contiguous):
-                raise TypeError(
-                    f"RUC SFCTMP Metal {name} must be a contiguous flat float32 MetalArray")
-            if array.buffer.context is not raw.buffer.context:
-                raise ValueError("RUC SFCTMP SPP resources must share one context")
-            if enabled and array.size < 9 * n:
-                raise ValueError(f"RUC SFCTMP Metal {name} must contain 9*n values")
-            if (enabled and (name == "pattern_spp_lsm"
-                             or has_field_sf and name == "field_sf")
-                    and _overlaps(raw, array)):
-                raise ValueError(f"RUC SFCTMP Metal {name} must not alias the packed workspace")
-        if enabled and _overlaps(pattern, output):
-            raise ValueError("RUC SFCTMP Metal field_sf must not alias the SPP pattern")
-        if has_field_sf and field_sf is None:
-            raise ValueError("RUC SFCTMP Metal field_sf flag has no output resource")
-        resources.update({"pattern_spp_lsm": pattern, "field_sf": output})
+    enabled = parameters["spp_lsm"] == 1
+    has_field_sf = parameters["has_field_sf"] == 1
+    dummy = raw.view((raw.size,), np.float32)
+    pattern = pattern_spp_lsm if enabled else dummy
+    output = field_sf if enabled and has_field_sf else dummy
+    for name, array in (("pattern_spp_lsm", pattern), ("field_sf", output)):
+        if (not isinstance(array, MetalArray)
+                or array.dtype != np.dtype(np.float32)
+                or array.ndim != 1 or not array.flags.c_contiguous):
+            raise TypeError(
+                f"RUC SFCTMP Metal {name} must be a contiguous flat float32 MetalArray")
+        if array.buffer.context is not raw.buffer.context:
+            raise ValueError("RUC SFCTMP SPP resources must share one context")
+        if enabled and array.size < 9 * n:
+            raise ValueError(f"RUC SFCTMP Metal {name} must contain 9*n values")
+        if (enabled and (name == "pattern_spp_lsm"
+                         or has_field_sf and name == "field_sf")
+                and _overlaps(raw, array)):
+            raise ValueError(f"RUC SFCTMP Metal {name} must not alias the packed workspace")
+    if enabled and _overlaps(pattern, output):
+        raise ValueError("RUC SFCTMP Metal field_sf must not alias the SPP pattern")
+    if has_field_sf and field_sf is None:
+        raise ValueError("RUC SFCTMP Metal field_sf flag has no output resource")
+    resources.update({"pattern_spp_lsm": pattern, "field_sf": output})
     return raw.buffer.context.submit_kernel(
         f"ruc_sfctmp_stage{stage}", resources,
         launch_parameters, exact_policy=True,

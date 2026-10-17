@@ -1756,7 +1756,7 @@ kernel void ruc_sfctmp_stage1(
     if (a218[c]) { a404[c] = (a56[c] < as_type<float>(0x00000000)); }
     if (a218[c]) { if (a404[c]) { failed = true; atomic_fetch_or_explicit(reinterpret_cast<device atomic_uint *>(r.flags) + 15, 1u << 17, memory_order_relaxed); } }
     if (a218[c]) { if (failed) { ruc_sfctmp_zero_outputs(r, p, n, c); return; } }
-    if (a218[c]) { ruc_soil_properties(a401, a400, a396, a391, a388, a394, a395, a397, a398, a399, a48, a49, a50, a51, a54, a55, a56, as_type<float>(0x3f666667), a405, a406, a407, a408, n, c, forms); }
+    if (a218[c]) { ruc_soil_properties(a401, a400, a396, a391, a388, a394, a395, a397, a398, a399, a48, a49, a50, a51, a54, a55, a56, as_type<float>(0x3f666667), a405, a406, a407, a408, n, c, forms); if (p.spp_lsm != 0) { for (int k = 0; k < RUC_NZS; ++k) { const int index = k * n + c; const float original = a407[index]; const float pattern = r.pattern_spp_lsm[index]; if (p.has_field_sf != 0) r.field_sf[index] = ruc_fmul_rn(original, pattern); a407[index] = ruc_fmul_rn(original, ruc_fadd_rn(1.0f, pattern)); } } }
     if (a218[c]) { if (!isfinite(a69[c])) { failed = true; atomic_fetch_or_explicit(reinterpret_cast<device atomic_uint *>(r.flags) + 15, 1u << 18, memory_order_relaxed); } }
     if (a218[c]) { a409[c] = (a69[c] < as_type<float>(0x00000000)); }
     if (a218[c]) { if (a409[c]) { failed = true; atomic_fetch_or_explicit(reinterpret_cast<device atomic_uint *>(r.flags) + 15, 1u << 19, memory_order_relaxed); } }
@@ -2398,7 +2398,7 @@ kernel void ruc_sfctmp_stage2(
     if (a223[c]) { a750[c] = (a56[c] < as_type<float>(0x00000000)); }
     if (a223[c]) { if (a750[c]) { failed = true; atomic_fetch_or_explicit(reinterpret_cast<device atomic_uint *>(r.flags) + 22, 1u << 4, memory_order_relaxed); } }
     if (a223[c]) { if (failed) { ruc_sfctmp_zero_outputs(r, p, n, c); return; } }
-    if (a223[c]) { ruc_soil_properties(a747, a746, a742, a737, a734, a740, a741, a743, a744, a745, a48, a49, a50, a51, a54, a55, a56, as_type<float>(0x3f666667), a751, a752, a753, a754, n, c, forms); }
+    if (a223[c]) { ruc_soil_properties(a747, a746, a742, a737, a734, a740, a741, a743, a744, a745, a48, a49, a50, a51, a54, a55, a56, as_type<float>(0x3f666667), a751, a752, a753, a754, n, c, forms); if (p.spp_lsm != 0) { for (int k = 0; k < RUC_NZS; ++k) { const int index = k * n + c; const float original = a753[index]; const float pattern = r.pattern_spp_lsm[index]; if (p.has_field_sf != 0) r.field_sf[index] = ruc_fmul_rn(original, pattern); a753[index] = ruc_fmul_rn(original, ruc_fadd_rn(1.0f, pattern)); } } }
     if (a223[c]) { ruc_soil_canopy_setup(a734, a40, a155, a154, a44, a148, a20, a57, a51, a52, a755, a756, a757, a758, n, c); }
     if (a223[c]) { for (int k = 0; k < RUC_NZS; ++k) { if (!isfinite(a740[k * n + c])) { failed = true; atomic_fetch_or_explicit(reinterpret_cast<device atomic_uint *>(r.flags) + 22, 1u << 5, memory_order_relaxed); } } }
     if (a223[c]) { if ((a72[c] < 1 || a72[c] >= RUC_NZS)) { failed = true; atomic_fetch_or_explicit(reinterpret_cast<device atomic_uint *>(r.flags) + 22, 1u << 6, memory_order_relaxed); /* unused diagnostic payload */; } }

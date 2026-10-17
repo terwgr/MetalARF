@@ -136,12 +136,10 @@ def dispatch_full_chain(*, workspace, inputs, prologue_parameters,
     submissions = [submit_prologue(
         raw=raw, flags=driver_flags, parameters=prologue)]
     from .ruc_sfctmp_family import submit_stage
-    submissions.append(submit_stage(
-        0, raw=raw, flags=sf_flags, parameters=sfctmp,
-        pattern_spp_lsm=pattern_spp_lsm, field_sf=field_sf))
-    for stage in (1, 2):
+    for stage in (0, 1, 2):
         submissions.append(submit_stage(
-            stage, raw=raw, flags=sf_flags, parameters=sfctmp))
+            stage, raw=raw, flags=sf_flags, parameters=sfctmp,
+            pattern_spp_lsm=pattern_spp_lsm, field_sf=field_sf))
     submissions.append(submit_epilogue(
         raw=raw, flags=driver_flags, parameters=epilogue))
     submissions.append(submit_commit(

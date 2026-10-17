@@ -124,32 +124,35 @@ def _append_column(text: str) -> str:
 
 
 def _insert_spp_hydraulic_operator(text: str) -> str:
-    """Apply the member's hydraulic SPP immediately after stage-0 soilprop."""
-    start = text.index("kernel void ruc_sfctmp_stage0")
-    end = text.index("kernel void ruc_sfctmp_stage1", start)
-    stage0 = text[start:end]
-    call_start = stage0.find("ruc_soil_properties(")
-    if call_start < 0 or stage0.find("ruc_soil_properties(", call_start + 1) >= 0:
-        raise RuntimeError("expected exactly one stage-0 RUC soil-properties call")
-    call_end = stage0.find(");", call_start)
-    if call_end < 0:
-        raise RuntimeError("unterminated stage-0 RUC soil-properties call")
-    arguments = stage0[call_start + len("ruc_soil_properties("):call_end].split(",")
-    if len(arguments) < 7:
-        raise RuntimeError("RUC soil-properties call has no packed hydro output")
-    hydro = arguments[-5].strip()
-    operator = (
-        f" if (p.spp_lsm != 0) {{ for (int k = 0; k < RUC_NZS; ++k) {{ "
-        f"const int index = k * n + c; const float original = {hydro}[index]; "
-        f"const float pattern = r.pattern_spp_lsm[index]; "
-        "if (p.has_field_sf != 0) "
-        "r.field_sf[index] = ruc_fmul_rn(original, pattern); "
-        f"{hydro}[index] = ruc_fmul_rn(original, ruc_fadd_rn(1.0f, pattern)); "
-        "} }"
-    )
-    call_end += 2  # insert after the call's closing parenthesis and semicolon
-    stage0 = stage0[:call_end] + operator + stage0[call_end:]
-    return text[:start] + stage0 + text[end:]
+    """Apply hydraulic SPP after each stage's soil-properties diagnosis."""
+    for stage in range(3):
+        start = text.index(f"kernel void ruc_sfctmp_stage{stage}")
+        end = (text.index(f"kernel void ruc_sfctmp_stage{stage + 1}", start)
+               if stage < 2 else len(text))
+        body = text[start:end]
+        call_start = body.find("ruc_soil_properties(")
+        if call_start < 0 or body.find("ruc_soil_properties(", call_start + 1) >= 0:
+            raise RuntimeError(f"expected exactly one stage-{stage} RUC soil-properties call")
+        call_end = body.find(");", call_start)
+        if call_end < 0:
+            raise RuntimeError(f"unterminated stage-{stage} RUC soil-properties call")
+        arguments = body[call_start + len("ruc_soil_properties("):call_end].split(",")
+        if len(arguments) < 7:
+            raise RuntimeError("RUC soil-properties call has no packed hydro output")
+        hydro = arguments[-5].strip()
+        operator = (
+            f" if (p.spp_lsm != 0) {{ for (int k = 0; k < RUC_NZS; ++k) {{ "
+            f"const int index = k * n + c; const float original = {hydro}[index]; "
+            f"const float pattern = r.pattern_spp_lsm[index]; "
+            "if (p.has_field_sf != 0) "
+            "r.field_sf[index] = ruc_fmul_rn(original, pattern); "
+            f"{hydro}[index] = ruc_fmul_rn(original, ruc_fadd_rn(1.0f, pattern)); "
+            "} }"
+        )
+        call_end += 2
+        body = body[:call_end] + operator + body[call_end:]
+        text = text[:start] + body + text[end:]
+    return text
 
 
 def generate() -> str:

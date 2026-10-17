@@ -61104,7 +61104,7 @@
         ]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": [
         "wrf-exact"
       ]
@@ -61125,6 +61125,16 @@
           "flags",
           "uint64",
           "read_write"
+        ],
+        [
+          "pattern_spp_lsm",
+          "float",
+          "read"
+        ],
+        [
+          "field_sf",
+          "float",
+          "read_write"
         ]
       ],
       "shapes": {
@@ -61134,6 +61144,16 @@
           ]
         ],
         "flags": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pattern_spp_lsm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "field_sf": [
           [
             "any_1d"
           ]
@@ -61219,10 +61239,18 @@
         [
           "forms",
           "int32"
+        ],
+        [
+          "spp_lsm",
+          "int32"
+        ],
+        [
+          "has_field_sf",
+          "int32"
         ]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": [
         "wrf-exact"
       ]
@@ -61243,6 +61271,16 @@
           "flags",
           "uint64",
           "read_write"
+        ],
+        [
+          "pattern_spp_lsm",
+          "float",
+          "read"
+        ],
+        [
+          "field_sf",
+          "float",
+          "read_write"
         ]
       ],
       "shapes": {
@@ -61252,6 +61290,16 @@
           ]
         ],
         "flags": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pattern_spp_lsm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "field_sf": [
           [
             "any_1d"
           ]
@@ -61337,10 +61385,18 @@
         [
           "forms",
           "int32"
+        ],
+        [
+          "spp_lsm",
+          "int32"
+        ],
+        [
+          "has_field_sf",
+          "int32"
         ]
       ],
       "threads_per_group": 128,
-      "layout_version": 1,
+      "layout_version": 2,
       "arithmetic_policies": [
         "wrf-exact"
       ]
