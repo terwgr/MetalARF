@@ -283,7 +283,8 @@ def mynn_pbl_step(
         qn_out = {out_name: cp.zeros((nz, ny, nx), dtype=DTYPE)
                   for _, _, out_name in MYNN_MIXSCALARS_QN}
     if mixscalars_on:
-        # The driver's fixture-pinned combo requires all five qn flags.
+        # bl_mynn_mixscalars=1 mixes all five number-concentration
+        # scalars, so all five qn flags must be set.
         for flag in ("flag_qnc", "flag_qni", "flag_qnwfa", "flag_qnifa",
                      "flag_qnbca"):
             options.setdefault(flag, True)
@@ -438,6 +439,16 @@ def _mynn_pbl_step_metal(atmosphere, fields, *, w, dx, delt, itimestep,
         "bl_mynn_gsd41_unsquared_qtke": False,
         "bl_mynn_cloud_tendency_form": "wrf_461",
     }
+    mixscalars_on = options.get("bl_mynn_mixscalars", 0) == 1
+    if mixscalars_on:
+        # bl_mynn_mixscalars=1 mixes all five number-concentration
+        # scalars, so all five qn flags must be set.
+        allowed.update({"bl_mynn_mixscalars": 1, "flag_qnc": True,
+                        "flag_qni": True, "flag_qnwfa": True,
+                        "flag_qnifa": True, "flag_qnbca": True})
+        for flag in ("flag_qnc", "flag_qni", "flag_qnwfa", "flag_qnifa",
+                     "flag_qnbca"):
+            options.setdefault(flag, True)
     for name, value in options.items():
         if name == "bl_mynn_mixlength":
             if type(value) is not int or value not in (1, 2):
@@ -448,16 +459,18 @@ def _mynn_pbl_step_metal(atmosphere, fields, *, w, dx, delt, itimestep,
             raise NotImplementedError(
                 f"Metal MYNN caller does not support option {name}={value!r}")
     # scalar_pblmix=1 is WRF's diff4d local diffusion of the mp=28 number
-    # scalars after MYNN, ported below. The MYNN plume mixscalars arm
-    # (bl_mynn_mixscalars=1) stays refused by the option pin above.
+    # scalars after MYNN, ported below; bl_mynn_mixscalars=1 is the MYNN
+    # plume + diffusive mixing of the same scalars inside the driver.
     if scalar_pblmix not in (0, 1) or type(scalar_pblmix) is not int:
         raise NotImplementedError(
             f"Metal MYNN caller does not support scalar_pblmix={scalar_pblmix!r}")
-    if scalar_pblmix == 1 and qn_scalars is None:
+    if (scalar_pblmix == 1 or mixscalars_on) and qn_scalars is None:
         raise TypeError("PBL scalar mixing requires qn_scalars (the mp=28 "
                         "nc/ni/nwfa/nifa fields)")
-    if scalar_pblmix == 0 and qn_scalars is not None:
-        raise NotImplementedError("Metal MYNN mixscalars is not implemented")
+    if scalar_pblmix == 0 and not mixscalars_on and qn_scalars is not None:
+        raise NotImplementedError(
+            "Metal MYNN qn_scalars need bl_mynn_mixscalars=1 or "
+            "scalar_pblmix=1")
     nz, ny, nx = atmosphere["theta"].shape
     ncol = ny * nx
     context = atmosphere["theta"].buffer.context
@@ -496,10 +509,14 @@ def _mynn_pbl_step_metal(atmosphere, fields, *, w, dx, delt, itimestep,
     values["uoce"] = state.scratch((ncol,), "mynn_pbl_metal_uoce")
     values["voce"] = state.scratch((ncol,), "mynn_pbl_metal_voce")
     values["uoce"].fill(np.float32(0)); values["voce"].fill(np.float32(0))
+    if mixscalars_on:
+        for solver_name, state_name, _ in MYNN_MIXSCALARS_QN:
+            values[solver_name] = layer(qn_scalars[state_name], state_name)
     out = mynn_bl_driver_metal(values, initflag=1 if int(itimestep) == 1 else 0,
         delt=delt, state=state, flag_qs=mynn_flag_qs(mp_physics),
         bl_mynn_mixlength=selected_mixlength,
-        bl_mynn_version=bl_mynn_version, rstoch=rstoch)
+        bl_mynn_version=bl_mynn_version, rstoch=rstoch,
+        bl_mynn_mixscalars=int(mixscalars_on))
     if bl_mynn_version == "wrf_461":
         submit_mynn_wrapper_from_specific(
             context, sq["sqv"], out["rqvblten"], out["rqcblten"],
@@ -523,6 +540,11 @@ def _mynn_pbl_step_metal(atmosphere, fields, *, w, dx, delt, itimestep,
             (nz, ncol), f"mynn_pbl_metal_tendency_{target}")
         tendency[...] = out[solver]
         tendencies[target] = tendency.view((nz, ny, nx))
+    if mixscalars_on:
+        for solver_name, _, out_name in MYNN_MIXSCALARS_QN:
+            rate = state.scratch((nz, ncol), f"mynn_pbl_metal_{out_name}")
+            rate[...] = out[f"r{solver_name}blten"]
+            tendencies[out_name] = rate.view((nz, ny, nx))
     if scalar_pblmix == 1:
         from woof.metal.mynn_pbl_family import submit_mynn_scalar_pblmix
         # module_pbl_driver.F calls diff4d after MYNN with MYNN's exch_h.

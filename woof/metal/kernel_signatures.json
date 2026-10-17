@@ -29164,6 +29164,10 @@
         [
           "edmf_entrainment",
           "float32"
+        ],
+        [
+          "mixscalars",
+          "int32"
         ]
       ],
       "resources": [
@@ -29308,6 +29312,26 @@
           "read"
         ],
         [
+          "qnc",
+          "float",
+          "read"
+        ],
+        [
+          "qni",
+          "float",
+          "read"
+        ],
+        [
+          "qnwfa",
+          "float",
+          "read"
+        ],
+        [
+          "qnifa",
+          "float",
+          "read"
+        ],
+        [
           "edmf_a",
           "float",
           "read_write"
@@ -29393,6 +29417,26 @@
           "read_write"
         ],
         [
+          "s_awqnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqni",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnifa",
+          "float",
+          "read_write"
+        ],
+        [
           "maxwidth",
           "float",
           "read_write"
@@ -29414,6 +29458,11 @@
         ],
         [
           "plume_scratch",
+          "float",
+          "read_write"
+        ],
+        [
+          "up_qn",
           "float",
           "read_write"
         ],
@@ -29719,6 +29768,61 @@
           [
             "nz+1",
             "ncol"
+          ]
+        ],
+        "qnc": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qni": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qnwfa": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qnifa": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "s_awqnc": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqni": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqnwfa": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqnifa": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "up_qn": [
+          [
+            "ncol",
+            8,
+            "nz+1"
           ]
         ]
       },
@@ -156589,6 +156693,142 @@
         "zw": [
           [
             "count"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/mynn_pbl_family.metal",
+      "threads_per_group": 128
+    },
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/mynn_scalar_mix.cu",
+      "cuda_symbol": "mynn_mix_scalar_columns",
+      "layout_version": 1,
+      "module": "mynn_pbl_family",
+      "name": "mynn_mix_scalar_columns",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "qn",
+          "float",
+          "read"
+        ],
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "dfh",
+          "float",
+          "read"
+        ],
+        [
+          "s_aw",
+          "float",
+          "read"
+        ],
+        [
+          "s_awqn",
+          "float",
+          "read"
+        ],
+        [
+          "delt",
+          "float",
+          "read"
+        ],
+        [
+          "qn2",
+          "float",
+          "read_write"
+        ],
+        [
+          "dqn",
+          "float",
+          "read_write"
+        ],
+        [
+          "scratch",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "qn": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "rho": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dfh": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "s_aw": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqn": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "delt": [
+          [
+            "ncol"
+          ]
+        ],
+        "qn2": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dqn": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "scratch": [
+          [
+            8,
+            "nz",
+            "ncol"
           ]
         ]
       },

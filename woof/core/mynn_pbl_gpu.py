@@ -1481,12 +1481,13 @@ def mynn_dmp_mf_cuda(
                 "Metal MYNN mass flux requires DomainState for persistent "
                 "output and workspace slots")
         if (bl_mynn_edmf_mom != 1 or bl_mynn_edmf_tke != 0
-                or bl_mynn_mixscalars != 0 or mix_chem is not False
+                or bl_mynn_mixscalars not in (0, 1) or mix_chem is not False
                 or bl_mynn_version != "wrf_461"):
             raise NotImplementedError(
                 "Metal MYNN mass flux currently supports the default "
-                "wrf_461 EDMF momentum-only, no-scalar-mixing lane")
-        return mynn_dmp_mf_metal(values, state=state)
+                "wrf_461 EDMF momentum-only lane")
+        return mynn_dmp_mf_metal(values, state=state,
+                                 bl_mynn_mixscalars=bl_mynn_mixscalars)
 
     if bl_mynn_edmf_mom != 1 or type(bl_mynn_edmf_mom) is not int:
         raise ValueError("MYNN mass-flux lane requires bl_mynn_edmf_mom=1")
@@ -1673,8 +1674,8 @@ def mynn_dmp_mf_cuda(
 
 
 def mynn_dmp_mf_metal(values: Mapping[str, object], *, state,
-                      bl_mynn_version: str = "wrf_461"
-                      ) -> MynnDmpMfResult:
+                      bl_mynn_version: str = "wrf_461",
+                      bl_mynn_mixscalars: int = 0) -> MynnDmpMfResult:
     """Run the default MYNN DMP column kernel on Metal storage.
 
     All model profiles are already contiguous MetalArray slabs. Outputs and
@@ -1686,6 +1687,9 @@ def mynn_dmp_mf_metal(values: Mapping[str, object], *, state,
         submit_mynn_dmp_mf, submit_mynn_dmp_mf_gsd41)
 
     _mynn_version_check(bl_mynn_version)
+    if bl_mynn_version != "wrf_461" and bl_mynn_mixscalars != 0:
+        raise ValueError(
+            "MYNN gsd_41 mass flux does not run with bl_mynn_mixscalars=1")
 
     required = (*MYNN_DMP_MF_COLUMN_INPUTS, "zw",
                 *MYNN_DMP_MF_SCALAR_INPUTS)
@@ -1746,6 +1750,7 @@ def mynn_dmp_mf_metal(values: Mapping[str, object], *, state,
     outputs.update({name: persistent(name, (ncol,))
                     for name in ("maxwidth", "ztop", "maxmf")})
     outputs["ktop"] = persistent("ktop", (ncol,), dtype=np.int32)
+    mixscalars = None
     if bl_mynn_version == "gsd_41":
         if "sgm" not in values:
             raise TypeError("MYNN GSD 4.1 mass flux requires sgm")
@@ -1767,10 +1772,19 @@ def mynn_dmp_mf_metal(values: Mapping[str, object], *, state,
     else:
         plume_workspace = persistent("plume_workspace", (ncol, 8, 8, nz + 1))
         work_workspace = persistent("work_workspace", (ncol, 11, nz))
+        if bl_mynn_mixscalars == 1:
+            # The four mp=28 number scalars' plume fluxes (qnbca is a zero
+            # column that solves to exactly zero and has no flux).
+            qn_names = ("qnc", "qni", "qnwfa", "qnifa")
+            s_awqn = {name: persistent(f"s_aw{name}", (nz + 1, ncol))
+                      for name in qn_names}
+            mixscalars = ({name: values[name] for name in qn_names}, s_awqn,
+                          persistent("up_qn", (ncol, 8, nz + 1)))
         submit_mynn_dmp_mf(context, inputs, outputs,
                            plume_workspace=plume_workspace,
                            work_workspace=work_workspace,
-                           nz=nz, ncol=ncol, experimental=True)
+                           nz=nz, ncol=ncol, experimental=True,
+                           mixscalars=mixscalars)
 
     zero_layer = persistent("zero_layer", (nz, ncol))
     zero_interface = persistent("zero_interface", (nz + 1, ncol))
@@ -1781,9 +1795,12 @@ def mynn_dmp_mf_metal(values: Mapping[str, object], *, state,
         sub_thl=zero_layer, sub_sqv=zero_layer, sub_u=zero_layer,
         sub_v=zero_layer, det_thl=zero_layer, det_sqv=zero_layer,
         det_sqc=zero_layer, det_u=zero_layer, det_v=zero_layer,
-        s_awqke=zero_interface, s_awqnc=zero_interface,
-        s_awqni=zero_interface, s_awqnwfa=zero_interface,
-        s_awqnifa=zero_interface, s_awqnbca=zero_interface)
+        s_awqke=zero_interface,
+        **(dict(zip(("s_awqnc", "s_awqni", "s_awqnwfa", "s_awqnifa"),
+                    mixscalars[1].values())) if mixscalars is not None
+           else dict(s_awqnc=zero_interface, s_awqni=zero_interface,
+                     s_awqnwfa=zero_interface, s_awqnifa=zero_interface)),
+        s_awqnbca=zero_interface)
 
 
 def _driver_prep_cuda(layers, ust, ncol: int, nz: int, work):
@@ -1869,12 +1886,20 @@ def _driver_surface_cuda(layers, qv1, scalars, ncol: int, nz: int, work,
     return outputs
 
 
+QN_NAMES = ("qnc", "qni", "qnwfa", "qnifa")
+
+
 def mynn_bl_driver_metal(
     values: Mapping[str, object], *, initflag: int, delt: object,
     state, flag_qs: bool = True, bl_mynn_mixlength: int = 1,
     bl_mynn_version: str = "wrf_461", rstoch=None,
+    bl_mynn_mixscalars: int = 0,
 ) -> dict[str, object]:
     """Run the source-supported MYNN chain on Metal arrays.
+
+    ``bl_mynn_mixscalars=1`` (wrf_461 only) also mixes the mp=28 number
+    scalars ``qnc/qni/qnwfa/qnifa`` (level-major ``values`` entries) and
+    returns their tendencies as ``rqncblten`` etc.
 
     ``rstoch`` is the spp_pbl pattern, level-major ``(nz, ncol)``; None
     runs the deterministic chain.
@@ -1899,6 +1924,8 @@ def mynn_bl_driver_metal(
         submit_mynn_tendencies, submit_mynn_turbulence_default,
     )
 
+    if type(bl_mynn_mixscalars) is not int or bl_mynn_mixscalars not in (0, 1):
+        raise ValueError("MYNN Metal driver requires bl_mynn_mixscalars in {0,1}")
     if type(initflag) is not int or initflag not in (0, 1):
         raise ValueError("MYNN Metal driver requires initflag in {0,1}")
     if type(bl_mynn_mixlength) is not int or bl_mynn_mixlength not in (1, 2):
@@ -2052,8 +2079,11 @@ def mynn_bl_driver_metal(
         "ts": surf["th_sfc"], "psig_shcu": psig_shcu}
     if bl_mynn_version == "gsd_41":
         dmp_inputs["sgm"] = cond["sgm"]
+    if bl_mynn_mixscalars == 1:
+        dmp_inputs.update({name: layer(name) for name in QN_NAMES})
     plumes = mynn_dmp_mf_metal(
-        dmp_inputs, state=state, bl_mynn_version=bl_mynn_version)
+        dmp_inputs, state=state, bl_mynn_version=bl_mynn_version,
+        bl_mynn_mixscalars=bl_mynn_mixscalars)
 
     level2 = {name: slot(f"level2_{name}", L) for name in
               ("dtl", "dqw", "dtv", "gm", "gh", "sm", "sh")}
@@ -2144,6 +2174,19 @@ def mynn_bl_driver_metal(
     submit_mynn_tendencies(context, resource, nz=nz, ncol=ncol,
         onoff=np.float32(1), workspace=slot("tendency_workspace", (15, nz + 1, ncol)),
         gsd41=gsd41, experimental=True)
+    qn_tendencies = {}
+    if bl_mynn_mixscalars == 1:
+        # module_bl_mynn.F:4654-4860 qn solves with the plume flux s_awqn.
+        from woof.metal.mynn_pbl_family import submit_mynn_mix_scalar
+        qn2 = slot("mixscalar_qn2", L)
+        mix_work = slot("mixscalar_workspace", (8, nz, ncol))
+        for name in QN_NAMES:
+            dqn = slot(f"mixscalar_d{name}", L)
+            submit_mynn_mix_scalar(
+                context, layer(name), layers["dz"], layers["rho"], t["dfh"],
+                plumes.s_aw, getattr(plumes, f"s_aw{name}"), delta, qn2,
+                dqn, mix_work, nz=nz, ncol=ncol)
+            qn_tendencies[f"r{name}blten"] = dqn
     submit_mynn_driver_exchange(context, layers["dz"], t["dfm"], t["dfh"],
         tr["exch_m"], tr["exch_h"], nz=nz, experimental=True)
     if gsd41:
@@ -2163,7 +2206,7 @@ def mynn_bl_driver_metal(
         "cldfra_bl": plumes.cldfra_bl, "pblh": pblh_out, "kpbl": kpbl,
         "rmol": surf["rmol"], "maxwidth": plumes.maxwidth,
         "maxmf": plumes.maxmf, "ztop_plume": plumes.ztop,
-        "ktop_plume": plumes.ktop}
+        "ktop_plume": plumes.ktop, **qn_tendencies}
 
 
 def mynn_bl_driver_cuda(

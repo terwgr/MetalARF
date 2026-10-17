@@ -30,6 +30,7 @@
 #include "mynn_dmp_mf_gsd41_columns_bindings.metalh"
 #include "mynn_condensation_gsd41_columns_bindings.metalh"
 #include "mynn_scalar_pblmix_columns_bindings.metalh"
+#include "mynn_mix_scalar_columns_bindings.metalh"
 #include "mynn_pblh_scale_gsd41_columns_bindings.metalh"
 #include "mynn_turbulence_gsd41_interfaces_bindings.metalh"
 #include "mynn_predict_gsd41_columns_bindings.metalh"
@@ -3276,11 +3277,22 @@ static inline void mynn_dmp_condensation(float qt, float thl, float p,
 #define DMP_WORK(v, k) r.work_scratch[work_base + ulong(v) * ulong(q.nz) + ulong(k)]
 #define DMP_ENT(i, k) r.work_scratch[work_base + ulong(3 + (i)) * ulong(q.nz) + ulong(k)]
 
+// bl_mynn_mixscalars=1 inputs/outputs of the DMP body: the four number
+// scalars' layer values, their s_awqn interface fluxes and the up_qn plume
+// scratch (twin of mynn_dmp_qn_flux_columns in mynn_scalar_mix.cu).
+struct MynnDmpQn {
+    device const float *qn[4];
+    device float *s_awqn[4];
+    device float *up_qn;
+    int on;
+};
+
 template <typename Resources, typename Params>
 static inline void mynn_dmp_mf_body(constant Resources &r,
                                     constant Params &q, uint column,
                                     bool gsd41,
-                                    device const float *sgm_gsd41)
+                                    device const float *sgm_gsd41,
+                                    MynnDmpQn mq)
 {
     const int nz = q.nz;
     const uint ncol = uint(q.ncol);
@@ -3323,6 +3335,7 @@ static inline void mynn_dmp_mf_body(constant Resources &r,
         DMP_I(s_awqt, k) = 0.0f; DMP_I(s_awqv, k) = 0.0f;
         DMP_I(s_awqc, k) = 0.0f; DMP_I(s_awu, k) = 0.0f;
         DMP_I(s_awv, k) = 0.0f;
+        if (mq.on) for (int n = 0; n < 4; ++n) mq.s_awqn[n][ulong(k) * ulong(q.ncol) + column] = 0.0f;
         for (int i = 0; i < nup; ++i)
             for (int v = 0; v < 8; ++v) DMP_PLUME(v, i, k) = 0.0f;
     }
@@ -3627,6 +3640,43 @@ static inline void mynn_dmp_mf_body(constant Resources &r,
                 mynn_f32_mul(mynn_f32_mul(aw, DMP_PLUME(7, i, k)), psig_w));
           }
         }
+        if (mq.on) {
+            // mynn_dmp_qn_flux_columns: s_awqn from the PRE-limiter up_a.
+            const ulong nc = ulong(q.ncol);
+            device float *upq = mq.up_qn + ulong(column) * ulong(nup) * ulong(nz + 1);
+#define DMP_UPQ(i, k) upq[ulong(i) * ulong(nz + 1) + ulong(k)]
+            for (int n = 0; n < 4; ++n) {
+                device const float *qn = mq.qn[n];
+                device float *saw = mq.s_awqn[n];
+                for (int s = 0; s < nup * (nz + 1); ++s) upq[s] = 0.0f;
+                for (int i = 0; i < nup; ++i) {
+                    // WRF :6140-6144 surface value, :6213/:6217 entrainment.
+                    DMP_UPQ(i, 0) = mynn_f32_div(mynn_f32_add(
+                        mynn_f32_mul(qn[column], DMP_L(dz, 1)),
+                        mynn_f32_mul(qn[nc + column], DMP_L(dz, 0))),
+                        mynn_f32_add(DMP_L(dz, 0), DMP_L(dz, 1)));
+                    for (int k = 1; k < nz - 1; ++k) {
+                        if (!(DMP_PLUME(0, i, k) > 0.0f)) continue;
+                        const float ent_exp = mynn_f32_mul(DMP_ENT(i, k),
+                            mynn_f32_sub(DMP_I(zw, k + 1), DMP_I(zw, k)));
+                        DMP_UPQ(i, k) = mynn_f32_add(
+                            mynn_f32_mul(DMP_UPQ(i, k - 1),
+                                         mynn_f32_sub(1.0f, ent_exp)),
+                            mynn_f32_mul(qn[ulong(k) * nc + column], ent_exp));
+                    }
+                }
+                // WRF :6447-6456, k outer and plume inner.
+                for (int k = 0; k < nz; ++k)
+                    for (int i = 0; i < nup; ++i) {
+                        device float &acc = saw[ulong(k + 1) * nc + column];
+                        acc = mynn_f32_add(acc, mynn_f32_mul(mynn_f32_mul(
+                            mynn_f32_mul(mynn_f32_mul(DMP_WORK(0, k),
+                                DMP_PLUME(5, i, k)), DMP_PLUME(0, i, k)),
+                            DMP_UPQ(i, k)), psig_w));
+                    }
+            }
+#undef DMP_UPQ
+        }
         DMP_WORK(1, 0) = mynn_f32_mul(0.5f,
             mynn_f32_add(DMP_L(dz, 0), DMP_L(dz, 1)));
         const float flx1 = DMP_I(s_aw, 1) != 0.0f
@@ -3645,6 +3695,11 @@ static inline void mynn_dmp_mf_body(constant Resources &r,
                 DMP_I(s_awqc, k) = mynn_f32_mul(DMP_I(s_awqc, k), adjust);
                 DMP_I(s_awu, k) = mynn_f32_mul(DMP_I(s_awu, k), adjust);
                 DMP_I(s_awv, k) = mynn_f32_mul(DMP_I(s_awv, k), adjust);
+                if (mq.on) for (int n = 0; n < 4; ++n) {
+                    device float *saw = mq.s_awqn[n];
+                    saw[ulong(k) * ulong(q.ncol) + column] = mynn_f32_mul(
+                        saw[ulong(k) * ulong(q.ncol) + column], adjust);
+                }
                 for (int i = 0; i < nup; ++i)
                     DMP_PLUME(5, i, k) = mynn_f32_mul(DMP_PLUME(5, i, k), adjust);
             }
@@ -3849,7 +3904,10 @@ kernel void mynn_dmp_mf_columns(
     constant MynnDmpMfColumnsParams &q [[buffer(1)]],
     uint column [[thread_position_in_grid]])
 {
-    mynn_dmp_mf_body(r, q, column, false, r.dz);
+    MynnDmpQn mq = {{r.qnc, r.qni, r.qnwfa, r.qnifa},
+        {r.s_awqnc, r.s_awqni, r.s_awqnwfa, r.s_awqnifa}, r.up_qn,
+        q.mixscalars};
+    mynn_dmp_mf_body(r, q, column, false, r.dz, mq);
 }
 
 kernel void mynn_dmp_mf_gsd41_columns(
@@ -3857,7 +3915,9 @@ kernel void mynn_dmp_mf_gsd41_columns(
     constant MynnDmpMfGsd41ColumnsParams &q [[buffer(1)]],
     uint column [[thread_position_in_grid]])
 {
-    mynn_dmp_mf_body(r, q, column, true, r.sgm);
+    MynnDmpQn mq = {{nullptr, nullptr, nullptr, nullptr},
+        {nullptr, nullptr, nullptr, nullptr}, nullptr, 0};
+    mynn_dmp_mf_body(r, q, column, true, r.sgm, mq);
 }
 
 #undef DMP_L
@@ -3933,4 +3993,103 @@ kernel void mynn_scalar_pblmix_columns(
         r.rate[SPM(k)] = mynn_f32_div(mynn_f32_sub(solved, r.qn[SPM(k)]), dt);
     }
 #undef SPM
+}
+
+// WRF v4.6.1 module_bl_mynn.F:4654-4689 qn-family tridiagonal solve with the
+// mass-flux terms: Metal twin of mynn_mix_scalar_columns in
+// woof/core/kernels/mynn_scalar_mix.cu, op for op.  Level-major (nz, ncol);
+// scratch holds khdz (nz+1) then a, b, c, d, cpw, dpw (nz each).
+kernel void mynn_mix_scalar_columns(
+    constant MynnMixScalarColumnsResources &r [[buffer(0)]],
+    constant MynnMixScalarColumnsParams &q [[buffer(1)]],
+    uint column [[thread_position_in_grid]])
+{
+    if (column >= uint(q.ncol)) return;
+    const int nz = q.nz;
+    const ulong nc = ulong(q.ncol);
+#define MS(p, k) p[ulong(k) * nc + column]
+    device float *khdz = r.scratch;
+    device float *a = khdz + ulong(nz + 1) * nc;
+    device float *b = a + ulong(nz) * nc;
+    device float *c = b + ulong(nz) * nc;
+    device float *d = c + ulong(nz) * nc;
+    device float *cpw = d + ulong(nz) * nc;
+    device float *dpw = cpw + ulong(nz) * nc;
+    const float delt = r.delt[column];
+    float rhoz = MS(r.rho, 0);
+    MS(khdz, 0) = mynn_f32_mul(rhoz, MS(r.dfh, 0));
+    for (int k = 1; k < nz; ++k) {
+        rhoz = mynn_f32_div(
+            mynn_f32_add(mynn_f32_mul(MS(r.rho, k), MS(r.dz, k - 1)),
+                         mynn_f32_mul(MS(r.rho, k - 1), MS(r.dz, k))),
+            mynn_f32_add(MS(r.dz, k - 1), MS(r.dz, k)));
+        rhoz = mynn_f32_max2(rhoz, 1.0e-4f);
+        MS(khdz, k) = mynn_f32_mul(rhoz, MS(r.dfh, k));
+    }
+    MS(khdz, nz) = mynn_f32_mul(rhoz, MS(r.dfh, nz - 1));
+    for (int k = 1; k < nz - 1; ++k) {
+        MS(khdz, k) = mynn_f32_max2(MS(khdz, k),
+            mynn_f32_mul(0.5f, MS(r.s_aw, k)));
+        MS(khdz, k) = mynn_f32_max2(MS(khdz, k), -mynn_f32_mul(0.5f,
+            mynn_f32_sub(MS(r.s_aw, k), MS(r.s_aw, k + 1))));
+    }
+    {
+        const float dtz0 = mynn_f32_div(delt, MS(r.dz, 0));
+        const float rhoinv0 = mynn_f32_div(1.0f, MS(r.rho, 0));
+        const float hdz0 = mynn_f32_mul(mynn_f32_mul(0.5f, dtz0), rhoinv0);
+        const float dzinv0 = mynn_f32_mul(dtz0, rhoinv0);
+        MS(a, 0) = -mynn_f32_mul(mynn_f32_mul(dtz0, MS(khdz, 0)), rhoinv0);
+        MS(b, 0) = mynn_f32_sub(
+            mynn_f32_add(1.0f, mynn_f32_mul(mynn_f32_mul(dtz0,
+                mynn_f32_add(MS(khdz, 1), MS(khdz, 0))), rhoinv0)),
+            mynn_f32_mul(mynn_f32_mul(hdz0, MS(r.s_aw, 1)), 1.0f));
+        MS(c, 0) = mynn_f32_sub(
+            -mynn_f32_mul(mynn_f32_mul(dtz0, MS(khdz, 1)), rhoinv0),
+            mynn_f32_mul(mynn_f32_mul(hdz0, MS(r.s_aw, 1)), 1.0f));
+        MS(d, 0) = mynn_f32_sub(MS(r.qn, 0),
+            mynn_f32_mul(mynn_f32_mul(dzinv0, MS(r.s_awqn, 1)), 1.0f));
+    }
+    for (int k = 1; k < nz - 1; ++k) {
+        const float dtz = mynn_f32_div(delt, MS(r.dz, k));
+        const float rhoinv = mynn_f32_div(1.0f,
+            mynn_f32_max2(MS(r.rho, k), 1.0e-4f));
+        const float hdz = mynn_f32_mul(mynn_f32_mul(0.5f, dtz), rhoinv);
+        const float dzinv = mynn_f32_mul(dtz, rhoinv);
+        MS(a, k) = mynn_f32_add(
+            -mynn_f32_mul(mynn_f32_mul(dtz, MS(khdz, k)), rhoinv),
+            mynn_f32_mul(mynn_f32_mul(hdz, MS(r.s_aw, k)), 1.0f));
+        MS(b, k) = mynn_f32_add(
+            mynn_f32_add(1.0f, mynn_f32_mul(mynn_f32_mul(dtz,
+                mynn_f32_add(MS(khdz, k), MS(khdz, k + 1))), rhoinv)),
+            mynn_f32_mul(mynn_f32_mul(hdz, mynn_f32_sub(MS(r.s_aw, k),
+                MS(r.s_aw, k + 1))), 1.0f));
+        MS(c, k) = mynn_f32_sub(
+            -mynn_f32_mul(mynn_f32_mul(dtz, MS(khdz, k + 1)), rhoinv),
+            mynn_f32_mul(mynn_f32_mul(hdz, MS(r.s_aw, k + 1)), 1.0f));
+        MS(d, k) = mynn_f32_add(MS(r.qn, k),
+            mynn_f32_mul(mynn_f32_mul(dzinv, mynn_f32_sub(MS(r.s_awqn, k),
+                MS(r.s_awqn, k + 1))), 1.0f));
+    }
+    MS(a, nz - 1) = 0.0f;
+    MS(b, nz - 1) = 1.0f;
+    MS(c, nz - 1) = 0.0f;
+    MS(d, nz - 1) = MS(r.qn, nz - 1);
+    // module_bl_mynn.F:5422 tridiag2.
+    MS(cpw, 0) = mynn_f32_div(MS(c, 0), MS(b, 0));
+    MS(dpw, 0) = mynn_f32_div(MS(d, 0), MS(b, 0));
+    for (int k = 1; k < nz; ++k) {
+        const float m = mynn_f32_sub(MS(b, k),
+            mynn_f32_mul(MS(cpw, k - 1), MS(a, k)));
+        MS(cpw, k) = mynn_f32_div(MS(c, k), m);
+        MS(dpw, k) = mynn_f32_div(mynn_f32_sub(MS(d, k),
+            mynn_f32_mul(MS(dpw, k - 1), MS(a, k))), m);
+    }
+    MS(r.qn2, nz - 1) = MS(dpw, nz - 1);
+    for (int k = nz - 2; k >= 0; --k)
+        MS(r.qn2, k) = mynn_f32_sub(MS(dpw, k),
+            mynn_f32_mul(MS(cpw, k), MS(r.qn2, k + 1)));
+    for (int k = 0; k < nz; ++k)
+        MS(r.dqn, k) = mynn_f32_div(
+            mynn_f32_sub(MS(r.qn2, k), MS(r.qn, k)), delt);
+#undef MS
 }

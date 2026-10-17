@@ -819,10 +819,6 @@ METAL_FAMILY_CAPS = {
 
 
 METAL_KNOWN_CONFLICTS = (
-    ("Metal MYNN has no bl_mynn_mixscalars=1 caller",
-     lambda cfg, radiation, cumulus, cam_ozone:
-     int(cfg.bl_pbl_physics) == 5
-     and int(getattr(cfg, "bl_mynn_mixscalars", 0) or 0) != 0),
     ("IEVA vertical advection solves at most 256 levels",
      lambda cfg, radiation, cumulus, cam_ozone:
      int(getattr(cfg, "zadvect_implicit", 0) or 0) != 0

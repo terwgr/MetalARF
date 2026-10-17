@@ -1,0 +1,690 @@
+{
+  "kernels": [
+    {
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/core/kernels/mynn_pbl.cu",
+      "cuda_symbol": "mynn_dmp_mf_columns",
+      "layout_version": 2,
+      "module": "mynn_pbl_family",
+      "name": "mynn_dmp_mf_columns",
+      "parameters": [
+        [
+          "nz",
+          "int32"
+        ],
+        [
+          "ncol",
+          "int32"
+        ],
+        [
+          "edmf_entrainment",
+          "float32"
+        ],
+        [
+          "mixscalars",
+          "int32"
+        ]
+      ],
+      "resources": [
+        [
+          "dz",
+          "float",
+          "read"
+        ],
+        [
+          "p",
+          "float",
+          "read"
+        ],
+        [
+          "rho",
+          "float",
+          "read"
+        ],
+        [
+          "u",
+          "float",
+          "read"
+        ],
+        [
+          "v",
+          "float",
+          "read"
+        ],
+        [
+          "w",
+          "float",
+          "read"
+        ],
+        [
+          "th",
+          "float",
+          "read"
+        ],
+        [
+          "thl",
+          "float",
+          "read"
+        ],
+        [
+          "thv",
+          "float",
+          "read"
+        ],
+        [
+          "tk",
+          "float",
+          "read"
+        ],
+        [
+          "qt",
+          "float",
+          "read"
+        ],
+        [
+          "qv",
+          "float",
+          "read"
+        ],
+        [
+          "qc",
+          "float",
+          "read"
+        ],
+        [
+          "exner",
+          "float",
+          "read"
+        ],
+        [
+          "rstoch",
+          "float",
+          "read"
+        ],
+        [
+          "qc_bl_in",
+          "float",
+          "read"
+        ],
+        [
+          "cldfra_bl_in",
+          "float",
+          "read"
+        ],
+        [
+          "vt_in",
+          "float",
+          "read"
+        ],
+        [
+          "vq_in",
+          "float",
+          "read"
+        ],
+        [
+          "zw",
+          "float",
+          "read"
+        ],
+        [
+          "flt",
+          "float",
+          "read"
+        ],
+        [
+          "fltv",
+          "float",
+          "read"
+        ],
+        [
+          "flq",
+          "float",
+          "read"
+        ],
+        [
+          "pblh",
+          "float",
+          "read"
+        ],
+        [
+          "dx",
+          "float",
+          "read"
+        ],
+        [
+          "landsea",
+          "float",
+          "read"
+        ],
+        [
+          "ts",
+          "float",
+          "read"
+        ],
+        [
+          "psig_shcu",
+          "float",
+          "read"
+        ],
+        [
+          "qnc",
+          "float",
+          "read"
+        ],
+        [
+          "qni",
+          "float",
+          "read"
+        ],
+        [
+          "qnwfa",
+          "float",
+          "read"
+        ],
+        [
+          "qnifa",
+          "float",
+          "read"
+        ],
+        [
+          "edmf_a",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_w",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_qt",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_thl",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_ent",
+          "float",
+          "read_write"
+        ],
+        [
+          "edmf_qc",
+          "float",
+          "read_write"
+        ],
+        [
+          "qc_bl",
+          "float",
+          "read_write"
+        ],
+        [
+          "cldfra_bl",
+          "float",
+          "read_write"
+        ],
+        [
+          "vt",
+          "float",
+          "read_write"
+        ],
+        [
+          "vq",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_aw",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awthl",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqt",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqv",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awu",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awv",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqni",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnifa",
+          "float",
+          "read_write"
+        ],
+        [
+          "maxwidth",
+          "float",
+          "read_write"
+        ],
+        [
+          "ztop",
+          "float",
+          "read_write"
+        ],
+        [
+          "maxmf",
+          "float",
+          "read_write"
+        ],
+        [
+          "ktop",
+          "int32",
+          "read_write"
+        ],
+        [
+          "plume_scratch",
+          "float",
+          "read_write"
+        ],
+        [
+          "up_qn",
+          "float",
+          "read_write"
+        ],
+        [
+          "work_scratch",
+          "float",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cldfra_bl": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "cldfra_bl_in": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "dx": [
+          [
+            "ncol"
+          ]
+        ],
+        "dz": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "edmf_a": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "edmf_ent": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "edmf_qc": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "edmf_qt": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "edmf_thl": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "edmf_w": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "exner": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "flq": [
+          [
+            "ncol"
+          ]
+        ],
+        "flt": [
+          [
+            "ncol"
+          ]
+        ],
+        "fltv": [
+          [
+            "ncol"
+          ]
+        ],
+        "ktop": [
+          [
+            "ncol"
+          ]
+        ],
+        "landsea": [
+          [
+            "ncol"
+          ]
+        ],
+        "maxmf": [
+          [
+            "ncol"
+          ]
+        ],
+        "maxwidth": [
+          [
+            "ncol"
+          ]
+        ],
+        "p": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "pblh": [
+          [
+            "ncol"
+          ]
+        ],
+        "plume_scratch": [
+          [
+            "ncol",
+            8,
+            8,
+            "nz+1"
+          ]
+        ],
+        "psig_shcu": [
+          [
+            "ncol"
+          ]
+        ],
+        "qc": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qc_bl": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qc_bl_in": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qt": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qv": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "rho": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "rstoch": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "s_aw": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqc": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqt": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqv": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awthl": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awu": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awv": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "th": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "thl": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "thv": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "tk": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "ts": [
+          [
+            "ncol"
+          ]
+        ],
+        "u": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "v": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vq": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vq_in": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vt": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "vt_in": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "w": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "work_scratch": [
+          [
+            "ncol",
+            11,
+            "nz"
+          ]
+        ],
+        "ztop": [
+          [
+            "ncol"
+          ]
+        ],
+        "zw": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "qnc": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qni": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qnwfa": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qnifa": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "s_awqnc": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqni": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqnwfa": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqnifa": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "up_qn": [
+          [
+            "ncol",
+            8,
+            "nz+1"
+          ]
+        ]
+      },
+      "source": "woof/metal/shaders/mynn_pbl_family.metal",
+      "threads_per_group": 128
+    }
+  ]
+}

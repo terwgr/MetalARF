@@ -21,6 +21,10 @@
         [
           "edmf_entrainment",
           "float32"
+        ],
+        [
+          "mixscalars",
+          "int32"
         ]
       ],
       "resources": [
@@ -165,6 +169,26 @@
           "read"
         ],
         [
+          "qnc",
+          "float",
+          "read"
+        ],
+        [
+          "qni",
+          "float",
+          "read"
+        ],
+        [
+          "qnwfa",
+          "float",
+          "read"
+        ],
+        [
+          "qnifa",
+          "float",
+          "read"
+        ],
+        [
           "edmf_a",
           "float",
           "read_write"
@@ -250,6 +274,26 @@
           "read_write"
         ],
         [
+          "s_awqnc",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqni",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnwfa",
+          "float",
+          "read_write"
+        ],
+        [
+          "s_awqnifa",
+          "float",
+          "read_write"
+        ],
+        [
           "maxwidth",
           "float",
           "read_write"
@@ -271,6 +315,11 @@
         ],
         [
           "plume_scratch",
+          "float",
+          "read_write"
+        ],
+        [
+          "up_qn",
           "float",
           "read_write"
         ],
@@ -576,6 +625,61 @@
           [
             "nz+1",
             "ncol"
+          ]
+        ],
+        "qnc": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qni": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qnwfa": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "qnifa": [
+          [
+            "nz",
+            "ncol"
+          ]
+        ],
+        "s_awqnc": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqni": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqnwfa": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "s_awqnifa": [
+          [
+            "nz+1",
+            "ncol"
+          ]
+        ],
+        "up_qn": [
+          [
+            "ncol",
+            8,
+            "nz+1"
           ]
         ]
       },

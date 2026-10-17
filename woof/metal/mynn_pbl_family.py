@@ -255,6 +255,27 @@ def submit_mynn_scalar_pblmix(context, qn, dz, rho, exch_h, rate, scratch,
                    int(ncol), True)
 
 
+def submit_mynn_mix_scalar(context, qn, dz, rho, dfh, s_aw, s_awqn, delt,
+                           qn2, dqn, scratch, *, nz: int, ncol: int):
+    """Solve WRF's MYNN mixscalars tridiagonal for one number scalar.
+
+    Layer arrays are contiguous FP32 ``(nz, ncol)``, ``s_aw``/``s_awqn`` are
+    ``(nz+1, ncol)``, ``delt`` is ``(ncol,)`` and ``scratch`` holds
+    ``8 * nz * ncol`` floats (``(7 * nz + 1) * ncol`` are used). Writes ``qn2`` and ``dqn = (qn2-qn)/delt``.
+    """
+    nz, ncol = int(nz), int(ncol)
+    resources = {
+        name: _reshape_fp32(array, name, shape) for name, array, shape in (
+            ("qn", qn, (nz, ncol)), ("dz", dz, (nz, ncol)),
+            ("rho", rho, (nz, ncol)), ("dfh", dfh, (nz, ncol)),
+            ("s_aw", s_aw, (nz + 1, ncol)),
+            ("s_awqn", s_awqn, (nz + 1, ncol)), ("delt", delt, (ncol,)),
+            ("qn2", qn2, (nz, ncol)), ("dqn", dqn, (nz, ncol)),
+            ("scratch", scratch, (8, nz, ncol)))}
+    return _submit(context, "mynn_mix_scalar_columns", resources,
+                   {"nz": nz, "ncol": ncol}, ncol, True)
+
+
 def submit_mynn_driver_exchange(context, dz, dfm, dfh, k_m, k_h, *, nz: int,
                                 experimental=False):
     """Experimentally form interface exchange coefficients in level-major order.
@@ -276,12 +297,15 @@ def submit_mynn_driver_exchange(context, dz, dfm, dfh, k_m, k_h, *, nz: int,
 
 def submit_mynn_dmp_mf(context, inputs, outputs, *, plume_workspace,
                        work_workspace, nz: int, ncol: int,
-                       experimental=False):
+                       experimental=False, mixscalars=None):
     """Submit the default MYNN EDMF mass-flux column solve.
 
     Profiles are level-major ``(nz,ncol)`` arrays. The plume and work
     workspaces are per-column, caller-owned scratch so forecast storage can be
-    bound to persistent domain scratch.
+    bound to persistent domain scratch.  ``mixscalars=(qn, s_awqn, up_qn)``
+    turns on bl_mynn_mixscalars=1: ``qn``/``s_awqn`` map the names
+    ``qnc, qni, qnwfa, qnifa`` to ``(nz, ncol)`` inputs and ``(nz+1, ncol)``
+    flux outputs, ``up_qn`` is ``(ncol, 8, nz+1)`` scratch.
     """
     for name, extent in (("nz", nz), ("ncol", ncol)):
         if (isinstance(extent, (bool, np.bool_))
@@ -342,8 +366,26 @@ def submit_mynn_dmp_mf(context, inputs, outputs, *, plume_workspace,
         plume_workspace, "plume_workspace", (ncol, 8, 8, nz + 1))
     resources["work_scratch"] = _reshape_fp32(
         work_workspace, "work_workspace", (ncol, 11, nz))
+    qn_names = ("qnc", "qni", "qnwfa", "qnifa")
+    if mixscalars is None:
+        # Unused bindings of the flag-off launch.
+        for name in qn_names:
+            resources[name] = resources["dz"]
+            resources[f"s_awqn{name[2:]}"] = resources["s_aw"]
+        resources["up_qn"] = resources["plume_scratch"].view(
+            (resources["plume_scratch"].size,))[:ncol * 8 * (nz + 1)].view(
+                (ncol, 8, nz + 1))
+    else:
+        qn, s_awqn, up_qn = mixscalars
+        for name in qn_names:
+            resources[name] = _reshape_fp32(qn[name], name, (nz, ncol))
+            resources[f"s_awqn{name[2:]}"] = _reshape_fp32(
+                s_awqn[name], f"s_awqn{name[2:]}", (nz + 1, ncol))
+        resources["up_qn"] = _reshape_fp32(up_qn, "up_qn", (ncol, 8, nz + 1))
     return _submit(context, "mynn_dmp_mf_columns", resources,
-                   {"nz": nz, "ncol": ncol}, ncol, experimental)
+                   {"nz": nz, "ncol": ncol,
+                    "mixscalars": 0 if mixscalars is None else 1},
+                   ncol, experimental)
 
 
 def submit_mynn_dmp_mf_gsd41(context, inputs, outputs, *, sgm,

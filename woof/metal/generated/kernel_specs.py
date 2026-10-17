@@ -1543,15 +1543,15 @@ MYNN_CONDENSATION_DEFAULT_COLUMNS_SHAPES = (('cldfra', (('nz', 'ncol'),)), ('dz'
 MYNN_CONDENSATION_DEFAULT_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('spp_pbl', 'ctypes.c_int32')]
 MYNN_CONDENSATION_DEFAULT_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_CONDENSATION_DEFAULT_COLUMNS_LAYOUT_HASH = '82f9175da171f146eb3cac06aa80cf7e3a3354e461629e0b6701d1906019d408'
-MYNN_CONDENSATION_DEFAULT_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_CONDENSATION_DEFAULT_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
-MYNN_DMP_MF_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('p', 'float', 'read'), ('rho', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('th', 'float', 'read'), ('thl', 'float', 'read'), ('thv', 'float', 'read'), ('tk', 'float', 'read'), ('qt', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('exner', 'float', 'read'), ('rstoch', 'float', 'read'), ('qc_bl_in', 'float', 'read'), ('cldfra_bl_in', 'float', 'read'), ('vt_in', 'float', 'read'), ('vq_in', 'float', 'read'), ('zw', 'float', 'read'), ('flt', 'float', 'read'), ('fltv', 'float', 'read'), ('flq', 'float', 'read'), ('pblh', 'float', 'read'), ('dx', 'float', 'read'), ('landsea', 'float', 'read'), ('ts', 'float', 'read'), ('psig_shcu', 'float', 'read'), ('edmf_a', 'float', 'read_write'), ('edmf_w', 'float', 'read_write'), ('edmf_qt', 'float', 'read_write'), ('edmf_thl', 'float', 'read_write'), ('edmf_ent', 'float', 'read_write'), ('edmf_qc', 'float', 'read_write'), ('qc_bl', 'float', 'read_write'), ('cldfra_bl', 'float', 'read_write'), ('vt', 'float', 'read_write'), ('vq', 'float', 'read_write'), ('s_aw', 'float', 'read_write'), ('s_awthl', 'float', 'read_write'), ('s_awqt', 'float', 'read_write'), ('s_awqv', 'float', 'read_write'), ('s_awqc', 'float', 'read_write'), ('s_awu', 'float', 'read_write'), ('s_awv', 'float', 'read_write'), ('maxwidth', 'float', 'read_write'), ('ztop', 'float', 'read_write'), ('maxmf', 'float', 'read_write'), ('ktop', 'int32', 'read_write'), ('plume_scratch', 'float', 'read_write'), ('work_scratch', 'float', 'read_write'))
-MYNN_DMP_MF_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
-MYNN_DMP_MF_COLUMNS_SHAPES = (('cldfra_bl', (('nz', 'ncol'),)), ('cldfra_bl_in', (('nz', 'ncol'),)), ('dx', (('ncol',),)), ('dz', (('nz', 'ncol'),)), ('edmf_a', (('nz', 'ncol'),)), ('edmf_ent', (('nz', 'ncol'),)), ('edmf_qc', (('nz', 'ncol'),)), ('edmf_qt', (('nz', 'ncol'),)), ('edmf_thl', (('nz', 'ncol'),)), ('edmf_w', (('nz', 'ncol'),)), ('exner', (('nz', 'ncol'),)), ('flq', (('ncol',),)), ('flt', (('ncol',),)), ('fltv', (('ncol',),)), ('ktop', (('ncol',),)), ('landsea', (('ncol',),)), ('maxmf', (('ncol',),)), ('maxwidth', (('ncol',),)), ('p', (('nz', 'ncol'),)), ('pblh', (('ncol',),)), ('plume_scratch', (('ncol', 8, 8, 'nz+1'),)), ('psig_shcu', (('ncol',),)), ('qc', (('nz', 'ncol'),)), ('qc_bl', (('nz', 'ncol'),)), ('qc_bl_in', (('nz', 'ncol'),)), ('qt', (('nz', 'ncol'),)), ('qv', (('nz', 'ncol'),)), ('rho', (('nz', 'ncol'),)), ('rstoch', (('nz', 'ncol'),)), ('s_aw', (('nz+1', 'ncol'),)), ('s_awqc', (('nz+1', 'ncol'),)), ('s_awqt', (('nz+1', 'ncol'),)), ('s_awqv', (('nz+1', 'ncol'),)), ('s_awthl', (('nz+1', 'ncol'),)), ('s_awu', (('nz+1', 'ncol'),)), ('s_awv', (('nz+1', 'ncol'),)), ('th', (('nz', 'ncol'),)), ('thl', (('nz', 'ncol'),)), ('thv', (('nz', 'ncol'),)), ('tk', (('nz', 'ncol'),)), ('ts', (('ncol',),)), ('u', (('nz', 'ncol'),)), ('v', (('nz', 'ncol'),)), ('vq', (('nz', 'ncol'),)), ('vq_in', (('nz', 'ncol'),)), ('vt', (('nz', 'ncol'),)), ('vt_in', (('nz', 'ncol'),)), ('w', (('nz', 'ncol'),)), ('work_scratch', (('ncol', 11, 'nz'),)), ('ztop', (('ncol',),)), ('zw', (('nz+1', 'ncol'),)))
-MYNN_DMP_MF_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('edmf_entrainment', 'ctypes.c_float')]
+MYNN_DMP_MF_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('p', 'float', 'read'), ('rho', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('th', 'float', 'read'), ('thl', 'float', 'read'), ('thv', 'float', 'read'), ('tk', 'float', 'read'), ('qt', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('exner', 'float', 'read'), ('rstoch', 'float', 'read'), ('qc_bl_in', 'float', 'read'), ('cldfra_bl_in', 'float', 'read'), ('vt_in', 'float', 'read'), ('vq_in', 'float', 'read'), ('zw', 'float', 'read'), ('flt', 'float', 'read'), ('fltv', 'float', 'read'), ('flq', 'float', 'read'), ('pblh', 'float', 'read'), ('dx', 'float', 'read'), ('landsea', 'float', 'read'), ('ts', 'float', 'read'), ('psig_shcu', 'float', 'read'), ('qnc', 'float', 'read'), ('qni', 'float', 'read'), ('qnwfa', 'float', 'read'), ('qnifa', 'float', 'read'), ('edmf_a', 'float', 'read_write'), ('edmf_w', 'float', 'read_write'), ('edmf_qt', 'float', 'read_write'), ('edmf_thl', 'float', 'read_write'), ('edmf_ent', 'float', 'read_write'), ('edmf_qc', 'float', 'read_write'), ('qc_bl', 'float', 'read_write'), ('cldfra_bl', 'float', 'read_write'), ('vt', 'float', 'read_write'), ('vq', 'float', 'read_write'), ('s_aw', 'float', 'read_write'), ('s_awthl', 'float', 'read_write'), ('s_awqt', 'float', 'read_write'), ('s_awqv', 'float', 'read_write'), ('s_awqc', 'float', 'read_write'), ('s_awu', 'float', 'read_write'), ('s_awv', 'float', 'read_write'), ('s_awqnc', 'float', 'read_write'), ('s_awqni', 'float', 'read_write'), ('s_awqnwfa', 'float', 'read_write'), ('s_awqnifa', 'float', 'read_write'), ('maxwidth', 'float', 'read_write'), ('ztop', 'float', 'read_write'), ('maxmf', 'float', 'read_write'), ('ktop', 'int32', 'read_write'), ('plume_scratch', 'float', 'read_write'), ('up_qn', 'float', 'read_write'), ('work_scratch', 'float', 'read_write'))
+MYNN_DMP_MF_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
+MYNN_DMP_MF_COLUMNS_SHAPES = (('cldfra_bl', (('nz', 'ncol'),)), ('cldfra_bl_in', (('nz', 'ncol'),)), ('dx', (('ncol',),)), ('dz', (('nz', 'ncol'),)), ('edmf_a', (('nz', 'ncol'),)), ('edmf_ent', (('nz', 'ncol'),)), ('edmf_qc', (('nz', 'ncol'),)), ('edmf_qt', (('nz', 'ncol'),)), ('edmf_thl', (('nz', 'ncol'),)), ('edmf_w', (('nz', 'ncol'),)), ('exner', (('nz', 'ncol'),)), ('flq', (('ncol',),)), ('flt', (('ncol',),)), ('fltv', (('ncol',),)), ('ktop', (('ncol',),)), ('landsea', (('ncol',),)), ('maxmf', (('ncol',),)), ('maxwidth', (('ncol',),)), ('p', (('nz', 'ncol'),)), ('pblh', (('ncol',),)), ('plume_scratch', (('ncol', 8, 8, 'nz+1'),)), ('psig_shcu', (('ncol',),)), ('qc', (('nz', 'ncol'),)), ('qc_bl', (('nz', 'ncol'),)), ('qc_bl_in', (('nz', 'ncol'),)), ('qt', (('nz', 'ncol'),)), ('qv', (('nz', 'ncol'),)), ('rho', (('nz', 'ncol'),)), ('rstoch', (('nz', 'ncol'),)), ('s_aw', (('nz+1', 'ncol'),)), ('s_awqc', (('nz+1', 'ncol'),)), ('s_awqt', (('nz+1', 'ncol'),)), ('s_awqv', (('nz+1', 'ncol'),)), ('s_awthl', (('nz+1', 'ncol'),)), ('s_awu', (('nz+1', 'ncol'),)), ('s_awv', (('nz+1', 'ncol'),)), ('th', (('nz', 'ncol'),)), ('thl', (('nz', 'ncol'),)), ('thv', (('nz', 'ncol'),)), ('tk', (('nz', 'ncol'),)), ('ts', (('ncol',),)), ('u', (('nz', 'ncol'),)), ('v', (('nz', 'ncol'),)), ('vq', (('nz', 'ncol'),)), ('vq_in', (('nz', 'ncol'),)), ('vt', (('nz', 'ncol'),)), ('vt_in', (('nz', 'ncol'),)), ('w', (('nz', 'ncol'),)), ('work_scratch', (('ncol', 11, 'nz'),)), ('ztop', (('ncol',),)), ('zw', (('nz+1', 'ncol'),)), ('qnc', (('nz', 'ncol'),)), ('qni', (('nz', 'ncol'),)), ('qnwfa', (('nz', 'ncol'),)), ('qnifa', (('nz', 'ncol'),)), ('s_awqnc', (('nz+1', 'ncol'),)), ('s_awqni', (('nz+1', 'ncol'),)), ('s_awqnwfa', (('nz+1', 'ncol'),)), ('s_awqnifa', (('nz+1', 'ncol'),)), ('up_qn', (('ncol', 8, 'nz+1'),)))
+MYNN_DMP_MF_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('edmf_entrainment', 'ctypes.c_float'), ('mixscalars', 'ctypes.c_int32')]
 MYNN_DMP_MF_COLUMNS_THREADS_PER_GROUP = 128
-MYNN_DMP_MF_COLUMNS_LAYOUT_HASH = 'f43fb47cb90d44bece0e0b7bf013b32f437b1113195e04e9dd5e36b699bf1df2'
-MYNN_DMP_MF_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_DMP_MF_COLUMNS_LAYOUT_HASH = '89ce38408c216b95301fc553e64fdef385c30b6b447c143e24aacc8771dbdefb'
+MYNN_DMP_MF_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_DRIVER_DISS_HEAT_COLUMNS_RESOURCES = (('el', 'float', 'read'), ('qke', 'float', 'read'), ('p', 'float', 'read'), ('diss_heat', 'float', 'read_write'))
 MYNN_DRIVER_DISS_HEAT_COLUMNS_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -1559,7 +1559,7 @@ MYNN_DRIVER_DISS_HEAT_COLUMNS_SHAPES = (('diss_heat', (('nz', 'ncol'),)), ('el',
 MYNN_DRIVER_DISS_HEAT_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_DRIVER_DISS_HEAT_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_DRIVER_DISS_HEAT_COLUMNS_LAYOUT_HASH = '64e53c8db2d06bc103c8c026b9672d595f721bcacde26ea27895ea1db65818ec'
-MYNN_DRIVER_DISS_HEAT_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_DRIVER_DISS_HEAT_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_DRIVER_EXCHANGE_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('dfm', 'float', 'read'), ('dfh', 'float', 'read'), ('k_m', 'float', 'read_write'), ('k_h', 'float', 'read_write'))
 MYNN_DRIVER_EXCHANGE_COLUMNS_ACCESS = ('read', 'read', 'read', 'read_write', 'read_write')
@@ -1567,7 +1567,7 @@ MYNN_DRIVER_EXCHANGE_COLUMNS_SHAPES = (('dfh', (('count',),)), ('dfm', (('count'
 MYNN_DRIVER_EXCHANGE_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('count', 'ctypes.c_int32')]
 MYNN_DRIVER_EXCHANGE_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_DRIVER_EXCHANGE_COLUMNS_LAYOUT_HASH = '9cacf4b3fab1aad6c586ffd77d89a1587b3fc35f1292c0f8f7b6cc0890c9d372'
-MYNN_DRIVER_EXCHANGE_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_DRIVER_EXCHANGE_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_DRIVER_PREP_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('exner', 'float', 'read'), ('sqv', 'float', 'read'), ('sqc', 'float', 'read'), ('sqi', 'float', 'read'), ('th', 'float', 'read'), ('ust', 'float', 'read'), ('zw', 'float', 'read_write'), ('qv1', 'float', 'read_write'), ('sqw', 'float', 'read_write'), ('thl', 'float', 'read_write'), ('thetav', 'float', 'read_write'), ('qke_seed', 'float', 'read_write'))
 MYNN_DRIVER_PREP_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1575,7 +1575,7 @@ MYNN_DRIVER_PREP_COLUMNS_SHAPES = (('dz', (('nz', 'ncol'),)), ('exner', (('nz', 
 MYNN_DRIVER_PREP_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_DRIVER_PREP_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_DRIVER_PREP_COLUMNS_LAYOUT_HASH = '87eb77a008273cf1ff3a79bf6b17b82e24239a3d6c6a0fc34f82afc90ca4f88e'
-MYNN_DRIVER_PREP_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_DRIVER_PREP_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_DRIVER_SURFACE_COLUMNS_RESOURCES = (('rho', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('qv1', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('ts', 'float', 'read'), ('flt', 'float', 'read_write'), ('fltv', 'float', 'read_write'), ('flq', 'float', 'read_write'), ('flqv', 'float', 'read_write'), ('flqc', 'float', 'read_write'), ('th_sfc', 'float', 'read_write'), ('rmol', 'float', 'read_write'), ('zet', 'float', 'read_write'), ('pmz', 'float', 'read_write'), ('phh', 'float', 'read_write'))
 MYNN_DRIVER_SURFACE_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1583,7 +1583,7 @@ MYNN_DRIVER_SURFACE_COLUMNS_SHAPES = (('dz', (('nz', 'ncol'),)), ('exner', (('nz
 MYNN_DRIVER_SURFACE_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_DRIVER_SURFACE_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_DRIVER_SURFACE_COLUMNS_LAYOUT_HASH = '9cfbfa572d5841d3b3c711fc2895345c2263ddbcf6cc044eb1c7693da26845d7'
-MYNN_DRIVER_SURFACE_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_DRIVER_SURFACE_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_INITIALIZE_DEFAULT_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('thl', 'float', 'read'), ('qw', 'float', 'read'), ('theta', 'float', 'read'), ('edmf_w', 'float', 'read'), ('edmf_a', 'float', 'read'), ('sm_in', 'float', 'read'), ('sh_in', 'float', 'read'), ('qke_in', 'float', 'read'), ('zw', 'float', 'read'), ('rmo', 'float', 'read'), ('ust', 'float', 'read'), ('zi', 'float', 'read'), ('psig_bl', 'float', 'read'), ('el', 'float', 'read_write'), ('qke', 'float', 'read_write'), ('tsq', 'float', 'read_write'), ('qsq', 'float', 'read_write'), ('cov', 'float', 'read_write'), ('sm', 'float', 'read_write'), ('sh', 'float', 'read_write'), ('scratch', 'float', 'read_write'))
 MYNN_INITIALIZE_DEFAULT_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1591,7 +1591,7 @@ MYNN_INITIALIZE_DEFAULT_COLUMNS_SHAPES = (('cov', (('nz', 'ncol'),)), ('dz', (('
 MYNN_INITIALIZE_DEFAULT_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('initialize_qke', 'ctypes.c_int32'), ('mixlength', 'ctypes.c_int32'), ('prandtl', 'ctypes.c_float'), ('cns', 'ctypes.c_float'), ('alp1', 'ctypes.c_float')]
 MYNN_INITIALIZE_DEFAULT_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_INITIALIZE_DEFAULT_COLUMNS_LAYOUT_HASH = 'bd7079a25e82ef0fa8c495ceb395d357f4e0ae31c596a1edb4fa9773a22d7cad'
-MYNN_INITIALIZE_DEFAULT_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_INITIALIZE_DEFAULT_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_LEVEL2_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('thl', 'float', 'read'), ('qw', 'float', 'read'), ('vt', 'float', 'read'), ('vq', 'float', 'read'), ('dtl', 'float', 'read_write'), ('dqw', 'float', 'read_write'), ('dtv', 'float', 'read_write'), ('gm', 'float', 'read_write'), ('gh', 'float', 'read_write'), ('sm', 'float', 'read_write'), ('sh', 'float', 'read_write'))
 MYNN_LEVEL2_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1599,7 +1599,7 @@ MYNN_LEVEL2_COLUMNS_SHAPES = (('dqw', (('nz', 'ncol'),)), ('dtl', (('nz', 'ncol'
 MYNN_LEVEL2_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('prandtl', 'ctypes.c_float')]
 MYNN_LEVEL2_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_LEVEL2_COLUMNS_LAYOUT_HASH = '4b87b092f61e60b4bfe4b40b017da898bad97b61d8ab5219aaadf44e1b12c921'
-MYNN_LEVEL2_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_LEVEL2_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_LEVEL2_PAIRS_RESOURCES = (('dz_a', 'float', 'read'), ('u_a', 'float', 'read'), ('v_a', 'float', 'read'), ('thl_a', 'float', 'read'), ('qw_a', 'float', 'read'), ('vt_a', 'float', 'read'), ('vq_a', 'float', 'read'), ('dz_prev_a', 'float', 'read'), ('u_prev_a', 'float', 'read'), ('v_prev_a', 'float', 'read'), ('thl_prev_a', 'float', 'read'), ('qw_prev_a', 'float', 'read'), ('vt_prev_a', 'float', 'read'), ('vq_prev_a', 'float', 'read'), ('dtl_o', 'float', 'read_write'), ('dqw_o', 'float', 'read_write'), ('dtv_o', 'float', 'read_write'), ('gm_o', 'float', 'read_write'), ('gh_o', 'float', 'read_write'), ('sm_o', 'float', 'read_write'), ('sh_o', 'float', 'read_write'))
 MYNN_LEVEL2_PAIRS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1607,7 +1607,7 @@ MYNN_LEVEL2_PAIRS_SHAPES = (('dqw_o', (('n',),)), ('dtl_o', (('n',),)), ('dtv_o'
 MYNN_LEVEL2_PAIRS_PARAM_FIELDS = [('n', 'ctypes.c_int32'), ('prandtl', 'ctypes.c_float')]
 MYNN_LEVEL2_PAIRS_THREADS_PER_GROUP = 128
 MYNN_LEVEL2_PAIRS_LAYOUT_HASH = '2750288881a7f18262501ecbe2e8dd66493f5625e240de85f8ef0cb420b7f051'
-MYNN_LEVEL2_PAIRS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_LEVEL2_PAIRS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_MIXLENGTH_DEFAULT_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('zw', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('qke', 'float', 'read'), ('dtv', 'float', 'read'), ('theta', 'float', 'read'), ('edmf_w', 'float', 'read'), ('edmf_a', 'float', 'read'), ('rmo', 'float', 'read'), ('fltv', 'float', 'read'), ('zi', 'float', 'read'), ('psig_bl', 'float', 'read'), ('el', 'float', 'read_write'), ('qkw', 'float', 'read_write'), ('qtke', 'float', 'read_write'), ('thetaw', 'float', 'read_write'), ('elblavg', 'float', 'read_write'), ('dlu', 'float', 'read_write'), ('dld', 'float', 'read_write'))
 MYNN_MIXLENGTH_DEFAULT_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1615,7 +1615,7 @@ MYNN_MIXLENGTH_DEFAULT_COLUMNS_SHAPES = (('dld', (('nz', 'ncol'),)), ('dlu', (('
 MYNN_MIXLENGTH_DEFAULT_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('mixlength', 'ctypes.c_int32'), ('cns', 'ctypes.c_float'), ('alp1', 'ctypes.c_float')]
 MYNN_MIXLENGTH_DEFAULT_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_MIXLENGTH_DEFAULT_COLUMNS_LAYOUT_HASH = 'e1958c22440704abe640f7708095783a5aa88dcce5f4eaf8875f9cadc970fa0e'
-MYNN_MIXLENGTH_DEFAULT_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_MIXLENGTH_DEFAULT_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_PBLH_SCALE_COLUMNS_RESOURCES = (('thetav', 'float', 'read'), ('qke', 'float', 'read'), ('zw', 'float', 'read'), ('dz', 'float', 'read'), ('landsea', 'float', 'read'), ('dx', 'float', 'read'), ('zi', 'float', 'read_write'), ('kzi', 'int32', 'read_write'), ('psig_bl', 'float', 'read_write'), ('psig_shcu', 'float', 'read_write'))
 MYNN_PBLH_SCALE_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1623,7 +1623,7 @@ MYNN_PBLH_SCALE_COLUMNS_SHAPES = (('dx', (('ncol',),)), ('dz', (('nz', 'ncol'),)
 MYNN_PBLH_SCALE_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_PBLH_SCALE_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_PBLH_SCALE_COLUMNS_LAYOUT_HASH = 'dee5bcaaf7f7166cb5915b1ac733a96e09b76dc63bae1b2bc460a90cf59a5bc4'
-MYNN_PBLH_SCALE_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_PBLH_SCALE_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_PREDICT_DEFAULT_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('rho', 'float', 'read'), ('dfq', 'float', 'read'), ('pdk', 'float', 'read'), ('pdt', 'float', 'read'), ('pdq', 'float', 'read'), ('pdc', 'float', 'read'), ('el', 'float', 'read'), ('s_aw', 'float', 'read'), ('ust', 'float', 'read'), ('pmz', 'float', 'read'), ('phh', 'float', 'read'), ('delt', 'float', 'read'), ('qke_in', 'float', 'read'), ('qsq_in', 'float', 'read'), ('qke_out', 'float', 'read_write'), ('tsq_out', 'float', 'read_write'), ('qsq_out', 'float', 'read_write'), ('cov_out', 'float', 'read_write'), ('qkw', 'float', 'read_write'), ('rhoinv', 'float', 'read_write'), ('kqdz', 'float', 'read_write'), ('kmdz', 'float', 'read_write'), ('a', 'float', 'read_write'), ('b', 'float', 'read_write'), ('c', 'float', 'read_write'), ('d', 'float', 'read_write'), ('cp', 'float', 'read_write'), ('dp', 'float', 'read_write'))
 MYNN_PREDICT_DEFAULT_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1631,7 +1631,7 @@ MYNN_PREDICT_DEFAULT_COLUMNS_SHAPES = (('a', (('nz', 'ncol'),)), ('b', (('nz', '
 MYNN_PREDICT_DEFAULT_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_PREDICT_DEFAULT_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_PREDICT_DEFAULT_COLUMNS_LAYOUT_HASH = 'd9c274d7031c6a987d900d16590d8cf7ff280c2f7f395c5157c7a045eca23ac7'
-MYNN_PREDICT_DEFAULT_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_PREDICT_DEFAULT_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_SEAICE_BLEND_RESOURCES = (('xice', 'float', 'read'), ('value', 'float', 'read_write'), ('sea', 'float', 'read'))
 MYNN_SEAICE_BLEND_ACCESS = ('read', 'read_write', 'read')
@@ -1671,7 +1671,7 @@ MYNN_TENDENCIES_COLUMNS_SHAPES = (('delt', (('ncol',),)), ('det_sqc', (('nz', 'n
 MYNN_TENDENCIES_COLUMNS_PARAM_FIELDS = [('onoff', 'ctypes.c_float'), ('rd', 'ctypes.c_float'), ('p608', 'ctypes.c_float'), ('xlvcp', 'ctypes.c_float'), ('xlscp', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_TENDENCIES_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_TENDENCIES_COLUMNS_LAYOUT_HASH = '7d11ae28b98aac9711c2ad4535c80efbfb76fddaae78ab395fc889bfa89dec0d'
-MYNN_TENDENCIES_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_TENDENCIES_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_TURBULENCE_DEFAULT_INTERFACES_RESOURCES = (('dz', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('cldfra', 'float', 'read'), ('edmf_w', 'float', 'read'), ('edmf_a', 'float', 'read'), ('tkeprodtd', 'float', 'read'), ('el', 'float', 'read'), ('qkw', 'float', 'read'), ('dtl', 'float', 'read'), ('dqw', 'float', 'read'), ('gm', 'float', 'read'), ('gh', 'float', 'read'), ('sm', 'float', 'read_write'), ('sh', 'float', 'read_write'), ('dfm', 'float', 'read_write'), ('dfh', 'float', 'read_write'), ('dfq', 'float', 'read_write'), ('pdk', 'float', 'read_write'), ('pdt', 'float', 'read_write'), ('pdq', 'float', 'read_write'), ('pdc', 'float', 'read_write'), ('tcd', 'float', 'read_write'), ('qcd', 'float', 'read_write'))
 MYNN_TURBULENCE_DEFAULT_INTERFACES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1679,7 +1679,7 @@ MYNN_TURBULENCE_DEFAULT_INTERFACES_SHAPES = (('cldfra', (('count',),)), ('dfh', 
 MYNN_TURBULENCE_DEFAULT_INTERFACES_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('count', 'ctypes.c_int32'), ('prandtl', 'ctypes.c_float')]
 MYNN_TURBULENCE_DEFAULT_INTERFACES_THREADS_PER_GROUP = 128
 MYNN_TURBULENCE_DEFAULT_INTERFACES_LAYOUT_HASH = '9ffa1870f602cd9688f9e216f6a8312d63a910da44a5e939e211664276d49da9'
-MYNN_TURBULENCE_DEFAULT_INTERFACES_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_TURBULENCE_DEFAULT_INTERFACES_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_WRAPPER_FROM_SPECIFIC_RESOURCES = (('sqv', 'float', 'read'), ('rqvblten', 'float', 'read_write'), ('rqcblten', 'float', 'read_write'), ('rqiblten', 'float', 'read_write'), ('qc_bl', 'float', 'read_write'), ('qi_bl', 'float', 'read_write'))
 MYNN_WRAPPER_FROM_SPECIFIC_ACCESS = ('read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1687,7 +1687,7 @@ MYNN_WRAPPER_FROM_SPECIFIC_SHAPES = (('qc_bl', (('count',),)), ('qi_bl', (('coun
 MYNN_WRAPPER_FROM_SPECIFIC_PARAM_FIELDS = [('count', 'ctypes.c_int32')]
 MYNN_WRAPPER_FROM_SPECIFIC_THREADS_PER_GROUP = 128
 MYNN_WRAPPER_FROM_SPECIFIC_LAYOUT_HASH = 'f98ab1f0fd5c53e183ee49dcb0e6f4f3ac00188206092621c30090b25f9b4457'
-MYNN_WRAPPER_FROM_SPECIFIC_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_WRAPPER_FROM_SPECIFIC_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_WRAPPER_TO_SPECIFIC_RESOURCES = (('qv', 'float', 'read'), ('qc', 'float', 'read'), ('qi', 'float', 'read'), ('qs', 'float', 'read'), ('sqv', 'float', 'read_write'), ('sqc', 'float', 'read_write'), ('sqi', 'float', 'read_write'), ('sqs', 'float', 'read_write'))
 MYNN_WRAPPER_TO_SPECIFIC_ACCESS = ('read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -1695,7 +1695,7 @@ MYNN_WRAPPER_TO_SPECIFIC_SHAPES = (('qc', (('count',),)), ('qi', (('count',),)),
 MYNN_WRAPPER_TO_SPECIFIC_PARAM_FIELDS = [('count', 'ctypes.c_int32')]
 MYNN_WRAPPER_TO_SPECIFIC_THREADS_PER_GROUP = 128
 MYNN_WRAPPER_TO_SPECIFIC_LAYOUT_HASH = 'ed914af115e221e6d3c739a0a0c6c89278e6b46ba5c1a25d5b3ee232e520e1d4'
-MYNN_WRAPPER_TO_SPECIFIC_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_WRAPPER_TO_SPECIFIC_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 NEST_BDY_INTERP1_FRAGMENT_RESOURCES = (('parent_a', 'float', 'read'), ('child_a', 'float', 'read'), ('value_a', 'float', 'read_write'), ('tendency_a', 'float', 'read_write'), ('ci_map_a', 'int32', 'read'), ('ip_map_a', 'int32', 'read'), ('cj_map_a', 'int32', 'read'), ('jp_map_a', 'int32', 'read'), ('xig_a', 'float', 'read'), ('xjg_a', 'float', 'read'))
 NEST_BDY_INTERP1_FRAGMENT_ACCESS = ('read', 'read', 'read_write', 'read_write', 'read', 'read', 'read', 'read', 'read', 'read')
@@ -6199,7 +6199,7 @@ MYNN_CONDENSATION_GSD41_COLUMNS_SHAPES = (('dz', (('nz', 'ncol'),)), ('zw', (('n
 MYNN_CONDENSATION_GSD41_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_CONDENSATION_GSD41_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_CONDENSATION_GSD41_COLUMNS_LAYOUT_HASH = '4f4e44d72e4231c95230a7c41ec00cc6d09eb8f667a1eea6299b177e5fd80b7c'
-MYNN_CONDENSATION_GSD41_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_CONDENSATION_GSD41_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_DMP_MF_GSD41_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('p', 'float', 'read'), ('rho', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('w', 'float', 'read'), ('th', 'float', 'read'), ('thl', 'float', 'read'), ('thv', 'float', 'read'), ('tk', 'float', 'read'), ('qt', 'float', 'read'), ('qv', 'float', 'read'), ('qc', 'float', 'read'), ('exner', 'float', 'read'), ('rstoch', 'float', 'read'), ('qc_bl_in', 'float', 'read'), ('cldfra_bl_in', 'float', 'read'), ('vt_in', 'float', 'read'), ('vq_in', 'float', 'read'), ('zw', 'float', 'read'), ('flt', 'float', 'read'), ('fltv', 'float', 'read'), ('flq', 'float', 'read'), ('pblh', 'float', 'read'), ('dx', 'float', 'read'), ('landsea', 'float', 'read'), ('ts', 'float', 'read'), ('psig_shcu', 'float', 'read'), ('sgm', 'float', 'read'), ('edmf_a', 'float', 'read_write'), ('edmf_w', 'float', 'read_write'), ('edmf_qt', 'float', 'read_write'), ('edmf_thl', 'float', 'read_write'), ('edmf_ent', 'float', 'read_write'), ('edmf_qc', 'float', 'read_write'), ('qc_bl', 'float', 'read_write'), ('cldfra_bl', 'float', 'read_write'), ('vt', 'float', 'read_write'), ('vq', 'float', 'read_write'), ('s_aw', 'float', 'read_write'), ('s_awthl', 'float', 'read_write'), ('s_awqt', 'float', 'read_write'), ('s_awqv', 'float', 'read_write'), ('s_awqc', 'float', 'read_write'), ('s_awu', 'float', 'read_write'), ('s_awv', 'float', 'read_write'), ('maxwidth', 'float', 'read_write'), ('ztop', 'float', 'read_write'), ('maxmf', 'float', 'read_write'), ('ktop', 'int32', 'read_write'), ('plume_scratch', 'float', 'read_write'), ('work_scratch', 'float', 'read_write'))
 MYNN_DMP_MF_GSD41_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -6207,7 +6207,7 @@ MYNN_DMP_MF_GSD41_COLUMNS_SHAPES = (('dz', (('nz', 'ncol'),)), ('p', (('nz', 'nc
 MYNN_DMP_MF_GSD41_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('edmf_entrainment', 'ctypes.c_float')]
 MYNN_DMP_MF_GSD41_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_DMP_MF_GSD41_COLUMNS_LAYOUT_HASH = 'acfdd86cf2fb656a33014ea55c272ad8f9e064ab0d192d3ae15cfcd6658d6fca'
-MYNN_DMP_MF_GSD41_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_DMP_MF_GSD41_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_DRIVER_SURFACE_GSD41_COLUMNS_RESOURCES = (('rho', 'float', 'read'), ('exner', 'float', 'read'), ('dz', 'float', 'read'), ('qv1', 'float', 'read'), ('ust', 'float', 'read'), ('hfx', 'float', 'read'), ('qfx', 'float', 'read'), ('ts', 'float', 'read'), ('rmol_in', 'float', 'read'), ('flt', 'float', 'read_write'), ('fltv', 'float', 'read_write'), ('flq', 'float', 'read_write'), ('flqv', 'float', 'read_write'), ('flqc', 'float', 'read_write'), ('th_sfc', 'float', 'read_write'), ('rmol', 'float', 'read_write'), ('zet', 'float', 'read_write'), ('pmz', 'float', 'read_write'), ('phh', 'float', 'read_write'))
 MYNN_DRIVER_SURFACE_GSD41_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -6215,7 +6215,7 @@ MYNN_DRIVER_SURFACE_GSD41_COLUMNS_SHAPES = (('rho', (('nz', 'ncol'),)), ('exner'
 MYNN_DRIVER_SURFACE_GSD41_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_DRIVER_SURFACE_GSD41_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_DRIVER_SURFACE_GSD41_COLUMNS_LAYOUT_HASH = 'f151a8e36e1bb280e33af76437d52829a37defb6d6b247c8f166502232779ffa'
-MYNN_DRIVER_SURFACE_GSD41_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_DRIVER_SURFACE_GSD41_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_MIXLENGTH_GSD41_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('zw', 'float', 'read'), ('qke', 'float', 'read'), ('dtv', 'float', 'read'), ('theta', 'float', 'read'), ('edmf_w', 'float', 'read'), ('edmf_a', 'float', 'read'), ('cldfra', 'float', 'read'), ('vt', 'float', 'read'), ('vq', 'float', 'read'), ('flt', 'float', 'read'), ('flq', 'float', 'read'), ('rmo', 'float', 'read'), ('zi', 'float', 'read'), ('psig_bl', 'float', 'read'), ('el', 'float', 'read_write'), ('qkw', 'float', 'read_write'), ('qtke', 'float', 'read_write'), ('thetaw', 'float', 'read_write'))
 MYNN_MIXLENGTH_GSD41_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -6223,7 +6223,7 @@ MYNN_MIXLENGTH_GSD41_COLUMNS_SHAPES = (('dz', (('nz', 'ncol'),)), ('zw', (('nz+1
 MYNN_MIXLENGTH_GSD41_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_MIXLENGTH_GSD41_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_MIXLENGTH_GSD41_COLUMNS_LAYOUT_HASH = 'c0d8474fe91ef6808d5b4a027ff40d4bf1f4430bdd626a9305a3fc5bb9b7c809'
-MYNN_MIXLENGTH_GSD41_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_MIXLENGTH_GSD41_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_INITIALIZE_GSD41_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('thl', 'float', 'read'), ('qw', 'float', 'read'), ('theta', 'float', 'read'), ('edmf_w', 'float', 'read'), ('edmf_a', 'float', 'read'), ('sm_in', 'float', 'read'), ('sh_in', 'float', 'read'), ('qke_in', 'float', 'read'), ('zw', 'float', 'read'), ('rmo', 'float', 'read'), ('ust', 'float', 'read'), ('zi', 'float', 'read'), ('psig_bl', 'float', 'read'), ('el', 'float', 'read_write'), ('qke', 'float', 'read_write'), ('tsq', 'float', 'read_write'), ('qsq', 'float', 'read_write'), ('cov', 'float', 'read_write'), ('sm', 'float', 'read_write'), ('sh', 'float', 'read_write'), ('scratch', 'float', 'read_write'))
 MYNN_INITIALIZE_GSD41_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -6231,7 +6231,7 @@ MYNN_INITIALIZE_GSD41_COLUMNS_SHAPES = (('edmf_w', (('nz', 'ncol'),)), ('qw', ((
 MYNN_INITIALIZE_GSD41_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32'), ('initialize_qke', 'ctypes.c_int32'), ('prandtl', 'ctypes.c_float'), ('cns', 'ctypes.c_float'), ('alp1', 'ctypes.c_float')]
 MYNN_INITIALIZE_GSD41_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_INITIALIZE_GSD41_COLUMNS_LAYOUT_HASH = 'dbc1de89dfbae4a8876fd8774803fc9438b0c8595eec9258fe436ba59622c067'
-MYNN_INITIALIZE_GSD41_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_INITIALIZE_GSD41_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 THOMPSON_AA_WRF39_GRAUPEL_FINALIZE_RESOURCES = (('qg', 'float', 'read_write'),)
 THOMPSON_AA_WRF39_GRAUPEL_FINALIZE_ACCESS = ('read_write',)
@@ -6423,7 +6423,7 @@ MYNN_SCALAR_PBLMIX_COLUMNS_SHAPES = (('qn', (('nz', 'ncol'),)), ('dz', (('nz', '
 MYNN_SCALAR_PBLMIX_COLUMNS_PARAM_FIELDS = [('dt', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_SCALAR_PBLMIX_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_SCALAR_PBLMIX_COLUMNS_LAYOUT_HASH = '6c20c94af3e1a6a7f4e2deb37654375e7adf802898eb52b1713226db40ea749f'
-MYNN_SCALAR_PBLMIX_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_SCALAR_PBLMIX_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 WRF_W_CFL_STAT_RESOURCES = (('ww', 'float', 'read'), ('mup', 'float', 'read'), ('mub2d', 'float', 'read'), ('c1f', 'float', 'read'), ('c2f', 'float', 'read'), ('rdnw', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('msfu', 'float', 'read'), ('msfv', 'float', 'read'), ('out', 'uint32', 'read_write'))
 WRF_W_CFL_STAT_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -7615,7 +7615,7 @@ MYNN_PBLH_SCALE_GSD41_COLUMNS_SHAPES = (('dx', (('ncol',),)), ('dz', (('nz', 'nc
 MYNN_PBLH_SCALE_GSD41_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_PBLH_SCALE_GSD41_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_PBLH_SCALE_GSD41_COLUMNS_LAYOUT_HASH = 'da327d582164038e004f7b9ad9cf5b4df206b6ea96c75c2f83817dc448ccbc09'
-MYNN_PBLH_SCALE_GSD41_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_PBLH_SCALE_GSD41_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_TURBULENCE_GSD41_INTERFACES_RESOURCES = (('dz', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('cldfra', 'float', 'read'), ('edmf_w', 'float', 'read'), ('edmf_a', 'float', 'read'), ('tkeprodtd', 'float', 'read'), ('el', 'float', 'read'), ('qkw', 'float', 'read'), ('dtl', 'float', 'read'), ('dqw', 'float', 'read'), ('gm', 'float', 'read'), ('gh', 'float', 'read'), ('sm', 'float', 'read_write'), ('sh', 'float', 'read_write'), ('dfm', 'float', 'read_write'), ('dfh', 'float', 'read_write'), ('dfq', 'float', 'read_write'), ('pdk', 'float', 'read_write'), ('pdt', 'float', 'read_write'), ('pdq', 'float', 'read_write'), ('pdc', 'float', 'read_write'), ('tcd', 'float', 'read_write'), ('qcd', 'float', 'read_write'))
 MYNN_TURBULENCE_GSD41_INTERFACES_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -7623,7 +7623,7 @@ MYNN_TURBULENCE_GSD41_INTERFACES_SHAPES = (('cldfra', (('count',),)), ('dfh', ((
 MYNN_TURBULENCE_GSD41_INTERFACES_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('count', 'ctypes.c_int32'), ('prandtl', 'ctypes.c_float')]
 MYNN_TURBULENCE_GSD41_INTERFACES_THREADS_PER_GROUP = 128
 MYNN_TURBULENCE_GSD41_INTERFACES_LAYOUT_HASH = 'eda506314736f49a98897e626996cd2afe7bc17a8fc20f764acb045956fc1db4'
-MYNN_TURBULENCE_GSD41_INTERFACES_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_TURBULENCE_GSD41_INTERFACES_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_PREDICT_GSD41_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('rho', 'float', 'read'), ('dfq', 'float', 'read'), ('pdk', 'float', 'read'), ('pdt', 'float', 'read'), ('pdq', 'float', 'read'), ('pdc', 'float', 'read'), ('el', 'float', 'read'), ('s_aw', 'float', 'read'), ('ust', 'float', 'read'), ('pmz', 'float', 'read'), ('phh', 'float', 'read'), ('delt', 'float', 'read'), ('qke_in', 'float', 'read'), ('qsq_in', 'float', 'read'), ('qke_out', 'float', 'read_write'), ('tsq_out', 'float', 'read_write'), ('qsq_out', 'float', 'read_write'), ('cov_out', 'float', 'read_write'), ('qkw', 'float', 'read_write'), ('rhoinv', 'float', 'read_write'), ('kqdz', 'float', 'read_write'), ('kmdz', 'float', 'read_write'), ('a', 'float', 'read_write'), ('b', 'float', 'read_write'), ('c', 'float', 'read_write'), ('d', 'float', 'read_write'), ('cp', 'float', 'read_write'), ('dp', 'float', 'read_write'))
 MYNN_PREDICT_GSD41_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write')
@@ -7631,7 +7631,7 @@ MYNN_PREDICT_GSD41_COLUMNS_SHAPES = (('a', (('nz', 'ncol'),)), ('b', (('nz', 'nc
 MYNN_PREDICT_GSD41_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_PREDICT_GSD41_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_PREDICT_GSD41_COLUMNS_LAYOUT_HASH = 'cdca51bfd1653a5a28406f5f62525bc741ece7fc9c3a8f370362185adc986e3d'
-MYNN_PREDICT_GSD41_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_PREDICT_GSD41_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_DRIVER_DISS_HEAT_GSD41_COLUMNS_RESOURCES = (('el', 'float', 'read'), ('qke', 'float', 'read'), ('p', 'float', 'read'), ('diss_heat', 'float', 'read_write'))
 MYNN_DRIVER_DISS_HEAT_GSD41_COLUMNS_ACCESS = ('read', 'read', 'read', 'read_write')
@@ -7639,7 +7639,7 @@ MYNN_DRIVER_DISS_HEAT_GSD41_COLUMNS_SHAPES = (('diss_heat', (('nz', 'ncol'),)), 
 MYNN_DRIVER_DISS_HEAT_GSD41_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_DRIVER_DISS_HEAT_GSD41_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_DRIVER_DISS_HEAT_GSD41_COLUMNS_LAYOUT_HASH = '1e7ea6b34bf333d553ba9f659b300b7a0fcd5b15c507a1b553dcee4756a4381a'
-MYNN_DRIVER_DISS_HEAT_GSD41_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_DRIVER_DISS_HEAT_GSD41_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_TENDENCIES_GSD41_COLUMNS_RESOURCES = (('dz', 'float', 'read'), ('rho', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('th', 'float', 'read'), ('tk', 'float', 'read'), ('qv', 'float', 'read'), ('p', 'float', 'read'), ('exner', 'float', 'read'), ('thl_in', 'float', 'read'), ('sqv', 'float', 'read'), ('sqc', 'float', 'read'), ('sqi', 'float', 'read'), ('sqs', 'float', 'read'), ('ozone', 'float', 'read'), ('tcd', 'float', 'read'), ('qcd', 'float', 'read'), ('dfm', 'float', 'read'), ('dfh', 'float', 'read'), ('diss_heat', 'float', 'read'), ('sub_thl', 'float', 'read'), ('sub_sqv', 'float', 'read'), ('sub_u', 'float', 'read'), ('sub_v', 'float', 'read'), ('det_thl', 'float', 'read'), ('det_sqv', 'float', 'read'), ('det_sqc', 'float', 'read'), ('det_u', 'float', 'read'), ('det_v', 'float', 'read'), ('s_aw', 'float', 'read'), ('s_awthl', 'float', 'read'), ('s_awqv', 'float', 'read'), ('s_awqc', 'float', 'read'), ('s_awu', 'float', 'read'), ('s_awv', 'float', 'read'), ('sd_aw', 'float', 'read'), ('sd_awthl', 'float', 'read'), ('sd_awqv', 'float', 'read'), ('sd_awqc', 'float', 'read'), ('sd_awu', 'float', 'read'), ('sd_awv', 'float', 'read'), ('delt', 'float', 'read'), ('psfc', 'float', 'read'), ('ust', 'float', 'read'), ('wspd', 'float', 'read'), ('uoce', 'float', 'read'), ('voce', 'float', 'read'), ('flt', 'float', 'read'), ('flqv', 'float', 'read'), ('flqc', 'float', 'read'), ('du', 'float', 'read_write'), ('dv', 'float', 'read_write'), ('dth', 'float', 'read_write'), ('dqv', 'float', 'read_write'), ('dqc', 'float', 'read_write'), ('dqi', 'float', 'read_write'), ('dqs', 'float', 'read_write'), ('dozone', 'float', 'read_write'), ('thl', 'float', 'read_write'), ('scratch', 'float', 'read_write'), ('qc_original', 'float', 'read'), ('qi_original', 'float', 'read'))
 MYNN_TENDENCIES_GSD41_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read_write', 'read', 'read')
@@ -7647,7 +7647,7 @@ MYNN_TENDENCIES_GSD41_COLUMNS_SHAPES = (('delt', (('ncol',),)), ('det_sqc', (('n
 MYNN_TENDENCIES_GSD41_COLUMNS_PARAM_FIELDS = [('onoff', 'ctypes.c_float'), ('rd', 'ctypes.c_float'), ('p608', 'ctypes.c_float'), ('xlvcp', 'ctypes.c_float'), ('xlscp', 'ctypes.c_float'), ('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_TENDENCIES_GSD41_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_TENDENCIES_GSD41_COLUMNS_LAYOUT_HASH = 'e5828864d48e44ce9457368ef6b92d549fde9680f8ea8148b5983fbd88e08a70'
-MYNN_TENDENCIES_GSD41_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_TENDENCIES_GSD41_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_GSD41_THVL_COLUMNS_RESOURCES = (('th', 'float', 'read'), ('exner', 'float', 'read'), ('sqv', 'float', 'read'), ('sqc', 'float', 'read'), ('sqi', 'float', 'read'), ('tk', 'float', 'read'), ('qc_bl', 'float', 'read'), ('cldfra_bl', 'float', 'read'), ('thvl', 'float', 'read_write'))
 MYNN_GSD41_THVL_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write')
@@ -7655,7 +7655,7 @@ MYNN_GSD41_THVL_COLUMNS_SHAPES = (('th', (('count',),)), ('exner', (('count',),)
 MYNN_GSD41_THVL_COLUMNS_PARAM_FIELDS = [('count', 'ctypes.c_int32')]
 MYNN_GSD41_THVL_COLUMNS_THREADS_PER_GROUP = 128
 MYNN_GSD41_THVL_COLUMNS_LAYOUT_HASH = 'b6a54d6f1c98d65c5a990b4c22045475789886001e96d44f036d1ee3ac66b00a'
-MYNN_GSD41_THVL_COLUMNS_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_GSD41_THVL_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 MYNN_GSD41_CLOUD_DECAY_RESOURCES = (('cldfra_bl', 'float', 'read_write'), ('qc_bl', 'float', 'read_write'), ('cldfra_old', 'float', 'read'), ('u', 'float', 'read'), ('v', 'float', 'read'), ('dx', 'float', 'read'), ('delt', 'float', 'read'))
 MYNN_GSD41_CLOUD_DECAY_ACCESS = ('read_write', 'read_write', 'read', 'read', 'read', 'read', 'read')
@@ -7663,7 +7663,7 @@ MYNN_GSD41_CLOUD_DECAY_SHAPES = (('cldfra_bl', (('nz', 'ncol'),)), ('qc_bl', (('
 MYNN_GSD41_CLOUD_DECAY_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
 MYNN_GSD41_CLOUD_DECAY_THREADS_PER_GROUP = 128
 MYNN_GSD41_CLOUD_DECAY_LAYOUT_HASH = '6dfcb60c3d33cebd765051cb3164bd13ae1a25474bdbf46bf35488c664fdc158'
-MYNN_GSD41_CLOUD_DECAY_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_GSD41_CLOUD_DECAY_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
 
 RRTMGP_MYNN_CLOUD_MERGE_GSD41_RESOURCES = (('qc', 'float', 'read_write'), ('qi', 'float', 'read_write'), ('cldfra', 'float', 'read_write'), ('qc_bl', 'float', 'read'), ('cldfra_bl', 'float', 'read'), ('tlay', 'float', 'read'))
 RRTMGP_MYNN_CLOUD_MERGE_GSD41_ACCESS = ('read_write', 'read_write', 'read_write', 'read', 'read', 'read')
@@ -7823,4 +7823,12 @@ MYNN_SPP_DIFFUSIVITY_SHAPES = (('dfh', (('count',),)), ('dfm', (('count',),)), (
 MYNN_SPP_DIFFUSIVITY_PARAM_FIELDS = [('count', 'ctypes.c_int32')]
 MYNN_SPP_DIFFUSIVITY_THREADS_PER_GROUP = 128
 MYNN_SPP_DIFFUSIVITY_LAYOUT_HASH = '6f98c4256814529d5da98378611a1e41a9cbd4db3c3f60e5062566d9b8478892'
-MYNN_SPP_DIFFUSIVITY_SHADER_HASH = '0dfc1da3d63f6cac29ca159d676fa4a5d619c7d5c87de10533bec5d31f925fd4'
+MYNN_SPP_DIFFUSIVITY_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
+
+MYNN_MIX_SCALAR_COLUMNS_RESOURCES = (('qn', 'float', 'read'), ('dz', 'float', 'read'), ('rho', 'float', 'read'), ('dfh', 'float', 'read'), ('s_aw', 'float', 'read'), ('s_awqn', 'float', 'read'), ('delt', 'float', 'read'), ('qn2', 'float', 'read_write'), ('dqn', 'float', 'read_write'), ('scratch', 'float', 'read_write'))
+MYNN_MIX_SCALAR_COLUMNS_ACCESS = ('read', 'read', 'read', 'read', 'read', 'read', 'read', 'read_write', 'read_write', 'read_write')
+MYNN_MIX_SCALAR_COLUMNS_SHAPES = (('qn', (('nz', 'ncol'),)), ('dz', (('nz', 'ncol'),)), ('rho', (('nz', 'ncol'),)), ('dfh', (('nz', 'ncol'),)), ('s_aw', (('nz+1', 'ncol'),)), ('s_awqn', (('nz+1', 'ncol'),)), ('delt', (('ncol',),)), ('qn2', (('nz', 'ncol'),)), ('dqn', (('nz', 'ncol'),)), ('scratch', ((8, 'nz', 'ncol'),)))
+MYNN_MIX_SCALAR_COLUMNS_PARAM_FIELDS = [('nz', 'ctypes.c_int32'), ('ncol', 'ctypes.c_int32')]
+MYNN_MIX_SCALAR_COLUMNS_THREADS_PER_GROUP = 128
+MYNN_MIX_SCALAR_COLUMNS_LAYOUT_HASH = '7903b870f6647e1aa824da94e1a66aacd37a7aa7364fbe467e67cac946dec2d4'
+MYNN_MIX_SCALAR_COLUMNS_SHADER_HASH = '8527473a7492d99fd0fb225ba34f58420c71b1bbd41a1129bd494c64dcfe1260'
