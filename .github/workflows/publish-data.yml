@@ -37,6 +37,8 @@ concurrency:
 
 jobs:
   publish:
+    # PyPI trusted publishers are bound to the upstream repository.
+    if: ${{ github.repository == 'recastsystems/woof' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
