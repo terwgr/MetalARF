@@ -1,0 +1,66 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_cofrz_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_cofrz_rrfs",
+      "resources": [
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

@@ -69,14 +69,14 @@ def require_metal_native_profile(config):
     if getattr(config, 'table_key', DEFAULT_ROW) != DEFAULT_ROW:
         from .rrfs.driver_rrfs import resolve_namelist as resolve_rrfs
 
-        if config.table_key != 'mpasphys_rrfs_44c0849' or config.suite != 'hrrrv5':
+        if config.table_key not in ('mpasphys_rrfs', 'mpasphys_rrfs_44c0849') or config.suite != 'hrrrv5':
             raise ValueError('native Metal RRFS requires the supported HRRRv5 source row')
         expected = resolve_rrfs("&physics\nconfig_physics_suite='hrrrv5'\n/\n",
                                 table_key=config.table_key)
         if config.selectors != expected.selectors:
             raise ValueError('native Metal RRFS requires the HRRRv5 suite selectors')
         unsupported = ('config_do_DAcycling', 'config_ngw_scheme', 'config_mynn_enh_mix',
-                       'config_spp_pbl', 'config_spp_lsm', 'config_sppt', 'config_sst_update',
+                       'config_spp_lsm', 'config_sppt', 'config_sst_update',
                        'config_sstdiurn_update', 'config_deepsoiltemp_update', 'config_lakemodel')
         options = config.execution_options
         enabled = [key for key in unsupported if options.get(key)]

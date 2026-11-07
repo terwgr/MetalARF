@@ -62,9 +62,9 @@ class MetalMpasMynnEdmf:
                 or metadata['ime'] < nc or metadata['kme'] < nz + 1):
             raise ValueError('RRFS MYNN-EDMF requires one native solve row and the upper interface level')
         if (metadata['do_chemistry'] or metadata['f_nbca'] or metadata['f_qoz']
-                or options.get('config_mynn_enh_mix') or options.get('config_spp_pbl')
+                or options.get('config_mynn_enh_mix')
                 or options['config_do_DAcycling']):
-            raise NotImplementedError('Metal RRFS MYNN-EDMF requires chemistry, black carbon, ozone, fire mixing, SPP and DA cycling disabled')
+            raise NotImplementedError('Metal RRFS MYNN-EDMF requires chemistry, black carbon, ozone, fire mixing and DA cycling disabled')
         dt = np.float32(metadata['dt_pbl'])
         length = np.float32(options['config_len_disp'])
         if not np.isfinite(dt) or dt <= 0 or not np.isfinite(length) or length <= 0:

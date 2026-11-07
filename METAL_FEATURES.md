@@ -1606,17 +1606,38 @@ heating was zero in this nighttime case. Exact mode follows native MPAS
 restart initialization and starts the radiation cadence anew.
 
 `woof hex forecast --backend metal --physics-backend mpasphys --physics-suite hrrrv5`
-admits the current RRFS source row, its default scheme selectors and
-supported native options on a fixed regional mesh. For moist native regional
-scalar advection, select `config_monotonic=false` and
-`config_positive_definite=false`. Metal refuses requests for the scalar limiter
-before device startup. The daylight public run
-covered 381 columns and 59 layers. After a checkpoint during the six-minute
-radiation hold, the continued run matched 16,324,769 checkpoint values and
-839,293 history values at each of two endpoints. Both spectra had 22,479
-active heating values. The held heating and surface fluxes kept their words
-until the next due call. Older RRFS forecast rows, strict Hex numerics, and
-unsupported physics options and output streams retain their admission checks.
+admits both RRFS source pins with their default HRRRv5 selectors and
+supported native options on a fixed regional mesh. The default monotonic
+scalar transport now runs the retained CUDA FCT schedule on Metal; either
+`config_monotonic` or `config_positive_definite` selects it on the final RK
+stage. Regional boundary residual clearing, copy-back and the unit-density
+pool follow that source, including signed-zero limiter budgets. The daylight
+public run covered 381 columns and 59 layers. Live FCT boundaries matched
+54,629,598 retained-source words across the full run and fresh continuation.
+After a checkpoint during the six-minute radiation hold, the continued run
+matched 16,324,769 checkpoint values and 839,293 history values at each of two
+endpoints. Both spectra had 22,479 active heating values. The held heating and surface fluxes kept their words
+until the next due call.
+The older RRFS pin uses its own scalar limiter, mixing, seeded momentum,
+scalar-offcentred acoustics and outer-step composition. Component checks match
+3,611,610 operator words and 6,780 transport words, including global padding
+and nonzero entry scratch. Live operators in the authentic old-pin public
+forecast match 32,574,565 retained CUDA source words. The four-step daylight
+run and fresh file continuation match 16,216,429 checkpoint values and 839,293
+history values at each endpoint, with active SW/LW and held/due cadence.
+Strict Hex numerics and unsupported physics options and output streams retain
+their admission checks.
+The MYNN PBL SPP selector accepts the upstream zero-pattern staging and
+matched 126,836 retained-source Registry words. A public positive-definite-only
+transport step with that selector also completed. This does not supply a
+stochastic pattern generator. SPPT and LSM stochastic forcing remain refused
+because the CUDA route does not bind an active hook or pattern producer.
+Multi-device requests explicitly refuse because Metal supports one GPU.
+Native Metal startup now selects global inputs and the unpadded global
+geometry when regional LBCs are disabled. A public physics-none control on an
+existing 40,962-cell, 55-layer globe completes without LBC files. This exercises
+the initializer; a full HRRRv5 zoom forecast still needs complete, authenticated
+RRFS global geography and a matching initialized zoom mesh.
 The joined restart compares the same Metal configuration, and the independent
 retained-source comparisons cover the selected scheme boundaries above.
 Regional stage-three heating uses the density tendency after the first two

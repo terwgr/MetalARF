@@ -1,0 +1,146 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_fct_vertical_low_order_v841",
+      "module": "hexv841_fct_vertical_low_order_v841",
+      "source": "woof/metal/shaders/hexv841_fct_vertical_low_order_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "fct_vertical_low_order_v841",
+      "resources": [
+        [
+          "source_old",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_old",
+          "float32",
+          "read"
+        ],
+        [
+          "vertical_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "high_vertical",
+          "float32",
+          "read"
+        ],
+        [
+          "mass",
+          "float32",
+          "read_write"
+        ],
+        [
+          "vertical_residual",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale_in",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale_out",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source_old": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "rho_old": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "vertical_velocity": [
+          [
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "rdzw": [
+          [
+            "nlev"
+          ]
+        ],
+        "high_vertical": [
+          [
+            "ntracers",
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "mass": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "vertical_residual": [
+          [
+            "ntracers",
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "scale_in": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "scale_out": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

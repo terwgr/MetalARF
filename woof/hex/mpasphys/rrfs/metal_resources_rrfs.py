@@ -1,4 +1,4 @@
-"""Authenticated resources for the RRFS-44 HRRRv5 Metal session.
+"""Authenticated resources for the pinned RRFS HRRRv5 Metal session.
 
 The physics-resources packet must include ``metal_tempo.table_witness``, a
 path to the portable TEMPO table receipt (relative paths start with ``./``).
@@ -27,8 +27,8 @@ _SHARED = ('LANDUSE.TBL', 'VEGPARM.TBL', 'SOILPARM.TBL', 'GENPARM.TBL',
 
 def load_resources(context, *, config, landuse, ozone_levels, packet):
     """Return the keyword arguments needed by ``MetalPhysicsSession``."""
-    if config.pin_set != 'rrfs-44c0849':
-        raise rb.PhysicsResourceError('Metal HRRRv5 resources require the RRFS-44 pin set')
+    if config.pin_set not in ('rrfs', 'rrfs-44c0849'):
+        raise rb.PhysicsResourceError('Metal HRRRv5 resources require a supported RRFS pin set')
     if not isinstance(landuse, str) or not landuse.strip():
         raise rb.PhysicsResourceError('Metal RRFS resources require the input landuse classification')
     if packet is None or not Path(packet).is_file():

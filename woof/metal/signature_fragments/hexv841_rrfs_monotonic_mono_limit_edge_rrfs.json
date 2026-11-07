@@ -1,0 +1,136 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_monotonic_mono_limit_edge_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_limit_edge_rrfs",
+      "resources": [
+        [
+          "coe",
+          "int32",
+          "read"
+        ],
+        [
+          "mask",
+          "int32",
+          "read"
+        ],
+        [
+          "dv",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read"
+        ],
+        [
+          "o",
+          "float32",
+          "read"
+        ],
+        [
+          "scale",
+          "float32",
+          "read"
+        ],
+        [
+          "flux",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "coe": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "solved",
+          "int32"
+        ],
+        [
+          "regional",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

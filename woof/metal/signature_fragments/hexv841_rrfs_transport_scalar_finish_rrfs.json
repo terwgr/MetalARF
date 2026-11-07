@@ -1,0 +1,250 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_transport_scalar_finish_rrfs",
+      "module": "hexv841_rrfs_transport",
+      "source": "woof/metal/shaders/hexv841_rrfs_transport.metal",
+      "cuda_source": "woof/hex/cuda_transport_rrfs.py",
+      "cuda_symbol": "scalar_finish_rrfs",
+      "resources": [
+        [
+          "mask",
+          "int32",
+          "read"
+        ],
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "sign",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read"
+        ],
+        [
+          "edge",
+          "float32",
+          "read"
+        ],
+        [
+          "ww",
+          "float32",
+          "read"
+        ],
+        [
+          "fnm",
+          "float32",
+          "read"
+        ],
+        [
+          "fnp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "old",
+          "float32",
+          "read"
+        ],
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "rho0",
+          "float32",
+          "read"
+        ],
+        [
+          "rho1",
+          "float32",
+          "read"
+        ],
+        [
+          "source",
+          "float32",
+          "read"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ],
+        [
+          "target",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "stage": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho0": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "solved",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "weight",
+          "float32"
+        ],
+        [
+          "coef",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

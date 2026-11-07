@@ -284306,6 +284306,9363 @@
       ]
     },
     {
+      "name": "hexv841_fct_boundary_residual_v841",
+      "module": "hexv841_fct_boundary_residual_v841",
+      "source": "woof/metal/shaders/hexv841_fct_boundary_residual_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "fct_boundary_residual_v841",
+      "resources": [
+        [
+          "bdy_mask_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "residual",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "bdy_mask_edge": [
+          [
+            "nedges"
+          ]
+        ],
+        "residual": [
+          [
+            "ntracers",
+            "nlev",
+            "nedges"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_copy_back_v841",
+      "module": "hexv841_fct_copy_back_v841",
+      "source": "woof/metal/shaders/hexv841_fct_copy_back_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "fct_copy_back_v841",
+      "resources": [
+        [
+          "bdy_mask_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "output",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "bdy_mask_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "stage": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "output": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "regional",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_edge_residual_v841",
+      "module": "hexv841_fct_edge_residual_v841",
+      "source": "woof/metal/shaders/hexv841_fct_edge_residual_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "fct_edge_residual_v841",
+      "resources": [
+        [
+          "source_old",
+          "float32",
+          "read"
+        ],
+        [
+          "velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "high_flux",
+          "float32",
+          "read"
+        ],
+        [
+          "upwind_flux",
+          "float32",
+          "read_write"
+        ],
+        [
+          "horizontal_residual",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source_old": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "velocity": [
+          [
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "nedges"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "nedges",
+            2
+          ]
+        ],
+        "high_flux": [
+          [
+            "ntracers",
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "upwind_flux": [
+          [
+            "ntracers",
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "horizontal_residual": [
+          [
+            "ntracers",
+            "nlev",
+            "nedges"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_finish_v841",
+      "module": "hexv841_fct_finish_v841",
+      "source": "woof/metal/shaders/hexv841_fct_finish_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "fct_finish_v841",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "acoustic_sign",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "horizontal_residual",
+          "float32",
+          "read"
+        ],
+        [
+          "vertical_residual",
+          "float32",
+          "read"
+        ],
+        [
+          "target_density",
+          "float32",
+          "read"
+        ],
+        [
+          "mass",
+          "float32",
+          "read"
+        ],
+        [
+          "output",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "acoustic_sign": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "rdzw": [
+          [
+            "nlev"
+          ]
+        ],
+        "horizontal_residual": [
+          [
+            "ntracers",
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "vertical_residual": [
+          [
+            "ntracers",
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "target_density": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "mass": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "output": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_horizontal_low_order_v841",
+      "module": "hexv841_fct_horizontal_low_order_v841",
+      "source": "woof/metal/shaders/hexv841_fct_horizontal_low_order_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "fct_horizontal_low_order_v841",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "acoustic_sign",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "upwind_flux",
+          "float32",
+          "read"
+        ],
+        [
+          "horizontal_residual",
+          "float32",
+          "read"
+        ],
+        [
+          "mass",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale_in",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale_out",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "acoustic_sign": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "upwind_flux": [
+          [
+            "ntracers",
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "horizontal_residual": [
+          [
+            "ntracers",
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "mass": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "scale_in": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "scale_out": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_limit_horizontal",
+      "module": "hexv841_fct_limit_horizontal",
+      "source": "woof/metal/shaders/hexv841_fct_limit_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_transport.py",
+      "cuda_symbol": "fct_limit_horizontal",
+      "resources": [
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "scale_in",
+          "float32",
+          "read"
+        ],
+        [
+          "scale_out",
+          "float32",
+          "read"
+        ],
+        [
+          "residual",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells_on_edge": [
+          [
+            "nedges",
+            2
+          ]
+        ],
+        "scale_in": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "scale_out": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "residual": [
+          [
+            "ntracers",
+            "nlev",
+            "nedges"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_limit_vertical",
+      "module": "hexv841_fct_limit_vertical",
+      "source": "woof/metal/shaders/hexv841_fct_limit_vertical.metal",
+      "cuda_source": "woof/hex/cuda_transport.py",
+      "cuda_symbol": "fct_limit_vertical",
+      "resources": [
+        [
+          "scale_in",
+          "float32",
+          "read"
+        ],
+        [
+          "scale_out",
+          "float32",
+          "read"
+        ],
+        [
+          "residual",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "scale_in": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "scale_out": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "residual": [
+          [
+            "ntracers",
+            "nlev+1",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_minmax_source",
+      "module": "hexv841_fct_minmax_source",
+      "source": "woof/metal/shaders/hexv841_fct_minmax_source.metal",
+      "cuda_source": "woof/hex/cuda_transport.py",
+      "cuda_symbol": "fct_minmax_source",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "old",
+          "float32",
+          "read"
+        ],
+        [
+          "source",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_old",
+          "float32",
+          "read"
+        ],
+        [
+          "source_old",
+          "float32",
+          "read_write"
+        ],
+        [
+          "minimum",
+          "float32",
+          "read_write"
+        ],
+        [
+          "maximum",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "cells_on_cell": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "old": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "source": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "rho_old": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "source_old": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "minimum": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "maximum": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_pool_density_v841",
+      "module": "hexv841_fct_pool_density_v841",
+      "source": "woof/metal/shaders/hexv841_fct_pool_density_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "fct_pool_density_v841",
+      "resources": [
+        [
+          "density",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "density": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "cell",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_scale",
+      "module": "hexv841_fct_scale",
+      "source": "woof/metal/shaders/hexv841_fct_scale.metal",
+      "cuda_source": "woof/hex/cuda_transport.py",
+      "cuda_symbol": "fct_scale",
+      "resources": [
+        [
+          "minimum",
+          "float32",
+          "read"
+        ],
+        [
+          "maximum",
+          "float32",
+          "read"
+        ],
+        [
+          "target_density",
+          "float32",
+          "read"
+        ],
+        [
+          "mass",
+          "float32",
+          "read"
+        ],
+        [
+          "scale_in",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale_out",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "minimum": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "maximum": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "target_density": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "mass": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "scale_in": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "scale_out": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_fct_vertical_low_order_v841",
+      "module": "hexv841_fct_vertical_low_order_v841",
+      "source": "woof/metal/shaders/hexv841_fct_vertical_low_order_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "fct_vertical_low_order_v841",
+      "resources": [
+        [
+          "source_old",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_old",
+          "float32",
+          "read"
+        ],
+        [
+          "vertical_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "high_vertical",
+          "float32",
+          "read"
+        ],
+        [
+          "mass",
+          "float32",
+          "read_write"
+        ],
+        [
+          "vertical_residual",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale_in",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale_out",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "source_old": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "rho_old": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "vertical_velocity": [
+          [
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "rdzw": [
+          [
+            "nlev"
+          ]
+        ],
+        "high_vertical": [
+          [
+            "ntracers",
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "mass": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "vertical_residual": [
+          [
+            "ntracers",
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "scale_in": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "scale_out": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_transport_edge_values_mono_v841",
+      "module": "hexv841_transport_edge_values_mono_v841",
+      "source": "woof/metal/shaders/hexv841_transport_edge_values_mono_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "transport_edge_values_mono_v841",
+      "resources": [
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "adv",
+          "float32",
+          "read"
+        ],
+        [
+          "adv3",
+          "float32",
+          "read"
+        ],
+        [
+          "n_adv",
+          "int32",
+          "read"
+        ],
+        [
+          "adv_cells",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_values",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "stage": [
+          [
+            "ntracers",
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "velocity": [
+          [
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "adv": [
+          [
+            "nedges",
+            "width"
+          ]
+        ],
+        "adv3": [
+          [
+            "nedges",
+            "width"
+          ]
+        ],
+        "n_adv": [
+          [
+            "nedges"
+          ]
+        ],
+        "adv_cells": [
+          [
+            "nedges",
+            "width"
+          ]
+        ],
+        "edge_values": [
+          [
+            "ntracers",
+            "nlev",
+            "nedges"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ntracers",
+          "int32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "coefficient",
+          "float32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_transport_target_density_v841",
+      "module": "hexv841_transport_target_density_v841",
+      "source": "woof/metal/shaders/hexv841_transport_target_density_v841.metal",
+      "cuda_source": "woof/hex/cuda_transport_v841.py",
+      "cuda_symbol": "transport_target_density_v841",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "acoustic_sign",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "vertical_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_old",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_new",
+          "float32",
+          "read"
+        ],
+        [
+          "target_density",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "acoustic_sign": [
+          [
+            "ncells",
+            "max_edges"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "nedges"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "ncells"
+          ]
+        ],
+        "velocity": [
+          [
+            "nlev",
+            "nedges"
+          ]
+        ],
+        "vertical_velocity": [
+          [
+            "nlev+1",
+            "ncells"
+          ]
+        ],
+        "rdzw": [
+          [
+            "nlev"
+          ]
+        ],
+        "rho_old": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "rho_new": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ],
+        "target_density": [
+          [
+            "nlev",
+            "ncells"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "advance_density",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_count",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_carriers_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_carriers_rrfs",
+      "resources": [
+        [
+          "old",
+          "float32",
+          "read"
+        ],
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "o",
+          "float32",
+          "read_write"
+        ],
+        [
+          "n",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "stage": [
+          [
+            "any_1d"
+          ]
+        ],
+        "o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "s",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "dummy",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_density_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_density_rrfs",
+      "resources": [
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "sign",
+          "float32",
+          "read"
+        ],
+        [
+          "dv",
+          "float32",
+          "read"
+        ],
+        [
+          "area",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read"
+        ],
+        [
+          "ww",
+          "float32",
+          "read"
+        ],
+        [
+          "rd",
+          "float32",
+          "read"
+        ],
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_finish_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_finish_rrfs",
+      "resources": [
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "mask",
+          "int32",
+          "read"
+        ],
+        [
+          "sign",
+          "float32",
+          "read"
+        ],
+        [
+          "area",
+          "float32",
+          "read"
+        ],
+        [
+          "rd",
+          "float32",
+          "read"
+        ],
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "scale",
+          "float32",
+          "read"
+        ],
+        [
+          "flux",
+          "float32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read_write"
+        ],
+        [
+          "n",
+          "float32",
+          "read_write"
+        ],
+        [
+          "stage",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n": [
+          [
+            "any_1d"
+          ]
+        ],
+        "stage": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "s",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "copylo",
+          "int32"
+        ],
+        [
+          "copyhi",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_high_edge_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_high_edge_rrfs",
+      "resources": [
+        [
+          "coe",
+          "int32",
+          "read"
+        ],
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "cells",
+          "int32",
+          "read"
+        ],
+        [
+          "coef",
+          "float32",
+          "read"
+        ],
+        [
+          "coef3",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read"
+        ],
+        [
+          "q",
+          "float32",
+          "read"
+        ],
+        [
+          "flux",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "coe": [
+          [
+            "any_1d"
+          ]
+        ],
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coef": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coef3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "q": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "solved",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_limit_edge_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_limit_edge_rrfs",
+      "resources": [
+        [
+          "coe",
+          "int32",
+          "read"
+        ],
+        [
+          "mask",
+          "int32",
+          "read"
+        ],
+        [
+          "dv",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read"
+        ],
+        [
+          "o",
+          "float32",
+          "read"
+        ],
+        [
+          "scale",
+          "float32",
+          "read"
+        ],
+        [
+          "flux",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "coe": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "solved",
+          "int32"
+        ],
+        [
+          "regional",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_low_edge_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_low_edge_rrfs",
+      "resources": [
+        [
+          "coe",
+          "int32",
+          "read"
+        ],
+        [
+          "mask",
+          "int32",
+          "read"
+        ],
+        [
+          "dv",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read"
+        ],
+        [
+          "o",
+          "float32",
+          "read"
+        ],
+        [
+          "flux",
+          "float32",
+          "read_write"
+        ],
+        [
+          "upwind",
+          "float32",
+          "read_write"
+        ],
+        [
+          "residual",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "coe": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "flux": [
+          [
+            "any_1d"
+          ]
+        ],
+        "upwind": [
+          [
+            "any_1d"
+          ]
+        ],
+        "residual": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "regional",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_low_vertical_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_low_vertical_rrfs",
+      "resources": [
+        [
+          "o",
+          "float32",
+          "read"
+        ],
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "ww",
+          "float32",
+          "read"
+        ],
+        [
+          "rd",
+          "float32",
+          "read"
+        ],
+        [
+          "n",
+          "float32",
+          "read_write"
+        ],
+        [
+          "w",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rd": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_scale_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_scale_rrfs",
+      "resources": [
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "sign",
+          "float32",
+          "read"
+        ],
+        [
+          "area",
+          "float32",
+          "read"
+        ],
+        [
+          "upwind",
+          "float32",
+          "read"
+        ],
+        [
+          "residual",
+          "float32",
+          "read"
+        ],
+        [
+          "mn",
+          "float32",
+          "read"
+        ],
+        [
+          "mx",
+          "float32",
+          "read"
+        ],
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "n",
+          "float32",
+          "read_write"
+        ],
+        [
+          "scale",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "upwind": [
+          [
+            "any_1d"
+          ]
+        ],
+        "residual": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_source_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_source_rrfs",
+      "resources": [
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "old",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tend",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_monotonic_mono_vertical_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_vertical_rrfs",
+      "resources": [
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "neighbors",
+          "int32",
+          "read"
+        ],
+        [
+          "o",
+          "float32",
+          "read"
+        ],
+        [
+          "n",
+          "float32",
+          "read"
+        ],
+        [
+          "ww",
+          "float32",
+          "read"
+        ],
+        [
+          "fnm",
+          "float32",
+          "read"
+        ],
+        [
+          "fnp",
+          "float32",
+          "read"
+        ],
+        [
+          "mn",
+          "float32",
+          "read_write"
+        ],
+        [
+          "mx",
+          "float32",
+          "read_write"
+        ],
+        [
+          "w",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "neighbors": [
+          [
+            "any_1d"
+          ]
+        ],
+        "o": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mn": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mx": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "coef",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_transport_gsl_scalar_filter4_rrfs",
+      "module": "hexv841_rrfs_transport",
+      "source": "woof/metal/shaders/hexv841_rrfs_transport.metal",
+      "cuda_source": "woof/hex/cuda_transport_rrfs.py",
+      "cuda_symbol": "gsl_scalar_filter4_rrfs",
+      "resources": [
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "coe",
+          "int32",
+          "read"
+        ],
+        [
+          "sign",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area",
+          "float32",
+          "read"
+        ],
+        [
+          "dv",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dc",
+          "float32",
+          "read"
+        ],
+        [
+          "scale4",
+          "float32",
+          "read"
+        ],
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "lap",
+          "float32",
+          "read"
+        ],
+        [
+          "tend",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coe": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale4": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "solved",
+          "int32"
+        ],
+        [
+          "filter4",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_transport_gsl_scalar_laplacian_rrfs",
+      "module": "hexv841_rrfs_transport",
+      "source": "woof/metal/shaders/hexv841_rrfs_transport.metal",
+      "cuda_source": "woof/hex/cuda_transport_rrfs.py",
+      "cuda_symbol": "gsl_scalar_laplacian_rrfs",
+      "resources": [
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "coe",
+          "int32",
+          "read"
+        ],
+        [
+          "sign",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area",
+          "float32",
+          "read"
+        ],
+        [
+          "dv",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dc",
+          "float32",
+          "read"
+        ],
+        [
+          "scale2",
+          "float32",
+          "read"
+        ],
+        [
+          "km",
+          "float32",
+          "read"
+        ],
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "old",
+          "float32",
+          "read"
+        ],
+        [
+          "lap",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tend",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coe": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc": [
+          [
+            "any_1d"
+          ]
+        ],
+        "scale2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "km": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "lap": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "cells",
+          "int32"
+        ],
+        [
+          "prandtl_inv",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_transport_scalar_edge_rrfs",
+      "module": "hexv841_rrfs_transport",
+      "source": "woof/metal/shaders/hexv841_rrfs_transport.metal",
+      "cuda_source": "woof/hex/cuda_transport_rrfs.py",
+      "cuda_symbol": "scalar_edge_rrfs",
+      "resources": [
+        [
+          "mask",
+          "int32",
+          "read"
+        ],
+        [
+          "coe",
+          "int32",
+          "read"
+        ],
+        [
+          "dv",
+          "float32",
+          "read"
+        ],
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read"
+        ],
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "cells",
+          "int32",
+          "read"
+        ],
+        [
+          "coef",
+          "float32",
+          "read"
+        ],
+        [
+          "coef3",
+          "float32",
+          "read"
+        ],
+        [
+          "edge",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coe": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv": [
+          [
+            "any_1d"
+          ]
+        ],
+        "stage": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coef": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coef3": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "width",
+          "int32"
+        ],
+        [
+          "regional",
+          "int32"
+        ],
+        [
+          "edge_start",
+          "int32"
+        ],
+        [
+          "edge_end",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_transport_scalar_finish_rrfs",
+      "module": "hexv841_rrfs_transport",
+      "source": "woof/metal/shaders/hexv841_rrfs_transport.metal",
+      "cuda_source": "woof/hex/cuda_transport_rrfs.py",
+      "cuda_symbol": "scalar_finish_rrfs",
+      "resources": [
+        [
+          "mask",
+          "int32",
+          "read"
+        ],
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "sign",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area",
+          "float32",
+          "read"
+        ],
+        [
+          "uh",
+          "float32",
+          "read"
+        ],
+        [
+          "edge",
+          "float32",
+          "read"
+        ],
+        [
+          "ww",
+          "float32",
+          "read"
+        ],
+        [
+          "fnm",
+          "float32",
+          "read"
+        ],
+        [
+          "fnp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "old",
+          "float32",
+          "read"
+        ],
+        [
+          "stage",
+          "float32",
+          "read"
+        ],
+        [
+          "rho0",
+          "float32",
+          "read"
+        ],
+        [
+          "rho1",
+          "float32",
+          "read"
+        ],
+        [
+          "source",
+          "float32",
+          "read"
+        ],
+        [
+          "out",
+          "float32",
+          "read_write"
+        ],
+        [
+          "target",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "sign": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area": [
+          [
+            "any_1d"
+          ]
+        ],
+        "uh": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fnp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "stage": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho0": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho1": [
+          [
+            "any_1d"
+          ]
+        ],
+        "source": [
+          [
+            "any_1d"
+          ]
+        ],
+        "out": [
+          [
+            "any_1d"
+          ]
+        ],
+        "target": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "solved",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "weight",
+          "float32"
+        ],
+        [
+          "coef",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_transpose",
+      "module": "hexv841_rrfs_transpose",
+      "source": "woof/metal/shaders/hexv841_rrfs_transpose.metal",
+      "resources": [
+        [
+          "src",
+          "uint32",
+          "read"
+        ],
+        [
+          "dst",
+          "uint32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "src": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dst": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "rows",
+          "int32"
+        ],
+        [
+          "columns",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ],
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "_stencil_layout"
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_cell_diagnostics_chunk_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "cell_diagnostics_chunk_v841_f32",
+      "resources": [
+        [
+          "normal_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "ke_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "ke_vertex",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "kite_areas",
+          "float32",
+          "read"
+        ],
+        [
+          "divergence",
+          "float32",
+          "read_write"
+        ],
+        [
+          "kinetic_energy",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ke_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ke_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kite_areas": [
+          [
+            "any_1d"
+          ]
+        ],
+        "divergence": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kinetic_energy": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ],
+        [
+          "lpt",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_cell_diagnostics_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "cell_diagnostics_v841_f32",
+      "resources": [
+        [
+          "normal_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "ke_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "ke_vertex",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "kite_areas",
+          "float32",
+          "read"
+        ],
+        [
+          "divergence",
+          "float32",
+          "read_write"
+        ],
+        [
+          "kinetic_energy",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ke_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ke_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kite_areas": [
+          [
+            "any_1d"
+          ]
+        ],
+        "divergence": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kinetic_energy": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_laplacian_divergence_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "laplacian_divergence_v841_f32",
+      "resources": [
+        [
+          "delsq_u",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "delsq_divergence",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "delsq_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delsq_divergence": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_laplacian_vorticity_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "laplacian_vorticity_v841_f32",
+      "resources": [
+        [
+          "delsq_u",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_triangle",
+          "float32",
+          "read"
+        ],
+        [
+          "delsq_vorticity",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "delsq_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_triangle": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delsq_vorticity": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_mass_flux_divergence_chunk_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "mass_flux_divergence_chunk_v841_f32",
+      "resources": [
+        [
+          "rho_u",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "mass_divergence",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mass_divergence": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "lpt",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_mass_flux_divergence_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "mass_flux_divergence_v841_f32",
+      "resources": [
+        [
+          "rho_u",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "mass_divergence",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mass_divergence": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_momentum_filter_lap4_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "momentum_filter_lap4_v841_f32",
+      "resources": [
+        [
+          "rho_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "delsq_divergence",
+          "float32",
+          "read"
+        ],
+        [
+          "delsq_vorticity",
+          "float32",
+          "read"
+        ],
+        [
+          "del4",
+          "float32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "tendency",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delsq_divergence": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delsq_vorticity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del4": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "h4",
+          "float32"
+        ],
+        [
+          "div_factor",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_momentum_filter_seed_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "momentum_filter_seed_v841_f32",
+      "resources": [
+        [
+          "rho_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "divergence",
+          "float32",
+          "read"
+        ],
+        [
+          "vorticity",
+          "float32",
+          "read"
+        ],
+        [
+          "kdiff",
+          "float32",
+          "read"
+        ],
+        [
+          "del2",
+          "float32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "delsq_u",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tendency",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "divergence": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vorticity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdiff": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delsq_u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_pressure_gradient_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "pressure_gradient_v841_f32",
+      "resources": [
+        [
+          "pressure_p",
+          "float32",
+          "read"
+        ],
+        [
+          "dpdz",
+          "float32",
+          "read"
+        ],
+        [
+          "cqu",
+          "float32",
+          "read"
+        ],
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "zxu",
+          "float32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "tendency",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pressure_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dpdz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zxu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_pv_apvm_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "pv_apvm_v841_f32",
+      "resources": [
+        [
+          "normal_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "tangential_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "pv_vertex",
+          "float32",
+          "read"
+        ],
+        [
+          "pv_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "pv_edge",
+          "float32",
+          "read_write"
+        ],
+        [
+          "grad_pv_normal",
+          "float32",
+          "read_write"
+        ],
+        [
+          "grad_pv_tangential",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tangential_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "grad_pv_normal": [
+          [
+            "any_1d"
+          ]
+        ],
+        "grad_pv_tangential": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "scale",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_pv_cell_chunk_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "pv_cell_chunk_v841_f32",
+      "resources": [
+        [
+          "pv_vertex",
+          "float32",
+          "read"
+        ],
+        [
+          "vertices_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "kite_areas",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "pv_cell",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pv_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kite_areas": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_cell": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ],
+        [
+          "lpt",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_pv_cell_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "pv_cell_v841_f32",
+      "resources": [
+        [
+          "pv_vertex",
+          "float32",
+          "read"
+        ],
+        [
+          "vertices_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "kite_areas",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "pv_cell",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pv_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kite_areas": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_cell": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_smagorinsky_rrfs_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "smagorinsky_rrfs_f32",
+      "resources": [
+        [
+          "u",
+          "float32",
+          "read"
+        ],
+        [
+          "v",
+          "float32",
+          "read"
+        ],
+        [
+          "edges",
+          "int32",
+          "read"
+        ],
+        [
+          "counts",
+          "int32",
+          "read"
+        ],
+        [
+          "defc_a",
+          "float32",
+          "read"
+        ],
+        [
+          "defc_b",
+          "float32",
+          "read"
+        ],
+        [
+          "kdiff",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "v": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges": [
+          [
+            "any_1d"
+          ]
+        ],
+        "counts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "defc_a": [
+          [
+            "any_1d"
+          ]
+        ],
+        "defc_b": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdiff": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "strain_scale",
+          "float32"
+        ],
+        [
+          "ceiling",
+          "float32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "ne",
+          "int32"
+        ],
+        [
+          "me",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_tangential_velocity_hoist_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "tangential_velocity_hoist_v841_f32",
+      "resources": [
+        [
+          "normal_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "weights_on_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "tangential_velocity",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "weights_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tangential_velocity": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges2",
+          "int32"
+        ],
+        [
+          "lpt",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_theta_filter_lap2_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "theta_filter_lap2_v841_f32",
+      "resources": [
+        [
+          "theta_m",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "kdiff",
+          "float32",
+          "read"
+        ],
+        [
+          "del2",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "delsq_theta",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tendency",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdiff": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delsq_theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_theta_filter_lap4_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "theta_filter_lap4_v841_f32",
+      "resources": [
+        [
+          "delsq_theta",
+          "float32",
+          "read"
+        ],
+        [
+          "del4",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "tendency",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "delsq_theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del4": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "h4",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_vertex_diagnostics_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "vertex_diagnostics_v841_f32",
+      "resources": [
+        [
+          "normal_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "ke_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_vertex",
+          "int32",
+          "read"
+        ],
+        [
+          "vertices_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_triangle",
+          "float32",
+          "read"
+        ],
+        [
+          "f_vertex",
+          "float32",
+          "read"
+        ],
+        [
+          "vorticity",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ke_vertex",
+          "float32",
+          "read_write"
+        ],
+        [
+          "pv_vertex",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "normal_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ke_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vertices_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_triangle": [
+          [
+            "any_1d"
+          ]
+        ],
+        "f_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "vorticity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ke_vertex": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_vertex": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "nvertices",
+          "int32"
+        ],
+        [
+          "vertex_degree",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_w_filter_lap2_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "w_filter_lap2_v841_f32",
+      "resources": [
+        [
+          "vertical_velocity",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "kdiff",
+          "float32",
+          "read"
+        ],
+        [
+          "del2",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "delsq_w",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tendency",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "vertical_velocity": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kdiff": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "delsq_w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_w_filter_lap4_v841_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal_rrfs.py",
+      "cuda_symbol": "w_filter_lap4_v841_f32",
+      "resources": [
+        [
+          "delsq_w",
+          "float32",
+          "read"
+        ],
+        [
+          "del4",
+          "float32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "tendency",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "delsq_w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del4": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tendency": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "h4",
+          "float32"
+        ],
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_coefficients_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_coefficients_rrfs",
+      "resources": [
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "cqw",
+          "float32",
+          "read"
+        ],
+        [
+          "pressure",
+          "float32",
+          "read"
+        ],
+        [
+          "theta",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_base",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_base",
+          "float32",
+          "read"
+        ],
+        [
+          "pressure_base",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_p",
+          "float32",
+          "read"
+        ],
+        [
+          "qtot",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzu",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "b_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "c_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qtot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_cofrz_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_cofrz_rrfs",
+      "resources": [
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_column_post_rt_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_column_post_rt_rrfs",
+      "resources": [
+        [
+          "spec_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "dss",
+          "float32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read"
+        ],
+        [
+          "rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_save",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rs",
+          "float32",
+          "read"
+        ],
+        [
+          "ts",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_save": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_column_post_w_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_column_post_w_rrfs",
+      "resources": [
+        [
+          "spec_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "dss",
+          "float32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read"
+        ],
+        [
+          "rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_save",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rs",
+          "float32",
+          "read"
+        ],
+        [
+          "ts",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_save": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_column_pre_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_column_pre_rrfs",
+      "resources": [
+        [
+          "spec_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "dss",
+          "float32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read"
+        ],
+        [
+          "rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_save",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rs",
+          "float32",
+          "read"
+        ],
+        [
+          "ts",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_save": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_column_solve_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_column_solve_rrfs",
+      "resources": [
+        [
+          "spec_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_zz",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "dss",
+          "float32",
+          "read"
+        ],
+        [
+          "w",
+          "float32",
+          "read"
+        ],
+        [
+          "rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_save",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rw",
+          "float32",
+          "read"
+        ],
+        [
+          "rs",
+          "float32",
+          "read"
+        ],
+        [
+          "ts",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "spec_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dss": [
+          [
+            "any_1d"
+          ]
+        ],
+        "w": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_save": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_factor_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_factor_rrfs",
+      "resources": [
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "cqw",
+          "float32",
+          "read"
+        ],
+        [
+          "pressure",
+          "float32",
+          "read"
+        ],
+        [
+          "theta",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_base",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_base",
+          "float32",
+          "read"
+        ],
+        [
+          "pressure_base",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_p",
+          "float32",
+          "read"
+        ],
+        [
+          "qtot",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzu",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "b_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "c_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qtot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_matrix_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_matrix_rrfs",
+      "resources": [
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "cqw",
+          "float32",
+          "read"
+        ],
+        [
+          "pressure",
+          "float32",
+          "read"
+        ],
+        [
+          "theta",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_base",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_base",
+          "float32",
+          "read"
+        ],
+        [
+          "pressure_base",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_p",
+          "float32",
+          "read"
+        ],
+        [
+          "qtot",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzu",
+          "float32",
+          "read"
+        ],
+        [
+          "cofwr",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofwz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofwt",
+          "float32",
+          "read_write"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read_write"
+        ],
+        [
+          "a_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "b_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "c_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "alpha_tri",
+          "float32",
+          "read_write"
+        ],
+        [
+          "gamma_tri",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pressure_base": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "qtot": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwr": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofwt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "a_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "b_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "c_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "alpha_tri": [
+          [
+            "any_1d"
+          ]
+        ],
+        "gamma_tri": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_prepare_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_prepare_rrfs",
+      "resources": [
+        [
+          "rw_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rtheta_pp_old",
+          "float32",
+          "read_write"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ww_avg",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp_old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ww_avg": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "small_step",
+          "int32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "cell_start",
+          "int32"
+        ],
+        [
+          "cell_end",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_rs_ts_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_rs_ts_rrfs",
+      "resources": [
+        [
+          "n_edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_cell",
+          "int32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edge_sign_on_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "dv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_area_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "spec_cell",
+          "float32",
+          "read"
+        ],
+        [
+          "theta_m",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzw",
+          "float32",
+          "read"
+        ],
+        [
+          "cofrz",
+          "float32",
+          "read"
+        ],
+        [
+          "coftz",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_p",
+          "float32",
+          "read"
+        ],
+        [
+          "rw_p",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rho",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_rt",
+          "float32",
+          "read"
+        ],
+        [
+          "rs",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ts",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "n_edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edge_sign_on_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_area_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_cell": [
+          [
+            "any_1d"
+          ]
+        ],
+        "theta_m": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cofrz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "coftz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rw_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_rt": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rs": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ts": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "epssm",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_acoustic_acoustic_ru_rrfs",
+      "module": "hexv841_rrfs_acoustic",
+      "source": "woof/metal/shaders/hexv841_rrfs_acoustic.metal",
+      "cuda_source": "woof/hex/cuda_acoustic_rrfs.py",
+      "cuda_symbol": "acoustic_ru_rrfs",
+      "resources": [
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "zz",
+          "float32",
+          "read"
+        ],
+        [
+          "exner",
+          "float32",
+          "read"
+        ],
+        [
+          "cqu",
+          "float32",
+          "read"
+        ],
+        [
+          "zxu",
+          "float32",
+          "read"
+        ],
+        [
+          "tend_ru",
+          "float32",
+          "read"
+        ],
+        [
+          "spec_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "rtheta_pp",
+          "float32",
+          "read"
+        ],
+        [
+          "ru_p",
+          "float32",
+          "read_write"
+        ],
+        [
+          "ru_avg",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "exner": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "zxu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend_ru": [
+          [
+            "any_1d"
+          ]
+        ],
+        "spec_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rtheta_pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_p": [
+          [
+            "any_1d"
+          ]
+        ],
+        "ru_avg": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "small_step",
+          "int32"
+        ],
+        [
+          "dts",
+          "float32"
+        ],
+        [
+          "edge_start",
+          "int32"
+        ],
+        [
+          "edge_end",
+          "int32"
+        ],
+        [
+          "gravity",
+          "float32"
+        ],
+        [
+          "rgas",
+          "float32"
+        ],
+        [
+          "cp",
+          "float32"
+        ],
+        [
+          "nsolve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_dynamics_euler_w_accumulate_rrfs_f32",
+      "module": "hexv841_rrfs_dynamics",
+      "source": "woof/metal/shaders/hexv841_rrfs_dynamics.metal",
+      "cuda_source": "woof/hex/cuda_dynamics_rrfs.py",
+      "cuda_symbol": "euler_w_accumulate_rrfs_f32",
+      "resources": [
+        [
+          "pp",
+          "float32",
+          "read"
+        ],
+        [
+          "dpdz",
+          "float32",
+          "read"
+        ],
+        [
+          "cqw",
+          "float32",
+          "read"
+        ],
+        [
+          "rdzu",
+          "float32",
+          "read"
+        ],
+        [
+          "fzm",
+          "float32",
+          "read"
+        ],
+        [
+          "fzp",
+          "float32",
+          "read"
+        ],
+        [
+          "tend",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "pp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "dpdz": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cqw": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rdzu": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzm": [
+          [
+            "any_1d"
+          ]
+        ],
+        "fzp": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "solve",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_dynamics_vector_momentum_rrfs_f32",
+      "module": "hexv841_rrfs_dynamics",
+      "source": "woof/metal/shaders/hexv841_rrfs_dynamics.metal",
+      "cuda_source": "woof/hex/cuda_dynamics_rrfs.py",
+      "cuda_symbol": "vector_momentum_rrfs_f32",
+      "resources": [
+        [
+          "u",
+          "float32",
+          "read"
+        ],
+        [
+          "rho_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "pv_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "kinetic",
+          "float32",
+          "read"
+        ],
+        [
+          "mass_divergence",
+          "float32",
+          "read"
+        ],
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "edges_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "n_edges_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "weights_on_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "inv_dc_edge",
+          "float32",
+          "read"
+        ],
+        [
+          "initial_tendency",
+          "float32",
+          "read"
+        ],
+        [
+          "result",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "u": [
+          [
+            "any_1d"
+          ]
+        ],
+        "rho_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "pv_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "kinetic": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mass_divergence": [
+          [
+            "any_1d"
+          ]
+        ],
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "edges_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "n_edges_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "weights_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "inv_dc_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "initial_tendency": [
+          [
+            "any_1d"
+          ]
+        ],
+        "result": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nlev",
+          "int32"
+        ],
+        [
+          "ncells",
+          "int32"
+        ],
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "max_edges2",
+          "int32"
+        ],
+        [
+          "has_initial",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_regional_w_boundary_rrfs",
+      "module": "hexv841_rrfs_regional",
+      "source": "woof/metal/shaders/hexv841_rrfs_regional.metal",
+      "cuda_source": "woof/hex/cuda_regional_rrfs.py",
+      "cuda_symbol": "w_boundary_rrfs",
+      "resources": [
+        [
+          "mask",
+          "int32",
+          "read"
+        ],
+        [
+          "nearest",
+          "int32",
+          "read"
+        ],
+        [
+          "input",
+          "float32",
+          "read"
+        ],
+        [
+          "output",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "mask": [
+          [
+            "any_1d"
+          ]
+        ],
+        "nearest": [
+          [
+            "any_1d"
+          ]
+        ],
+        "input": [
+          [
+            "any_1d"
+          ]
+        ],
+        "output": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "first",
+          "int32"
+        ],
+        [
+          "end",
+          "int32"
+        ],
+        [
+          "relaxation",
+          "int32"
+        ],
+        [
+          "zero",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
+      "name": "hexv841_rrfs_horizontal_mixing_scaling_f32",
+      "module": "hexv841_rrfs_horizontal",
+      "source": "woof/metal/shaders/hexv841_rrfs_horizontal.metal",
+      "cuda_source": "woof/hex/cuda_horizontal.py",
+      "cuda_symbol": "mixing_scaling_f32",
+      "resources": [
+        [
+          "cells_on_edge",
+          "int32",
+          "read"
+        ],
+        [
+          "mesh_density",
+          "float32",
+          "read"
+        ],
+        [
+          "del2",
+          "float32",
+          "read_write"
+        ],
+        [
+          "del4",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "cells_on_edge": [
+          [
+            "any_1d"
+          ]
+        ],
+        "mesh_density": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del2": [
+          [
+            "any_1d"
+          ]
+        ],
+        "del4": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "nedges",
+          "int32"
+        ],
+        [
+          "scale_with_mesh",
+          "int32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    },
+    {
       "name": "nudging_difference",
       "module": "nudging_family",
       "source": "woof/metal/shaders/nudging_family.metal",

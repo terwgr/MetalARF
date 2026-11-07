@@ -29,6 +29,7 @@ OPTIONS = frozenset({
     'streams', 'stream_list_directory', 'history_every_minutes',
     'checkpoint_hours', 'restart_from', 'out', 'scratch', 'receipt',
     'init_source', 'repo', 'stop_on_refusal', 'wind_farms',
+    'output_format', 'output_config', 'icechunk_store',
 })
 
 _UNAVAILABLE_STREAM_FIELDS = frozenset({
@@ -54,10 +55,11 @@ def run_forecast(arguments, config, text):
     if 'hex_physics_profile' in config.options:
         from .metal_bl_mynn_slot_v842 import validate_mynn_options
         validate_mynn_options(config.options)
-    for name in ('grid', 'static', 'init', 'lbc_dir'):
+    required = ('grid', 'static', 'init', 'lbc_dir') if getattr(arguments, 'lbc_dir', None) is not None else ('grid', 'init')
+    for name in required:
         value = getattr(arguments, name, None)
         if value is None or not Path(value).exists():
-            raise _refuse(f'native regional Metal requires an existing --{name.replace("_", "-")}')
+            raise _refuse(f'native Metal requires an existing --{name.replace("_", "-")}')
     text = bind_native_dynamics(arguments, bind_native_step(arguments, text))
     return shared_forecast(arguments, config, text, runtime=run_dynamics)
 
@@ -66,6 +68,7 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
                  start, stop, dt, steps, out, *, moving=None, namelist):
     from .metal_forecast_v842 import initialize_native_metal
     from .driver_v842 import interval_seconds
+    from .route_table import route_row
     from .streams_output_v842 import PhysicsStreams, _FailedStartReflectivity
 
     class MetalPhysicsStreams(PhysicsStreams):
@@ -109,7 +112,7 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
     missing = _UNAVAILABLE_STREAM_FIELDS.intersection(
         name for s in outputs if s.name != 'restart' for name in s.fields)
     microphysics_diagnostics = bool(missing) and config.selectors['microphysics'] in (
-        'mp_thompson', 'mp_thompson_aerosols', 'mp_wsm6')
+        'mp_thompson', 'mp_thompson_aerosols', 'mp_wsm6', 'mp_tempo')
     if microphysics_diagnostics:
         missing = frozenset()
     if kessler:
@@ -171,6 +174,14 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
             plan.update(backend='metal', physics=receipt['physics'], identity_checked=True)
             request.write_text(json.dumps(plan, indent=2) + '\n')
             mesh, grid, names = inputs
+            if config.selectors['microphysics'] == 'mp_tempo':
+                # driver_rrfs.bind_native_output_diagnostics: stream-selected hourly radar.
+                included = any('output' in s.directions and 'refl10cm_1km_max' in s.fields
+                               for s in streams)
+                session.pools.field('diag_physics', 'do_diag_dbz')[...] = np.int32(included)
+            row = route_row(session.config)
+            resets = row.get('diagnostic_resets', ('refl10cm_1km_max',))
+            reset_values = row.get('diagnostic_reset_values', {})
             output = MetalPhysicsStreams(session, streams, out, final_time=datetime.strptime(stop, '%Y-%m-%d_%H:%M:%S'))
             output.first_frame_from_first_call = session.config.mode == 'correct' and moving is None
             session.output_streams = output
@@ -207,10 +218,11 @@ def run_dynamics(arguments, config, layout, payload, streams, library,
                         receipt['steps_completed'] = step
                     diagnostics_written = output.write(step=step, dt=dt, receipt=receipt)
                     if step and diagnostics_written:
-                        key = ('diag_physics', 'refl10cm_1km_max')
-                        if key in session.native._fields:
-                            session.pools.field(*key, full=True)[...] = np.float32(0)
-                            session.pools.publish()
+                        for name in resets:
+                            key = ('diag_physics', name)
+                            if key in session.native._fields:
+                                session.pools.fill(*key, np.float32(reset_values.get(name, 0)))
+                        session.pools.publish()
                     if moving is not None:
                         moving.after_step(step, session=session, dycore=driver, mesh=mesh,
                             vertical=grid.vertical_grid, names=names, layout=layout,

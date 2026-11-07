@@ -1,0 +1,88 @@
+{
+  "kernels": [
+    {
+      "name": "hexv841_rrfs_monotonic_mono_source_rrfs",
+      "module": "hexv841_rrfs_monotonic",
+      "source": "woof/metal/shaders/hexv841_rrfs_monotonic.metal",
+      "cuda_source": "woof/hex/cuda_monotonic_rrfs.py",
+      "cuda_symbol": "mono_source_rrfs",
+      "resources": [
+        [
+          "rho",
+          "float32",
+          "read"
+        ],
+        [
+          "old",
+          "float32",
+          "read_write"
+        ],
+        [
+          "tend",
+          "float32",
+          "read_write"
+        ]
+      ],
+      "shapes": {
+        "rho": [
+          [
+            "any_1d"
+          ]
+        ],
+        "old": [
+          [
+            "any_1d"
+          ]
+        ],
+        "tend": [
+          [
+            "any_1d"
+          ]
+        ]
+      },
+      "parameters": [
+        [
+          "ns",
+          "int32"
+        ],
+        [
+          "nl",
+          "int32"
+        ],
+        [
+          "nc",
+          "int32"
+        ],
+        [
+          "lo",
+          "int32"
+        ],
+        [
+          "hi",
+          "int32"
+        ],
+        [
+          "dt",
+          "float32"
+        ],
+        [
+          "dispatch_x",
+          "int32"
+        ],
+        [
+          "dispatch_levels",
+          "int32"
+        ],
+        [
+          "dispatch_species",
+          "int32"
+        ]
+      ],
+      "threads_per_group": 128,
+      "layout_version": 1,
+      "arithmetic_policies": [
+        "default"
+      ]
+    }
+  ]
+}

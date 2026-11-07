@@ -102,6 +102,13 @@ def _full_physics(config: Any) -> bool:
 class MetalDycoreV841:
     """One resident Metal atmosphere and its v8.4.1 dry RK3 step."""
 
+    _validate_config = staticmethod(CudaDryDycoreDriver._validate_config)
+
+    @staticmethod
+    def _vertical_damping(mesh, vertical, config):
+        return build_v841_vertical_velocity_damping(np.asarray(vertical.zgrid),
+            xnutr=config.config_xnutr,damping_start_z=config.config_zd)
+
     regional_v841 = None
     halo_exchanger_v841 = None
     _pending_candidate = None
@@ -160,7 +167,7 @@ class MetalDycoreV841:
         """Upload every field once, after the CUDA lane's admission."""
 
         config.validate()
-        CudaDryDycoreDriver._validate_config(config)
+        cls._validate_config(config)
         if getattr(config, "source_release", None) != "v8.4.1":
             raise ConfigurationRefusal(
                 "source_release", getattr(config, "source_release", None),
@@ -206,11 +213,7 @@ class MetalDycoreV841:
         # config_xnutr/config_zd, and round cf1..cf3 to the float32 RKIND.
         selected_vertical = replace(
             vertical,
-            dss=build_v841_vertical_velocity_damping(
-                np.asarray(vertical.zgrid),
-                xnutr=config.config_xnutr,
-                damping_start_z=config.config_zd,
-            ),
+            dss=cls._vertical_damping(mesh, vertical, config),
             **{name: float(np.float32(getattr(vertical, name)))
                for name in ("cf1", "cf2", "cf3")},
         )
@@ -573,6 +576,29 @@ class MetalDycoreV841:
                         advance_scalars_regional_metal_v841,
                     )
 
+                    if stage.stage == 3 and (config.config_monotonic or config.config_positive_definite):
+                        from .metal_transport_v841 import advance_scalars_monotonic_metal_v841
+
+                        transported = advance_scalars_monotonic_metal_v841(
+                            self.atmosphere.mesh, self.v841_context,
+                            outer_saved.scalars, scalar_stage, outer_saved.rho,
+                            current.rho, split_flux_u, split_flux_w, stage.large_timestep,
+                            coefficients=self.coefficients, fzm=vertical.fzm,
+                            fzp=vertical.fzp, rdzw=vertical.rdzw,
+                            config_scalar_adv_order=3, config_scalar_vadv_order=3,
+                            config_coef_3rd_order=config.config_coef_3rd_order,
+                            scalar_tendency=None if physics is None else physics.scalars,
+                            advance_density=True, validation_flag=validation_flag,
+                            indices_prevalidated=True, rho_old_prevalidated=True,
+                            config_apply_lbcs=True, bdy_mask_cell=regional.bdy_mask_cell,
+                            bdy_mask_edge=regional.bdy_mask_edge,
+                            garbage_cell=int(regional.padded.garbage_cell),
+                            bind_density_pool=regional.bind_state_rho)
+                        scalar_stage = transported.scalars
+                        regional.bdy_adjust_scalars(scalar_stage, stage.stage)
+                        accumulate_finite_array_metal_v841(
+                            scalar_stage, invalid_flag=validation_flag)
+                        continue
                     scalar_stage, _target = advance_scalars_regional_metal_v841(
                         regional, self.atmosphere.mesh, self.v841_context,
                         outer_saved.scalars, scalar_stage, outer_saved.rho,
@@ -668,7 +694,8 @@ class MetalDycoreV841:
         It does not admit a public native physics provider.
         """
         from .mpasphys.config_v842 import NativeMpasDycoreConfigV842
-        if not isinstance(self.config, NativeMpasDycoreConfigV842):
+        from .config_rrfs import RRFSDryDycoreConfig
+        if not isinstance(self.config, (NativeMpasDycoreConfigV842, RRFSDryDycoreConfig)):
             raise TypeError("native MPAS stepping requires its native dycore config")
         if not callable(physics_stage_callback) or not callable(physics_post_transport_callback):
             raise TypeError("native MPAS stepping requires both physics callbacks")
@@ -776,6 +803,7 @@ def assemble_regional_metal_dycore_v841(
     lbc_paths: Any,
     start_time: Any,
     scalar_names: tuple[str, ...] = ("lbc_qv",),
+    driver_class=MetalDycoreV841,
 ) -> MetalDycoreV841:
     """Build the limited-area resident dycore, as ``assemble_regional_driver_v841``.
 
@@ -797,7 +825,7 @@ def assemble_regional_metal_dycore_v841(
     from .regional_v841 import derive_regional_masks
 
     config.validate()
-    CudaDryDycoreDriver._validate_config(config)
+    driver_class._validate_config(config)
     dtype = np.dtype(np.float32)
     padded = PaddedRegionalHostMesh(mesh, derive_regional_masks(mesh, dtype))
     nlev = int(np.asarray(state.rho).shape[0])
@@ -809,11 +837,7 @@ def assemble_regional_metal_dycore_v841(
         transition_top_z=config.config_epssm_transition_top_z,
     )
     # dss is built on the unpadded zgrid and padded, as on CUDA.
-    selected_dss = build_v841_vertical_velocity_damping(
-        np.asarray(vertical.zgrid),
-        xnutr=config.config_xnutr,
-        damping_start_z=config.config_zd,
-    )
+    selected_dss = driver_class._vertical_damping(mesh, vertical, config)
 
     class _VerticalWithDss:
         def __getattr__(self, name: str) -> Any:
@@ -838,7 +862,7 @@ def assemble_regional_metal_dycore_v841(
     coefficients = MetalAdvectionCoefficients.from_host(
         context, regional_padded_advection_coefficients(
             host_coefficients, padded.garbage_cell))
-    driver = MetalDycoreV841(context, atmosphere, config, coefficients, v841_context)
+    driver = driver_class(context, atmosphere, config, coefficients, v841_context)
     if driver.mixing_config_v841 is not None:
         from .mixing_v841 import initialize_deformation_weights_v841
 

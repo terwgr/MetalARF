@@ -1,11 +1,7 @@
 """Metal mirror of the MPAS-A v8.4.1 CUDA atmosphere scalar transport.
 
-``advance_scalar_transport_metal_v841`` follows
-``cuda_transport_v841.advance_scalar_transport_cuda_v841`` on the path the
-v8.4.1 dry step uses (standard third-order stage update).  Every array is a
-resident ``MetalArray``; the only readback is the validation flag the CUDA
-function itself reads with ``cp.asnumpy``.  The monotonic (FCT) kernels are
-not mirrored and the monotonic dispatch refuses.
+Standard RK stages and final-stage FCT run on resident Metal arrays.
+The limiter follows the retained CUDA schedule one species at a time.
 """
 
 from __future__ import annotations
@@ -446,6 +442,138 @@ def advance_scalars_metal_v841(
     return MetalScalarTransportResult(output[0] if squeezed else output, target)
 
 
+def advance_scalars_monotonic_metal_v841(
+    mesh: Any, v841: Any, scalar_old: Any, scalar_stage: Any,
+    rho_zz_old: Any, rho_zz_new: Any, uh_avg: Any, ww_avg: Any, dt: float,
+    *, coefficients: MetalAdvectionCoefficients, fzm: Any, fzp: Any,
+    rdzw: Any, config_scalar_adv_order: int, config_scalar_vadv_order: int,
+    config_coef_3rd_order: float, scalar_tendency: Any | None = None,
+    advance_density: bool = False, validation_flag: Any | None = None,
+    indices_prevalidated: bool = False, rho_old_prevalidated: bool = False,
+    halo_exchange: Any | None = None, n_halos: int = 3,
+    config_apply_lbcs: bool = False, bdy_mask_cell: Any | None = None,
+    bdy_mask_edge: Any | None = None, garbage_cell: int | None = None,
+    bind_density_pool: Any | None = None,
+) -> MetalScalarTransportResult:
+    """Source-ordered FCT, with one species workspace reused per pass."""
+    if halo_exchange is not None:
+        raise ConfigurationRefusal(
+            "halo_exchange", "set", "Metal FCT requires a single device",
+            "halo_exchange=None")
+    if n_halos < 3:
+        raise ConfigurationRefusal("nHalos", n_halos, "FCT requires three halos", "nHalos=3")
+    if not np.isfinite(dt) or dt < 0.0:
+        raise ValueError("dt must be finite and non-negative")
+    _validate_orders(config_scalar_adv_order, config_scalar_vadv_order, config_coef_3rd_order)
+    (old, stage, squeezed, rho0, rho1, velocity, vertical_velocity,
+     fnm, fnp, rdnw, ntracers, nlev, ncells, nedges) = _inputs(
+        mesh, v841, scalar_old, scalar_stage, rho_zz_old, rho_zz_new,
+        uh_avg, ww_avg, fzm, fzp, rdzw)
+    context = old.buffer.context
+    module = _module(context)
+    counts, edges, neighbors, cells, signs, dv, _area, max_edges = (
+        _validate_geometry_and_coefficients(context, mesh, coefficients,
+            ncells=ncells, nedges=nedges, indices_prevalidated=indices_prevalidated))
+    if config_apply_lbcs:
+        if bdy_mask_cell is None or bdy_mask_edge is None:
+            raise ValueError("regional FCT requires both boundary masks")
+        bdy_mask_cell, bdy_mask_edge = _i32(bdy_mask_cell), _i32(bdy_mask_edge)
+        if bdy_mask_cell.shape != (ncells,) or bdy_mask_edge.shape != (nedges,):
+            raise ValueError("regional FCT masks must include every pool element")
+    if garbage_cell is not None:
+        if not config_apply_lbcs or type(garbage_cell) is not int or garbage_cell != ncells - 1:
+            raise ValueError("a regional FCT garbage cell must name an allocated pool element")
+        rho0 = rho0.copy()
+        if bind_density_pool is not None:
+            bind_density_pool(rho0)
+        launch(context, "hexv841_fct_pool_density_v841", nlev,
+            {"density": rho0}, dict(nlev=nlev, ncells=ncells, cell=garbage_cell, dispatch_count=nlev))
+    if not rho_old_prevalidated:
+        _check_density(context, rho0, name="rho_zz_old", count=nlev * ncells, invalid_flag=None)
+    source = _source(context, old, scalar_tendency, squeezed=squeezed)
+    target = module.empty(rho0.shape, np.float32)
+    if garbage_cell is not None and bind_density_pool is not None:
+        bind_density_pool(target)
+    launch(context, "hexv841_transport_target_density_v841", ncells,
+        dict(n_edges_on_cell=counts, edges_on_cell=edges, acoustic_sign=signs,
+             dv_edge=dv, inv_area_cell=v841.inv_area_cell, velocity=velocity,
+             vertical_velocity=vertical_velocity, rdzw=rdnw,
+             rho_old=rho0, rho_new=rho1, target_density=target),
+        dict(nlev=nlev, ncells=ncells, nedges=nedges, max_edges=max_edges,
+             advance_density=int(advance_density), dt=float(np.float32(dt)), dispatch_count=ncells))
+    if garbage_cell is not None:
+        launch(context, "hexv841_fct_pool_density_v841", nlev,
+            {"density": target}, dict(nlev=nlev, ncells=ncells, cell=garbage_cell, dispatch_count=nlev))
+    _check_density(context, target, name="target_density", count=nlev * ncells,
+                   invalid_flag=validation_flag)
+    shape = (1, nlev, ncells)
+    high_edge = module.empty((1, nlev, nedges), np.float32)
+    high_vertical = module.empty((1, nlev + 1, ncells), np.float32)
+    source_old = module.empty(shape, np.float32)
+    minimum, maximum = module.empty(shape, np.float32), module.empty(shape, np.float32)
+    mass = module.empty(shape, np.float32)
+    vr = module.empty(high_vertical.shape, np.float32)
+    si, so = module.empty(shape, np.float32), module.empty(shape, np.float32)
+    upwind, hr = module.empty(high_edge.shape, np.float32), module.empty(high_edge.shape, np.float32)
+    output = module.empty(old.shape, np.float32)
+    z = dict(ntracers=1, nlev=nlev, ncells=ncells)
+    dt = float(np.float32(dt))
+    coefficient = float(np.float32(config_coef_3rd_order))
+    for species in range(ntracers):
+        qold, qstage, qsource = (v[species:species + 1] for v in (old, stage, source))
+        launch(context, "hexv841_transport_edge_values_mono_v841", nedges,
+            dict(stage=qstage, velocity=velocity, adv=coefficients.adv_coefs,
+                 adv3=coefficients.adv_coefs_3rd, n_adv=coefficients.n_adv_cells_for_edge,
+                 adv_cells=coefficients.adv_cells_for_edge, edge_values=high_edge),
+            dict(**z, nedges=nedges, width=int(coefficients.adv_coefs.shape[1]),
+                 coefficient=coefficient, dispatch_count=nedges))
+        launch(context, "hexv841_transport_vertical_flux", (nlev + 1) * ncells,
+            dict(stage=qstage, velocity=vertical_velocity, fzm=fnm, fzp=fnp,
+                 vertical_flux=high_vertical), dict(**z, coefficient=coefficient))
+        launch(context, "hexv841_fct_minmax_source", ncells,
+            dict(n_edges_on_cell=counts, cells_on_cell=neighbors, old=qold,
+                 source=qsource, rho_old=rho0, source_old=source_old,
+                 minimum=minimum, maximum=maximum),
+            dict(**z, max_edges=max_edges, dt=dt, dispatch_count=ncells))
+        launch(context, "hexv841_fct_vertical_low_order_v841", ncells,
+            dict(source_old=source_old, rho_old=rho0, vertical_velocity=vertical_velocity,
+                 rdzw=rdnw, high_vertical=high_vertical, mass=mass,
+                 vertical_residual=vr, scale_in=si, scale_out=so),
+            dict(**z, dt=dt, dispatch_count=ncells))
+        launch(context, "hexv841_fct_edge_residual_v841", nedges,
+            dict(source_old=source_old, velocity=velocity, dv_edge=dv, cells_on_edge=cells,
+                 high_flux=high_edge, upwind_flux=upwind, horizontal_residual=hr),
+            dict(**z, nedges=nedges, dt=dt, dispatch_count=nedges))
+        if config_apply_lbcs:
+            launch(context, "hexv841_fct_boundary_residual_v841", nlev * nedges,
+                dict(bdy_mask_edge=bdy_mask_edge, residual=hr),
+                dict(ntracers=1, nlev=nlev, nedges=nedges, dispatch_count=nlev * nedges))
+        launch(context, "hexv841_fct_horizontal_low_order_v841", ncells,
+            dict(n_edges_on_cell=counts, edges_on_cell=edges, acoustic_sign=signs,
+                 inv_area_cell=v841.inv_area_cell, upwind_flux=upwind,
+                 horizontal_residual=hr, mass=mass, scale_in=si, scale_out=so),
+            dict(**z, nedges=nedges, max_edges=max_edges, dispatch_count=ncells))
+        launch(context, "hexv841_fct_scale", ncells,
+            dict(minimum=minimum, maximum=maximum, target_density=target,
+                 mass=mass, scale_in=si, scale_out=so), dict(**z, dispatch_count=ncells))
+        launch(context, "hexv841_fct_limit_horizontal", nedges,
+            dict(cells_on_edge=cells, scale_in=si, scale_out=so, residual=hr),
+            dict(**z, nedges=nedges, dispatch_count=nedges))
+        launch(context, "hexv841_fct_limit_vertical", ncells,
+            dict(scale_in=si, scale_out=so, residual=vr), dict(**z, dispatch_count=ncells))
+        out = output[species:species + 1]
+        launch(context, "hexv841_fct_finish_v841", ncells,
+            dict(n_edges_on_cell=counts, edges_on_cell=edges, acoustic_sign=signs,
+                 inv_area_cell=v841.inv_area_cell, rdzw=rdnw, horizontal_residual=hr,
+                 vertical_residual=vr, target_density=target, mass=mass, output=out),
+            dict(**z, nedges=nedges, max_edges=max_edges, dispatch_count=ncells))
+        if config_apply_lbcs:
+            launch(context, "hexv841_fct_copy_back_v841", nlev * ncells,
+                dict(bdy_mask_cell=bdy_mask_cell, stage=qstage, output=out),
+                dict(**z, regional=1, dispatch_count=nlev * ncells))
+    return MetalScalarTransportResult(output[0] if squeezed else output, target)
+
+
 def advance_scalar_transport_metal_v841(
     mesh: Any,
     v841: Any,
@@ -487,11 +615,10 @@ def advance_scalar_transport_metal_v841(
     if not config_scalar_advection:
         return MetalScalarTransportResult(stage.copy(), rho_new.copy())
     if rk_step >= 3 and (config_monotonic or config_positive_definite):
-        raise ConfigurationRefusal(
-            "config_monotonic", config_monotonic,
-            "the Metal transport mirrors the non-monotonic path only",
-            "config_monotonic=False, config_positive_definite=False",
-        )
+        return advance_scalars_monotonic_metal_v841(
+            mesh, v841, scalar_old, scalar_stage, rho_zz_old, rho_zz_new,
+            uh_avg, ww_avg, dt, coefficients=coefficients, fzm=fzm, fzp=fzp,
+            rdzw=rdzw, advance_density=config_split_dynamics_transport, **kwargs)
     return advance_scalars_metal_v841(
         mesh, v841, scalar_old, scalar_stage, rho_zz_old, rho_zz_new,
         uh_avg, ww_avg, dt, rk_step=rk_step,

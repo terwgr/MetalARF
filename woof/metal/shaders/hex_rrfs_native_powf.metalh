@@ -1,0 +1,35 @@
+#ifndef HEX_RRFS_NATIVE_POWF_H
+#define HEX_RRFS_NATIVE_POWF_H
+#include "pressure_power.metalh"
+// Positive GNU powf path used by the retained RRFS mesh scaling.
+// Arm optimized-routines v21.02, Copyright (c) 2017-2019 Arm Limited, MIT.
+constant ulong rrfs_log[32] = {0x3ff661ec79f8f3beul, 0xbfdefec65b963019ul, 0x3ff571ed4aaf883dul, 0xbfdb0b6832d4fca4ul, 0x3ff49539f0f010b0ul, 0xbfd7418b0a1fb77bul, 0x3ff3c995b0b80385ul, 0xbfd39de91a6dcf7bul, 0x3ff30d190c8864a5ul, 0xbfd01d9bf3f2b631ul, 0x3ff25e227b0b8ea0ul, 0xbfc97c1d1b3b7af0ul, 0x3ff1bb4a4a1a343ful, 0xbfc2f9e393af3c9ful, 0x3ff12358f08ae5baul, 0xbfb960cbbf788d5cul, 0x3ff0953f419900a7ul, 0xbfaa6f9db6475fceul, 0x3ff0000000000000ul, 0x0000000000000000ul, 0x3fee608cfd9a47acul, 0x3fb338ca9f24f53dul, 0x3feca4b31f026aa0ul, 0x3fc476a9543891baul, 0x3feb2036576afce6ul, 0x3fce840b4ac4e4d2ul, 0x3fe9c2d163a1aa2dul, 0x3fd40645f0c6651cul, 0x3fe886e6037841edul, 0x3fd88e9c2c1b9ff8ul, 0x3fe767dcf5534862ul, 0x3fdce0a44eb17bccul};
+constant ulong rrfs_poly[5] = {0x3fd27616c9496e0bul, 0xbfd71969a075c67aul, 0x3fdec70a6ca7baddul, 0xbfe7154748bef6c8ul, 0x3ff71547652ab82bul};
+constant ulong rrfs_exp[32] = {0x3ff0000000000000ul, 0x3fefd9b0d3158574ul, 0x3fefb5586cf9890ful, 0x3fef9301d0125b51ul, 0x3fef72b83c7d517bul, 0x3fef54873168b9aaul, 0x3fef387a6e756238ul, 0x3fef1e9df51fdee1ul, 0x3fef06fe0a31b715ul, 0x3feef1a7373aa9cbul, 0x3feedea64c123422ul, 0x3feece086061892dul, 0x3feebfdad5362a27ul, 0x3feeb42b569d4f82ul, 0x3feeab07dd485429ul, 0x3feea47eb03a5585ul, 0x3feea09e667f3bcdul, 0x3fee9f75e8ec5f74ul, 0x3feea11473eb0187ul, 0x3feea589994cce13ul, 0x3feeace5422aa0dbul, 0x3feeb737b0cdc5e5ul, 0x3feec49182a3f090ul, 0x3feed503b23e255dul, 0x3feee89f995ad3adul, 0x3feeff76f2fb5e47ul, 0x3fef199bdd85529cul, 0x3fef3720dcef9069ul, 0x3fef5818dcfba487ul, 0x3fef7c97337b9b5ful, 0x3fefa4afa2a490daul, 0x3fefd0765b6e4540ul};
+static inline float rrfs_native_powf(float x, float exponent) {
+    uint ix=as_type<uint>(x);
+    if(ix<0x00800000u || ix>=0x7f800000u)
+        return fp32_pressure_power(x,1.0f,exponent);
+    uint tmp=ix-0x3f330000u, index=(tmp>>19)%16u, top=tmp&0xff800000u;
+    int k=as_type<int>(top)>>23;
+    ulong z=soft64_from_f32_bits(ix-top);
+    ulong r=soft64_sub(soft64_mul(z,rrfs_log[2*index]),0x3ff0000000000000ul);
+    ulong y0=soft64_add(rrfs_log[2*index+1],soft64_from_f32_bits(as_type<uint>(float(k))));
+    ulong r2=soft64_mul(r,r),r4=soft64_mul(r2,r2);
+    ulong y=soft64_add(soft64_mul(rrfs_poly[0],r),rrfs_poly[1]);
+    ulong p=soft64_add(soft64_mul(rrfs_poly[2],r),rrfs_poly[3]);
+    ulong q=soft64_add(soft64_mul(rrfs_poly[4],r),y0);
+    q=soft64_add(soft64_mul(p,r2),q);
+    y=soft64_add(soft64_mul(y,r4),q);
+    ulong xd=soft64_mul(soft64_from_f32_bits(as_type<uint>(exponent)),y);
+    const ulong shift=0x42e8000000000000ul;
+    ulong kd=soft64_add(xd,shift),ki=kd;
+    r=soft64_sub(xd,soft64_sub(kd,shift));
+    ulong scale=rrfs_exp[ki%32ul]+(ki<<47);
+    z=soft64_add(soft64_mul(0x3fac6af84b912394ul,r),0x3fcebfce50fac4f3ul);
+    r2=soft64_mul(r,r);
+    y=soft64_add(soft64_mul(0x3fe62e42ff0c52d6ul,r),0x3ff0000000000000ul);
+    y=soft64_add(soft64_mul(z,r2),y);
+    return as_type<float>(soft64_to_f32_bits(soft64_mul(y,scale)));
+}
+#endif
