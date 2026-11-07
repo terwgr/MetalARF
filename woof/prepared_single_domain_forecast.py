@@ -9624,10 +9624,6 @@ def run_prepared_forecast(
     if state_backend not in {"cuda", "metal"}:
         raise ValueError("state_backend must be 'cuda' or 'metal'")
     if state_backend == "metal":
-        from woof.core.physics import metal_nudging_refusals
-        nudging_refusals = metal_nudging_refusals(inputs.experiment)
-        if nudging_refusals:
-            raise ValueError("; ".join(nudging_refusals))
         if array_module is None or not getattr(
                 array_module, "__woof_metal_array_module__", False):
             raise ValueError(
@@ -12181,8 +12177,8 @@ def main(argv=None, *, observer=None, prestaged_boundaries=None,
             # PhysicsDriver enforces (METAL_FAMILY_CAPS + known conflicts);
             # dycore-only gates still refuse at construction.  A separate
             # hand-kept whitelist here drifted behind the public route.
-            from woof.core.physics import _metal_admission_refusals, metal_nudging_refusals
-            metal_physics_refusals = metal_nudging_refusals(metal_exp) + [
+            from woof.core.physics import _metal_admission_refusals
+            metal_physics_refusals = [
                 message for message in _metal_admission_refusals(
                     metal_cfg, radiation=None, cumulus=None, cam_ozone=None)
                 if not message.startswith(("radiation adapter", "cumulus adapter"))]

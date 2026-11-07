@@ -721,6 +721,16 @@ suppression and window offsets (a slab of a larger domain) on the same kernels
 as the CUDA path, and the apply step takes the domain extent as the CUDA kernel
 does.
 
+Grid and spectral analysis nudging run on resident, fixed-step regional grids,
+including explicitly selected fixed nests. WRF PBL suppression, vertical masks,
+field coefficients, moisture, held tendencies, `fgdt`, `fgdtzero` and end ramps
+follow the source kernels. Spectral transforms use host-staged NumPy FFTs, as
+host stochastic patterns do; this is a host-transform reference, not a claim of
+cuFFT word identity. Physical-temperature pressure powers use host libm to match
+the host-built CUDA reference. CUDA `globaltimer` stamps are unavailable; Metal
+receipts omit per-stage device timings. Moving, delayed and tiled analysis grids
+retain their explicit refusals.
+
 Latent heat nudging (`--radar-tten-mode lhn`) runs on Metal: the observed rain
 rate and the nudging step are the CUDA kernels with glibc powf and expf.
 

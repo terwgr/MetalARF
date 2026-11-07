@@ -1181,19 +1181,6 @@ def _metal_admission_refusals(cfg, *, radiation, cumulus, cam_ozone):
     return refusals
 
 
-def metal_nudging_refusals(experiment) -> list[str]:
-    """Name selected domains whose analysis nudging requires CUDA."""
-    nudging = getattr(experiment, "nudging", None)
-    if nudging is None:
-        return []
-    domains = list(experiment.domains)
-    return [
-        (f"d{int(domain.grid_id):02d}: " if len(domains) > 1 else "")
-        + "grid and spectral nudging have no Metal implementation"
-        for domain in domains if nudging.for_domain(domain.grid_id) is not None
-    ]
-
-
 def metal_experiment_refusals(experiment) -> list[str]:
     """Every domain's Metal admission refusals, decidable from the config.
 
@@ -1203,7 +1190,7 @@ def metal_experiment_refusals(experiment) -> list[str]:
     from woof.core import streaming
 
     domains = list(experiment.domains)
-    refusals = metal_nudging_refusals(experiment)
+    refusals = []
     for domain in domains:
         prefix = f"d{int(domain.grid_id):02d}: " if len(domains) > 1 else ""
         refusals.extend(
