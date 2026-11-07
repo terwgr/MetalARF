@@ -10,10 +10,10 @@ import numpy as np
 from woof.metal.array import MetalArray, MetalArrayModule
 
 
-_SIGNATURE_PATH = (Path(__file__).resolve().parent
-                   / "signature_fragments" / "gf_family.json")
+_SIGNATURE_PATH = Path(__file__).with_name("kernel_signatures.json")
 with _SIGNATURE_PATH.open(encoding="utf-8") as _stream:
-    _ENTRY = json.load(_stream)["kernels"][0]
+    _ENTRY = next(k for k in json.load(_stream)["kernels"]
+                  if k["source"] == "woof/metal/shaders/gf_family.metal")
 #: Columns per command buffer.  A full mesh in one launch outlives the
 #: GPU watchdog on a display GPU (kIOGPUCommandBufferCallbackErrorImpacting-
 #: Interactivity); each batch is its own submission.

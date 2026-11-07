@@ -9,7 +9,7 @@ import numpy as np
 
 from .array import MetalArray
 
-_FRAGMENTS = Path(__file__).with_name("signature_fragments")
+_REGISTRY = Path(__file__).with_name("kernel_signatures.json")
 _UNITS = ("sfire_core", "sfire_phys", "sfire_moisture", "sfire_wind", "sfire_atm",
           "sfire_coupling", "sfire_spotting", "sfire_ideal", "sfire_ideal_atmos")
 
@@ -17,8 +17,8 @@ _UNITS = ("sfire_core", "sfire_phys", "sfire_moisture", "sfire_wind", "sfire_atm
 @lru_cache(maxsize=1)
 def _signatures():
     table = {}
-    for unit in _UNITS:
-        for k in json.loads((_FRAGMENTS / f"{unit}.json").read_text())["kernels"]:
+    for k in json.loads(_REGISTRY.read_text())["kernels"]:
+        if Path(k["source"]).stem in _UNITS:
             table[k["cuda_symbol"]] = (k["name"], tuple(r[0] for r in k["resources"]),
                                        tuple(k["parameters"]), k["threads_per_group"])
     return table

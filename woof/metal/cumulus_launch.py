@@ -10,7 +10,7 @@ import numpy as np
 
 from woof.metal.array import MetalArray
 
-_FRAGMENTS = Path(__file__).resolve().parent / "signature_fragments"
+_REGISTRY = Path(__file__).with_name("kernel_signatures.json")
 _DTYPES = {"float": np.dtype(np.float32), "float32": np.dtype(np.float32),
            "int32": np.dtype(np.int32), "uint32": np.dtype(np.uint32)}
 #: Columns per command buffer: a full mesh in one launch outlives the GPU
@@ -20,7 +20,7 @@ COLUMNS_PER_SUBMIT = 2048
 
 @lru_cache(maxsize=None)
 def _entry(family: str, name: str) -> dict:
-    with (_FRAGMENTS / f"{family}.json").open(encoding="utf-8") as stream:
+    with _REGISTRY.open(encoding="utf-8") as stream:
         return next(k for k in json.load(stream)["kernels"] if k["name"] == name)
 
 

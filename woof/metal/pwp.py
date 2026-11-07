@@ -9,12 +9,13 @@ import numpy as np
 
 from .array import MetalArray, MetalArrayModule
 
-_FRAGMENT = Path(__file__).with_name("signature_fragments") / "pwp_family.json"
+_REGISTRY = Path(__file__).with_name("kernel_signatures.json")
 
 
 @lru_cache(maxsize=1)
 def _signatures():
-    kernels = json.loads(_FRAGMENT.read_text())["kernels"]
+    kernels = [k for k in json.loads(_REGISTRY.read_text())["kernels"]
+               if k["source"] == "woof/metal/shaders/pwp_family.metal"]
     return {k["cuda_symbol"]: (k["name"], tuple(r[0] for r in k["resources"]),
                                tuple(p for p in k["parameters"] if p[0] != "levels"),
                                k["threads_per_group"]) for k in kernels}

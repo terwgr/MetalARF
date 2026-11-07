@@ -9,14 +9,13 @@ import numpy as np
 
 from .array import MetalArray
 
-_FRAGMENTS = tuple(Path(__file__).with_name("signature_fragments") / name
-                   for name in ("seaice_family.json", "seaice_ocean_owned.json", "seaice_pwp.json"))
+_REGISTRY = Path(__file__).with_name("kernel_signatures.json")
 
 
 @lru_cache(maxsize=1)
 def _signatures():
-    kernels = [kernel for path in _FRAGMENTS
-               for kernel in json.loads(path.read_text())["kernels"]]
+    kernels = [k for k in json.loads(_REGISTRY.read_text())["kernels"]
+               if k["source"] == "woof/metal/shaders/seaice_family.metal"]
     return {k["cuda_symbol"]: (k["name"], tuple(r[0] for r in k["resources"]),
                                tuple(p[0] for p in k["parameters"][:-1])) for k in kernels}
 
